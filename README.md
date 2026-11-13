@@ -85,9 +85,9 @@ Use these terms consistently:
 | AI marketing assistant | Draft creatives/copy, campaign recommendations, reviewed publishing workflow. | Planned / optional |
 | NSW and Victoria market intelligence | Evidence-labelled research into subject/year demand using approved public data and Studytomy enquiry trends. | Planned / optional |
 
-### Existing business workflows requiring migration decisions
+### Public website and legacy workflow separation
 
-The legacy website includes lead intake, staff/tutor administration, trial booking, student conversion, recurring classes, attendance, payments, notifications, and scheduling workflows. These are not assumed to exist in equivalent form in the new open-source LMS. Each must be explicitly marked `retain` / `migrate` / `replace` / `retire` before production cutover.
+The public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) is an independent application outside the LMS development and deployment scope, with its own deployment, authentication sessions, and data storage. There is no requirement to migrate the public website's Supabase database or connect its existing business workflows/APIs (lead intake, trial booking, recurring classes, attendance, payments, notifications, scheduling) to the LMS unless separately authorized.
 
 ### Out of scope unless separately approved
 
@@ -99,26 +99,31 @@ The legacy website includes lead intake, staff/tutor administration, trial booki
 
 ## Target architecture
 
-**Decision**: Extend the open-source [LearnHouse](https://github.com/learnhouse/learnhouse) Community Edition using its native runtime and database. Do not introduce another application backend or parallel identity store.
+**Decision**: Deploy Studytomy Portal (`lms.studytomy.com`, [`nirzaf/studytomyportal`](https://github.com/nirzaf/studytomyportal)) as a standalone application built on the open-source [LearnHouse](https://github.com/learnhouse/learnhouse) Community Edition runtime and database, while the existing public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) remains unchanged and independent.
 
 ```mermaid
 flowchart TD
-  Visitor[Visitors] --> Marketing[Studytomy public website]
-  Learner[Students / Tutors / Admins] --> Web[Studytomy learning portal\nNext.js / React]
-  Marketing --> API[FastAPI application\nExisting LMS + Studytomy modules]
-  Web --> API
-  Web <-->|Collaborative editing| Collab[Hocuspocus / Yjs]
-  API --> PG[(PostgreSQL + pgvector)]
-  API --> Redis[(Redis)]
-  API --> Files[Private file / object storage]
-  API --> AI[Approved AI model providers]
-  API -. Optional .-> Ext[Email / Zoom / other integrations]
-  Web --> Lab[Browser-side virtual labs\n2D / 3D simulations]
-  Lab -->|Validated event submissions| API
-  API -->|Hints and feedback| Web
+  subgraph PublicSite["studytomy.com — Public Website (studytomy-react)"]
+    Visitor[Visitors] --> Marketing[Public Website]
+  end
+
+  subgraph LMS["lms.studytomy.com — Studytomy Portal (studytomyportal)"]
+    Learner[Students / Tutors / Admins] --> Web[Studytomy Portal\nNext.js / React]
+    Web --> API[FastAPI Backend]
+    Web <-->|Collaborative editing| Collab[Collaboration Service\nHocuspocus / Yjs]
+    API --> PG[(PostgreSQL + pgvector)]
+    API --> Redis[(Redis)]
+    API --> Files[Private file / object storage]
+    API --> AI[AI Providers]
+    Web --> Lab[Browser-side virtual labs\n2D / 3D simulations]
+    Lab -->|Validated event submissions| API
+    API -->|Hints and feedback| Web
+  end
+
+  Marketing -. Optional navigation link .-> Web
 ```
 
-**Deployment approach**: Retain the existing public website separately at first (e.g. `www.studytomy.com`) while launching the authenticated LMS on a dedicated subdomain (e.g. `learn.studytomy.com`). Both use the same FastAPI backend for any integrated business operations. Consolidation into one Next.js application can be assessed later; these domains are proposed, not confirmed deployments.
+**Deployment approach**: Deploy the Studytomy LMS at `lms.studytomy.com` while the existing public website (`studytomy.com` / `www.studytomy.com`) remains completely separate with independent deployment, authentication sessions, and data storage. The public website can link to `https://lms.studytomy.com` via a navigation item when ready (a separately approved website change).
 
 ### Architecture boundaries
 
@@ -281,17 +286,18 @@ For application unit, integration, and end-to-end tests, use the scripts actuall
 
 ## Migration strategy
 
-**Principle**: Perform a mapped data migration, not a direct Supabase-to-PostgreSQL schema copy.
+**Status**: **Not included by default.** The public website (`studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) and Studytomy Portal (`lms.studytomy.com`, [`nirzaf/studytomyportal`](https://github.com/nirzaf/studytomyportal)) operate as independent applications with separate deployments, authentication sessions, and databases. Migrating the public website's Supabase database or connecting its business APIs to the LMS is out of scope unless separately authorized.
 
-1. **Inventory**: Identify required users, leads, tutors, students, enrollments, trials, classes, attendance, payments, notifications, documents, and references.
-2. **Map**: Connect legacy identities and business entities to the new LMS models or approved Studytomy extensions. Prevent duplicate users and orphaned records.
-3. **Extract**: Export legacy data in a controlled, audited, read-only process. Protect student records and credentials.
+If a data migration is explicitly authorized in the future, follow a mapped migration process rather than a direct Supabase-to-PostgreSQL schema copy:
+
+1. **Inventory**: Identify explicitly authorized records to migrate.
+2. **Map**: Connect legacy identities and entities to verified LMS models without duplicate or orphaned records.
+3. **Extract**: Export legacy data in a controlled, audited, read-only process.
 4. **Transform and validate**: Normalize dates/time zones, statuses, record ownership, and cross-record references.
 5. **Dry run**: Import into isolated staging and reconcile counts and representative workflows.
-6. **Cut over**: Freeze the required writes, perform final reconciliation, switch integrations, and retain rollback capability.
-7. **Retire**: Remove target Supabase dependencies only after a signed-off migration and successful production smoke tests.
+6. **Cut over**: Freeze required writes, perform final reconciliation, and retain rollback capability.
 
-Do not assume Supabase password hashes or sessions are compatible with the new authentication system. Plan invitation/re-verification or an approved account migration path.
+Do not assume Supabase password hashes or sessions are compatible with the LMS authentication system.
 
 ## Security, privacy, and governance
 

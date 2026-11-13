@@ -8,15 +8,14 @@
 
 ## 1. Mission and success criteria
 
-Build Studytomy, an educator-led, AI-assisted learning platform, by adopting and selectively extending the [LearnHouse](https://github.com/learnhouse/learnhouse) open-source Community Edition.
+Build Studytomy Portal (`lms.studytomy.com`, [`nirzaf/studytomyportal`](https://github.com/nirzaf/studytomyportal)), an educator-led, AI-assisted learning management system, by adopting and selectively extending the [LearnHouse](https://github.com/learnhouse/learnhouse) open-source Community Edition.
 
-The objective is to deliver a secure, maintainable Australian-curriculum learning experience while preserving selected existing Studytomy business operations. Reuse existing upstream features first; write custom code only for verified gaps.
+The objective is to deliver a secure, maintainable Australian-curriculum learning experience on `lms.studytomy.com` while keeping the existing public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) as a completely separate, unchanged application. Reuse existing upstream features first; write custom code only for verified gaps.
 
 Success is demonstrated through complete, authorized user journeys—not features inferred from filenames, marketing pages, or a roadmap:
 
 - A learner can access the intended course, lesson, AI help, assignment, and their own progress.
 - A tutor can author or review approved content and assess work within their permissions.
-- Existing Studytomy business workflows designated for retention work after migration.
 - Learner/guardian/staff access, assessment correctness, backups, and recovery pass targeted verification.
 - Any new AI, laboratory, or marketing capability has a separately approved scope and acceptance criteria.
 
@@ -26,14 +25,15 @@ Success is demonstrated through complete, authorized user journeys—not feature
 
 ### Selected technology and architectural boundaries
 
-- **Upstream**: `https://github.com/learnhouse/learnhouse.git` (tracked as `upstream` or `origin` when configured).
+- **Portal repository & domain**: `https://github.com/nirzaf/studytomyportal.git` (default branch `main`), target deployment domain `lms.studytomy.com`.
+- **Upstream**: `https://github.com/learnhouse/learnhouse.git` (tracked as `upstream` or `origin` when configured; reference only).
 - **Frontend**: Existing LearnHouse Next.js / React / TypeScript frontend; preserve its App Router and established UI conventions.
 - **Backend**: Existing Python / FastAPI services and API contracts.
 - **Persistence**: PostgreSQL is authoritative; reuse `pgvector` when curriculum retrieval needs it.
 - **Supporting infrastructure**: Existing Redis, Yjs/Hocuspocus collaboration, Alembic migrations, and configured private file/object storage.
 - **Identity**: Reuse LearnHouse authentication and authorization; do not create an independent identity store.
-- **Public website**: The existing Studytomy marketing website may initially remain a separate static frontend with approved FastAPI form endpoints. Consolidation into LearnHouse is not an assumed implementation.
-- **No Supabase in the target runtime**: No new Supabase client, Auth, storage, Edge Functions, schedules, or database dependencies. The legacy system may be read only for controlled migration.
+- **Public website separation**: The existing Studytomy website (`studytomy.com` / `www.studytomy.com`, `nirzaf/studytomy-react`) is an independent application outside the LMS development and deployment scope, with its own deployment, authentication sessions, and data storage. Migrating its Supabase database or connecting its business APIs to the LMS is not included unless separately authorized.
+- **No Supabase in the target runtime**: No Supabase client, Auth, storage, Edge Functions, schedules, or database dependencies in `studytomyportal`.
 - **No additional backend, database, message broker, or microservice** unless an approved requirement and measured limitation justify it.
 
 ### Reuse from the Community Edition (verify in pinned revision)
@@ -159,14 +159,13 @@ For each meaningful candidate, include:
 
 ---
 
-## 5. Legacy migration safety
+## 5. Public website separation and legacy migration boundaries
 
-The old [Studytomy website repository](https://github.com/nirzaf/studytomy-react) uses a static Next.js frontend and Supabase-powered business workflows. Treat it as the migration source, not the target backend:
+The existing [Studytomy website repository](https://github.com/nirzaf/studytomy-react) (`studytomy.com` / `www.studytomy.com`) and the Studytomy Portal (`lms.studytomy.com`, `nirzaf/studytomyportal`) are independent applications with separate deployments, authentication sessions, and data storage:
 
-- Inventory records and workflows; classify `retain` / `migrate` / `replace` / `retire` with client approval.
-- Export in read-only mode, transform into verified LearnHouse identities and approved Studytomy PostgreSQL models, and reconcile sample records and counts.
-- Do not assume Supabase sessions/passwords are portable; use approved user invitation/re-verification flows.
-- Rehearse in staging with a reversible cutover. Do not delete legacy data or turn off services without explicit release authorization and the required codeword.
+- Treat `nirzaf/studytomy-react` as outside the LMS development and deployment scope.
+- Do not migrate the public website's Supabase database or connect its existing business workflows/APIs to the LMS unless separately and explicitly authorized.
+- If a legacy data migration is separately authorized in the future: export in read-only mode, transform into verified LearnHouse identities and approved PostgreSQL models, reconcile sample records and counts in staging, and never assume Supabase sessions or password hashes are portable.
 
 ---
 
