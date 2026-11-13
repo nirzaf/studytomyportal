@@ -369,6 +369,8 @@ Studytomy branding, content, and development responsibilities are subject to the
 
 ## References
 
+- [Studytomy Portal Navigation & Initial Configuration Guide](PORTAL_GUIDE.md)
+- [Studytomy AI Agent Engineering Instructions](AGENTS.md)
 - [LearnHouse upstream source](https://github.com/learnhouse/learnhouse)
 - [LearnHouse Community/Enterprise boundaries](https://docs.learnhouse.app/enterprise)
 - [LearnHouse self-hosting documentation](https://docs.learnhouse.app/self-hosting)
