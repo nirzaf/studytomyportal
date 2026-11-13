@@ -369,6 +369,7 @@ Studytomy branding, content, and development responsibilities are subject to the
 
 ## References
 
+- [Studytomy Virtual Science Lab — Agentuto Integration Proposal](VIRTUAL_SCIENCE_LAB_PROPOSAL.md)
 - [Studytomy Portal Navigation & Initial Configuration Guide](PORTAL_GUIDE.md)
 - [Studytomy AI Agent Engineering Instructions](AGENTS.md)
 - [LearnHouse upstream source](https://github.com/learnhouse/learnhouse)
