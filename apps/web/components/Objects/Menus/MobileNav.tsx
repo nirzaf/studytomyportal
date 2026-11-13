@@ -375,9 +375,6 @@ function MobileMoreSheet({
                   {currentLang === language.code && <Check size={16} weight="bold" className="text-neutral-900" />}
                 </button>
               ))}
-            {isAdmin && (
-              <SheetRow href="https://docs.learnhouse.app" external Icon={Book} label={t('common.help_menu.documentation')} />
-            )}
             {isAuthenticated && (
               <SheetRow
                 onClick={() => {

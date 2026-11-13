@@ -100,7 +100,7 @@ export default function AuthMobileHeader({ org, welcomeText }: AuthMobileHeaderP
                     width={56}
                     height={56}
                     src={learnhouseIcon}
-                    alt="LearnHouse"
+                    alt="Studytomy"
                     className="object-contain"
                   />
                 )
@@ -110,7 +110,7 @@ export default function AuthMobileHeader({ org, welcomeText }: AuthMobileHeaderP
         </Link>
 
         <div className="relative z-10 mt-4 min-w-0">
-          <p className="truncate text-xl font-black tracking-tight text-white">{org?.name || 'LearnHouse'}</p>
+          <p className="truncate text-xl font-black tracking-tight text-white">{org?.name || 'Studytomy'}</p>
           {displayMessage && (
             <p className="mt-0.5 line-clamp-2 text-sm font-medium text-white/65">{displayMessage}</p>
           )}

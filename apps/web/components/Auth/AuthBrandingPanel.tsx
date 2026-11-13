@@ -148,18 +148,16 @@ export default function AuthBrandingPanel({ org, welcomeText, title, subtitle }:
               and for the no-org apex panel (platform shows no logo on the image). */}
           {!isWhiteLabel && !noOrg && (
             <div className="login-topbar">
-              <Link prefetch href="https://learnhouse.app" target="_blank">
-                <img
-                  src="/lrn.svg"
-                  alt="LearnHouse"
-                  width={30}
-                  height={30}
-                  className={cn(
-                    "transition-opacity hover:opacity-100",
-                    text_color === 'light' ? "opacity-60 invert" : "opacity-40"
-                  )}
-                />
-              </Link>
+              <img
+                src="/studytomy-mini.png"
+                alt="Studytomy"
+                width={30}
+                height={30}
+                className={cn(
+                  "transition-opacity hover:opacity-100",
+                  text_color === 'light' ? "opacity-60 invert" : "opacity-40"
+                )}
+              />
             </div>
           )}
 
@@ -199,7 +197,7 @@ export default function AuthBrandingPanel({ org, welcomeText, title, subtitle }:
                               width={96}
                               height={96}
                               src={learnhouseIcon}
-                              alt="LearnHouse"
+                              alt="Studytomy"
                               className="object-contain"
                             />
                           )
@@ -210,7 +208,7 @@ export default function AuthBrandingPanel({ org, welcomeText, title, subtitle }:
 
                   {/* Text content */}
                   <div className="space-y-1">
-                    <h1 className="font-black text-3xl tracking-tight">{org?.name || 'LearnHouse'}</h1>
+                    <h1 className="font-black text-3xl tracking-tight">{org?.name || 'Studytomy'}</h1>
                     {displayMessage && (
                       <p className={cn(
                         "text-lg max-w-sm leading-relaxed",

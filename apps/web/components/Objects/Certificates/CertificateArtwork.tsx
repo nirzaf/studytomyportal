@@ -172,7 +172,7 @@ function CertificateArtwork({
             </div>
           )}
           <span dir="auto" style={{ fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em' }}>
-            {org?.name || 'LearnHouse'}
+            {org?.name || 'Studytomy'}
           </span>
         </div>
         <span style={{ ...caption, color: style.accent }}>
@@ -231,7 +231,7 @@ function CertificateArtwork({
       <div style={{ position: 'absolute', left: 92, right: 92, bottom: 80, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div style={{ width: 300 }}>
           <div dir="auto" style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.3, paddingBottom: 10, borderBottom: '1px solid #d1d5db' }}>
-            {signer || org?.name || 'LearnHouse'}
+            {signer || org?.name || 'Studytomy'}
           </div>
           <div style={{ ...caption, marginTop: 10 }}>
             {signer ? t('certificate.document.instructor') : t('certificate.document.issued_by')}

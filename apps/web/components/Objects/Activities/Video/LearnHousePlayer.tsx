@@ -210,7 +210,7 @@ function PlayerLogo() {
   if (!showBranding) return null
   return (
     <img
-      src="/lrn.svg"
+      src="/studytomy-mini.png"
       alt=""
       aria-hidden="true"
       draggable={false}

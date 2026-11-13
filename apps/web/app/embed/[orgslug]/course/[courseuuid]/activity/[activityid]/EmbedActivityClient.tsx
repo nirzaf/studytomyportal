@@ -153,7 +153,7 @@ function EmbedActivityClient({ activityId, courseuuid, orgslug }: EmbedActivityC
             <div className="mb-6">
               <Image
                 src="/learnhouse_bigicon.png"
-                alt="LearnHouse"
+                alt="Studytomy"
                 width={64}
                 height={64}
                 className="mx-auto"
@@ -223,8 +223,8 @@ function PoweredByBadge({ activityUrl }: { activityUrl: string }) {
         className="bg-white/80 backdrop-blur-lg rounded-2xl p-2 light-shadow block cursor-pointer"
       >
         <Image
-          src="/lrn.svg"
-          alt="LearnHouse"
+          src="/studytomy-mini.png"
+          alt="Studytomy"
           width={20}
           height={20}
         />

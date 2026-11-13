@@ -985,7 +985,7 @@ export default function CreateNewOrgPage() {
             <div className="flex justify-center">
               <Link href="/home">
                 { }
-                <img src="/lrn.svg" alt="LearnHouse" width={40} height={40} className="opacity-90" />
+                <img src="/studytomy-mini.png" alt="Studytomy" width={40} height={40} className="opacity-90" />
               </Link>
             </div>
             <div className="flex justify-end">

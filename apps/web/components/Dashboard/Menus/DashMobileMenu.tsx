@@ -166,7 +166,7 @@ function DashMobileMenu() {
                 </div>
               ) : (
                 <div className="h-10 w-10 flex items-center justify-center bg-white/[0.06] rounded-xl shrink-0">
-                  <img src="/lrn-dash.svg" alt="LearnHouse" className="h-5 w-5" style={{ filter: 'brightness(0) invert(1)' }} />
+                  <img src="/studytomy-mini.png" alt="Studytomy" className="h-5 w-5" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
@@ -241,8 +241,6 @@ function DashMobileMenu() {
                   ))}
                 </div>
               )}
-              <SheetRow href="https://docs.learnhouse.app" external Icon={Book} label={t('common.help_menu.documentation')} />
-              <SheetRow href="http://learnhouse.to/discord" external Icon={DiscordIcon} label={t('common.help_menu.discord')} />
               <SheetRow
                 Icon={ChatCircleDots}
                 label={t('common.help_menu.report_feedback')}

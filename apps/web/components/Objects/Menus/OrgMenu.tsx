@@ -352,35 +352,13 @@ export const OrgMenu = (props: any) => {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                       <a
-                        href="https://docs.learnhouse.app"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2"
-                      >
-                        <Book size={16} weight="fill" />
-                        <span>{t('common.help_menu.documentation')}</span>
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a
-                        href="https://learnhouse.app"
+                        href="https://www.studytomy.com/"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2"
                       >
                         <Globe size={16} weight="fill" />
                         <span>{t('common.help_menu.website')}</span>
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a
-                        href="http://learnhouse.to/discord"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2"
-                      >
-                        <DiscordIcon size={16} />
-                        <span>{t('common.help_menu.discord')}</span>
                       </a>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -463,11 +441,12 @@ export const OrgMenu = (props: any) => {
 const LearnHouseLogo = ({ logoFilter }: { logoFilter: string }) => {
   return (
     <Image
-      src="/lrn-text.svg"
-      alt="LearnHouse logo"
-      width={133}
-      height={40}
-      style={{ height: 'auto', filter: logoFilter }}
+      src="/studytomy-logo.png"
+      alt="Studytomy logo"
+      width={639}
+      height={428}
+      className="h-9 w-auto object-contain"
+      style={{ filter: logoFilter }}
     />
   )
 }

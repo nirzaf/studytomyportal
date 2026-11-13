@@ -16,7 +16,7 @@ import {
   submitConsent,
 } from '@services/mcp/mcp'
 import { cn } from '@/lib/utils'
-import lrnLogo from 'public/lrn.svg'
+import lrnLogo from 'public/studytomy-mini.png'
 
 type Access = 'admin' | 'write' | 'read'
 
@@ -292,7 +292,7 @@ function AccessOption({
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#f8f8f8] flex flex-col items-center justify-center px-4 py-10">
-      <Image src={lrnLogo} alt="LearnHouse" width={36} height={36} className="mb-6 opacity-90" />
+      <Image src={lrnLogo} alt="Studytomy" width={36} height={36} className="mb-6 opacity-90" />
       <div className="w-full max-w-md rounded-2xl bg-white nice-shadow p-6">{children}</div>
     </div>
   )

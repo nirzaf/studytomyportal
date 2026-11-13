@@ -256,7 +256,7 @@ export default function CommandPalette() {
               </div>
               {!isWhiteLabel && (
                 <img
-                  src="/lrn-dash.svg"
+                  src="/studytomy-mini.png"
                   alt=""
                   aria-hidden="true"
                   draggable={false}

@@ -126,7 +126,7 @@ export function PublicHeaderVignette({ wideUrl, name, primaryColor, font, label,
             {wideUrl ? (
               <img src={wideUrl} alt="" className="h-full w-auto max-w-[110px] object-contain rounded-sm" />
             ) : (
-              <span className={cn('font-semibold truncate', ink, large ? 'text-sm' : 'text-[9px]')}>{name || 'LearnHouse'}</span>
+              <span className={cn('font-semibold truncate', ink, large ? 'text-sm' : 'text-[9px]')}>{name || 'Studytomy'}</span>
             )}
           </span>
           <span className="flex items-center gap-1.5">
@@ -206,7 +206,7 @@ export function LoginPanelVignette({
           {scrim && <span className="absolute inset-0 bg-black/30" />}
           {showLearnHouseMark && (
             <img
-              src="/lrn.svg"
+              src="/studytomy-mini.png"
               alt=""
               className={cn('absolute', large ? 'top-3 start-3 h-4' : 'top-1.5 start-1.5 h-2', light ? 'opacity-60 invert' : 'opacity-40')}
             />
@@ -219,7 +219,7 @@ export function LoginPanelVignette({
               className={cn('ring-1 ring-inset ring-white/10', large ? 'h-16 w-16 rounded-2xl' : 'h-9 w-9 rounded-lg')}
               insetClassName={large ? 'p-2' : 'p-1'}
             />
-            <span className={cn('font-black tracking-tight leading-tight', large ? 'text-lg' : 'text-[9px]')}>{name || 'LearnHouse'}</span>
+            <span className={cn('font-black tracking-tight leading-tight', large ? 'text-lg' : 'text-[9px]')}>{name || 'Studytomy'}</span>
             {welcome && (
               <span className={cn('leading-snug', large ? 'text-xs max-w-[220px]' : 'text-[7px] max-w-[110px] line-clamp-2', light ? 'text-white/70' : 'text-gray-600')}>
                 {welcome}

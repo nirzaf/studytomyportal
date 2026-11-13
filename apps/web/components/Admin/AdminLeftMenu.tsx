@@ -42,7 +42,7 @@ function AdminTopMenu() {
       >
         {/* Logo */}
         <Link className="flex items-center gap-2 transition-opacity hover:opacity-70 shrink-0" href="/admin">
-          <img src="/lrn-dash.svg" alt="Learnhouse logo" className="h-7 w-7" />
+          <img src="/studytomy-mini.png" alt="Studytomy logo" className="h-7 w-7 rounded-md object-contain" />
           <span className="font-semibold text-sm text-white">{t('admin.menu.admin')}</span>
           <span className="text-[9px] font-medium uppercase tracking-wider text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">
             {t('admin.menu.superadmin')}
