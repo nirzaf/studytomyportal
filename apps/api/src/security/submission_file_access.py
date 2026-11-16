@@ -97,6 +97,11 @@ def split_content_path(file_path: str) -> list[str]:
     ]
 
 
+def is_private_studytomy_path(parts: list[str]) -> bool:
+    """Reserve the organization Studytomy namespace for purpose-specific routes."""
+    return len(parts) >= 3 and parts[0].casefold() == "orgs" and parts[2].casefold() == "studytomy"
+
+
 def is_submission_file(parts: list[str]) -> bool:
     """True when the split path points at an assignment submission file."""
     return (

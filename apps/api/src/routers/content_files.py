@@ -33,6 +33,7 @@ from src.services.courses.activities.access import verify_activity_reader_access
 from src.security.submission_file_access import (
     enforce_solution_file_access,
     enforce_submission_file_access,
+    is_private_studytomy_path,
     is_solution_file,
     is_submission_file,
     split_content_path,
@@ -156,7 +157,10 @@ def _validate_content_path(file_path: str) -> str | None:
     if not full_real.startswith(base_real + os.sep):
         return None
     # Return the validated relative path
-    return os.path.relpath(full_real, base_real)
+    # Object-store keys and the content-path parser use POSIX separators on every
+    # platform. ``relpath`` emits backslashes on Windows, which can make a valid
+    # public course or branding key look like one opaque path segment downstream.
+    return os.path.relpath(full_real, base_real).replace(os.sep, "/")
 
 
 async def _verify_course_in_org(
@@ -250,6 +254,8 @@ async def _check_content_access(
     - orgs/{uuid}/...                                  → org-level (public)
     """
     parts = split_content_path(file_path)
+    if is_private_studytomy_path(parts):
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # Course activity files (including submission files): the org segment must
     # be the course's org, so one org's path can't front another org's file.

@@ -1,10 +1,11 @@
 """Router tests for src/routers/content_files.py."""
 
-from types import SimpleNamespace
+import os
 import urllib.parse
+from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
 from src.core.events.database import get_db_session
@@ -13,9 +14,17 @@ from src.tests.fixtures.rows import activity_row
 from src.db.podcasts.podcasts import Podcast
 from src.db.podcasts.episodes import PodcastEpisode
 from src.db.users import APITokenUser, AnonymousUser, PublicUser
-from src.routers import content_files
+from src.routers import content_files, local_content
 from src.routers.content_files import router as content_files_router
 from src.security.auth import get_current_user
+
+
+@pytest.mark.parametrize("handler", [content_files._check_content_access, local_content._check_content_access])
+@pytest.mark.parametrize("namespace", ["studytomy", "StudyTomy"])
+async def test_generic_content_handlers_reserve_private_evidence_namespace(handler, namespace):
+    with pytest.raises(HTTPException) as denied:
+        await handler(f"orgs/org_fixture/{namespace}/evidence/ev_fixture.pdf", AnonymousUser(), None)
+    assert denied.value.status_code == 403
 
 
 @pytest.fixture
@@ -102,7 +111,7 @@ class TestContentFilesRouter:
             def fake_realpath(path):
                 if path == "content":
                     return "/tmp/content"
-                if path == "/tmp/content/safe.txt":
+                if path == os.path.join("/tmp/content", "safe.txt"):
                     return "/tmp/other/safe.txt"
                 return path
 
