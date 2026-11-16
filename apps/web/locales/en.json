@@ -274,6 +274,7 @@
   "auth": {
     "login": "Login",
     "sign_in": "Sign in",
+    "session_revalidating": "Checking your session...",
     "email": "Email",
     "password": "Password",
     "forgot_password": "Forgot password?",
@@ -2679,6 +2680,15 @@
       "zone_body": "This removes your account and access. Any organization you are the sole admin of, and all of its courses and content, will be deleted too. Organizations with other admins are kept; you are simply removed from them."
     },
     "ai_apps": "AI apps",
+    "privacy": "Privacy",
+    "privacy_description": "Review how this account appears in Studytomy learning spaces.",
+    "privacy_loading": "Loading privacy status…",
+    "privacy_load_error": "Privacy status could not be loaded. Please try again later.",
+    "privacy_private_title": "Public visibility is off by default",
+    "privacy_private_body": "This account is protected in peer search and public author labels. Learning access does not depend on publicity.",
+    "privacy_controls_unavailable": "Purpose-specific publicity controls are not available yet. This page does not grant permission for any public use of a learner's identity or work.",
+    "privacy_profile_title": "Existing account profile",
+    "privacy_profile_body": "No Studytomy learner profile is linked to this account. Existing account profile visibility rules apply.",
     "mobile_actions": "Account mobile actions"
   },
   "user": {
