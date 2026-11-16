@@ -63,6 +63,7 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "asyncio: mark test as async",
     "ollama: live test that requires a local Ollama server (opt-in; skipped if unreachable)",
+    "studytomy_postgres: opt-in test that requires an isolated PostgreSQL database (STUDYTOMY_TEST_DATABASE_URL)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
