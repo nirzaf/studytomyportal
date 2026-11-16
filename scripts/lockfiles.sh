@@ -8,7 +8,7 @@
 # The manifests are the source of truth; the lockfiles are derived. Anything
 # that edits a manifest (Renovate, a release version bump, a hand-edited
 # dependency) has to run this, or `bun install --frozen-lockfile` /
-# `uv sync --frozen` breaks in the Docker build and in CI.
+# `uv sync --frozen` breaks in Docker image builds and local verification.
 #
 set -euo pipefail
 
@@ -37,8 +37,8 @@ if ! have bun; then
 fi
 
 # ── bun version ────────────────────────────────────────────────────────────
-# .bun-version is what CI installs; apps/web declares the same version in
-# `packageManager` so a stray `npm`/`pnpm`/`yarn` install refuses to run there.
+# .bun-version is the repository's expected toolchain; apps/web declares the
+# same version in `packageManager` so a stray package manager is rejected.
 note "bun version"
 WANT_BUN="$(tr -d '[:space:]' < .bun-version)"
 DECLARED_BUN="$(bun -e 'console.log((JSON.parse(await Bun.file("apps/web/package.json").text()).packageManager ?? "").replace(/^bun@/, ""))')"
@@ -49,12 +49,12 @@ else
   echo "  $WANT_BUN"
 fi
 if [[ "$(bun --version)" != "$WANT_BUN" ]]; then
-  echo "  note: local bun is $(bun --version); CI resolves with $WANT_BUN." >&2
+  echo "  note: local bun is $(bun --version); expected version is $WANT_BUN." >&2
 fi
 
 # The Dockerfiles pin bun as an image tag, which nothing else validates. A tag
 # left behind on an older bun is how the frontend image ended up building on a
-# different runtime than CI: the build crashed on a bug CI never saw. Every
+# different runtime from the one declared by the repository. Every
 # `oven/bun:` base must name the version in .bun-version.
 note "bun image tags"
 DOCKERFILE_BUN_MISMATCH=0
@@ -77,8 +77,7 @@ for ws in "${BUN_WORKSPACES[@]}"; do
   [[ -f "$ws/package.json" ]] || continue
   note "bun install ($ws)"
   if (( CHECK )); then
-    # This is the exact command the Dockerfiles and CI run, so a pass here
-    # means a pass there.
+    # This matches the frozen install used in the Dockerfiles.
     (cd "$ws" && bun install --frozen-lockfile) || FAILED+=("$ws/bun.lock")
   else
     (cd "$ws" && bun install)

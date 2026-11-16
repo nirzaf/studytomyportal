@@ -24,7 +24,7 @@ RUN rm -f .env*
 ARG LEARNHOUSE_PUBLIC=false
 RUN if [ "$LEARNHOUSE_PUBLIC" = "true" ] || { [ -L /app/ee ] && [ ! -e /app/ee ]; }; then rm -rf /app/ee; fi
 
-# Commit sha from CI; lets Next tell deploys apart (see generateBuildId)
+# Optional explicit build identifier; see generateBuildId in next.config.js.
 ARG BUILD_ID
 ENV BUILD_ID=$BUILD_ID
 RUN bun run build

@@ -1,4 +1,4 @@
-# The CI build context is ./apps/api, so Docker reads this file and not the one at
+# The API build context is ./apps/api, so Docker reads this file and not the one at
 # the repo root. Without it a local build copies .venv over the image's own venv,
 # and ships .env into the image.
 

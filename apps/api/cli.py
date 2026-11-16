@@ -51,13 +51,12 @@ def _to_sync_url(url: str) -> str:
 @cli.command()
 def migrate(
     status: Annotated[bool, typer.Option("--status", help="Only show the database and code revisions")] = False,
-    strict: Annotated[bool, typer.Option("--strict", help="Fail if the models needed schema the migrations didn't provide (CI)")] = False,
+    strict: Annotated[bool, typer.Option("--strict", help="Fail if the models need schema the migrations didn't provide")] = False,
 ):
     """Bring the database schema to this version of LearnHouse.
 
     The API does this on startup unless LEARNHOUSE_AUTO_MIGRATE=false; run it
-    yourself to migrate ahead of a deploy (the Kubernetes chart does) or to
-    check where a database stands.
+    yourself to check or migrate a local database.
     """
     from src.core.migrations import SchemaMigrationError, current_revisions, head_revisions, sync_database_url
 

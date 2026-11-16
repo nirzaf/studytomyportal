@@ -1,6 +1,6 @@
 ---
 title: "Contribution Guidelines"
-description: "Follow the LearnHouse contribution workflow: branch naming, lockfiles, pull requests against dev, code style and the CI checks to run locally."
+description: "Follow the local contribution workflow: branch naming, lockfiles, code style and checks to run before committing."
 ---
 
 # Contribution Guidelines
@@ -41,7 +41,7 @@ When adding or updating dependencies:
 
 - **Frontend**: Use `bun` to manage JavaScript/TypeScript dependencies (e.g., `bun add <package>`).
 - **Backend**: Use `uv` to manage Python dependencies (e.g., `uv add <package>`).
-- **Lockfiles**: CI installs with frozen lockfiles, so commit the updated lockfiles. Run `scripts/lockfiles.sh` to regenerate them all.
+- **Lockfiles**: installs use frozen lockfiles. Run `scripts/lockfiles.sh` to regenerate them all, then verify with `scripts/lockfiles.sh --check`.
 
 ### 4. Submit a Pull Request
 
@@ -79,7 +79,7 @@ In your pull request description:
 - Verify that existing functionality is not broken by your changes.
 - For new features, include tests where applicable.
 
-CI runs these checks on pull requests that touch each app. You can run the same commands locally:
+This checkout has no configured CI workflow. Run the relevant checks locally before committing:
 
 | App | Directory | Commands |
 | --- | --- | --- |
@@ -87,7 +87,7 @@ CI runs these checks on pull requests that touch each app. You can run the same 
 | Web | `apps/web` | `bun run test`, `bunx tsc --noEmit` (after `bunx next typegen`), and `bun run lint:strict <changed files>` |
 | CLI | `apps/cli` | `bun run typecheck`, `bun run test`, and `bun run test:integration` (needs Docker) |
 
-The API test suite enforces 100% coverage (set in `apps/api/pyproject.toml`), so add tests for every line you change. Files you change in the web app must pass the strict lint. Playwright end-to-end tests in `apps/e2e` run nightly.
+The API test suite enforces 100% coverage (set in `apps/api/pyproject.toml`), so add tests for every line you change. Files you change in the web app must pass the strict lint. Playwright end-to-end tests in `apps/e2e` can be run locally when their environment is configured; this repository does not run them on a schedule.
 
 ## Review Process
 

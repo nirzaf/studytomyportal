@@ -4,6 +4,8 @@
 
 Studytomy Portal is a LearnHouse-based Australian curriculum-focused learning platform under active development combining structured courses, educator-led tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The initial target market is Australia (a Victorian pilot, subject to client approval), with engineering delivery supported from Sri Lanka.
 
+**Current operation: local development only.** This repository has no configured deployment or CI/CD workflow. See [LOCAL-ONLY.md](LOCAL-ONLY.md) for local verification commands and the external-integration boundary.
+
 ## Contents
 
 - [Product vision](#product-vision)
@@ -109,7 +111,7 @@ The public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-re
 
 ## Target architecture
 
-**Decision**: Deploy Studytomy Portal (`lms.studytomy.com`, [`nirzaf/studytomyportal`](https://github.com/nirzaf/studytomyportal)) as a standalone application built on the open-source [LearnHouse](https://github.com/learnhouse/learnhouse) Community Edition runtime and database, while the existing public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) remains unchanged and independent.
+**Target architecture (not deployed)**: Studytomy Portal targets `lms.studytomy.com` and is built on the open-source [LearnHouse](https://github.com/learnhouse/learnhouse) Community Edition runtime and database. The repository currently supports local development only. The existing public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) remains a separate application.
 
 ```mermaid
 flowchart TD
@@ -117,7 +119,7 @@ flowchart TD
     Visitor[Visitors] --> Marketing[Public Website]
   end
 
-  subgraph LMS["lms.studytomy.com — Studytomy Portal (studytomyportal)"]
+  subgraph LMS["Studytomy Portal target — not deployed"]
     Learner[Students / Tutors / Admins] --> Web[Studytomy Portal\nNext.js / React]
     Web --> API[FastAPI Backend]
     Web <-->|Collaborative editing| Collab[Collaboration Service\nHocuspocus / Yjs]
@@ -133,7 +135,7 @@ flowchart TD
   Marketing -. Optional navigation link .-> Web
 ```
 
-**Deployment approach**: Deploy the Studytomy LMS at `lms.studytomy.com` while the existing public website (`studytomy.com` / `www.studytomy.com`) remains completely separate with independent deployment, authentication sessions, and data storage. The public website can link to `https://lms.studytomy.com` via a navigation item when ready (a separately approved website change).
+**Current operation**: Run and verify the portal locally. A future deployment to `lms.studytomy.com` would require separate operational and business approval. No deployment or CI/CD configuration is included in this repository, and removing repository configuration does not disconnect external GitHub Apps or hosting accounts. The public website remains separate with its own deployment, authentication sessions, and data storage.
 
 ### Architecture boundaries
 
@@ -165,7 +167,7 @@ This inventory describes the checked-out source and committed dependency declara
 | Documentation | Next.js 16.4.5, Fumadocs Core 16.18.1 / MDX 15.5.0 | `docs/package.json`, `docs/bun.lock` |
 | Headless clients | `@learnhouse/sdk`, `@learnhouse/react`, `@learnhouse/vue` 1.4.3 | `packages/*/package.json`; separate from portal runtime |
 
-The CLI's default application image is `ghcr.io/learnhouse/app:latest` (development: `:dev`), not a reproducible Studytomy release pin. Select and verify the intended fork artifact before deployment. The Python pgvector client version (0.5.1) is not the database extension version. Optional integrations and Enterprise-related packages in manifests do not prove that their associated features are licensed, enabled or deployed. No Supabase dependency is declared in these manifests.
+The CLI's default application image is `ghcr.io/learnhouse/app:latest` (development: `:dev`), not a reproducible Studytomy build pin; do not treat it as a Studytomy artifact. The Python pgvector client version (0.5.1) is not the database extension version. Optional integrations and Enterprise-related packages in manifests do not prove that their associated features are licensed, enabled or deployed. No Supabase dependency is declared in these manifests.
 
 ### Complete direct dependency inventory
 
@@ -700,7 +702,7 @@ apps/
   web/       # Next.js portal and authoring interfaces
   api/       # FastAPI, database models, API routers, services, migrations
   collab/    # Collaborative editing server
-  cli/       # Setup, diagnostics and deployment tools
+  cli/       # Local development, diagnostics and LearnHouse self-hosting tools
 ```
 
 Studytomy-specific modules follow the existing application structure:
@@ -729,7 +731,7 @@ bun install --frozen-lockfile
 uv sync --frozen
 ```
 
-Run commands in the component directory indicated, not as a single root script. Start required PostgreSQL/Redis services and configure supported environment variables before starting the API. The repository includes a combined Dockerfile and CLI-generated Compose templates; deployment must use the intended Studytomy build, not blindly the CLI's upstream `latest` image.
+Run commands in the component directory indicated, not as a single root script. Start required PostgreSQL/Redis services and configure supported environment variables before starting the API. The combined Dockerfile and CLI-generated Compose templates support local builds and runtime tests; they do not configure a hosted environment or deploy this project.
 
 ### 2. Development commands
 
@@ -858,4 +860,4 @@ Studytomy branding, content, and development responsibilities are subject to the
 - [LearnHouse AI configuration](https://docs.learnhouse.app/self-hosting/configuration/ai-setup)
 - [Previous Studytomy website repository](https://github.com/nirzaf/studytomy-react) (access controlled)
 
-**Current delivery state**: LearnHouse foundation plus active Studytomy implementation. Release requires verified tests, migrations, deployment configuration and approved business/educational gates; this document is not a deployment receipt.
+**Current delivery state**: LearnHouse foundation plus active Studytomy implementation, under local development. Run tests locally. This repository intentionally has no deployment or CI/CD configuration. Any future release requires separate approval and verified business, educational, privacy, security, and operational gates; this document is not a deployment receipt.

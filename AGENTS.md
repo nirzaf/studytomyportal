@@ -1,7 +1,7 @@
 # Studytomy — AI Agent Engineering Instructions
 
 - **Scope**: Place this file at the root of the new Studytomy modernization fork based on LearnHouse Community Edition. It is not an instruction to rewrite or modify the legacy `nirzaf/studytomy-react` repository.
-- **Project status**: Modernization is planned. Do not represent any proposed Studytomy feature, migration, integration, or deployment as implemented without verifying the actual target repository.
+- **Project status**: Modernization is in local development only. This repository has no configured deployment or CI/CD workflow. Do not represent any proposed Studytomy feature, migration, integration, or deployment as implemented without verifying the actual target repository.
 - **Priority**: Apply this root file together with more specific repository instructions (including upstream `apps/web/AGENTS.md`); the more specific instructions govern their respective paths, except where they conflict with the project's approval, security, or licensing requirements.
 
 ---
@@ -25,7 +25,7 @@ Success is demonstrated through complete, authorized user journeys—not feature
 
 ### Selected technology and architectural boundaries
 
-- **Portal repository & domain**: `https://github.com/nirzaf/studytomyportal.git` (default branch `main`), target deployment domain `lms.studytomy.com`.
+- **Portal repository & target domain**: `https://github.com/nirzaf/studytomyportal.git` (default branch `main`), future target domain `lms.studytomy.com`; the checkout currently runs locally only.
 - **Upstream**: `https://github.com/learnhouse/learnhouse.git` (tracked as `upstream` or `origin` when configured; reference only).
 - **Frontend**: Existing LearnHouse Next.js / React / TypeScript frontend; preserve its App Router and established UI conventions.
 - **Backend**: Existing Python / FastAPI services and API contracts.
@@ -42,7 +42,7 @@ Success is demonstrated through complete, authorized user journeys—not feature
 - Quizzes, supported assignment task types, automatic marking for objective formats, manual grading and feedback.
 - Learning paths, completion records, certificates, user groups, roles, invitations, MFA and search.
 - Activity-scoped Ask AI, AI-assisted authoring, question drafting, Magic Blocks, interactive playgrounds and collaborative boards (where configured).
-- APIs, API tokens, supported webhooks, MCP integration, self-hosting CLI and deployment tools (where configured).
+- APIs, API tokens, supported webhooks, MCP integration, and the end-user self-hosting CLI (where configured). These product capabilities do not configure deployment or CI/CD for this repository.
 
 > [!WARNING]
 > **Do not equate**: course completion with mastery; AI question drafting with validated VCE/HSC exams; playgrounds with scientifically validated laboratories; objective auto-grading with essay/handwriting evaluation; or assignment statistics with Enterprise Analytics.
@@ -70,7 +70,7 @@ Before changing code, classify each requested behavior as **Implemented / Partia
 
 For every substantive change:
 
-1. **Understand**: Inspect the current target branch, actual call sites, `README.md`, applicable nested `AGENTS.md`, schemas, migrations, CI and tests. Record the inspected commit SHA. Do not infer deployed behavior from a prior discussion.
+1. **Understand**: Inspect the current target branch, actual call sites, `README.md`, applicable nested `AGENTS.md`, schemas, migrations, and tests. Record the inspected commit SHA. This checkout has no configured CI/CD; do not infer deployed behavior from a prior discussion.
 2. **Specify**: State the requested behavior, affected workflows, non-goals, compatibility concerns, roles/permissions and objective acceptance criteria. For changes larger than a small fix, propose the minimal plan first.
 3. **Implement minimally**: Follow upstream naming and folder conventions, normally `apps/web`, `apps/api/src/routers`, `apps/api/src/services`, `apps/api/src/db`, `apps/api/migrations`, and `apps/collab`. Avoid unrelated refactors and speculative abstractions.
 4. **Protect boundaries**: Enforce permissions, student/guardian relationships, validation, transactionality, concurrency, retries, idempotency, and auditability at the server boundary.
@@ -94,7 +94,7 @@ For every substantive change:
 
 ### Check cadence and triggers
 
-- Review upstream at least weekly using an external scheduled job/automation. `AGENTS.md` alone cannot execute on a timer; the repository or automation must be configured separately.
+- Review upstream at least weekly. This repository has no scheduled workflow; any separate monitoring automation requires its own owner and approval.
 - Check on demand when requested, before any planned upgrade, and when relevant upstream changes could solve an approved Studytomy requirement.
 - Prioritize tagged stable releases, security advisories, migrations, and bug fixes. Follow the upstream `dev` branch for discovery only; never merge it directly into production.
 - Compare against the last adopted upstream tag and exact SHA recorded in the Studytomy fork (currently `144c843b`). If this baseline is absent, report `BASELINE UNKNOWN` and establish it read-only before suggesting an upgrade.

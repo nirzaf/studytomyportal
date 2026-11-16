@@ -74,4 +74,4 @@ docker compose -f .learnhouse/docker-compose.dev.yml -p learnhouse-dev down
 - **Port conflicts**: Make sure ports 3000 (web), 1338 (API), 4000 (collab), 5432 (Postgres), and 6379 (Redis) are not in use by other applications.
 - **Docker not running**: Ensure the Docker daemon is started before running `npx learnhouse dev`.
 - **Dependency issues**: The CLI only installs dependencies when `node_modules` (web, collab) or `.venv` (API) is missing. After pulling changes that touch dependencies, run `bun install` or `uv sync` yourself, or delete those directories and re-run `npx learnhouse dev`.
-- **Lockfile errors in CI**: after changing a `package.json` or `apps/api/pyproject.toml`, run `scripts/lockfiles.sh` to regenerate every lockfile. CI runs `scripts/lockfiles.sh --check`.
+- **Lockfile errors**: after changing a `package.json` or `apps/api/pyproject.toml`, run `scripts/lockfiles.sh` to regenerate every lockfile, then run `scripts/lockfiles.sh --check` locally. No repository CI workflow runs this automatically.

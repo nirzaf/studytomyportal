@@ -407,7 +407,7 @@ async def _sync_demo_inner(
     await _sync_engagement(db_session, bundle, org, registry, epoch, users_by_key, stats)
     # The storefront is the one part of the demo whose code lives in another
     # repository on its own release cadence, so it can break on a version skew
-    # that nothing here or in CI would catch. A failure there must cost the
+    # outside the main demo-sync path. A failure there must cost the
     # storefront, not the entire demo: six courses, forty learners and the
     # grading inbox are the sales asset, and a demo that refuses to exist
     # because one optional feature drifted is the worse outcome.

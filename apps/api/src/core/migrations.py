@@ -1,9 +1,8 @@
 """Bring the database schema to the version of the code that is starting.
 
-One routine for every way LearnHouse runs: the API calls it on startup (the
-all-in-one image, docker compose, the CLI's installs), ``python cli.py migrate``
-runs it by hand, and the Kubernetes chart runs that command as a pre-deploy
-job, so a release never serves traffic against an older schema.
+One routine for API startup, the CLI's local installs, and the manual
+``python cli.py migrate`` command. It brings the database schema in line with
+the code that is starting.
 
 What it does depends on the database it finds:
 
@@ -17,13 +16,12 @@ What it does depends on the database it finds:
   then stamp the head.
 
 After an upgrade it also adds any table or column the models have that the
-migrations missed, and logs it, so a forgotten migration degrades into a
-warning instead of an outage. CI fails the pull request that forgets one.
+migrations missed, and logs it, so schema drift is visible instead of silently
+being accepted.
 
-Every step runs in one transaction under a Postgres advisory lock: replicas
-starting together take turns, and a failed migration leaves the database as
-it was. The caller then refuses to start, so a rollout stalls on the old
-pods instead of serving errors.
+Every step runs in one transaction under a Postgres advisory lock: concurrent
+API processes take turns, and a failed migration leaves the database as it
+was. The caller then refuses to start against a partially migrated schema.
 """
 
 import importlib

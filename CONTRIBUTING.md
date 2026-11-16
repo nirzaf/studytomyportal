@@ -14,18 +14,15 @@ This will spin up PostgreSQL and Redis containers, install dependencies, and sta
 
 ## Dependencies and lockfiles
 
-Every install in CI and in the Docker images is frozen, so a manifest change
-that skips the lockfile fails the build with `lockfile had changes, but
-lockfile is frozen`. After touching a `package.json`, `apps/api/pyproject.toml`
-or a version number, run:
+Local and Docker image installs use frozen lockfiles, so a manifest change
+that skips the lockfile fails with `lockfile had changes, but lockfile is
+frozen`. This repository has no configured CI workflow. After touching a
+`package.json`, `apps/api/pyproject.toml` or a version number, run:
 
 ```bash
 scripts/lockfiles.sh          # regenerate every lockfile
-scripts/lockfiles.sh --check  # what CI runs
+scripts/lockfiles.sh --check  # verify locally without rewriting lockfiles
 ```
-
-The `Lockfiles` workflow checks this on every PR, and pushes the regenerated
-files back to dependency-bot branches on its own.
 
 ## Submitting Contributions
 
