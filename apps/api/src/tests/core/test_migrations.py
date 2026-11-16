@@ -117,6 +117,73 @@ class TestEnsureSchema:
             with pytest.raises(SchemaMigrationError, match="expected"):
                 ensure_schema(db_url, metadata=_models())
 
+    def test_unknown_revision_fails_closed_by_default(self, db_url, monkeypatch):
+        ensure_schema(db_url, metadata=_models())
+        unknown_revision = "f6e7d8c9b0a1"
+        engine = create_engine(db_url)
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE alembic_version SET version_num=:revision"),
+                {"revision": unknown_revision},
+            )
+        engine.dispose()
+        monkeypatch.delenv("LEARNHOUSE_ALLOW_UNKNOWN_ALEMBIC_HEAD", raising=False)
+
+        with pytest.raises(SchemaMigrationError, match="does not know"):
+            ensure_schema(db_url, metadata=_models())
+        assert _revisions(db_url) == [unknown_revision]
+
+    def test_forward_compatible_mode_preserves_future_schema_and_revision(
+        self, db_url, monkeypatch, caplog
+    ):
+        ensure_schema(db_url, metadata=_models())
+        unknown_revision = "f6e7d8c9b0a1"
+        engine = create_engine(db_url)
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE alembic_version SET version_num=:revision"),
+                {"revision": unknown_revision},
+            )
+            connection.execute(
+                text("CREATE TABLE future_study_table (id INTEGER PRIMARY KEY, note TEXT NOT NULL)")
+            )
+            connection.execute(
+                text("INSERT INTO future_study_table (id, note) VALUES (1, 'retained')")
+            )
+        engine.dispose()
+        monkeypatch.setenv("LEARNHOUSE_ALLOW_UNKNOWN_ALEMBIC_HEAD", "true")
+
+        with patch.object(migrations.command, "upgrade") as upgrade:
+            report = ensure_schema(db_url, metadata=_models())
+        upgrade.assert_not_called()
+        assert report.state == "forward-compatible"
+        assert report.before == report.after == [unknown_revision]
+        assert _revisions(db_url) == [unknown_revision]
+        engine = create_engine(db_url)
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT note FROM future_study_table WHERE id=1")
+            ).scalar_one() == "retained"
+        engine.dispose()
+        assert "migrations are skipped" in caplog.text
+
+    def test_forward_compatible_mode_rejects_mixed_heads(self, db_url, monkeypatch):
+        ensure_schema(db_url, metadata=_models())
+        known_revision = _revisions(db_url)[0]
+        unknown_revision = "f6e7d8c9b0a1"
+        engine = create_engine(db_url)
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
+                {"revision": unknown_revision},
+            )
+        engine.dispose()
+        monkeypatch.setenv("LEARNHOUSE_ALLOW_UNKNOWN_ALEMBIC_HEAD", "true")
+
+        with pytest.raises(SchemaMigrationError, match="mixture of known and unknown"):
+            ensure_schema(db_url, metadata=_models())
+        assert set(_revisions(db_url)) == {known_revision, unknown_revision}
+
     def test_risky_differences_are_reported_not_applied(self, db_url, caplog):
         ensure_schema(db_url, metadata=_models())
         changed = MetaData()
@@ -179,6 +246,17 @@ class TestHelpers:
         else:
             monkeypatch.setenv("LEARNHOUSE_AUTO_MIGRATE", value)
         assert auto_migrate_enabled() is expected
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [(None, False), ("true", True), ("1", True), ("yes", True), ("on", True), ("false", False), ("0", False)],
+    )
+    def test_unknown_revision_rollback_flag(self, monkeypatch, value, expected):
+        if value is None:
+            monkeypatch.delenv("LEARNHOUSE_ALLOW_UNKNOWN_ALEMBIC_HEAD", raising=False)
+        else:
+            monkeypatch.setenv("LEARNHOUSE_ALLOW_UNKNOWN_ALEMBIC_HEAD", value)
+        assert migrations.allow_unknown_alembic_head() is expected
 
     @pytest.mark.parametrize("url,expected", [
         ("postgresql+asyncpg://u:p@h/db", "postgresql://u:p@h/db"),

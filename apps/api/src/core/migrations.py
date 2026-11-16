@@ -61,7 +61,7 @@ class SchemaMigrationError(RuntimeError):
 
 @dataclass
 class SchemaReport:
-    state: str  # "empty" | "stamped" | "unstamped"
+    state: str  # "empty" | "stamped" | "unstamped" | "forward-compatible"
     before: list[str] = field(default_factory=list)
     after: list[str] = field(default_factory=list)
     # Tables/columns/indexes added to match the models, as readable strings.
@@ -78,6 +78,17 @@ class SchemaReport:
 def auto_migrate_enabled() -> bool:
     """``LEARNHOUSE_AUTO_MIGRATE=false`` leaves the schema to the operator."""
     return os.getenv("LEARNHOUSE_AUTO_MIGRATE", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
+def allow_unknown_alembic_head() -> bool:
+    """Allow an explicit app rollback across a verified additive future schema.
+
+    Unknown revisions remain a hard error by default. When enabled, the runner
+    skips migrations and only reconciles missing objects from this app's models.
+    """
+    return os.getenv("LEARNHOUSE_ALLOW_UNKNOWN_ALEMBIC_HEAD", "").strip().lower() in (
+        "1", "true", "yes", "on"
+    )
 
 
 def load_models() -> MetaData:
@@ -254,6 +265,31 @@ def ensure_schema(url: Optional[str] = None, *, metadata: Optional[MetaData] = N
             with engine.begin() as connection:
                 report = SchemaReport(state="stamped", before=current_revisions(connection))
                 has_tables = any(inspect(connection).has_table(name) for name in metadata.tables)
+                known_revisions = {
+                    revision.revision
+                    for revision in ScriptDirectory.from_config(alembic_config()).walk_revisions()
+                }
+                unknown_heads = set(report.before).difference(known_revisions)
+                forward_compatible = bool(unknown_heads)
+                if forward_compatible:
+                    if not allow_unknown_alembic_head():
+                        raise SchemaMigrationError(
+                            "Database has Alembic revision(s) this application does not know: "
+                            f"{sorted(unknown_heads)!r}. Refusing startup. The explicit "
+                            "LEARNHOUSE_ALLOW_UNKNOWN_ALEMBIC_HEAD option is only for "
+                            "rollback to code verified against an additive future schema."
+                        )
+                    if len(unknown_heads) != len(report.before):
+                        raise SchemaMigrationError(
+                            "Forward-compatible mode refuses a mixture of known and unknown "
+                            f"Alembic heads: {report.before!r}."
+                        )
+                    report.state = "forward-compatible"
+                    logger.warning(
+                        "Unknown Alembic head(s) %s; migrations are skipped under the "
+                        "explicit forward-compatible rollback option",
+                        sorted(unknown_heads),
+                    )
                 if not report.before and not has_tables:
                     report.state = "empty"
                     metadata.create_all(connection)
@@ -262,6 +298,10 @@ def ensure_schema(url: Optional[str] = None, *, metadata: Optional[MetaData] = N
                     report.state = "unstamped"
                     report.reconciled, report.skipped = reconcile(connection, metadata)
                     command.stamp(alembic_config(connection), "heads")
+                elif forward_compatible:
+                    report.reconciled, report.skipped = reconcile(
+                        connection, metadata, indexes=False
+                    )
                 else:
                     command.upgrade(alembic_config(connection, deferred), "heads")
                     # Safety net for a migration someone forgot. Indexes are
@@ -269,7 +309,12 @@ def ensure_schema(url: Optional[str] = None, *, metadata: Optional[MetaData] = N
                     # table for a while on a live database.
                     report.reconciled, report.skipped = reconcile(connection, metadata, indexes=False)
                 report.after = current_revisions(connection)
-                if report.after != heads:
+                if forward_compatible and report.after != report.before:
+                    raise SchemaMigrationError(
+                        "Forward-compatible startup unexpectedly changed Alembic revisions: "
+                        f"{report.before!r} -> {report.after!r}."
+                    )
+                if not forward_compatible and report.after != heads:
                     raise SchemaMigrationError(f"database at {report.after} after migrating, expected {heads}")
             # Still under the lock, so another replica doesn't start the same
             # builds.
