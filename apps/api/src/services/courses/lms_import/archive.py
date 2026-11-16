@@ -152,6 +152,11 @@ def _extract_zip(src: str, dest_real: str, limits: ExtractLimits) -> None:
                 raise ArchiveError(f"Archive entry is too large: {info.filename}")
             try:
                 os.makedirs(os.path.dirname(target), exist_ok=True)
+                # On Windows, opening a directory as a file can raise a generic
+                # PermissionError instead of IsADirectoryError. Treat an
+                # archive file/directory name collision as a skipped entry.
+                if os.path.isdir(target):
+                    continue
                 out = open(target, "wb")
             except _PATH_CONFLICTS:
                 continue
@@ -205,6 +210,9 @@ def _extract_tar(src: str, dest_real: str, limits: ExtractLimits) -> None:
                 continue
             try:
                 os.makedirs(os.path.dirname(target), exist_ok=True)
+                if os.path.isdir(target):
+                    source.close()
+                    continue
                 out = open(target, "wb")
             except _PATH_CONFLICTS:
                 source.close()

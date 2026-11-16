@@ -1132,20 +1132,20 @@ def test_convert_end_to_end(tmp_path):
     out = tmp_path / "package"
     result = convert(str(archive), str(out), options=ConvertOptions(keep_past_due_dates=True))
     assert result.course.source == "blackboard"
-    manifest = json.loads((out / "manifest.json").read_text())
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["source"]["lms"] == "blackboard"
     course_dir = out / manifest["courses"][0]["path"]
-    course_json = json.loads((course_dir / "course.json").read_text())
+    course_json = json.loads((course_dir / "course.json").read_text(encoding="utf-8"))
     assert course_json["name"] == "Biology 101" and course_json["thumbnail_image"]
     chapters = sorted((course_dir / "chapters").iterdir())
-    names = sorted(json.loads((c / "chapter.json").read_text())["name"] for c in chapters)
+    names = sorted(json.loads((c / "chapter.json").read_text(encoding="utf-8"))["name"] for c in chapters)
     assert names == sorted(["Information", "Staff Contacts", "Learning Materials › Week 1", "Assessments",
                             "Links", "Question pools"])
-    activities = [json.loads((a / "activity.json").read_text())
+    activities = [json.loads((a / "activity.json").read_text(encoding="utf-8"))
                   for c in chapters for a in (c / "activities").iterdir()]
     types = {a["activity_type"] for a in activities}
     assert {"TYPE_DYNAMIC", "TYPE_DOCUMENT", "TYPE_VIDEO", "TYPE_ASSIGNMENT"} <= types
-    assignments = [json.loads(p.read_text()) for p in course_dir.rglob("assignment.json")]
+    assignments = [json.loads(p.read_text(encoding="utf-8")) for p in course_dir.rglob("assignment.json")]
     dues = {a["assignment"]["title"]: a["assignment"]["due_date"] for a in assignments}
     assert dues["Essay 1"] == "2024-05-01T23:59:00-04:00"
     assert dues["Quiz 1"] == "2024-04-15T17:00:00-04:00"

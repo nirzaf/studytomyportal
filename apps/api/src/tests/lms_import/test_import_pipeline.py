@@ -439,7 +439,9 @@ async def test_library_files_go_to_object_storage_when_enabled(db, org, admin_us
     if uploaded:
         assert result.successful == 1, result.courses[0].error
         assert len(media) == 1
-        assert upload.call_args.args == (f"content/{media[0].storage_key}", f"content/{media[0].storage_key}")
+        object_key, local_path = upload.call_args.args
+        assert object_key == f"content/{media[0].storage_key}"
+        assert local_path.replace("\\", "/") == f"content/{media[0].storage_key}"
     else:
         assert result.successful == 0 and "library file" in result.courses[0].error
         assert media == []

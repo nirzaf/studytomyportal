@@ -217,9 +217,14 @@ def _written_activities(out):
 
     acts = []
     for p in sorted(glob.glob(os.path.join(out, "courses/*/chapters/*/activities/*/activity.json"))):
-        a = json.load(open(p))
+        with open(p, encoding="utf-8") as activity_file:
+            a = json.load(activity_file)
         aj = p.replace("activity.json", "assignment.json")
-        a["_assignment"] = json.load(open(aj)) if os.path.exists(aj) else None
+        if os.path.exists(aj):
+            with open(aj, encoding="utf-8") as assignment_file:
+                a["_assignment"] = json.load(assignment_file)
+        else:
+            a["_assignment"] = None
         acts.append(a)
     return sorted(acts, key=lambda a: a["order"])
 

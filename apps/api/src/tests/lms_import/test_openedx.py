@@ -305,14 +305,14 @@ def test_asset_url_forms(tmp_path):
     }))
     reader = openedx._Reader(str(tmp_path))
     course = reader.read()
-    assert course.thumbnail.path.endswith("images/card.png")
+    assert course.thumbnail.path.replace("\\", "/").endswith("images/card.png")
     resolve = reader.resolve
     assert resolve("/static/My_File.png").name == "My File.png"
     assert resolve("/static/My%20File.png").name == "My File.png"
     assert resolve("/c4x/TestOrg/TX101/asset/My_File.png").name == "My File.png"
     assert resolve("/asset-v1:TestOrg+TX101+2024+type@asset+block@My_File.png").name == "My File.png"
     assert resolve("https://lms.example.org/asset-v1:O+C+R+type@asset+block@mapped.pdf").name == "Mapped Name.pdf"
-    assert resolve("asset-v1:O+C+R+type@asset+block@images_card.png").path.endswith("images/card.png")
+    assert resolve("asset-v1:O+C+R+type@asset+block@images_card.png").path.replace("\\", "/").endswith("images/card.png")
     assert resolve("/static/nope.png") is None
     assert resolve("/c4x/a/b/asset/nope.png") is None
     assert resolve("https://example.org/x.png") is None

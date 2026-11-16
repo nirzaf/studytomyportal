@@ -916,7 +916,8 @@ async def _import_library_media(
         dest = os.path.join(dest_dir, stored_name)
         shutil.copy2(source, dest)
         if is_s3_enabled():
-            if not upload_file_to_s3(dest, dest):
+            object_key = f"content/{rel_dir}/{stored_name}"
+            if not upload_file_to_s3(object_key, dest):
                 raise HTTPException(status_code=500, detail="Failed to upload a library file to storage")
 
         name = str(data.get("name") or os.path.splitext(file_name)[0])[:255]
