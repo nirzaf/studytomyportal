@@ -8,6 +8,7 @@ import React, {
   useCallback,
   useMemo,
   useRef,
+  useLayoutEffect,
 } from 'react'
 import {
   getAPIUrl,
@@ -19,6 +20,12 @@ import { safeRedirectUrl } from '@services/auth/redirects'
 import i18n from '@/lib/i18n'
 import { safeExternalUrl } from '@services/security/url'
 import { AUTH_EXPIRED_EVENT, AUTH_REFRESHED_EVENT } from '@/lib/auth/events'
+import {
+  AUTH_BROADCAST_CHANNEL,
+  AUTH_STORAGE_SYNC_KEY,
+  createAuthSyncReceiver,
+  publishAuthSync,
+} from '@/lib/auth/authSync'
 
 // Types matching NextAuth's session structure
 export interface Session {
@@ -47,6 +54,7 @@ export type RefreshOutcome =
 export interface UseSessionReturn {
   data: Session | null
   status: SessionStatus
+  isRevalidating: boolean
   update: (_force?: boolean) => Promise<void>
 }
 
@@ -108,13 +116,13 @@ interface SessionCache {
 // (the authenticated refetch interval is ~1 min).
 const SESSION_CACHE_TTL = 2 * 60 * 1000 // 2 minutes
 const TOKEN_REFRESH_THRESHOLD = 60 * 1000 // 1 minute before expiry
-const AUTH_BROADCAST_CHANNEL = 'learnhouse_auth_sync'
 const OAUTH_STATE_COOKIE = 'LH_oauth_state'
 
 // Context
 interface AuthContextValue {
   session: Session | null
   status: SessionStatus
+  isRevalidating: boolean
   accessToken: string | null
   refreshSession: (_force?: boolean) => Promise<string | null>
   signIn: (_provider: string, _options?: SignInOptions) => Promise<SignInResult | void>
@@ -224,82 +232,124 @@ export function SessionProvider({
 }: SessionProviderProps) {
   const [session, setSession] = useState<Session | null>(null)
   const [status, setStatus] = useState<SessionStatus>('loading')
+  const [isRevalidating, setIsRevalidatingState] = useState(false)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [tokenExpiry, setTokenExpiry] = useState<number | null>(null)
   const sessionCacheRef = useRef<SessionCache | null>(null)
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null)
-
+  const sessionRef = useRef<Session | null>(session)
+  const statusRef = useRef<SessionStatus>(status)
   const accessTokenRef = useRef<string | null>(accessToken)
-  accessTokenRef.current = accessToken
 
-  const refreshSessionInternalRef = useRef<() => Promise<void>>(async () => {})
+  useLayoutEffect(() => {
+    sessionRef.current = session
+    statusRef.current = status
+    accessTokenRef.current = accessToken
+  }, [accessToken, session, status])
+
+  const refreshSessionInternalRef = useRef<() => Promise<boolean>>(async () => false)
+  const refreshSessionInternalPromiseRef = useRef<Promise<boolean> | null>(null)
 
   // Use ref for refresh promise to avoid issues with stale closures
   // but still deduplicate within the same tab
   const refreshPromiseRef = useRef<Promise<RefreshOutcome> | null>(null)
   const isRefreshingRef = useRef(false)
   const authFailureHandledRef = useRef(false)
-  // Monotonic auth epoch: bumped on every logout/clear. An in-flight refresh that
-  // resolves AFTER a logout (cross-tab or same-tab) checks this before committing
-  // and aborts, so it can't resurrect a session that was just invalidated.
+  // Monotonic auth epoch: bumped at logout, login, and every session revalidation
+  // boundary. A refresh that resolves after a newer boundary cannot overwrite it.
   const authEpochRef = useRef(0)
 
-  const clearAuthState = useCallback((clearMarker: boolean = true) => {
+  const setSessionRevalidationPending = useCallback((pending: boolean) => {
+    if (pending) {
+      // Hide private content synchronously, before the React update paints. The
+      // React shield below then supplies accessible status and makes the app
+      // root inert while the refresh-cookie identity is checked.
+      // Each new resume/login boundary supersedes every refresh already in
+      // flight, including another event received while the shield is up.
+      authEpochRef.current++
+      if (typeof document !== 'undefined') {
+        document.documentElement.dataset.sessionValidationPending = 'true'
+      }
+    } else {
+      if (typeof document !== 'undefined') {
+        delete document.documentElement.dataset.sessionValidationPending
+      }
+    }
+    setIsRevalidatingState(pending)
+  }, [])
+
+  const clearAuthState = useCallback((clearMarker: boolean = true, broadcastLogout = false) => {
     authEpochRef.current++
+    sessionRef.current = null
     setSession(null)
     setAccessToken(null)
     setTokenExpiry(null)
     setStatus('unauthenticated')
     sessionCacheRef.current = null
+    setSessionRevalidationPending(false)
 
     if (clearMarker) {
       clearSessionMarker()
     }
-  }, [])
-
-  // Set up BroadcastChannel for cross-tab communication
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return
-    try {
-      broadcastChannelRef.current = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
-    } catch (e) {
-      // Some privacy modes throw on BroadcastChannel; degrade gracefully.
-      console.warn('[auth] BroadcastChannel unavailable:', e)
-      return
+    // A server-confirmed expired/revoked session must invalidate every tab,
+    // just like an explicit sign-out. Received LOGOUT events use the default
+    // false value so tabs do not echo the message back and forth.
+    if (broadcastLogout) {
+      publishAuthSync('LOGOUT', broadcastChannelRef.current)
     }
+  }, [setSessionRevalidationPending])
 
-    broadcastChannelRef.current.onmessage = (event) => {
-      if (event.data.type === 'LOGOUT') {
+  // Set up BroadcastChannel with a storage-event fallback for cross-tab auth.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const receiveAuthSync = createAuthSyncReceiver((type) => {
+      if (type === 'LOGOUT') {
         // Another tab logged out, so clear our state (and the session marker) too.
-        authEpochRef.current++
-        setSession(null)
-        setAccessToken(null)
-        setTokenExpiry(null)
-        setStatus('unauthenticated')
-        sessionCacheRef.current = null
-        clearSessionMarker()
-      } else if (event.data.type === 'LOGIN') {
-        // Another tab logged in. Refresh our session, but dedupe across tabs via
-        // a shared localStorage timestamp so N open tabs don't all fire
-        // /api/auth/refresh at once on a single login.
-        try {
-          const last = Number(localStorage.getItem('lh_xtab_refresh_at') || 0)
-          if (Date.now() - last < 3000) return
-          localStorage.setItem('lh_xtab_refresh_at', String(Date.now()))
-        } catch {
-          /* localStorage unavailable; fall through and just refresh */
+        clearAuthState()
+      } else if (type === 'LOGIN') {
+        // Every tab must check the shared refresh cookie. A cross-tab storage
+        // throttle caused other tabs to keep rendering the previous account.
+        // The same event can arrive over both transports, so dedupe its nonce
+        // locally while allowing distinct login events to supersede old work.
+        if (sessionRef.current?.user || statusRef.current === 'authenticated') {
+          setSessionRevalidationPending(true)
         }
         refreshSessionInternalRef.current().catch((e) =>
           console.error('[auth] cross-tab session refresh failed:', e),
         )
       }
+    })
+
+    try {
+      if ('BroadcastChannel' in window) {
+        broadcastChannelRef.current = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
+        broadcastChannelRef.current.onmessage = (event) => {
+          receiveAuthSync(event.data)
+        }
+      }
+    } catch (e) {
+      // Some privacy modes throw on BroadcastChannel; the storage event remains.
+      console.warn('[auth] BroadcastChannel unavailable:', e)
     }
 
-    return () => {
-      broadcastChannelRef.current?.close()
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== AUTH_STORAGE_SYNC_KEY || !event.newValue) return
+      try {
+        receiveAuthSync(JSON.parse(event.newValue))
+      } catch {
+        // Ignore malformed values from this application-owned sync key.
+      }
     }
-  }, [])
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      broadcastChannelRef.current?.close()
+      broadcastChannelRef.current = null
+    }
+  }, [clearAuthState, setSessionRevalidationPending])
 
   // Fetch user session from backend.
   //
@@ -424,51 +474,108 @@ export function SessionProvider({
     try {
       sessionData = await fetchUserSession(token, expiry)
     } catch (error) {
-      // Transient: the profile lookup did not complete. We hold a freshly
-      // issued access token, so the user IS signed in, but without user data
-      // there is nothing to render as authenticated. Leave the cookies alone
-      // and settle on 'unauthenticated', which is the state the refetch
-      // interval polls from (it keys off the surviving session marker), so the
-      // tab recovers on its own instead of hanging on 'loading' forever.
+      // A failed profile lookup cannot tell us whether the shared refresh
+      // cookie belongs to this tab's previous account or a newly signed-in
+      // account. Keep the previous component tree mounted so unsaved work is
+      // not discarded, but keep the revalidation shield up until identity can
+      // be confirmed. On cold start there is no previous identity to preserve.
       console.warn('[auth] session lookup failed, keeping session:', error)
-      setStatus('unauthenticated')
+      if (authEpochRef.current !== epoch) return false
+      setAccessToken(token)
+      setTokenExpiry(expiry || null)
+      sessionCacheRef.current = null
+      if (sessionRef.current?.user) {
+        setStatus('authenticated')
+      } else {
+        sessionRef.current = null
+        setSession(null)
+        setStatus('unauthenticated')
+      }
       return false
     }
     // A logout/clear that fired during the await bumped the epoch, so abort the
     // write so we don't resurrect a session that was just invalidated.
     if (authEpochRef.current !== epoch) return false
     if (!sessionData) {
-      clearAuthState()
+      clearAuthState(true, true)
       return false
     }
 
+    sessionRef.current = sessionData
     setSession(sessionData)
     setStatus('authenticated')
     sessionCacheRef.current = {
       data: sessionData,
       timestamp: Date.now(),
     }
+    setSessionRevalidationPending(false)
     return true
-  }, [clearAuthState, fetchUserSession])
+  }, [clearAuthState, fetchUserSession, setSessionRevalidationPending])
 
   // Internal refresh session function (used by broadcast channel)
-  const refreshSessionInternal = useCallback(async () => {
-    try {
-      const refreshResult = await refreshAccessToken()
-      if (refreshResult.status === 'ok') {
-        await applySessionFromToken(refreshResult.access_token, refreshResult.expiry)
-      } else if (refreshResult.status === 'unauthenticated') {
-        clearAuthState()
-      }
-      // 'transient': leave the current session in place. The refetch interval
-      // will try again shortly.
-    } catch (error) {
-      // Never end a session because of an unexpected client-side error.
-      console.error('Session refresh error:', error)
+  const refreshSessionInternal = useCallback((): Promise<boolean> => {
+    if (refreshSessionInternalPromiseRef.current) {
+      return refreshSessionInternalPromiseRef.current
     }
+
+    const runRefresh = async (): Promise<boolean> => {
+      const requestEpoch = authEpochRef.current
+      try {
+        const refreshResult = await refreshAccessToken()
+        // A second tab may have changed accounts while this request was in
+        // flight. Do not apply even a successfully refreshed older token.
+        if (authEpochRef.current !== requestEpoch) return false
+        if (refreshResult.status === 'ok') {
+          return applySessionFromToken(refreshResult.access_token, refreshResult.expiry)
+        } else if (refreshResult.status === 'unauthenticated') {
+          clearAuthState(true, true)
+          return true
+        }
+        // 'transient': leave the current session in place. A bounded-backoff
+        // retry keeps private content shielded until identity is confirmed.
+        return false
+      } catch (error) {
+        // Never end a session because of an unexpected client-side error.
+        console.error('Session refresh error:', error)
+        return false
+      }
+    }
+
+    let trackedPromise: Promise<boolean>
+    trackedPromise = runRefresh().finally(() => {
+      if (refreshSessionInternalPromiseRef.current === trackedPromise) {
+        refreshSessionInternalPromiseRef.current = null
+      }
+    })
+    refreshSessionInternalPromiseRef.current = trackedPromise
+    return trackedPromise
   }, [applySessionFromToken, clearAuthState, refreshAccessToken])
 
   refreshSessionInternalRef.current = refreshSessionInternal
+
+  // A refresh-cookie network failure says nothing about identity. Keep the
+  // app shielded and retry at a bounded exponential interval until the server
+  // either confirms a session or explicitly rejects the refresh credential.
+  useEffect(() => {
+    if (!isRevalidating) return
+
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let delay = 5_000
+
+    const retry = async () => {
+      const validated = await refreshSessionInternalRef.current()
+      if (cancelled || validated) return
+      timer = setTimeout(retry, delay)
+      delay = Math.min(delay * 2, 60_000)
+    }
+
+    timer = setTimeout(retry, delay)
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [isRevalidating])
 
   // Main session refresh function
   const refreshSession = useCallback(async (force?: boolean): Promise<string | null> => {
@@ -479,6 +586,7 @@ export function SessionProvider({
       sessionCacheRef.current &&
       now - sessionCacheRef.current.timestamp < SESSION_CACHE_TTL
     ) {
+      sessionRef.current = sessionCacheRef.current.data
       setSession(sessionCacheRef.current.data)
       setStatus('authenticated')
       return accessTokenRef.current
@@ -504,7 +612,7 @@ export function SessionProvider({
           setTokenExpiry(currentExpiry)
         } else if (refreshResult.status === 'unauthenticated') {
           // The backend rejected the refresh credential: genuinely signed out.
-          clearAuthState()
+          clearAuthState(true, true)
           return null
         } else {
           // Transient failure. Keep whatever session we already have rather
@@ -519,6 +627,7 @@ export function SessionProvider({
       // don't resurrect a session that was just invalidated (cross-tab logout).
       if (authEpochRef.current !== epoch) return null
       if (sessionData) {
+        sessionRef.current = sessionData
         setSession(sessionData)
         setStatus('authenticated')
         sessionCacheRef.current = {
@@ -527,7 +636,7 @@ export function SessionProvider({
         }
         return currentToken
       } else {
-        clearAuthState()
+        clearAuthState(true, true)
         return null
       }
     } catch (error) {
@@ -560,7 +669,7 @@ export function SessionProvider({
       if (refreshResult.status === 'ok') {
         await applySessionFromToken(refreshResult.access_token, refreshResult.expiry)
       } else if (refreshResult.status === 'unauthenticated') {
-        clearAuthState()
+        clearAuthState(true, true)
       } else {
         // Transient failure on a cold start. The refresh cookie is very likely
         // still good, so don't wipe it. Drop back to 'unauthenticated' status
@@ -618,10 +727,12 @@ export function SessionProvider({
         },
       }
 
+      sessionRef.current = newSession
       setSession(newSession)
       setAccessToken(data.tokens.access_token)
       setTokenExpiry(data.tokens.expiry || null)
       setStatus('authenticated')
+      setSessionRevalidationPending(false)
       sessionCacheRef.current = { data: newSession, timestamp: Date.now() }
 
       // Fetch full session with roles. The sign-in already succeeded (cookies
@@ -631,6 +742,7 @@ export function SessionProvider({
         const fullSession = await fetchUserSession(data.tokens.access_token, data.tokens.expiry)
         if (fullSession) {
           fullSession.tokens = newSession.tokens
+          sessionRef.current = fullSession
           setSession(fullSession)
           sessionCacheRef.current = { data: fullSession, timestamp: Date.now() }
         }
@@ -639,7 +751,7 @@ export function SessionProvider({
       }
 
       // Notify other tabs
-      broadcastChannelRef.current?.postMessage({ type: 'LOGIN' })
+      publishAuthSync('LOGIN', broadcastChannelRef.current)
 
       if (redirect) {
         window.location.href = safeRedirectUrl(callbackUrl)
@@ -647,7 +759,7 @@ export function SessionProvider({
 
       return { ok: true, error: null, url: callbackUrl, status: 200 }
     },
-    [fetchUserSession]
+    [fetchUserSession, setSessionRevalidationPending]
   )
 
   // Complete a login that stopped at the second-factor challenge.
@@ -850,10 +962,13 @@ export function SessionProvider({
                 expiry,
               },
             }
+            authEpochRef.current++
+            sessionRef.current = newSession
             setSession(newSession)
             setAccessToken(options.sso_access_token)
             setTokenExpiry(expiry)
             setStatus('authenticated')
+            setSessionRevalidationPending(false)
             sessionCacheRef.current = {
               data: newSession,
               timestamp: Date.now(),
@@ -871,6 +986,7 @@ export function SessionProvider({
               const fullSession = await fetchUserSession(options.sso_access_token, expiry)
               if (fullSession) {
                 fullSession.tokens = newSession.tokens
+                sessionRef.current = fullSession
                 setSession(fullSession)
                 sessionCacheRef.current = {
                   data: fullSession,
@@ -883,7 +999,7 @@ export function SessionProvider({
             }
 
             // Notify other tabs
-            broadcastChannelRef.current?.postMessage({ type: 'LOGIN' })
+            publishAuthSync('LOGIN', broadcastChannelRef.current)
 
             if (redirect) {
               window.location.href = safeRedirectUrl(callbackUrl)
@@ -1029,7 +1145,7 @@ export function SessionProvider({
         }
       }
     },
-    [fetchUserSession, establishSession]
+    [fetchUserSession, establishSession, setSessionRevalidationPending]
   )
 
   // Sign out function
@@ -1052,11 +1168,13 @@ export function SessionProvider({
     // (like clearAuthState + the cross-tab handler) so an in-flight refresh racing
     // this same-tab logout can't resurrect the session it's clearing.
     authEpochRef.current++
+    sessionRef.current = null
     setSession(null)
     setAccessToken(null)
     setTokenExpiry(null)
     setStatus('unauthenticated')
     sessionCacheRef.current = null
+    setSessionRevalidationPending(false)
 
     // Clear refresh promise
     refreshPromiseRef.current = null
@@ -1073,7 +1191,7 @@ export function SessionProvider({
     clearSessionMarker()
 
     // Notify other tabs about logout
-    broadcastChannelRef.current?.postMessage({ type: 'LOGOUT' })
+    publishAuthSync('LOGOUT', broadcastChannelRef.current)
 
     if (redirect) {
       window.location.href = safeRedirectUrl(callbackUrl)
@@ -1083,7 +1201,7 @@ export function SessionProvider({
     if (!logoutSuccess) {
       console.warn('Backend logout may have failed. User logged out locally.')
     }
-  }, [])
+  }, [setSessionRevalidationPending])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1111,12 +1229,18 @@ export function SessionProvider({
       const detail = (event as CustomEvent<{ access_token?: string; expiry?: number }>).detail
 
       if (detail?.access_token) {
+        if (sessionRef.current?.user || statusRef.current === 'authenticated') {
+          setSessionRevalidationPending(true)
+        }
         applySessionFromToken(detail.access_token, detail.expiry).catch((error) => {
           console.error('Post-refresh session sync failed:', error)
         })
         return
       }
 
+      if (sessionRef.current?.user || statusRef.current === 'authenticated') {
+        setSessionRevalidationPending(true)
+      }
       refreshSessionInternalRef.current().catch((error) => {
         console.error('Post-refresh session sync failed:', error)
       })
@@ -1129,7 +1253,47 @@ export function SessionProvider({
       window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired as EventListener)
       window.removeEventListener(AUTH_REFRESHED_EVENT, onAuthRefreshed)
     }
-  }, [applySessionFromToken, handleSignOut, hasSessionMarker])
+  }, [applySessionFromToken, handleSignOut, hasSessionMarker, setSessionRevalidationPending])
+
+  // A tab restored from the back/forward cache can hold a visually complete
+  // pre-logout page while JavaScript was frozen. Revalidate the refresh cookie
+  // on resume so an expired or cross-tab-revoked session clears that view.
+  const lastResumeSyncRef = useRef(0)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const refreshOnResume = () => {
+      if (
+        document.visibilityState !== 'visible'
+        || (status !== 'authenticated' && !hasSessionMarker())
+      ) return
+      const now = Date.now()
+      if (now - lastResumeSyncRef.current < 2000) return
+      lastResumeSyncRef.current = now
+      if (sessionRef.current?.user || statusRef.current === 'authenticated') {
+        setSessionRevalidationPending(true)
+      }
+      refreshSessionInternalRef.current().catch((error) => {
+        console.error('[auth] session refresh after tab resume failed:', error)
+      })
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshOnResume()
+    }
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) refreshOnResume()
+    }
+    const onFocus = () => refreshOnResume()
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pageshow', onPageShow)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pageshow', onPageShow)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [hasSessionMarker, setSessionRevalidationPending, status])
 
   // Memoized so consumers only re-render when auth state actually changes,
   // not on every render of the provider.
@@ -1137,6 +1301,7 @@ export function SessionProvider({
     () => ({
       session,
       status,
+      isRevalidating,
       accessToken,
       refreshSession,
       signIn: handleSignIn,
@@ -1148,6 +1313,7 @@ export function SessionProvider({
     [
       session,
       status,
+      isRevalidating,
       accessToken,
       refreshSession,
       handleSignIn,
@@ -1178,16 +1344,18 @@ export function useSession(): UseSessionReturn {
 
   const session = context?.session ?? null
   const status: SessionStatus = context ? context.status : 'unauthenticated'
+  const isRevalidating = context?.isRevalidating ?? false
 
-  // Same object until the session or status changes, so context consumers
+  // Same object until the session, status, or revalidation state changes, so context consumers
   // downstream (LHSessionProvider) don't re-render on every parent render.
   return useMemo(
     () => ({
       data: session,
       status,
+      isRevalidating,
       update,
     }),
-    [session, status, update]
+    [session, status, isRevalidating, update]
   )
 }
 
@@ -1340,14 +1508,15 @@ export async function signOut(options?: SignOutOptions): Promise<void> {
   clearOAuthStateCookie()
   clearSessionMarker()
 
-  // Try to notify other tabs (if BroadcastChannel is available)
+  // Notify same-origin tabs through storage even when BroadcastChannel is absent.
+  let channel: BroadcastChannel | null = null
   try {
-    const bc = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
-    bc.postMessage({ type: 'LOGOUT' })
-    bc.close()
+    channel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL)
   } catch {
     // BroadcastChannel not available
   }
+  publishAuthSync('LOGOUT', channel)
+  channel?.close()
 
   if (redirect) {
     window.location.href = safeRedirectUrl(callbackUrl)

@@ -28,6 +28,18 @@
   animation: fadeIn 0.3s ease-out;
 }
 
+/* Shield the last rendered account synchronously while a resumed tab checks
+   its shared refresh cookie. The React status overlay replaces this cover as
+   soon as the provider commits the accessible revalidation state. */
+html[data-session-validation-pending='true']::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  background: #fff;
+  pointer-events: auto;
+}
+
 /* Full-page loader entrance (replaces motion in PageLoading, which sits in the
    root bundle): opacity 0 -> 0.5 -> 1 over 0.6s, then a soft scale-in. */
 @keyframes page-loading-opacity {

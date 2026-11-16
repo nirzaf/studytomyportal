@@ -1,6 +1,7 @@
 'use client'
 import i18n from '@/lib/i18n'
-import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
+import React, { createContext, useContext, useEffect, useMemo, useReducer } from 'react'
+import { useLHSession } from '@components/Contexts/LHSessionContext'
 
 /**
  * A small, generic "background tasks" store. It's not upload-specific; any
@@ -33,7 +34,7 @@ export interface BgTask {
 type NewTask = Omit<BgTask, 'createdAt' | 'progress' | 'status' | 'id'> &
   Partial<Pick<BgTask, 'id' | 'progress' | 'status' | 'indeterminate'>>
 
-const STORAGE_KEY = 'lh_bg_tasks'
+const STORAGE_KEY_PREFIX = 'lh_bg_tasks'
 
 type Action =
   | { type: 'hydrate'; tasks: BgTask[] }
@@ -59,9 +60,9 @@ function reducer(state: BgTask[], action: Action): BgTask[] {
   }
 }
 
-function loadPersisted(): BgTask[] {
+function loadPersisted(storageKey: string): BgTask[] {
   try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
     if (!raw) return []
     const tasks = JSON.parse(raw) as BgTask[]
     if (!Array.isArray(tasks)) return []
@@ -91,25 +92,58 @@ function makeId(): string {
   return `bg_${Date.now().toString(36)}_${_seq}`
 }
 
-export function BackgroundTasksProvider({ children }: { children: React.ReactNode }) {
-  const [tasks, dispatch] = useReducer(reducer, [])
-  const hydrated = useRef(false)
+export function BackgroundTasksProvider({
+  children,
+  scopeKey,
+}: {
+  children: React.ReactNode
+  scopeKey: string
+}) {
+  const session = useLHSession()
+  const user = session?.data?.user
+  const userId = user?.id ?? user?.user_uuid
+  const userKey = session?.status === 'authenticated' && userId !== undefined && userId !== null
+    ? `user_${encodeURIComponent(String(userId))}`
+    : session?.status === 'authenticated'
+      ? 'authenticated_unknown'
+      : 'anonymous'
+  const ownerKey = `${userKey}:org_${encodeURIComponent(scopeKey)}`
 
-  // Hydrate once on mount (client only).
+  return (
+    <BackgroundTasksStateProvider
+      key={ownerKey}
+      storageKey={`${STORAGE_KEY_PREFIX}:${ownerKey}`}
+    >
+      {children}
+    </BackgroundTasksStateProvider>
+  )
+}
+
+function BackgroundTasksStateProvider({
+  children,
+  storageKey,
+}: {
+  children: React.ReactNode
+  storageKey: string
+}) {
+  const [tasks, dispatch] = useReducer(reducer, [])
+  const [hydratedStorageKey, setHydratedStorageKey] = React.useState<string | null>(null)
+
+  // The keyed parent remounts this state when the authenticated user changes.
   useEffect(() => {
-    dispatch({ type: 'hydrate', tasks: loadPersisted() })
-    hydrated.current = true
-  }, [])
+    dispatch({ type: 'hydrate', tasks: loadPersisted(storageKey) })
+    setHydratedStorageKey(storageKey)
+  }, [storageKey])
 
   // Persist on every change (after the initial hydrate).
   useEffect(() => {
-    if (!hydrated.current) return
+    if (hydratedStorageKey !== storageKey) return
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
+      localStorage.setItem(storageKey, JSON.stringify(tasks))
     } catch {
       /* quota / private mode; ignore */
     }
-  }, [tasks])
+  }, [hydratedStorageKey, storageKey, tasks])
 
   const api = useMemo<BackgroundTasksApi>(
     () => ({

@@ -34,13 +34,13 @@ type DockState = { open: string[]; heads: string[] }
 
 const EMPTY: DockState = { open: [], heads: [] }
 
-function storageKey(orgId: number) {
-  return `lh-chat-dock:${orgId}`
+function storageKey(orgId: number, userId: number) {
+  return `lh-chat-dock:${orgId}:${userId}`
 }
 
-function load(orgId: number): DockState {
+function load(orgId: number, userId: number): DockState {
   try {
-    const raw = window.localStorage.getItem(storageKey(orgId))
+    const raw = window.localStorage.getItem(storageKey(orgId, userId))
     if (!raw) return EMPTY
     const s = JSON.parse(raw)
     return {
@@ -52,9 +52,9 @@ function load(orgId: number): DockState {
   }
 }
 
-function save(orgId: number, state: DockState) {
+function save(orgId: number, userId: number, state: DockState) {
   try {
-    window.localStorage.setItem(storageKey(orgId), JSON.stringify(state))
+    window.localStorage.setItem(storageKey(orgId, userId), JSON.stringify(state))
   } catch {
     // Private windows can refuse storage; the dock still works for the visit.
   }
@@ -82,13 +82,13 @@ export default function ChatDock({ orgslug }: { orgslug: string }) {
   const pathname = usePathname() || ''
   const onMessagesPage = pathname.split('/').includes('messages')
   if (!enabled || !token || !orgId || !userId || onMessagesPage) return null
-  return <Dock orgslug={orgslug} orgId={orgId} />
+  return <Dock key={`${orgId}:${userId}`} orgslug={orgslug} orgId={orgId} userId={userId} />
 }
 
-function Dock({ orgslug, orgId }: { orgslug: string; orgId: number }) {
+function Dock({ orgslug, orgId, userId }: { orgslug: string; orgId: number; userId: number }) {
   const router = useRouter()
   const qc = useQueryClient()
-  const { token, userId, unreadTotal, subscribe } = useMessaging()
+  const { token, unreadTotal, subscribe } = useMessaging()
   const { data: conversations = [] } = useConversations()
   const podcast = usePodcastPlayer()
   const [state, setState] = useState<DockState>(EMPTY)
@@ -100,12 +100,12 @@ function Dock({ orgslug, orgId }: { orgslug: string; orgId: number }) {
 
   // Restore the dock as it was on the last page.
   useEffect(() => {
-    setState(load(orgId))
+    setState(load(orgId, userId))
     setReady(true)
-  }, [orgId])
+  }, [orgId, userId])
   useEffect(() => {
-    if (ready) save(orgId, state)
-  }, [orgId, state, ready])
+    if (ready) save(orgId, userId, state)
+  }, [orgId, userId, state, ready])
 
   useEffect(() => {
     const onResize = () => setSlots(slotsFor(window.innerWidth))

@@ -17,6 +17,8 @@ import {
 import lrnaiIcon from 'public/lrnai_icon.png'
 import { useTranslation } from 'react-i18next'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
+import { useLHSession } from '@components/Contexts/LHSessionContext'
+import { useOrg } from '@components/Contexts/OrgContext'
 
 interface MagicBlockModalProps {
   isOpen: boolean
@@ -49,6 +51,8 @@ function MagicBlockModal({
 }: MagicBlockModalProps) {
   const { t } = useTranslation()
   const { track } = useLHAnalytics('editor')
+  const session = useLHSession()
+  const org = useOrg() as any
   const [sessionUuid, setSessionUuid] = React.useState<string | null>(initialSessionUuid)
   const [messages, setMessages] = React.useState<MagicBlockMessage[]>(initialMessages)
   const [revisions, setRevisions] = React.useState<MagicBlockRevision[]>(initialRevisions)
@@ -62,7 +66,10 @@ function MagicBlockModal({
   const [styleCopied, setStyleCopied] = React.useState(false)
   const pendingPromptRef = React.useRef<string>('')
 
-  const STYLE_STORAGE_KEY = 'magicblock_style_reference'
+  const userIdentity = session?.data?.user?.user_uuid ?? session?.data?.user?.id
+  const STYLE_STORAGE_KEY = session?.status === 'authenticated' && userIdentity != null && org?.org_uuid
+    ? `magicblock_style_reference:${encodeURIComponent(org.org_uuid)}:${encodeURIComponent(String(userIdentity))}`
+    : null
 
   // Reset all state only when the modal transitions from closed → open
   const wasOpenRef = React.useRef(false)
@@ -79,14 +86,14 @@ function MagicBlockModal({
       setStyleCopied(false)
       // Hydrate the active style reference from localStorage on each open
       try {
-        const stored = window.localStorage.getItem(STYLE_STORAGE_KEY)
+        const stored = STYLE_STORAGE_KEY ? window.localStorage.getItem(STYLE_STORAGE_KEY) : null
         setStyleReference(stored && stored.length > 0 ? stored : null)
       } catch {
         setStyleReference(null)
       }
     }
     wasOpenRef.current = isOpen
-  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, STYLE_STORAGE_KEY]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // When async messages load from the server, update them without touching other state
   React.useEffect(() => {
@@ -207,7 +214,7 @@ function MagicBlockModal({
       // Clipboard blocked: fall back to localStorage only
     }
     try {
-      window.localStorage.setItem(STYLE_STORAGE_KEY, displayedHtml)
+      if (STYLE_STORAGE_KEY) window.localStorage.setItem(STYLE_STORAGE_KEY, displayedHtml)
     } catch {
       // ignore
     }
@@ -230,7 +237,7 @@ function MagicBlockModal({
         return
       }
       try {
-        window.localStorage.setItem(STYLE_STORAGE_KEY, text)
+        if (STYLE_STORAGE_KEY) window.localStorage.setItem(STYLE_STORAGE_KEY, text)
       } catch {
         // ignore
       }
@@ -243,7 +250,7 @@ function MagicBlockModal({
 
   const handleClearStyleReference = () => {
     try {
-      window.localStorage.removeItem(STYLE_STORAGE_KEY)
+      if (STYLE_STORAGE_KEY) window.localStorage.removeItem(STYLE_STORAGE_KEY)
     } catch {
       // ignore
     }

@@ -51,6 +51,7 @@ import { useTranslation } from 'react-i18next'
 import { useDirection } from '@hooks/useDirection'
 import { formatDate } from '@/lib/format'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
+import LearnerContextBanner from '@components/Studytomy/LearnerContextBanner'
 
 const ReactConfetti = dynamic(() => import('react-confetti'), { ssr: false })
 
@@ -814,6 +815,7 @@ function ActivityClient(props: ActivityClientProps) {
                   {/* Focus Mode Content */}
                   <div className="pt-16 pb-20 h-full overflow-auto">
                     <div className="container mx-auto px-4">
+                      <LearnerContextBanner className="mb-3 mt-4" />
                       {activity && activity.published == true && (
                         <>
                           {activity.content.paid_access == false ? (
@@ -917,6 +919,7 @@ function ActivityClient(props: ActivityClientProps) {
               </AnimatePresence>
             ) : (
               <GeneralWrapperStyled>
+                <LearnerContextBanner className="mb-4" />
                 {/* Original non-focus mode UI */}
                 {activityid === 'end' ? (
                   <CourseEndView 

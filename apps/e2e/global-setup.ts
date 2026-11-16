@@ -8,6 +8,8 @@
  * any test runs, so specs never start against a half-booted stack.
  */
 import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { chromium } from '@playwright/test'
 import {
   ADMIN_EMAIL,
@@ -25,8 +27,10 @@ import {
 import * as api from './core/client'
 import {
   ADMIN_STATE,
+  AUTH_DIR,
   STUDENT_STATE,
   ensureAuthDir,
+  sharedStudent,
   writeSharedStudent,
 } from './core/sharedAuth'
 
@@ -109,12 +113,32 @@ export default async function globalSetup(): Promise<void> {
 async function generateSharedAuth(): Promise<void> {
   ensureAuthDir()
 
-  // Create the reusable student via API (admin token is cached by api.login).
+  // Reuse the synthetic student persisted by an earlier local run. Creating a
+  // new account every time needlessly consumes signup capacity and causes
+  // focused reruns to fail on the API's real signup rate limit.
   const adminToken = await api.login(ADMIN_EMAIL, ADMIN_PASSWORD)
-  const org = await api.getOrg()
-  const stu = makeStudent('shared')
-  const studentId = await api.createStudent(adminToken, org.id, stu)
-  writeSharedStudent({ email: stu.email, username: stu.username, password: stu.password, id: studentId })
+  const sharedStudentPath = join(AUTH_DIR, 'shared.json')
+  let stu: Pick<ReturnType<typeof makeStudent>, 'email' | 'password'> | null = null
+
+  if (existsSync(sharedStudentPath)) {
+    const existingStudent = sharedStudent()
+    try {
+      await api.login(existingStudent.email, existingStudent.password)
+      stu = { email: existingStudent.email, password: existingStudent.password }
+    } catch (error) {
+      // Only recreate a fixture when the persisted account is absent from a
+      // freshly reset database. Network and rate-limit failures stay visible.
+      if (!/-> 401\b|-> 404\b/.test(String(error))) throw error
+    }
+  }
+
+  if (!stu) {
+    const org = await api.getOrg()
+    const freshStudent = makeStudent('shared')
+    const studentId = await api.createStudent(adminToken, org.id, freshStudent)
+    writeSharedStudent({ ...freshStudent, id: studentId })
+    stu = { email: freshStudent.email, password: freshStudent.password }
+  }
 
   const browser = await chromium.launch()
   try {
@@ -133,6 +157,29 @@ async function saveLogin(
   statePath: string,
 ): Promise<void> {
   const context = await browser.newContext()
+  // Seed onboarding state before the app's first render. Writing this after a
+  // login navigation raced with client redirects and could lose its execution
+  // context before storageState was captured.
+  await context.addInitScript(
+    ([key, value]) => {
+      try {
+        window.localStorage.setItem(key, value)
+      } catch {
+        /* ignore */
+      }
+    },
+    [
+      'lh_onboarding',
+      JSON.stringify({
+        completedSteps: [
+          'create_course', 'add_activities', 'experience_editor', 'try_playgrounds',
+          'invite_users', 'customize_org', 'teach_the_world',
+        ],
+        skippedSteps: [], minimized: true, expanded: false, showAllSteps: false,
+        dismissed: true, welcomeSeen: true,
+      }),
+    ] as const,
+  )
   const page = await context.newPage()
   for (let attempt = 1; attempt <= 3; attempt++) {
     await page.goto(`${BASE_URL}/login`)
@@ -147,25 +194,6 @@ async function saveLogin(
       await page.waitForTimeout(15_000)
     }
   }
-  // Bake the dismissed-onboarding flag into the saved state so every context
-  // reusing this storageState (including ad-hoc ones) skips the first-run UI.
-  await page.evaluate(() => {
-    try {
-      window.localStorage.setItem(
-        'lh_onboarding',
-        JSON.stringify({
-          completedSteps: [
-            'create_course', 'add_activities', 'experience_editor', 'try_playgrounds',
-            'invite_users', 'customize_org', 'teach_the_world',
-          ],
-          skippedSteps: [], minimized: true, expanded: false, showAllSteps: false,
-          dismissed: true, welcomeSeen: true,
-        }),
-      )
-    } catch {
-      /* ignore */
-    }
-  })
   await context.storageState({ path: statePath })
   await context.close()
 }

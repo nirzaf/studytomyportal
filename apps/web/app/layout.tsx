@@ -77,11 +77,13 @@ export default function RootLayout({
         <script src="/embed-bg.js" />
       </head>
       <body suppressHydrationWarning>
-        <Providers>
-          <main className="animate-fade-in">
-            {children}
-          </main>
-        </Providers>
+        <div data-session-content className="animate-fade-in">
+          <Providers>
+            <main>
+              {children}
+            </main>
+          </Providers>
+        </div>
       </body>
     </html>
   )
