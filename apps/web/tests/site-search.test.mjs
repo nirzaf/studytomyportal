@@ -105,7 +105,11 @@ describe('page registry', () => {
   test('the registry lists every page file', () => {
     const registry = read('lib/site-search/registry.ts')
     for (const file of metaFiles) {
-      const importPath = file.replace(/\/page\.search\.ts$/, '').replace(/^app/, '@/app')
+      const importPath = file
+        .split(path.sep)
+        .join('/')
+        .replace(/\/page\.search\.ts$/, '')
+        .replace(/^app/, '@/app')
       expect(registry, `${importPath} not imported by the registry`).toContain(`'${importPath}/page.search'`)
     }
   })
