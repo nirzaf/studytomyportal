@@ -9,8 +9,8 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
-from sqlmodel import select
 from sqlalchemy import update
+from sqlmodel import select
 
 from src.core.events.database import get_db_session
 from src.db.courses.activities import Activity, ActivitySubTypeEnum, ActivityTypeEnum
@@ -20,7 +20,11 @@ from src.db.courses.courses import Course
 from src.db.organizations import Organization
 from src.db.roles import Role, RoleTypeEnum
 from src.db.studytomy.governance import StudyBusinessEvent
-from src.db.studytomy.grounding import StudyDraftMaterial, StudyGroundedLessonEvidence, StudyGroundedQuizEvidence
+from src.db.studytomy.grounding import (
+    StudyDraftMaterial,
+    StudyGroundedLessonEvidence,
+    StudyGroundedQuizEvidence,
+)
 from src.db.user_organizations import UserOrganization
 from src.db.users import PublicUser, User
 from src.routers.studytomy.grounding import router
@@ -28,11 +32,22 @@ from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.services.ai.tools.base import ToolContext, make_synthetic_request
 from src.services.courses.activities import activities
 from src.services.courses.transfer import storage_utils
-from src.services.mcp.draft_authoring import GroundedPreviewInput, grounded_lesson_preview, grounded_quiz_preview
+from src.services.mcp.draft_authoring import (
+    GroundedLessonSaveInput,
+    GroundedPreviewInput,
+    GroundedQuizSaveInput,
+    grounded_lesson_preview,
+    grounded_lesson_save,
+    grounded_quiz_preview,
+    grounded_quiz_save,
+)
 from src.services.studytomy import grounding
+from src.services.studytomy.adaptive_retention import (
+    ensure_adaptive_org_deletable,
+    ensure_adaptive_user_deletable,
+)
 from src.services.studytomy.publication import _require_current_grounded_evidence
 from src.services.studytomy.releases import course_candidate_snapshot
-from src.services.studytomy.adaptive_retention import ensure_adaptive_org_deletable, ensure_adaptive_user_deletable
 from src.tests.services.rag_helpers import make_pdf
 
 
@@ -259,6 +274,34 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
             }
             lesson_tool = await grounded_lesson_preview(ctx, args)
             assert lesson_tool["blocks"][0]["citation"]["source_uuid"] == receipt["source_uuid"]
+            mcp_citation = {
+                key: value for key, value in lesson_tool["blocks"][0]["citation"].items()
+                if key != "label"
+            }
+            lesson_save = GroundedLessonSaveInput(
+                course_uuid=course.course_uuid, lesson_uuid=lesson.activity_uuid,
+                expected_current_version=2, title="MCP edited lesson",
+                blocks=[{"text": "Teacher-edited, source-cited text.", "citation": mcp_citation}],
+            )
+            for unauthorized, status in (
+                (replace(ctx, approved=False), 403),
+                (replace(ctx, org=other_org, org_slug=other_org.slug), 404),
+                (replace(ctx, user=PublicUser.model_validate(learner)), 403),
+            ):
+                with pytest.raises(HTTPException) as denied:
+                    await grounded_lesson_save(unauthorized, lesson_save)
+                assert denied.value.status_code == status
+            with pytest.raises(HTTPException) as wrong_lesson:
+                await grounded_lesson_save(
+                    ctx, lesson_save.model_copy(update={"lesson_uuid": sibling.activity_uuid}),
+                )
+            assert wrong_lesson.value.status_code == 404
+            saved_lesson = await grounded_lesson_save(ctx, lesson_save)
+            assert saved_lesson == {
+                "lesson_uuid": lesson.activity_uuid, "current_version": 3,
+                "status": "teacher_review_required",
+            }
+            await mcp_db.commit()
         provider.return_value = quiz
         quiz["questions"][0]["options"][1]["is_correct"] = True
         invalid_key = await client.post(quiz_preview, json=command)
@@ -278,6 +321,37 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         quiz_source = await client.post(quiz_sources, files=upload)
         assert quiz_source.status_code == 201
         quiz_save["questions"][0]["citation"] = {**saved_citation, "source_uuid": quiz_source.json()["source_uuid"]}
+        mcp_quiz_save = GroundedQuizSaveInput(
+            course_uuid=course.course_uuid, lesson_uuid=quiz_activity.activity_uuid,
+            **quiz_save,
+        )
+        async with postgres_session_factory() as denied_db:
+            ctx = ToolContext(
+                request=make_synthetic_request(), db_session=denied_db, user=actor,
+                org=org, org_slug=org.slug, surface="mcp", mode="execute", approved=True,
+            )
+            wrong_citation = mcp_quiz_save.questions[0].citation.model_copy(
+                update={"source_uuid": receipt["source_uuid"]},
+            )
+            wrong_question = mcp_quiz_save.questions[0].model_copy(
+                update={"citation": wrong_citation},
+            )
+            with pytest.raises(HTTPException) as wrong_scope:
+                await grounded_quiz_save(
+                    ctx, mcp_quiz_save.model_copy(update={"questions": [wrong_question]}),
+                )
+            assert wrong_scope.value.status_code == 404
+
+        async with postgres_session_factory() as mcp_db:
+            ctx = ToolContext(
+                request=make_synthetic_request(), db_session=mcp_db, user=actor,
+                org=org, org_slug=org.slug, surface="mcp", mode="execute", approved=True,
+            )
+            saved_quiz = await grounded_quiz_save(ctx, mcp_quiz_save)
+            replayed_quiz = await grounded_quiz_save(ctx, mcp_quiz_save)
+            assert saved_quiz == replayed_quiz
+            assert saved_quiz["status"] == "teacher_review_required"
+            await mcp_db.commit()
         result, replay = await asyncio.wait_for(asyncio.gather(
             client.post(quiz_save_path, json=quiz_save), client.post(quiz_save_path, json=quiz_save),
         ), timeout=15)
@@ -300,7 +374,11 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         assert current_quiz.status_code == 200 and current_quiz.headers["cache-control"] == "private, no-store"
         assert current_quiz.json()["status"] == "current"
         stored_citations = list(current_quiz.json()["citations"].values())
-        assert stored_citations == [{**citation, "source_uuid": quiz_source.json()["source_uuid"]}]
+        assert stored_citations == [{
+            **saved_citation,
+            "source_uuid": quiz_source.json()["source_uuid"],
+            "label": "source.pdf",
+        }]
         assert (await client.get(quiz_read.replace(task_uuid, f"assignmenttask_{uuid4()}"))).status_code == 404
         actor = PublicUser.model_validate(learner)
         assert (await client.get(quiz_read)).status_code == 403
@@ -348,7 +426,7 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         assert (await client.get(path)).json() == {"sources": [], "next_cursor": None}
         assert (await client.post(save, json={**edit, "expected_current_version": 2})).status_code == 404
         assert (await client.get(sources_path)).json() == {
-            "status": "stale", "current_version": 2, "citations": [],
+            "status": "stale", "current_version": 3, "citations": [],
         }
 
         revised = await client.post(path, files={"file": ("revision.pdf", make_pdf([source_text]), "application/pdf")})
@@ -373,14 +451,15 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         assert source.activity_id == lesson.id and source.revoked_at is not None
         saved_lesson = await db.get(Activity, lesson.id)
         assert (saved_lesson.current_version, saved_lesson.published, saved_lesson.name) == (
-            2, False, "Edited photosynthesis draft",
+            3, False, "MCP edited lesson",
         )
-        assert saved_lesson.content["content"][0]["content"][0]["text"] == "Teacher-edited wording."
-        evidence = (await db.exec(select(StudyGroundedLessonEvidence).where(
+        assert saved_lesson.content["content"][0]["content"][0]["text"] == "Teacher-edited, source-cited text."
+        lesson_evidence = (await db.exec(select(StudyGroundedLessonEvidence).where(
             StudyGroundedLessonEvidence.activity_id == lesson.id,
-        ))).one()
-        assert evidence.activity_version == 2
-        assert evidence.citations == [citation]
+        ).order_by(StudyGroundedLessonEvidence.activity_version))).all()
+        assert [evidence.activity_version for evidence in lesson_evidence] == [2, 3]
+        assert all(evidence.citations == [citation] for evidence in lesson_evidence)
+        assert len({evidence.content_sha256 for evidence in lesson_evidence}) == 2
         task = (await db.exec(select(AssignmentTask).where(AssignmentTask.assignment_id == assignment.id))).one()
         assert task.assignment_task_uuid == task_uuid and task.title == "Edited quiz"
         assert (await db.get(Assignment, assignment.id)).published is False

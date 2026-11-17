@@ -585,9 +585,12 @@ async def save_grounded_quiz(
     course, lesson = await _lock_draft_write(db, request, actor, org_uuid, course_uuid, lesson_uuid)
     assignment = await _draft_assignment(db, course, lesson, command.assignment_uuid)
     operation = "studytomy.grounding.save_quiz"
+    idempotent_request = SaveGroundedQuizRequest.model_validate(
+        command.model_dump(exclude={"course_uuid", "lesson_uuid"})
+    )
     replay = await claim_idempotency(
         db, org_id=course.org_id, actor_user_id=actor.id, operation=operation,
-        idempotency_key=str(command.request_id), request_payload=command,
+        idempotency_key=str(command.request_id), request_payload=idempotent_request,
     )
     if replay is not None:
         return GroundedQuizSave.model_validate(replay.response_projection)

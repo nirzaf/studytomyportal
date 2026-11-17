@@ -6,11 +6,19 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
 from sqlmodel import select
 
-from src.db.courses.activities import ActivityCreate, ActivitySubTypeEnum, ActivityTypeEnum
+from src.db.courses.activities import (
+    ActivityCreate,
+    ActivitySubTypeEnum,
+    ActivityTypeEnum,
+)
 from src.db.courses.chapters import Chapter, ChapterCreate
 from src.db.courses.course_chapters import CourseChapter
 from src.db.courses.courses import Course, CourseCreate
-from src.db.resource_authors import ResourceAuthor, ResourceAuthorshipEnum, ResourceAuthorshipStatusEnum
+from src.db.resource_authors import (
+    ResourceAuthor,
+    ResourceAuthorshipEnum,
+    ResourceAuthorshipStatusEnum,
+)
 from src.db.users import PublicUser
 from src.security.org_auth import require_org_create_permission
 from src.security.rbac import AccessAction, check_resource_access
@@ -20,7 +28,13 @@ from src.services.courses.chapters import create_chapter
 from src.services.courses.courses import create_course
 from src.services.studytomy.business_events import append_business_event
 from src.services.studytomy.grounding import (
-    GroundedLessonRequest, preview_grounded_lesson, preview_grounded_quiz,
+    GroundedLessonRequest,
+    SaveGroundedLessonRequest,
+    SaveGroundedQuizRequest,
+    preview_grounded_lesson,
+    preview_grounded_quiz,
+    save_grounded_lesson,
+    save_grounded_quiz,
 )
 from src.services.studytomy.idempotency import claim_idempotency, complete_idempotency
 from src.services.studytomy.policies import lock_organization, require_org_member_row
@@ -63,6 +77,16 @@ class DraftLessonInput(DraftCourseInput):
 
 
 class GroundedPreviewInput(GroundedLessonRequest):
+    course_uuid: _CourseRef
+    lesson_uuid: _LessonRef
+
+
+class GroundedLessonSaveInput(SaveGroundedLessonRequest):
+    course_uuid: _CourseRef
+    lesson_uuid: _LessonRef
+
+
+class GroundedQuizSaveInput(SaveGroundedQuizRequest):
     course_uuid: _CourseRef
     lesson_uuid: _LessonRef
 
@@ -195,6 +219,22 @@ async def grounded_quiz_preview(ctx: ToolContext, command: GroundedPreviewInput)
     return draft.model_dump(mode="json")
 
 
+async def grounded_lesson_save(ctx: ToolContext, command: GroundedLessonSaveInput) -> dict:
+    saved = await save_grounded_lesson(
+        ctx.db_session, ctx.request, _approved_mcp_actor(ctx), ctx.org.org_uuid,
+        command.course_uuid, command.lesson_uuid, command,
+    )
+    return saved.model_dump(mode="json")
+
+
+async def grounded_quiz_save(ctx: ToolContext, command: GroundedQuizSaveInput) -> dict:
+    saved = await save_grounded_quiz(
+        ctx.db_session, ctx.request, _approved_mcp_actor(ctx), ctx.org.org_uuid,
+        command.course_uuid, command.lesson_uuid, command,
+    )
+    return saved.model_dump(mode="json")
+
+
 SPECS = (
     ToolSpec(
         name="studytomy_create_draft_course",
@@ -227,5 +267,19 @@ SPECS = (
         params_model=GroundedPreviewInput, tier=ActionTier.CREATE, rights_bucket="courses",
         access_action=AccessAction.UPDATE, target_param="course_uuid", target_kind="course",
         execute=grounded_quiz_preview, approval=True, api_tokens=False, audit_arguments=False,
+    ),
+    ToolSpec(
+        name="studytomy_save_grounded_lesson_draft",
+        description="Save an edited, source-cited lesson draft through the native unpublished lesson service.",
+        params_model=GroundedLessonSaveInput, tier=ActionTier.EDIT, rights_bucket="courses",
+        access_action=AccessAction.UPDATE, target_param="course_uuid", target_kind="course",
+        execute=grounded_lesson_save, approval=True, api_tokens=False, audit_arguments=False,
+    ),
+    ToolSpec(
+        name="studytomy_save_grounded_quiz_draft",
+        description="Save an edited, source-cited quiz draft through the native unpublished assignment service.",
+        params_model=GroundedQuizSaveInput, tier=ActionTier.CREATE, rights_bucket="courses",
+        access_action=AccessAction.UPDATE, target_param="course_uuid", target_kind="course",
+        execute=grounded_quiz_save, approval=True, api_tokens=False, idempotent=True, audit_arguments=False,
     ),
 )
