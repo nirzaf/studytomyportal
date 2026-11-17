@@ -1,10 +1,11 @@
 import pytest
 from pydantic import ValidationError
 from src.db.roles import (
-    Rights,
+    DashboardPermission,
     Permission,
     PermissionsWithOwn,
-    DashboardPermission,
+    Rights,
+    StudytomyCapabilities,
 )
 
 
@@ -55,6 +56,7 @@ class TestRightsModel:
             "podcasts": self.get_valid_permission_with_own(),
             "boards": self.get_valid_permission_with_own(),
             "playgrounds": self.get_valid_permission_with_own(),
+            "studytomy": StudytomyCapabilities(),
         }
 
     def test_rights_model_with_all_fields(self):
@@ -193,7 +195,9 @@ class TestRightsModel:
         assert "discussions" in dumped
         assert "podcasts" in dumped
         assert "assignments" in dumped
-        assert len(dumped) == 16  # All 16 fields
+        assert len(dumped) == 17  # All fields, including default-deny Studytomy capabilities
+        assert dumped["studytomy"] == StudytomyCapabilities().model_dump()
+        assert not any(dumped["studytomy"].values())
 
 
 class TestPermissionModels:
@@ -261,6 +265,7 @@ class TestDefaultRolesValidation:
         "podcasts",
         "boards",
         "playgrounds",
+        "studytomy",
     ]
 
     def test_rights_model_has_expected_fields(self):
@@ -589,6 +594,7 @@ class TestRightsFieldConsistency:
             "podcasts",
             "boards",
             "playgrounds",
+            "studytomy",
         }
 
         actual_fields = set(fields.keys())

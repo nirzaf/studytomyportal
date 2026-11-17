@@ -19,17 +19,18 @@ from src.db.courses.activities import (
     ActivityTypeEnum,
 )
 from src.db.courses.chapter_activities import ChapterActivity
-from src.db.courses.courses import Course
+from src.db.courses.courses import Course, CourseRead
 from src.db.usergroup_resources import UserGroupResource
 from src.db.usergroup_user import UserGroupUser
 from src.db.usergroups import UserGroup
 from src.services.ai.rag import access as rag_access
-from src.services.ai.rag import query_service
+from src.services.ai.rag import pipeline, query_service
 from src.services.ai.rag.access import (
     RagAccessScope,
     build_rag_access_scope,
     filter_readable_chunks,
 )
+from src.services.ai.rag.types import ContentRef
 
 
 async def _course(db, org, course_id, uuid, public, published):
@@ -119,6 +120,28 @@ async def private_course(db, org):
 
 
 class TestCourseScope:
+    async def test_managed_course_is_excluded_from_native_ai_search(
+        self, db, org, admin_user, course, private_course, mock_request
+    ):
+        private_course.studytomy_managed = True
+        await db.commit()
+        native = await _activity(db, org, course, None, 30, "act_native")
+        managed = await _activity(db, org, private_course, None, 31, "act_managed")
+        await _index(db, org, course, native)
+        await _index(db, org, private_course, managed)
+
+        scope = await build_rag_access_scope(mock_request, admin_user, org.id, db)
+        assert scope.course_ids == [course.id]
+        projected = CourseRead(**private_course.model_dump(), authors=[])
+        with pytest.raises(HTTPException) as exc:
+            await build_rag_access_scope(mock_request, admin_user, org.id, db, course=projected)
+        assert exc.value.status_code == 403
+
+        assert await pipeline._org_of(ContentRef.course(private_course.id), db) is None
+        assert await pipeline._org_of(ContentRef.activity(managed.id), db) is None
+        assert await pipeline._org_of(ContentRef.course(course.id), db) == org.id
+        assert await pipeline._org_of(ContentRef.activity(native.id), db) == org.id
+
     async def test_named_private_course_is_403_for_member(
         self, db, org, regular_user, private_course, mock_request
     ):

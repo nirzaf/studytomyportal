@@ -18,6 +18,8 @@ import pytest
 from fastapi import HTTPException
 
 from src.db.organization_config import OrganizationConfig
+from src.db.studytomy.family import StudyLearnerProfile
+from src.routers.ai.rag import _open_rag
 from src.db.user_organizations import UserOrganization
 from src.db.users import PublicUser, User
 from src.services.ai import ai as ai_service
@@ -611,3 +613,91 @@ class TestRagHeadingClamp:
         assert "> quoted" in out
         assert "- item" in out
         assert "deep" in out
+
+
+@pytest.mark.parametrize(
+    ("name", "is_send"),
+    [
+        ("ai_start_activity_chat_session", False),
+        ("ai_send_activity_chat_message", True),
+        ("ai_start_activity_chat_session_stream", False),
+        ("ai_send_activity_chat_message_stream", True),
+    ],
+)
+async def test_managed_learner_cannot_start_or_resume_legacy_ai(
+    db,
+    org,
+    admin_user,
+    regular_user,
+    course,
+    activity,
+    org_config,
+    mock_request,
+    name,
+    is_send,
+):
+    db.add(
+        StudyLearnerProfile(
+            org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id
+        )
+    )
+    await db.commit()
+    payload = {
+        "activity_uuid": activity.activity_uuid,
+        "message": "Synthetic learner text",
+    }
+    body = (
+        SendActivityAIChatMessage(aichat_uuid="old_session", **payload)
+        if is_send
+        else StartActivityAIChatSession(**payload)
+    )
+    with (
+        patch.object(
+            ai_service, "reserve_ai_credit", new_callable=AsyncMock
+        ) as reserve,
+        patch.object(ai_service, "ask_ai", new_callable=AsyncMock) as provider,
+        patch.object(ai_service, "chat_session_belongs_to_user", return_value=True),
+        patch.object(
+            ai_service, "can_read_activity", new_callable=AsyncMock
+        ) as content_access,
+        pytest.raises(HTTPException) as denied,
+    ):
+        await getattr(ai_service, name)(mock_request, body, regular_user, db)
+    assert (
+        denied.value.status_code == 409
+        and denied.value.detail["code"] == "POLICY_NOT_APPROVED"
+    )
+    content_access.assert_not_awaited()
+    reserve.assert_not_awaited()
+    provider.assert_not_awaited()
+
+
+async def test_managed_learner_cannot_reach_direct_rag_or_editor_preview(
+    db, org, admin_user, regular_user, course, org_config, mock_request
+):
+    db.add(
+        StudyLearnerProfile(
+            org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id
+        )
+    )
+    await db.commit()
+    with (
+        patch(
+            "src.routers.ai.rag.build_rag_access_scope", new_callable=AsyncMock
+        ) as rag_scope,
+        pytest.raises(HTTPException) as denied,
+    ):
+        await _open_rag(mock_request, regular_user, course.course_uuid, None, db)
+    assert denied.value.status_code == 409
+    rag_scope.assert_not_awaited()
+    with (
+        patch.object(
+            editor_service, "check_resource_access", new_callable=AsyncMock
+        ) as writes,
+        pytest.raises(HTTPException) as denied,
+    ):
+        await editor_service._authorize_editor_ai_access(
+            course, org.id, regular_user, db, mock_request
+        )
+    assert denied.value.status_code == 409
+    writes.assert_not_awaited()

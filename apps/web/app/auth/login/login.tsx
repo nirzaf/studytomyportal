@@ -30,6 +30,8 @@ const LoginClient = (props: LoginClientProps) => {
   const { signIn, completeMfaLogin, requestMagicLink } = useAuth()
   const { track } = useLHAnalytics('public')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [passwordFormReady, setPasswordFormReady] = useState(false)
+  useEffect(() => { setPasswordFormReady(true) }, [])
   const [ssoEnabled, setSsoEnabled] = useState(false)
   const [ssoLoading, setSsoLoading] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
@@ -746,7 +748,7 @@ const LoginClient = (props: LoginClientProps) => {
 
             <div className="mt-8">
               {passwordAllowed && (
-              <FormLayout onSubmit={formik.handleSubmit}>
+              <FormLayout method="post" onSubmit={formik.handleSubmit}>
                 <FormField name="email">
                   <div className="flex items-center space-x-2 mb-1.5">
                     <Form.Label className="grow text-[13px] font-semibold text-black/70">{t('auth.email')}</Form.Label>
@@ -763,6 +765,7 @@ const LoginClient = (props: LoginClientProps) => {
                       onBlur={formik.handleBlur}
                       value={formik.values.email}
                       type="email"
+                      disabled={!passwordFormReady}
                       className="box-border w-full bg-neutral-50 text-black rounded-lg px-4 border border-neutral-200 inline-flex h-[44px] appearance-none items-center focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-neutral-400 transition-all placeholder:text-black/25 text-sm"
                     />
                   </Form.Control>
@@ -790,6 +793,7 @@ const LoginClient = (props: LoginClientProps) => {
                       onBlur={formik.handleBlur}
                       value={formik.values.password}
                       type="password"
+                      disabled={!passwordFormReady}
                       autoComplete="current-password"
                       className="box-border w-full bg-neutral-50 text-black rounded-lg px-4 border border-neutral-200 inline-flex h-[44px] appearance-none items-center focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-neutral-400 transition-all placeholder:text-black/25 text-sm"
                     />
@@ -804,7 +808,7 @@ const LoginClient = (props: LoginClientProps) => {
 
                 <Form.Submit asChild>
                   <button
-                    disabled={isSubmitting || (turnstileRequired && !turnstileToken)}
+                    disabled={!passwordFormReady || isSubmitting || (turnstileRequired && !turnstileToken)}
                     className="box-border w-full inline-flex h-[44px] rounded-lg items-center justify-center bg-black hover:bg-black/85 text-white px-[15px] font-bold text-[14px] leading-none mt-2 transition-all disabled:opacity-50"
                   >
                     {isSubmitting ? (
