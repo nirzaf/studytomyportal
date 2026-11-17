@@ -1,10 +1,10 @@
 """Versioned curriculum definitions and links to native lesson revisions."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import (
     JSON,
     BigInteger,
@@ -193,3 +193,8 @@ class CurriculumReviewedRead(CurriculumRevisionRead):
     status: Literal["published", "retired"]
     approved_at: datetime
     content_digest: str
+
+    @field_validator("approved_at")
+    @classmethod
+    def normalize_approved_at(cls, value: datetime) -> datetime:
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)

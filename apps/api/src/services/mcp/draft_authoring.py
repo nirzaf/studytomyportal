@@ -12,20 +12,24 @@ from src.db.courses.course_chapters import CourseChapter
 from src.db.courses.courses import Course, CourseCreate
 from src.db.resource_authors import ResourceAuthor, ResourceAuthorshipEnum, ResourceAuthorshipStatusEnum
 from src.db.users import PublicUser
-from src.security.org_auth import is_org_member, require_org_create_permission
+from src.security.org_auth import require_org_create_permission
 from src.security.rbac import AccessAction, check_resource_access
 from src.services.ai.tools.base import ActionTier, ToolContext, ToolSpec
 from src.services.courses.activities.activities import create_activity
 from src.services.courses.chapters import create_chapter
 from src.services.courses.courses import create_course
 from src.services.studytomy.business_events import append_business_event
+from src.services.studytomy.grounding import (
+    GroundedLessonRequest, preview_grounded_lesson, preview_grounded_quiz,
+)
 from src.services.studytomy.idempotency import claim_idempotency, complete_idempotency
-from src.services.studytomy.policies import lock_organization
+from src.services.studytomy.policies import lock_organization, require_org_member_row
 
 _UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 _RequestKey = Annotated[str, StringConstraints(pattern=r"^" + _UUID + r"$")]
 _CourseRef = Annotated[str, StringConstraints(pattern=r"^course_" + _UUID + r"$")]
 _ChapterRef = Annotated[str, StringConstraints(pattern=r"^chapter_" + _UUID + r"$")]
+_LessonRef = Annotated[str, StringConstraints(pattern=r"^activity_" + _UUID + r"$")]
 _Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
 
@@ -58,6 +62,11 @@ class DraftLessonInput(DraftCourseInput):
         return value
 
 
+class GroundedPreviewInput(GroundedLessonRequest):
+    course_uuid: _CourseRef
+    lesson_uuid: _LessonRef
+
+
 def lesson_text_document(text: str) -> dict:
     """Represent user input as text nodes, without interpreting HTML, URLs or Markdown."""
     return {
@@ -69,14 +78,18 @@ def lesson_text_document(text: str) -> dict:
     }
 
 
-async def _draft_actor(ctx: ToolContext) -> int:
+def _approved_mcp_actor(ctx: ToolContext) -> PublicUser:
     if ctx.surface != "mcp" or ctx.read_only or not ctx.approved or not isinstance(ctx.user, PublicUser):
         raise HTTPException(403, "Draft authoring requires approved MCP write access.")
+    return ctx.user
+
+
+async def _draft_actor(ctx: ToolContext) -> int:
+    actor = _approved_mcp_actor(ctx)
     await lock_organization(ctx.db_session, ctx.org.id)
-    if not await is_org_member(ctx.user.id, ctx.org.id, ctx.db_session):
-        raise HTTPException(403, "Draft authoring requires organization membership.")
-    await require_org_create_permission(ctx.user, ctx.org.id, ctx.db_session, "courses")
-    return ctx.user.id
+    await require_org_member_row(ctx.db_session, ctx.org.id, actor.id)
+    await require_org_create_permission(actor, ctx.org.id, ctx.db_session, "courses")
+    return actor.id
 
 
 async def _claim(ctx: ToolContext, actor: int, operation: str, command: DraftCourseInput):
@@ -166,6 +179,22 @@ async def create_draft_lesson(ctx: ToolContext, command: DraftLessonInput) -> di
     })
 
 
+async def grounded_lesson_preview(ctx: ToolContext, command: GroundedPreviewInput) -> dict:
+    draft = await preview_grounded_lesson(
+        ctx.db_session, ctx.request, _approved_mcp_actor(ctx), ctx.org.org_uuid,
+        command.course_uuid, command.lesson_uuid, command,
+    )
+    return draft.model_dump(mode="json")
+
+
+async def grounded_quiz_preview(ctx: ToolContext, command: GroundedPreviewInput) -> dict:
+    draft = await preview_grounded_quiz(
+        ctx.db_session, ctx.request, _approved_mcp_actor(ctx), ctx.org.org_uuid,
+        command.course_uuid, command.lesson_uuid, command,
+    )
+    return draft.model_dump(mode="json")
+
+
 SPECS = (
     ToolSpec(
         name="studytomy_create_draft_course",
@@ -184,5 +213,19 @@ SPECS = (
             f"Create unpublished lesson {params.title!r} in {params.course_uuid} / {params.chapter_uuid}"
         ),
         approval=True, api_tokens=False, idempotent=True, audit_arguments=False,
+    ),
+    ToolSpec(
+        name="studytomy_preview_grounded_lesson",
+        description="Generate a teacher-review lesson preview from explicit PDF source versions linked to one draft lesson.",
+        params_model=GroundedPreviewInput, tier=ActionTier.CREATE, rights_bucket="courses",
+        access_action=AccessAction.UPDATE, target_param="course_uuid", target_kind="course",
+        execute=grounded_lesson_preview, approval=True, api_tokens=False, audit_arguments=False,
+    ),
+    ToolSpec(
+        name="studytomy_preview_grounded_quiz",
+        description="Generate a teacher-review quiz preview from explicit PDF source versions linked to one draft lesson.",
+        params_model=GroundedPreviewInput, tier=ActionTier.CREATE, rights_bucket="courses",
+        access_action=AccessAction.UPDATE, target_param="course_uuid", target_kind="course",
+        execute=grounded_quiz_preview, approval=True, api_tokens=False, audit_arguments=False,
     ),
 )

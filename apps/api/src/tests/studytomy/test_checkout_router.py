@@ -334,11 +334,29 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             }
         if correction_scenario == "reentry":
             decisions[StudyPolicyKey.D_15] = {"supported_formats": {"max_bytes": 1024, "media_types": ["application/pdf"]}}
+        if price_minor > 0:
+            support_lead = await _seed_active_owner(db, org, owner.id, purchaser.id, StudyOwnerFunction.SUPPORT)
+            support_backup = await _seed_active_owner(
+                db, org, verifier.id, purchaser.id, StudyOwnerFunction.SUPPORT,
+            )
+            decisions[StudyPolicyKey.D_04]["staffing"]["support"] = {
+                "lead_owner_assignment_uuid": support_lead.owner_uuid,
+                "backup_owner_assignment_uuid": support_backup.owner_uuid,
+            }
+            decisions[StudyPolicyKey.D_04]["support_routes"] = {"public_support": {
+                "categories": ["Orders"], "contact_instructions": "Synthetic support contact",
+                "service_limits": "Synthetic support limits",
+            }}
+            decisions[StudyPolicyKey.D_04]["monitored_hours"] = {"public_support": "Synthetic hours"}
+            decisions[StudyPolicyKey.D_04]["response_targets"] = {"public_support": "Synthetic review expectations"}
+            decisions.setdefault(StudyPolicyKey.D_15, {})
         for key, specified in decisions.items():
             if delay_remedy_policy and key == StudyPolicyKey.D_07:
                 continue
             policies[key] = await _seed_approved_policy(db, org, owner.id, key, specified=specified)
         owners = {}
+        if price_minor > 0:
+            owners[StudyOwnerFunction.SUPPORT] = support_lead
         for key, policy in policies.items():
             for function in POLICY_REQUIRED_RESPONSIBILITIES[key]:
                 if function not in owners:
@@ -1773,6 +1791,16 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         expired = await client.get(history_path, headers=headers)
         assert expired.status_code == 200 and expired.json()["status"] == "expired"
         assert expired.json()["start_basis"] == "fixed_period"
+        assert (await client.get(lesson_path, headers=headers)).status_code == 404
+        monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_SUPPORT_INTAKE_ENABLED", "true")
+        support_path = f"{org_path}/support/cases"
+        support_case = await client.post(
+            support_path, headers=headers, json={"topic": "Orders", "request_id": str(uuid4())},
+        )
+        assert support_case.status_code == 201, support_case.text
+        receipt = support_case.json()
+        assert receipt == {"case_uuid": receipt["case_uuid"], "topic": "Orders", "status": "assigned"}
+        assert (await client.get(f"{support_path}/{receipt['case_uuid']}", headers=headers)).json() == receipt
         assert (await client.get(lesson_path, headers=headers)).status_code == 404
         history_list = f"{org_path}/learning/access-history"
         retained = await client.get(history_list, headers=headers)

@@ -21,6 +21,7 @@ from sqlmodel import select
 from src.db.course_embeddings import CourseEmbedding
 from src.db.courses.activities import Activity
 from src.db.courses.courses import Course
+from src.services.ai.llm.embeddings import DEFAULT_EMBEDDING_DIMENSIONS, embedding_provenance
 from src.services.ai.rag import media as media_stage
 from src.services.ai.rag import store
 from src.services.ai.rag.embedding_service import chunk_text, generate_embeddings
@@ -29,6 +30,7 @@ from src.services.ai.rag.sources import Extraction, extract
 from src.services.ai.rag.types import ContentRef
 
 logger = logging.getLogger(__name__)
+_EXTRACTION_AND_CHUNKING_REVISION = "rag-v1"
 
 
 def _session():
@@ -106,8 +108,11 @@ async def _store(extraction: Extraction, db) -> int:
     ref = extraction.ref
     chunks = _chunks(extraction)
     content_hash = _hash(chunks)
+    embedding_space, provenance = embedding_provenance()
+    provenance["extraction_chunking_revision"] = _EXTRACTION_AND_CHUNKING_REVISION
+    content_hash = hashlib.sha256(f"{_EXTRACTION_AND_CHUNKING_REVISION}:{content_hash}".encode()).hexdigest()
 
-    if chunks and await store.current_hash(ref, db) == content_hash:
+    if chunks and await store.current_hash(ref, db, embedding_space=embedding_space) == content_hash:
         await store.rename(
             ref, db,
             course_id=extraction.course_id,
@@ -119,7 +124,11 @@ async def _store(extraction: Extraction, db) -> int:
 
     # Embed before touching the table, so a provider failure leaves the
     # previous rows searchable.
+    if chunks and provenance["dimensions"] != DEFAULT_EMBEDDING_DIMENSIONS:
+        raise ValueError("The embedding dimensions do not match the course vector index.")
     vectors = await generate_embeddings([text for text, _, _ in chunks]) if chunks else []
+    if len(vectors) != len(chunks) or any(len(vector) != DEFAULT_EMBEDDING_DIMENSIONS for vector in vectors):
+        raise ValueError("The embedding provider returned an incompatible batch.")
     now = str(datetime.now())
     rows = [
         CourseEmbedding(
@@ -133,6 +142,8 @@ async def _store(extraction: Extraction, db) -> int:
             chunk_index=index,
             locator=segment.locator,
             content_hash=content_hash,
+            embedding_space=embedding_space,
+            provenance=provenance,
             activity_name=extraction.activity_name,
             chapter_name=segment.chapter_name or extraction.chapter_name,
             course_name=extraction.course_name,

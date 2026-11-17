@@ -18,6 +18,7 @@ from src.db.studytomy.adaptive_reports import (
     StudyReportReviewRequest,
 )
 from src.db.studytomy.education import StudyCourseReview
+from src.db.studytomy.grounding import StudyDraftMaterial
 from src.db.trail_runs import TrailRun
 from src.db.trail_steps import TrailStep
 from src.services.studytomy.errors import studytomy_http_error
@@ -42,6 +43,13 @@ async def _ensure_no_course_review(db: AsyncSession, *scope) -> None:
         )
 
 
+def _protected_draft_material():
+    return studytomy_http_error(
+        409, "GROUNDED_SOURCE_RETENTION_REQUIRED",
+        "Retained lesson source files require a retention review before deletion.",
+    )
+
+
 async def ensure_adaptive_org_deletable(db: AsyncSession, org_id: int) -> None:
     # All adaptive evidence, report and tutor trees reference a curriculum.
     result = await db.execute(
@@ -51,6 +59,11 @@ async def ensure_adaptive_org_deletable(db: AsyncSession, org_id: int) -> None:
     )
     if result.scalar_one_or_none() is not None:
         raise _protected_record()
+    draft_material = select(StudyDraftMaterial.id).join(
+        Course, Course.id == StudyDraftMaterial.course_id,
+    ).where(Course.org_id == org_id).exists()
+    if (await db.execute(select(draft_material))).scalar_one():
+        raise _protected_draft_material()
     await _ensure_no_course_review(db, StudyCourseReview.org_id == org_id)
 
 
@@ -76,10 +89,15 @@ async def ensure_adaptive_course_deletable(
 async def ensure_managed_progress_source_deletable(
     db: AsyncSession, org_id: int, course_id: int, *, activity_ids: list[int] | None = None,
 ) -> None:
-    """Protect native progress from foreign-key cascades on content deletion."""
+    """Protect retained draft sources and native progress on content deletion."""
     managed = (await db.execute(select(Course.studytomy_managed).where(
         Course.org_id == org_id, Course.id == course_id,
     ).with_for_update())).scalar_one_or_none()
+    draft_material = select(StudyDraftMaterial.id).where(StudyDraftMaterial.course_id == course_id)
+    if activity_ids is not None:
+        draft_material = draft_material.where(StudyDraftMaterial.activity_id.in_(activity_ids))
+    if managed is not None and (await db.execute(select(draft_material.exists()))).scalar_one():
+        raise _protected_draft_material()
     if not managed:
         return
     steps = select(TrailStep.id).where(TrailStep.course_id == course_id)
@@ -101,6 +119,9 @@ async def ensure_managed_progress_source_deletable(
 
 
 async def ensure_adaptive_user_deletable(db: AsyncSession, user_id: int) -> None:
+    draft_material = select(StudyDraftMaterial.id).where(StudyDraftMaterial.uploaded_by_user_id == user_id).exists()
+    if (await db.execute(select(draft_material))).scalar_one():
+        raise _protected_draft_material()
     report = StudyProgressReport
     references = (
         (StudyCurriculumRevision.id, StudyCurriculumRevision.reviewer_id == user_id),

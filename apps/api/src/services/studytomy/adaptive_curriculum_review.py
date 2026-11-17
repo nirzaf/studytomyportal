@@ -105,6 +105,17 @@ class CurriculumReviewSnapshot(BaseModel):
     content_digest: Digest
 
 
+class ReviewedCurriculumObjectives(BaseModel):
+    curriculum: CurriculumReviewedRead
+    concepts: list[CurriculumConceptSnapshot]
+    prerequisites: list[PrerequisiteDraft]
+
+
+class ReviewedCurriculumPage(BaseModel):
+    revisions: list[CurriculumReviewedRead]
+    next_cursor: str | None
+
+
 class _CurriculumApproval(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -154,6 +165,8 @@ async def _snapshot(
     db: AsyncSession,
     row: StudyCurriculumRevision,
     mappings: list[StudyConceptActivity],
+    *,
+    draft_projection: CurriculumDraftRead | None = None,
 ) -> CurriculumReviewSnapshot:
     concepts = list(
         (
@@ -200,7 +213,7 @@ async def _snapshot(
             prerequisites=prerequisites,
         )
     )
-    projection = CurriculumDraftRead.model_validate(row)
+    projection = draft_projection or CurriculumDraftRead.model_validate(row)
     manifest = {
         "curriculum": projection.model_dump(mode="json"),
         "source_reference": row.source_reference,
@@ -256,6 +269,51 @@ async def curriculum_review_snapshot(
     ):
         await _authorize_preview(request, db, org, actor, course_uuid)
     return await _snapshot(db, row, mappings)
+
+
+async def read_reviewed_curriculum_objectives(
+    request: Request, db: AsyncSession, org: Organization, actor: PublicUser, revision_uuid: str,
+) -> ReviewedCurriculumObjectives:
+    row = await _locked_revision(db, org, revision_uuid)
+    await _authorize_preview(request, db, org, actor, row.owner_course_uuid)
+    if row.status not in {"published", "retired"}:
+        raise HTTPException(404, "Reviewed curriculum revision not found.")
+    # Publish and retire each advance the record version without changing the reviewed graph.
+    reviewed_version = row.version - (2 if row.status == "retired" else 1)
+    reviewed = CurriculumReviewedRead.model_validate(row)
+    draft_projection = CurriculumDraftRead.model_validate({
+        **reviewed.model_dump(exclude={"approved_at", "content_digest"}),
+        "status": "draft", "version": reviewed_version,
+    })
+    snapshot = await _snapshot(db, row, await _mappings(db, row), draft_projection=draft_projection)
+    if snapshot.content_digest != row.content_digest:
+        raise studytomy_http_error(409, "CURRICULUM_EVIDENCE_CHANGED", "Stored objectives no longer match the reviewed revision.")
+    return ReviewedCurriculumObjectives(
+        curriculum=reviewed,
+        concepts=snapshot.concepts, prerequisites=snapshot.prerequisites,
+    )
+
+
+async def list_reviewed_course_curricula(
+    request: Request, db: AsyncSession, org: Organization, actor: PublicUser,
+    course_uuid: str, *, after: str | None, limit: int,
+) -> ReviewedCurriculumPage:
+    exists = await db.scalar(select(Course.id).where(Course.org_id == org.id, Course.course_uuid == course_uuid))
+    if exists is None:
+        raise HTTPException(404, "Course not found.")
+    await _authorize_preview(request, db, org, actor, course_uuid)
+    revision = StudyCurriculumRevision
+    statement = select(revision).where(
+        revision.org_id == org.id, revision.owner_course_uuid == course_uuid,
+        revision.status.in_(("published", "retired")),
+    )
+    if after is not None:
+        statement = statement.where(revision.uuid > after)
+    rows = (await db.execute(statement.order_by(revision.uuid).limit(limit + 1))).scalars().all()
+    return ReviewedCurriculumPage(
+        revisions=[CurriculumReviewedRead.model_validate(row) for row in rows[:limit]],
+        next_cursor=rows[limit - 1].uuid if len(rows) > limit else None,
+    )
 
 
 async def _authorize_preview(

@@ -64,7 +64,8 @@ class TestQueryCourseRag:
     async def test_numbers_sources_per_place_and_labels_context(self):
         rows = [
             _row(chunk_text="first"),
-            _row(chunk_text="second", locator={"start": 900}),  # same video: same number
+            _row(chunk_text="second", locator={"start": 900}),
+            _row(chunk_text="another chunk at the same timestamp", locator={"start": 900}),
             _row(activity_id=None, activity_uuid="", activity_name="", chapter_name="", source_type="course",
                  locator=None, chunk_text="course one"),
             # The course row of another course must not merge with the first one.
@@ -75,14 +76,27 @@ class TestQueryCourseRag:
         with patch.object(query_service, "search_course_content", new=AsyncMock(return_value=rows)):
             result = await query_service.query_course_rag("q", 1, None, scope)
 
-        assert [s["title"] for s in result["sources"]] == ["Lecture", "Biology", "Chemistry"]
-        # The best-ranked chunk's moment is the one cited.
+        assert [s["title"] for s in result["sources"]] == ["Lecture", "Lecture", "Biology", "Chemistry"]
         assert result["sources"][0]["locator"] == {"start": 192.4}
+        assert result["sources"][1]["locator"] == {"start": 900}
         parts = result["context"].split("\n\n---\n\n")
         assert parts[0] == '[Source 1] Video "Lecture" at 03:12\nfirst'
-        assert parts[1] == '[Source 1] Video "Lecture" at 15:00\nsecond'
-        assert parts[2].startswith('[Source 2] Course "Biology"')
-        assert parts[3].startswith('[Source 3] Course "Chemistry"')
+        assert parts[1] == '[Source 2] Video "Lecture" at 15:00\nsecond'
+        assert parts[2].startswith('[Source 2] Video "Lecture"')
+        assert parts[3].startswith('[Source 3] Course "Biology"')
+        assert parts[4].startswith('[Source 4] Course "Chemistry"')
+
+    async def test_pdf_pages_and_revisions_have_distinct_citations(self):
+        rows = [
+            _row(source_type="document_activity", locator={"page": 2}, content_hash="a" * 64),
+            _row(source_type="document_activity", locator='{"page": 3}', content_hash="a" * 64),
+            _row(source_type="document_activity", locator={"page": 3}, content_hash="b" * 64),
+        ]
+        with patch.object(query_service, "search_course_content", new=AsyncMock(return_value=rows)):
+            result = await query_service.query_course_rag("q", 1, None, SimpleNamespace(course_ids=[1]))
+        assert [(source["locator"]["page"], source["content_hash"]) for source in result["sources"]] == [
+            (2, "a" * 64), (3, "a" * 64), (3, "b" * 64),
+        ]
 
     async def test_nothing_found(self):
         with patch.object(query_service, "search_course_content", new=AsyncMock(return_value=[])):

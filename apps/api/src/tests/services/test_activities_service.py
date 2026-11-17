@@ -138,6 +138,28 @@ class TestGetEditorBootstrap:
         assert result.course.org_uuid == org.org_uuid
 
     @pytest.mark.asyncio
+    async def test_grounded_sources_available_only_for_eligible_drafts(
+        self, mock_request, db, course, activity, admin_user, monkeypatch,
+    ):
+        course.studytomy_managed = True
+        course.public = course.published = course.open_to_contributors = False
+        activity.published = False
+        db.add_all([course, activity])
+        await db.commit()
+
+        with patch("src.services.courses.activities.activities.check_resource_access", new_callable=AsyncMock):
+            monkeypatch.delenv("LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED", raising=False)
+            disabled = await get_editor_bootstrap(mock_request, activity.activity_uuid, admin_user, db)
+            assert disabled.course.grounded_sources_available is False
+            monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED", "true")
+            enabled = await get_editor_bootstrap(mock_request, activity.activity_uuid, admin_user, db)
+            assert enabled.course.grounded_sources_available is True
+            activity.published = True
+            await db.commit()
+            published = await get_editor_bootstrap(mock_request, activity.activity_uuid, admin_user, db)
+            assert published.course.grounded_sources_available is False
+
+    @pytest.mark.asyncio
     async def test_scrubs_content_when_no_paid_access(
         self, mock_request, db, org, course, chapter, activity, regular_user
     ):

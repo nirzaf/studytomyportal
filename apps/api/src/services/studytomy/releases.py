@@ -328,6 +328,10 @@ async def capture_native_release_media(
     }
 
 
+def grounded_source_review_required(snapshot: dict) -> bool:
+    return any(entry["status"] != "current" for entry in snapshot.get("grounded_source_evidence", ()))
+
+
 async def course_candidate_snapshot(
     db: AsyncSession, course: Course
 ) -> dict[str, object]:
@@ -426,7 +430,7 @@ async def course_candidate_snapshot(
         .all()
     )
     volatile_fields = {"creation_date", "update_date"}
-    return {
+    snapshot = {
         "schema": "course_content_evidence_v4",
         "course": course.model_dump(
             mode="json", exclude={"creation_date", "update_date", "studytomy_managed"}
@@ -452,3 +456,10 @@ async def course_candidate_snapshot(
             task.model_dump(mode="json", exclude=volatile_fields) for task in tasks
         ],
     }
+    if course.studytomy_managed:
+        from src.services.studytomy.grounding import course_grounding_evidence
+
+        evidence = await course_grounding_evidence(db, course, activities, tasks)
+        if evidence:
+            snapshot["grounded_source_evidence"] = evidence
+    return snapshot

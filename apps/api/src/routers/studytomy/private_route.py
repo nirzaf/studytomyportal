@@ -1,4 +1,4 @@
-"""Cache policy for authenticated StudyTomy routes."""
+"""Cache policy for authenticated Studytomy routes."""
 
 from collections.abc import Awaitable, Callable
 

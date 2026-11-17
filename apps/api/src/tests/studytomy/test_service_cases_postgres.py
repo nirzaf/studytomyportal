@@ -1,6 +1,8 @@
 """PostgreSQL constraints for confidential service case metadata."""
 
 import asyncio
+import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -15,7 +17,7 @@ from sqlmodel import select
 from src.core.events.database import get_db_session
 from src.db.organizations import Organization
 from src.db.roles import Role, RoleTypeEnum
-from src.db.studytomy.cases import StudyServiceCase, StudyServiceCaseExclusion
+from src.db.studytomy.cases import StudyGuestSupportChallenge, StudyServiceCase, StudyServiceCaseExclusion
 from src.db.studytomy.governance import (
     POLICY_REQUIRED_DECISION_AREAS, StudyBusinessEvent, StudyOwnerAssignment,
     StudyPolicyApproval, StudyPolicyKey, StudyPolicyVersion, StudyStaffScope,
@@ -26,6 +28,9 @@ from src.db.users import PublicUser, User
 from src.router import v1_router
 from src.security import auth
 from src.services.studytomy import cases, evidence_files
+from src.services.studytomy.guest_support import (
+    purge_expired_guest_support_challenges, redeem_guest_support_challenge,
+)
 from src.services.studytomy.policies import POLICY_REQUIRED_RESPONSIBILITIES
 from src.services.studytomy.retention import CaseEvidenceHoldCommand, CaseEvidenceHoldReleaseCommand
 from src.services.studytomy.safeguarding_retention import (
@@ -36,6 +41,92 @@ from src.services.studytomy.safeguarding_retention import (
 @pytest.fixture(autouse=True)
 def enable_synthetic_reporting(monkeypatch):
     monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_SAFEGUARDING_REPORTS_ENABLED", "true")
+
+
+@pytest.mark.studytomy_postgres
+async def test_guest_support_challenge_has_tenant_unique_token_and_bounded_consumption(postgres_session_factory):
+    tag = uuid4().hex
+    now = datetime.now(UTC)
+    async with postgres_session_factory() as db:
+        organizations = [
+            Organization(name="Synthetic support", slug=f"guest-{tag}-{index}",
+                         org_uuid=f"org_{uuid4()}", email=f"guest-{tag}-{index}@example.invalid")
+            for index in range(2)
+        ]
+        db.add_all(organizations)
+        await db.flush()
+        values = {
+            "org_id": organizations[0].id, "token_digest": f"{tag}{tag}",
+            "contact_ciphertext": "synthetic fixture ciphertext", "topic": "Orders",
+            "created_at": now, "expires_at": now + timedelta(minutes=10),
+        }
+        db.add_all([
+            StudyGuestSupportChallenge(**values),
+            StudyGuestSupportChallenge(**(values | {"org_id": organizations[1].id})),
+        ])
+        await db.flush()
+        for changes, constraint in (
+            ({}, "uq_st_guest_support_challenge_org_token"),
+            ({"token_digest": "raw"}, "ck_st_guest_support_challenge_digest"),
+            ({"token_digest": "a" * 64, "expires_at": now}, "ck_st_guest_support_challenge_window"),
+            (
+                {"token_digest": "b" * 64, "consumed_at": values["expires_at"]},
+                "ck_st_guest_support_challenge_window",
+            ),
+        ):
+            with pytest.raises(IntegrityError, match=constraint):
+                async with db.begin_nested():
+                    db.add(StudyGuestSupportChallenge(**(values | changes)))
+                    await db.flush()
+        await db.rollback()
+
+
+@pytest.mark.studytomy_postgres
+async def test_guest_support_purge_is_bounded_tenant_scoped_and_skips_locked_rows(postgres_session_factory):
+    now = datetime.now(UTC)
+    async with postgres_session_factory() as db:
+        organizations = [
+            Organization(name="Synthetic purge", slug=f"guest-purge-{uuid4().hex}",
+                         org_uuid=f"org_{uuid4()}", email=f"guest-purge-{uuid4().hex}@example.invalid")
+            for _ in range(2)
+        ]
+        db.add_all(organizations)
+        await db.flush()
+        org_id, other_org_id = (org.id for org in organizations)
+        rows = [
+            StudyGuestSupportChallenge(
+                org_id=scope, token_digest=uuid4().hex + uuid4().hex,
+                contact_ciphertext="synthetic fixture ciphertext", topic="Orders",
+                created_at=now - timedelta(minutes=15), expires_at=expiry,
+            )
+            for scope, expiry in (
+                (org_id, now - timedelta(minutes=1)), (org_id, now),
+                (org_id, now + timedelta(minutes=1)), (other_org_id, now),
+            )
+        ]
+        db.add_all(rows)
+        await db.flush()
+        earliest_id, boundary_id, live_id, other_id = (row.id for row in rows)
+        await db.commit()
+
+    async with postgres_session_factory() as first, postgres_session_factory() as second:
+        assert await purge_expired_guest_support_challenges(first, org_id=org_id, limit=1, now=now) == 1
+        assert await purge_expired_guest_support_challenges(first, org_id=org_id, limit=10, now=now) == 2
+        assert await purge_expired_guest_support_challenges(
+            first, org_id=org_id, limit=1, now=now, execute=True,
+        ) == 1
+        assert await purge_expired_guest_support_challenges(
+            second, org_id=org_id, limit=10, now=now, execute=True,
+        ) == 1
+        await second.commit()
+        await first.rollback()
+        assert await first.get(StudyGuestSupportChallenge, boundary_id) is None
+        for row_id in (earliest_id, live_id, other_id):
+            assert await first.get(StudyGuestSupportChallenge, row_id) is not None
+        assert await purge_expired_guest_support_challenges(
+            first, org_id=org_id, limit=10, now=now, execute=True,
+        ) == 1
+        await first.commit()
 
 
 @pytest.mark.studytomy_postgres
@@ -783,7 +874,8 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
         approvers = {function: owner(approver, function.value) for function in responsibilities}
         lead_owner = owner(lead, "safeguarding")
         backup_owner = owner(backup, "safeguarding")
-        db.add_all([lead_owner, backup_owner, *approvers.values()])
+        support_backup = owner(lead, "support")
+        db.add_all([lead_owner, backup_owner, support_backup, *approvers.values()])
         await db.flush()
         fields = {
             StudyPolicyKey.D_04: {
@@ -796,11 +888,22 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                     "contact_instructions": "Synthetic contact instructions",
                     "service_limits": "Synthetic service limits",
                     "internal_contact": "Private internal contact",
+                    "guest_intake_enabled": True,
                 }},
                 "monitored_hours": {"public_safeguarding": "Synthetic hours", "public_support": "Synthetic support hours"},
+                "response_targets": {
+                    "public_support": "Synthetic acknowledgement and review expectations",
+                    "internal_escalation": "Private escalation threshold",
+                },
                 "staffing": {"safeguarding": {
                     "lead_owner_assignment_uuid": lead_owner.owner_uuid,
                     "backup_owner_assignment_uuid": backup_owner.owner_uuid,
+                }, "support": {
+                    "lead_owner_assignment_uuid": next(
+                        assignment.owner_uuid for function, assignment in approvers.items()
+                        if function.value == "support"
+                    ),
+                    "backup_owner_assignment_uuid": support_backup.owner_uuid,
                 }},
             },
             StudyPolicyKey.D_13: {"retention": {
@@ -845,6 +948,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
         app.include_router(v1_router)
         app.dependency_overrides[get_db_session] = lambda: db
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            monkeypatch.delenv("LEARNHOUSE_STUDYTOMY_SUPPORT_INTAKE_ENABLED", raising=False)
             response = await client.get(f"/api/v1/studytomy/orgs/{org.org_uuid}/support/public-contact")
             assert response.status_code == 200
             assert response.headers["cache-control"] == "no-store"
@@ -853,10 +957,269 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                 "contact_instructions": "Synthetic contact instructions",
                 "service_limits": "Synthetic service limits",
                 "monitored_hours": "Synthetic support hours",
+                "response_expectations": "Synthetic acknowledgement and review expectations",
+                "intake_available": False,
             }
             assert (await client.get("/api/v1/studytomy/orgs/org_other/support/public-contact")).status_code == 404
 
         reporter_actor, lead_actor, backup_actor, approver_actor = map(PublicUser.model_validate, users)
+        support_path = f"/api/v1/studytomy/orgs/{org.org_uuid}/support/cases"
+
+        async def authenticate_reporter(*args, **kwargs):
+            return reporter_actor
+
+        async def authenticate_other_member(*args, **kwargs):
+            return backup_actor
+
+        payload = {"request_id": str(uuid4()), "topic": "Orders"}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_reporter)
+            monkeypatch.delenv("LEARNHOUSE_STUDYTOMY_SUPPORT_INTAKE_ENABLED", raising=False)
+            assert (await client.post(support_path, json=payload)).status_code == 409
+            await db.rollback()
+            await db.refresh(org)
+            for user in users:
+                await db.refresh(user)
+            monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_SUPPORT_INTAKE_ENABLED", "true")
+            from src.services.studytomy import support
+
+            read_policy_area = support._policy_area_values
+            with monkeypatch.context() as missing_target:
+                missing_target.setattr(
+                    support, "_policy_area_values",
+                    lambda policy, area: {"public_support": {"internal": "Private"}} if area == "response_targets"
+                    else read_policy_area(policy, area),
+                )
+                projected = await client.get(support_path.replace("/cases", "/public-contact"))
+                assert projected.status_code == 200
+                assert projected.json()["response_expectations"] is None
+                assert projected.json()["intake_available"] is False
+            public = await client.get(f"/api/v1/studytomy/orgs/{org.org_uuid}/support/public-contact")
+            assert public.json()["intake_available"] is True
+            created = await client.post(support_path, json=payload)
+            assert created.status_code == 201
+            assert created.headers["cache-control"] == "private, no-store"
+            saved_support = created.json()
+            assert saved_support == {"case_uuid": saved_support["case_uuid"], "topic": "Orders", "status": "assigned"}
+            stored_support = (await db.exec(select(StudyServiceCase).where(
+                StudyServiceCase.org_id == org.id,
+                StudyServiceCase.case_uuid == saved_support["case_uuid"],
+            ))).one()
+            assert stored_support.owner_user_id == approver.id
+            assert (await client.post(support_path, json=payload)).json() == saved_support
+            detail = f"{support_path}/{saved_support['case_uuid']}"
+            assert (await client.get(detail)).json() == saved_support
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_other_member)
+            assert (await client.get(detail)).status_code == 404
+            staff_path = support_path.replace("/support/cases", "/support/staff/cases")
+            staff_case = f"{staff_path}/{saved_support['case_uuid']}"
+            assert (await client.get(staff_path)).status_code == 404
+            command = {"expected_version": 1, "next_status": "under_review"}
+            assert (await client.post(f"{staff_case}/transition", json=command)).status_code == 404
+
+            async def authenticate_owner(*args, **kwargs):
+                return approver_actor
+
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_owner)
+            staff_receipt = {
+                **saved_support, "version": 1, "allowed_transitions": ["awaiting_information", "under_review"],
+            }
+            assert (await client.get(staff_case)).json() == staff_receipt
+            queue = await client.get(staff_path)
+            assert queue.status_code == 200
+            assert queue.headers["cache-control"] == "private, no-store"
+            assert queue.json() == {"cases": [staff_receipt], "next_cursor": None}
+            assert (await client.get(staff_path, params={"after": saved_support["case_uuid"]})).json() == {
+                "cases": [], "next_cursor": None,
+            }
+            invalid = await client.post(
+                f"{staff_case}/transition", json={**command, "next_status": "resolved"},
+            )
+            assert invalid.status_code == 409
+            updated = await client.post(f"{staff_case}/transition", json=command)
+            assert updated.status_code == 200
+            assert updated.json() == {
+                **saved_support, "status": "under_review", "version": 2,
+                "allowed_transitions": ["awaiting_information", "resolved"],
+            }
+            assert (await client.post(f"{staff_case}/transition", json=command)).status_code == 409
+            event = (await db.exec(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_uuid == saved_support["case_uuid"],
+                StudyBusinessEvent.action == "studytomy.support.transition_case",
+            ))).one()
+            assert event.before_state == {"status": "assigned", "version": 1}
+            assert event.after_state == {"status": "under_review", "version": 2}
+
+            fallback = await client.post(support_path, json={**payload, "request_id": str(uuid4())})
+            assert fallback.status_code == 201
+            fallback_case = (await db.exec(select(StudyServiceCase).where(
+                StudyServiceCase.org_id == org.id,
+                StudyServiceCase.case_uuid == fallback.json()["case_uuid"],
+            ))).one()
+            assert fallback_case.owner_user_id == lead.id
+            assert [case["case_uuid"] for case in (await client.get(staff_path)).json()["cases"]] == [
+                saved_support["case_uuid"],
+            ]
+
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_reporter)
+            assert (await client.get(detail)).json() == {**saved_support, "status": "under_review"}
+            complaint = await client.post(support_path, json={
+                **payload, "request_id": str(uuid4()), "subject_user_uuids": [approver.user_uuid],
+            })
+            assert complaint.status_code == 201
+            complaint_ref = complaint.json()["case_uuid"]
+            complaint_case = (await db.exec(select(StudyServiceCase).where(
+                StudyServiceCase.org_id == org.id, StudyServiceCase.case_uuid == complaint_ref,
+            ))).one()
+            assert complaint_case.owner_user_id == lead.id
+            assert await db.get(StudyServiceCaseExclusion, (org.id, complaint_ref, approver.id)) is not None
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_owner)
+            assert (await client.get(f"{staff_path}/{complaint_ref}")).status_code == 404
+            assert complaint_ref not in {case["case_uuid"] for case in (await client.get(staff_path)).json()["cases"]}
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_reporter)
+            all_conflicted = await client.post(support_path, json={
+                **payload, "request_id": str(uuid4()),
+                "subject_user_uuids": [approver.user_uuid, lead.user_uuid],
+            })
+            assert all_conflicted.status_code == 409
+
+            async def authenticate_support_backup(*args, **kwargs):
+                return lead_actor
+
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_support_backup)
+            excluded = await client.post(f"{staff_path}/{complaint_ref}/handoff", json={"expected_version": 1})
+            assert excluded.status_code == 409
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_owner)
+            assert (await client.post(f"{staff_case}/handoff", json={"expected_version": 1})).status_code == 409
+            handed_off = await client.post(f"{staff_case}/handoff", json={"expected_version": 2})
+            assert handed_off.status_code == 200
+            assert handed_off.json() == {**saved_support, "status": "under_review"}
+            assert (await client.get(staff_case)).status_code == 404
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_support_backup)
+            new_owner = await client.get(staff_case)
+            assert new_owner.status_code == 200
+            assert new_owner.json()["version"] == 3
+            handoff_event = (await db.exec(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_uuid == saved_support["case_uuid"],
+                StudyBusinessEvent.action == "studytomy.support.handoff_case",
+            ))).one()
+            assert handoff_event.before_state == {"case_owner_user_id": approver.id, "version": 2}
+            assert handoff_event.after_state == {"case_owner_user_id": lead.id, "version": 3}
+
+            complaint_transition = f"{staff_path}/{complaint_ref}/transition"
+            for version, status in enumerate(("under_review", "resolved", "under_review"), start=1):
+                result = await client.post(
+                    complaint_transition, json={"expected_version": version, "next_status": status},
+                )
+                assert result.status_code == 200
+                assert result.json()["status"] == status
+                assert result.json()["version"] == version + 1
+            assert (await client.post(
+                complaint_transition, json={"expected_version": 3, "next_status": "under_review"},
+            )).status_code == 409
+
+            guest_token = secrets.token_urlsafe(32)
+            issued_at = datetime.now(UTC)
+            db.add(StudyGuestSupportChallenge(
+                org_id=org.id, token_digest=hashlib.sha256(guest_token.encode("ascii")).hexdigest(),
+                contact_ciphertext="synthetic fixture ciphertext", topic="Orders",
+                created_at=issued_at, expires_at=issued_at + timedelta(minutes=10),
+            ))
+            await db.commit()
+            monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_GUEST_SUPPORT_ENABLED", "true")
+
+            async def redeem():
+                async with postgres_session_factory() as redemption_db:
+                    result = await redeem_guest_support_challenge(redemption_db, org, guest_token)
+                    await redemption_db.commit()
+                    return result
+
+            first, retry = await asyncio.wait_for(asyncio.gather(redeem(), redeem()), timeout=10)
+            assert first == retry
+            assert first.status == "assigned"
+            guest_event = (await db.exec(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_uuid == str(first.case_uuid),
+                StudyBusinessEvent.action == "studytomy.support.redeem_guest_challenge",
+            ))).one()
+            assert guest_event.actor_user_id is None
+            assert guest_event.after_state == {"status": "assigned", "case_owner_user_id": approver.id}
+
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_owner)
+            assert (await client.post(f"{staff_case}/recover", json={"expected_version": 3})).status_code == 404
+            assert (await client.get(staff_path, params={"view": "recoverable"})).json() == {
+                "cases": [], "next_cursor": None,
+            }
+            support_backup.effective_to = datetime.now(UTC)
+            await db.flush()
+            public = await client.get(support_path.replace("/cases", "/public-contact"))
+            assert public.json()["intake_available"] is False
+            recoverable = await client.get(staff_path, params={"view": "recoverable"})
+            assert recoverable.status_code == 200
+            assert recoverable.json() == {
+                "cases": [{**saved_support, "status": "under_review", "version": 3, "allowed_transitions": []}],
+                "next_cursor": None,
+            }
+            assert (await client.post(f"{staff_case}/recover", json={"expected_version": 2})).status_code == 409
+            recovered = await client.post(f"{staff_case}/recover", json={"expected_version": 3})
+            assert recovered.status_code == 200
+            assert recovered.json()["version"] == 4
+            assert (await client.get(staff_path, params={"view": "recoverable"})).json() == {
+                "cases": [], "next_cursor": None,
+            }
+            recovery_event = (await db.exec(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_uuid == saved_support["case_uuid"],
+                StudyBusinessEvent.action == "studytomy.support.recover_case",
+            ))).one()
+            assert recovery_event.before_state == {"case_owner_user_id": lead.id, "version": 3}
+            assert recovery_event.after_state == {"case_owner_user_id": approver.id, "version": 4}
+            assert (await client.post(f"{staff_path}/{complaint_ref}/recover", json={"expected_version": 1})).status_code == 404
+
+            # The first submission committed, but the reporter may not have received its response.
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_reporter)
+            replay = await client.post(support_path, json=payload)
+            assert replay.status_code == 201
+            assert replay.json() == saved_support
+            assert (await client.get(detail)).json() == {**saved_support, "status": "under_review"}
+            assert (await client.post(
+                support_path, json={**payload, "request_id": str(uuid4())},
+            )).status_code == 409
+            open_events = (await db.exec(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_uuid == saved_support["case_uuid"],
+                StudyBusinessEvent.action == "studytomy.support.open_case",
+            ))).all()
+            assert len(open_events) == 1
+
+            guest_case = StudyServiceCase(
+                org_id=org.id, category="support", support_topic="Orders",
+                guest_contact_verified_at=datetime.now(UTC), owner_user_id=approver.id, status="assigned",
+            )
+            db.add(guest_case)
+            await db.flush()
+            guest_ref = guest_case.case_uuid
+            assert (await client.get(f"{support_path}/{guest_ref}")).status_code == 404
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_owner)
+            staff_guest = await client.get(f"{staff_path}/{guest_ref}")
+            assert staff_guest.status_code == 200
+            assert staff_guest.json() == {
+                "case_uuid": guest_ref, "topic": "Orders", "status": "assigned",
+                "version": 1, "allowed_transitions": ["awaiting_information", "under_review"],
+            }
+            for invalid in (
+                {"category": "support", "support_topic": "Orders"},
+                {"category": "safeguarding", "guest_contact_verified_at": datetime.now(UTC)},
+                {"category": "support", "support_topic": "Orders", "reporter_user_id": reporter.id,
+                 "guest_contact_verified_at": datetime.now(UTC)},
+            ):
+                with pytest.raises(IntegrityError, match="ck_st_service_case_reporter_kind"):
+                    async with db.begin_nested():
+                        db.add(StudyServiceCase(org_id=org.id, **invalid))
+                        await db.flush()
+
         assert await cases.safeguarding_reporting_available(db, org)
         with monkeypatch.context() as inactive:
             inactive.delenv("LEARNHOUSE_STUDYTOMY_SAFEGUARDING_REPORTS_ENABLED", raising=False)

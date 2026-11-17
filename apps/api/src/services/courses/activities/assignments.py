@@ -5,6 +5,7 @@ import math
 import re
 from datetime import datetime, timedelta
 from typing import Sequence
+from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
 try:
@@ -1623,6 +1624,8 @@ async def create_assignment_task(
     assignment_task_object: AssignmentTaskCreate,
     current_user: PublicUser | AnonymousUser | APITokenUser,
     db_session: AsyncSession,
+    *,
+    before_commit: Callable[[AssignmentTask], Awaitable[None]] | None = None,
 ):
     # Check if assignment exists
     statement = select(Assignment).where(Assignment.assignment_uuid == assignment_uuid)
@@ -1670,6 +1673,9 @@ async def create_assignment_task(
 
     # Insert Assignment Task in DB
     db_session.add(assignment_task)
+    if before_commit is not None:
+        await db_session.flush()
+        await before_commit(assignment_task)
     await db_session.commit()
     await db_session.refresh(assignment_task)
     index_activity(assignment_task.activity_id)

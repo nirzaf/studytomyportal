@@ -24,6 +24,7 @@ from src.services.mcp.draft_authoring import (
     create_draft_course,
     create_draft_lesson,
 )
+from src.tests.conftest import ADMIN_RIGHTS, USER_RIGHTS
 
 
 @pytest.mark.studytomy_postgres
@@ -43,7 +44,7 @@ async def test_native_mcp_drafts_are_private_scoped_and_retryable(postgres_sessi
                 username=f"{label}_{code}", user_uuid=f"user_{label}_{code}",
                 first_name="Synthetic", last_name="Author", email=f"{label}-{code}@example.invalid",
             )
-            for label in ("creator", "other")
+            for label in ("teacher", "other_teacher", "admin", "learner")
         ]
         db.add_all([org, other_org, *users])
         await db.flush()
@@ -56,11 +57,20 @@ async def test_native_mcp_drafts_are_private_scoped_and_retryable(postgres_sessi
             id=role.id + 1, name=role.name, org_id=other_org.id,
             role_uuid=f"role_other_{code}", role_type=role.role_type, rights=role.rights,
         )
-        db.add_all([role, other_role, OrganizationConfig(org_id=org.id, config={"config_version": "1.0"})])
+        admin_role = Role(
+            id=role.id + 2, name="Synthetic admin", org_id=org.id,
+            role_uuid=f"role_admin_{code}", role_type=role.role_type, rights=ADMIN_RIGHTS.model_dump(),
+        )
+        learner_role = Role(
+            id=role.id + 3, name="Synthetic learner", org_id=org.id,
+            role_uuid=f"role_learner_{code}", role_type=role.role_type, rights=USER_RIGHTS.model_dump(),
+        )
+        db.add_all([role, other_role, admin_role, learner_role,
+                    OrganizationConfig(org_id=org.id, config={"config_version": "1.0"})])
         await db.flush()
-        for user in users:
+        for user, assigned_role in zip(users, (role, role, admin_role, learner_role), strict=True):
             db.add(UserOrganization(
-                org_id=org.id, user_id=user.id, role_id=role.id, creation_date="", update_date="",
+                org_id=org.id, user_id=user.id, role_id=assigned_role.id, creation_date="", update_date="",
             ))
         db.add(UserOrganization(
             org_id=other_org.id, user_id=users[0].id, role_id=other_role.id,
@@ -135,3 +145,27 @@ async def test_native_mcp_drafts_are_private_scoped_and_retryable(postgres_sessi
             "studytomy.mcp.create_draft_course", "studytomy.mcp.create_draft_lesson",
         }
         assert len(events) == 2
+
+        admin = replace(ctx, user=PublicUser.model_validate(users[2]), request=make_synthetic_request())
+        learner = replace(ctx, user=PublicUser.model_validate(users[3]), request=make_synthetic_request())
+        with pytest.raises(HTTPException) as learner_course:
+            await create_draft_course(learner, command)
+        assert learner_course.value.status_code == 403
+        with pytest.raises(HTTPException) as learner_lesson:
+            await create_draft_lesson(learner, lesson_command)
+        assert learner_lesson.value.status_code == 403
+        with pytest.raises(HTTPException) as unlinked_admin:
+            await create_draft_course(replace(admin, org=other_org, org_slug=other_org.slug), command)
+        assert unlinked_admin.value.status_code == 403
+        with pytest.raises(HTTPException) as unowned_lesson:
+            await create_draft_lesson(admin, lesson_command)
+        assert unowned_lesson.value.status_code == 404
+
+        admin_course = await create_draft_course(admin, command)
+        assert admin_course["course_uuid"] != created["course_uuid"]
+        admin_lesson = await create_draft_lesson(admin, lesson_command.model_copy(update={
+            "course_uuid": admin_course["course_uuid"], "chapter_uuid": admin_course["chapter_uuid"],
+        }))
+        await db.commit()
+        admin_row = (await db.exec(select(Activity).where(Activity.activity_uuid == admin_lesson["activity_uuid"]))).one()
+        assert admin_row.org_id == org.id and not admin_row.published

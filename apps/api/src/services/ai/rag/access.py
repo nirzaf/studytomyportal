@@ -163,6 +163,8 @@ async def readable_activity_ids(
         .outerjoin(Chapter, Chapter.id == ChapterActivity.chapter_id)  # type: ignore
         .where(Activity.id.in_(ids))  # type: ignore
         .where(Activity.course_id.in_(scope.course_ids))  # type: ignore
+        .where(Activity.org_id == scope.org_id)
+        .execution_options(populate_existing=True)
     )).all()
     activities: dict[int, tuple[Activity, Optional[Chapter]]] = {}
     for activity, chapter in activity_rows:

@@ -329,6 +329,7 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
             "evidence": [saved.json()],
             "next_before_id": None,
             "current_review": None,
+            "grounding_review_required": False,
         }
 
         replay = await client.post(files, data=payload, files=evidence, headers=headers)

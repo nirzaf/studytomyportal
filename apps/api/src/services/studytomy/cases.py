@@ -353,7 +353,7 @@ async def _require_narrative_retention(
     return int(policy.id), retention
 
 
-async def _resolve_case_subjects(
+async def resolve_case_subjects(
     db_session: AsyncSession, organization: Organization, subjects: list[str],
 ) -> set[int]:
     matches = (await db_session.exec(
@@ -397,7 +397,7 @@ async def open_safeguarding_case(
 
     if narrative is not None and not _online_reporting_enabled():
         raise HTTPException(409, "Online safeguarding reporting is unavailable.")
-    subject_ids = await _resolve_case_subjects(db_session, organization, subjects)
+    subject_ids = await resolve_case_subjects(db_session, organization, subjects)
     if narrative is not None:
         await public_safeguarding_contact(db_session, organization)
         if await _active_safeguarding_staffing(db_session, organization, policy_ids) is None:
@@ -731,7 +731,7 @@ async def record_safeguarding_triage(
         StudyServiceCaseExclusion.org_id == organization.id,
         StudyServiceCaseExclusion.case_uuid == case.case_uuid,
     ))).all())
-    confirmed = await _resolve_case_subjects(db_session, organization, sorted(set(subject_user_uuids)))
+    confirmed = await resolve_case_subjects(db_session, organization, sorted(set(subject_user_uuids)))
     if reviewer.id in confirmed:
         raise HTTPException(403, "Another approved reviewer must record this triage.")
     db_session.add_all([

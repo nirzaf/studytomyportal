@@ -102,6 +102,35 @@ class TestRun:
         embed.assert_not_awaited()
         assert {r.course_name for r in await _rows(session, activity_id=12)} == {"Renamed Course"}
 
+    async def test_changed_embedding_revision_reindexes_unchanged_content(
+        self, session, embed, org, course, chapter, monkeypatch,
+    ):
+        await _page_activity(session, org, course, chapter, 51, "Versioned course text")
+        ref = ContentRef.activity(51)
+        monkeypatch.setenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "synthetic-first")
+        await pipeline.run(ref)
+        rows = await _rows(session, activity_id=51)
+        first_space = rows[0].embedding_space
+        assert rows[0].provenance["model_revision"] == "synthetic-first"
+        assert rows[0].provenance["dimensions"] == 768
+        assert rows[0].provenance["extraction_chunking_revision"] == "rag-v1"
+
+        monkeypatch.setenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "synthetic-second")
+        embed.reset_mock()
+        await pipeline.run(ref)
+        embed.assert_awaited_once()
+        rows = await _rows(session, activity_id=51)
+        assert len({row.embedding_space for row in rows}) == 1
+        assert rows[0].embedding_space != first_space
+        assert rows[0].provenance["model_revision"] == "synthetic-second"
+
+        monkeypatch.setenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "synthetic-third")
+        embed.side_effect = None
+        embed.return_value = [[0.1] * 768]
+        with pytest.raises(ValueError, match="incompatible batch"):
+            await pipeline.run(ref)
+        assert {row.embedding_space for row in await _rows(session, activity_id=51)} == {rows[0].embedding_space}
+
     async def test_replaces_only_its_own_rows(self, session, embed, org, course, chapter):
         await _page_activity(session, org, course, chapter, 13, "First")
         activity = await _page_activity(session, org, course, chapter, 14, "Second")

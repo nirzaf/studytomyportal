@@ -88,6 +88,38 @@ def migrate(
 
 
 @cli.command()
+def purge_guest_support_challenges(
+    org: Annotated[str, typer.Option(help="Organization slug")],
+    limit: Annotated[int, typer.Option(min=1, max=1000, help="Maximum expired records to process")] = 100,
+    execute: Annotated[bool, typer.Option("--execute", help="Delete the expired batch")] = False,
+) -> None:
+    """Preview or purge expired guest support challenges for one organization."""
+    count = asyncio.run(_purge_guest_support_challenges(org, limit, execute))
+    action = "deleted" if execute else "eligible for deletion"
+    typer.echo(f"Expired guest support challenges {action}: {count}")
+
+
+async def _purge_guest_support_challenges(org_slug: str, limit: int, execute: bool) -> int:
+    from sqlmodel import select
+    from src.db.organizations import Organization
+    from src.services.studytomy.guest_support import purge_expired_guest_support_challenges
+
+    sql_url = get_learnhouse_config().database_config.sql_connection_string
+    engine = create_async_engine(_to_async_url(sql_url), echo=False, hide_parameters=True)
+    try:
+        async with AsyncSession(engine) as db:
+            org_id = (await db.exec(select(Organization.id).where(Organization.slug == org_slug))).one_or_none()
+            if org_id is None:
+                raise typer.BadParameter("Unknown organization slug", param_hint="--org")
+            count = await purge_expired_guest_support_challenges(db, org_id=org_id, limit=limit, execute=execute)
+            if execute:
+                await db.commit()
+            return count
+    finally:
+        await engine.dispose()
+
+
+@cli.command()
 def install(
     short: Annotated[bool, typer.Option(help="Install with predefined values")] = False
 ):

@@ -1,4 +1,4 @@
-"""Purchaser-owned projections of accepted StudyTomy orders."""
+"""Purchaser-owned projections of accepted Studytomy orders."""
 
 from datetime import UTC, datetime
 from typing import Literal

@@ -43,6 +43,10 @@ class CourseEmbedding(SQLModel, table=True):
     )
     # Hash of everything indexed for the chunk's ref, shared by all its rows.
     content_hash: Optional[str] = None
+    embedding_space: Optional[str] = Field(default=None, max_length=64)
+    provenance: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True),
+    )
     activity_name: str = ""
     chapter_name: str = ""
     course_name: str = ""

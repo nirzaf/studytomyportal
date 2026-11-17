@@ -14,6 +14,7 @@ from src.services.courses.transfer.storage_utils import read_file_content
 logger = logging.getLogger(__name__)
 
 MAX_PDF_CHARS = 100_000
+MAX_GROUNDING_PDF_PAGES = 200
 VTT_WINDOW_SECONDS = 60.0
 
 _CUE_RE = re.compile(r"((?:\d+:)?\d{1,2}:\d{2}[.,]\d{3})\s*-->\s*(?:\d+:)?\d{1,2}:\d{2}[.,]\d{3}")
@@ -22,24 +23,44 @@ _TAG_RE = re.compile(r"<[^>]+>")
 _NON_PROSE_KEY = re.compile(r"(?:^|_)(?:uuid|id|url|uri|href|src|file|filename|format|type|color|icon|emoji)s?$", re.I)
 
 
-def pdf_pages(pdf_bytes: bytes, max_chars: int = MAX_PDF_CHARS) -> list[tuple[int, str]]:
-    """Text of each non-empty page as (1-based page number, text), capped in total."""
+class GroundingPDFError(ValueError):
+    """A PDF cannot be accepted as an explicit drafting source."""
+
+
+def pdf_pages(
+    pdf_bytes: bytes, max_chars: int = MAX_PDF_CHARS, *, for_grounding: bool = False,
+) -> list[tuple[int, str]]:
+    """Extract numbered pages. Explicit sources reject unreadable or oversized files."""
     try:
         from pypdf import PdfReader
 
         reader = PdfReader(BytesIO(pdf_bytes))
+        if for_grounding:
+            if reader.is_encrypted:
+                raise GroundingPDFError("Upload a PDF without password protection.")
+            if len(reader.pages) > MAX_GROUNDING_PDF_PAGES:
+                raise GroundingPDFError("Split the PDF into files of at most 200 pages.")
         pages: list[tuple[int, str]] = []
         budget = max_chars
         for number, page in enumerate(reader.pages, start=1):
-            if budget <= 0:
+            if budget <= 0 and not for_grounding:
                 break
-            text = (page.extract_text() or "").strip()[:budget]
+            text = (page.extract_text() or "").replace("\x00", "").strip()
+            if for_grounding and len(text) > budget:
+                raise GroundingPDFError("Split the PDF into smaller files before using it as a source.")
+            text = text[:budget]
             if text:
                 pages.append((number, text))
                 budget -= len(text)
+        if for_grounding and not pages:
+            raise GroundingPDFError("The PDF has no readable text. Upload a searchable or OCR-processed PDF.")
         return pages
-    except Exception as e:
-        logger.warning("Failed to extract PDF text: %s", e)
+    except GroundingPDFError:
+        raise
+    except Exception as exc:
+        if for_grounding:
+            raise GroundingPDFError("The PDF could not be read. Check the file and upload it again.") from exc
+        logger.warning("Failed to extract PDF text")
         return []
 
 

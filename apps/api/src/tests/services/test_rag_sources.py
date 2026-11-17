@@ -517,6 +517,22 @@ class TestFormats:
     def test_pdf_pages_of_garbage_is_empty(self):
         assert formats.pdf_pages(b"not a pdf") == []
 
+    def test_grounding_pdf_retains_original_page_numbers(self):
+        pages = formats.pdf_pages(make_pdf(["first page", "", "third page"]), for_grounding=True)
+        assert pages == [(1, "first page"), (3, "third page")]
+
+    @pytest.mark.parametrize(("pdf", "message"), [
+        (b"not a pdf", "could not be read"),
+        (make_pdf([""]), "OCR-processed"),
+    ])
+    def test_grounding_pdf_rejects_unreadable_content(self, pdf, message):
+        with pytest.raises(formats.GroundingPDFError, match=message):
+            formats.pdf_pages(pdf, for_grounding=True)
+
+    def test_grounding_pdf_does_not_silently_truncate_readable_pages(self):
+        with pytest.raises(formats.GroundingPDFError, match="Split the PDF"):
+            formats.pdf_pages(make_pdf(["12345", "67890"]), max_chars=5, for_grounding=True)
+
     def test_vtt_windows_handles_hours_and_commas(self):
         vtt = "WEBVTT\n\n1\n01:00:00,500 --> 01:00:02,000\nLate cue\n\n00:00:01.000 --> 00:00:02.000\n\n"
         assert formats.vtt_windows(vtt) == [(3600.5, "Late cue")]

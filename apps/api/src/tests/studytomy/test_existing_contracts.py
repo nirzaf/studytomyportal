@@ -97,11 +97,13 @@ class TestMigrationAndMetadataBaseline:
 
     def test_alembic_head_revision_is_pinned(self):
         heads = head_revisions()
-        assert heads == ["72c1a8f0d4e6"]
+        assert heads == ["0cb1b9a418ed"]
 
     def test_core_models_registered_in_metadata(self):
         metadata = load_models()
         expected_tables = {
+            "st_draft_material",
+            "st_guest_support_challenge",
             "user",
             "organization",
             "role",

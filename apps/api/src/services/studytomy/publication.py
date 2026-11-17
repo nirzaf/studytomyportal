@@ -47,6 +47,7 @@ from src.services.studytomy.releases import (
     capture_native_release_media,
     course_candidate_snapshot,
     discard_retained_release_media,
+    grounded_source_review_required,
     load_release_policy_binding,
     retain_reviewed_release_media,
     validate_release_media_coverage,
@@ -123,6 +124,14 @@ async def verify_course_release(
     )
 
 
+def _require_current_grounded_evidence(snapshot: dict) -> None:
+    if grounded_source_review_required(snapshot):
+        raise studytomy_http_error(
+            409, "GROUNDED_SOURCE_REVIEW_REQUIRED",
+            "A grounded draft changed or a cited source is unavailable. Update its source evidence before approval.",
+        )
+
+
 async def _checked_course_release(
     db: AsyncSession,
     org: Organization,
@@ -132,6 +141,7 @@ async def _checked_course_release(
 ) -> tuple[StudyCourseReview, dict[str, object], ReleasePolicyBinding]:
     course_uuid = course.course_uuid
     snapshot = await course_candidate_snapshot(db, course)
+    _require_current_grounded_evidence(snapshot)
     digest = canonical_request_hash(snapshot)
     review = (
         await db.execute(
@@ -378,6 +388,8 @@ async def record_course_review(
         return CourseReviewReceipt.model_validate(replay.response_projection)
 
     snapshot = await course_candidate_snapshot(db, course)
+    if command.decision == "approved":
+        _require_current_grounded_evidence(snapshot)
     rights, accessibility = await _resolve_course_review_evidence(
         db,
         org,

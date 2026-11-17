@@ -17,11 +17,13 @@ from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from uuid import uuid4
 from dataclasses import replace
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Optional
 
 import json
 import logging
+import os
 
 from src.services.courses.activities.access import (
     redact_activity_for_reader,
@@ -198,6 +200,7 @@ class EditorBootstrapCourse(BaseModel):
     thumbnail_image: str | None = None
     org_uuid: str
     org_id: int
+    grounded_sources_available: bool = False
 
 
 class EditorBootstrapResponse(BaseModel):
@@ -272,6 +275,13 @@ async def get_editor_bootstrap(
             thumbnail_image=course.thumbnail_image,
             org_uuid=org.org_uuid,
             org_id=org.id or 0,
+            grounded_sources_available=(
+                os.getenv("LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED") == "true"
+                and course.studytomy_managed is True
+                and course.public is False and course.published is False
+                and course.open_to_contributors is False and activity.published is False
+                and activity.activity_sub_type == "SUBTYPE_DYNAMIC_PAGE"
+            ),
         ),
         org=org_read,
     )
@@ -467,6 +477,8 @@ async def update_activity(
     activity_uuid: str,
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
+    *,
+    before_commit: Callable[[Activity], Awaitable[None]] | None = None,
 ):
     statement = (
         select(Activity)
@@ -557,6 +569,8 @@ async def update_activity(
     db_session.add(activity)
     if version_snapshot is not None:
         await cleanup_old_versions(activity.id, db_session, commit=False)
+    if before_commit is not None:
+        await before_commit(activity)
     await db_session.commit()
     await db_session.refresh(activity)
     if version_snapshot is not None:

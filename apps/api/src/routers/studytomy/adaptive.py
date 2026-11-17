@@ -94,7 +94,11 @@ from src.services.studytomy.adaptive_curriculum_review import (
     CurriculumPublish,
     CurriculumRetire,
     CurriculumReviewSnapshot,
+    ReviewedCurriculumObjectives,
+    ReviewedCurriculumPage,
     curriculum_review_snapshot,
+    list_reviewed_course_curricula,
+    read_reviewed_curriculum_objectives,
     review_curriculum,
 )
 from src.services.studytomy.adaptive_diagnostics import (
@@ -935,6 +939,33 @@ async def api_create_curriculum_draft(
 
 
 CurriculumUUID = Annotated[str, Path(pattern=r"^curriculum_[0-9a-f-]{36}$")]
+
+
+@router.get("/orgs/{org_uuid}/courses/{course_uuid}/reviewed-curricula", response_model=ReviewedCurriculumPage)
+async def api_reviewed_course_curricula(
+    course_uuid: Annotated[str, Path(min_length=1, max_length=255)],
+    request: Request,
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    after: Annotated[str | None, Query(pattern=r"^curriculum_[0-9a-f-]{36}$")] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> ReviewedCurriculumPage:
+    return await list_reviewed_course_curricula(request, db, org, actor, course_uuid, after=after, limit=limit)
+
+
+@router.get(
+    "/orgs/{org_uuid}/curriculum-revisions/{revision_uuid}/objectives",
+    response_model=ReviewedCurriculumObjectives,
+)
+async def api_reviewed_curriculum_objectives(
+    revision_uuid: CurriculumUUID,
+    request: Request,
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+) -> ReviewedCurriculumObjectives:
+    return await read_reviewed_curriculum_objectives(request, db, org, actor, revision_uuid)
 
 
 @router.put(

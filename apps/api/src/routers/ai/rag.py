@@ -24,6 +24,7 @@ from src.db.users import PublicUser, AnonymousUser, APITokenUser
 from src.security.auth import get_current_user, get_authenticated_user, resolve_acting_user_id
 from src.security.features_utils.usage import reserve_ai_credit
 from src.security.org_auth import is_org_member, require_org_admin, enforce_org_mfa
+from src.services.ai.llm.embeddings import DEFAULT_EMBEDDING_DIMENSIONS, embedding_provenance
 from src.services.ai.rag import pipeline
 from src.services.ai.rag import queue as rag_queue
 from src.services.ai.rag.access import RagAccessScope, build_rag_access_scope
@@ -73,6 +74,7 @@ class RAGActivityStatus(BaseModel):
     name: str
     activity_type: str
     chunks: int
+    compatible_chunks: int = 0
     indexed_at: Optional[str] = None
     transcripts: list[dict] = []
 
@@ -80,6 +82,8 @@ class RAGActivityStatus(BaseModel):
 class RAGStatusResponse(BaseModel):
     course_uuid: str
     course_chunks: int
+    compatible_course_chunks: int = 0
+    reindex_required: bool = False
     activities: list[RAGActivityStatus]
 
 
@@ -297,11 +301,14 @@ async def api_rag_status(
         raise HTTPException(status_code=404, detail="Course not found")
     await require_org_admin(resolve_acting_user_id(current_user), course.org_id, db_session)
 
+    space, provenance = embedding_provenance()
+    compatible = func.count().filter(CourseEmbedding.embedding_space == space)
+    active_space = not course.studytomy_managed and provenance["dimensions"] == DEFAULT_EMBEDDING_DIMENSIONS
     counts = {
-        activity_id: (chunks, indexed_at)
-        for activity_id, chunks, indexed_at in (await db_session.execute(
-            select(CourseEmbedding.activity_id, func.count(), func.max(CourseEmbedding.update_date))
-            .where(CourseEmbedding.course_id == course.id)
+        activity_id: (chunks, indexed_at, matching if active_space else 0)
+        for activity_id, chunks, indexed_at, matching in (await db_session.execute(
+            select(CourseEmbedding.activity_id, func.count(), func.max(CourseEmbedding.update_date), compatible)
+            .where(CourseEmbedding.course_id == course.id, CourseEmbedding.org_id == course.org_id)
             .group_by(CourseEmbedding.activity_id)
         )).all()
     }
@@ -319,16 +326,20 @@ async def api_rag_status(
                 {**transcript, "block_uuid": block.block_uuid}
             )
 
+    course_chunks, _, compatible_course_chunks = counts.get(None, (0, None, 0))
     return RAGStatusResponse(
         course_uuid=course.course_uuid,
-        course_chunks=counts.get(None, (0, None))[0],
+        course_chunks=course_chunks,
+        compatible_course_chunks=compatible_course_chunks,
+        reindex_required=active_space and any(chunks != matching for chunks, _, matching in counts.values()),
         activities=[
             RAGActivityStatus(
                 activity_uuid=activity.activity_uuid,
                 name=activity.name,
                 activity_type=activity.activity_type,
-                chunks=counts.get(activity.id, (0, None))[0],
-                indexed_at=counts.get(activity.id, (0, None))[1],
+                chunks=counts.get(activity.id, (0, None, 0))[0],
+                indexed_at=counts.get(activity.id, (0, None, 0))[1],
+                compatible_chunks=counts.get(activity.id, (0, None, 0))[2],
                 transcripts=[
                     t for t in [status_of(activity.extra_metadata)] if t
                 ] + block_transcripts.get(activity.id, []),

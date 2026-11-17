@@ -91,6 +91,10 @@ class Source:
     title: str = ""
     snippet: str = ""
     similarity: Optional[float] = None
+    content_hash: Optional[str] = None
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        fields = asdict(self)
+        if self.content_hash is None:
+            fields.pop("content_hash")
+        return fields

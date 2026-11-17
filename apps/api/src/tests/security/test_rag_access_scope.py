@@ -311,6 +311,7 @@ class TestQuery:
 
         # pgvector's <=> only exists on Postgres; capture the search instead.
         fake_result = MagicMock()
+        fake_result.scalar_one.return_value = True
         fake_result.fetchall.return_value = [_row(course, draft), _row(course, visible)]
         search_db = AsyncMock()
         search_db.execute.return_value = fake_result
@@ -319,7 +320,7 @@ class TestQuery:
             return await filter_readable_chunks(rows, s, db)
 
         with patch.object(
-            query_service, "embed_single_text", new=AsyncMock(return_value=[0.0] * 3)
+            query_service, "embed_single_text", new=AsyncMock(return_value=[0.0] * 768)
         ), patch.object(query_service, "filter_readable_chunks", new=filter_with_real_db):
             result = await query_service.query_course_rag("q", org.id, search_db, scope=scope)
 

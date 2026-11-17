@@ -124,18 +124,23 @@ class TestStatus:
             org_id=org.id, course_id=course.id, activity_id=11, block_uuid="block_3",
             creation_date="", update_date="",
         ))
-        for activity_id in (10, 10, None):
+        space, _ = rag_router.embedding_provenance()
+        for activity_id, signature in ((10, space), (10, None), (None, "f" * 64)):
             db.add(CourseEmbedding(
                 org_id=org.id, course_id=course.id, activity_id=activity_id, source_type="x",
                 chunk_text="x", embedding=[0.0] * 768, update_date="2026-10-10 10:00:00",
+                embedding_space=signature,
             ))
         await db.commit()
 
         status = await rag_router.api_rag_status(course.course_uuid, admin_user, db)
 
         assert status.course_chunks == 1
+        assert status.compatible_course_chunks == 0
+        assert status.reindex_required
         by_uuid = {a.activity_uuid: a for a in status.activities}
         assert by_uuid["activity_10"].chunks == 2
+        assert by_uuid["activity_10"].compatible_chunks == 1
         assert by_uuid["activity_10"].indexed_at == "2026-10-10 10:00:00"
         assert by_uuid["activity_10"].transcripts == [{"source": "v.mp4", "status": "done"}]
         assert by_uuid["activity_11"].chunks == 0

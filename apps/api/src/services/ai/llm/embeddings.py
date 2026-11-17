@@ -13,6 +13,9 @@ re-indexing existing courses.
 from __future__ import annotations
 
 import logging
+import hashlib
+import json
+import os
 
 from pydantic_ai.embeddings import Embedder, EmbeddingModel, EmbeddingSettings
 
@@ -52,6 +55,33 @@ def _resolve_embedding_provider(cfg) -> str:
     return (getattr(cfg, "provider", None) or "").strip().lower() or DEFAULT_PROVIDER
 
 
+def _embedding_target(cfg) -> tuple[str, str]:
+    provider = _resolve_embedding_provider(cfg)
+    if provider in _GOOGLE_ALIASES or (provider != "ollama" and provider not in _OPENAI_ALIASES):
+        provider, family = "google", "google"
+    elif provider == "ollama":
+        family = "ollama"
+    else:
+        family = "openai"
+    return provider, getattr(cfg, "embedding_model", None) or _DEFAULT_EMBEDDING_MODEL[family]
+
+
+def embedding_provenance() -> tuple[str, dict]:
+    """Identify a configured vector space without retaining endpoint credentials."""
+    cfg = get_learnhouse_config().ai_config
+    provider, model = _embedding_target(cfg)
+    provenance = {
+        "provider": provider, "model": model, "dimensions": embedding_dimensions(),
+        "model_revision": os.getenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "").strip()[:100] or None,
+    }
+    endpoint = None if provider == "google" else getattr(cfg, "base_url", None)
+    if provider == "ollama" and not endpoint:
+        endpoint = DEFAULT_OLLAMA_BASE_URL
+    provenance["endpoint_sha256"] = hashlib.sha256(endpoint.encode()).hexdigest() if endpoint else None
+    signature = hashlib.sha256(json.dumps(provenance, sort_keys=True).encode()).hexdigest()
+    return signature, provenance
+
+
 def build_embedding_model() -> EmbeddingModel:
     """Build a Pydantic AI ``EmbeddingModel`` for the configured (embedding) provider."""
     cfg = get_learnhouse_config().ai_config
@@ -59,7 +89,7 @@ def build_embedding_model() -> EmbeddingModel:
     main_provider = (getattr(cfg, "provider", None) or "").strip().lower() or DEFAULT_PROVIDER
     api_key = getattr(cfg, "api_key", None)
     base_url = getattr(cfg, "base_url", None) or None
-    model_name = getattr(cfg, "embedding_model", None)
+    _, model_name = _embedding_target(cfg)
     settings = EmbeddingSettings(dimensions=embedding_dimensions())
 
     if prov in _GOOGLE_ALIASES:
@@ -74,7 +104,7 @@ def build_embedding_model() -> EmbeddingModel:
                 "Google embeddings require an API key (set LEARNHOUSE_GEMINI_API_KEY)."
             )
         return GoogleEmbeddingModel(
-            model_name or _DEFAULT_EMBEDDING_MODEL["google"],
+            model_name,
             provider=GoogleProvider(api_key=key),
             settings=settings,
         )
@@ -84,7 +114,7 @@ def build_embedding_model() -> EmbeddingModel:
         from pydantic_ai.providers.ollama import OllamaProvider
 
         return OpenAIEmbeddingModel(
-            model_name or _DEFAULT_EMBEDDING_MODEL["ollama"],
+            model_name,
             provider=OllamaProvider(base_url=base_url or DEFAULT_OLLAMA_BASE_URL),
             settings=settings,
         )
@@ -98,7 +128,7 @@ def build_embedding_model() -> EmbeddingModel:
                 "OpenAI embeddings require an API key (set LEARNHOUSE_AI_API_KEY)."
             )
         return OpenAIEmbeddingModel(
-            model_name or _DEFAULT_EMBEDDING_MODEL["openai"],
+            model_name,
             provider=OpenAIProvider(api_key=api_key, base_url=base_url),
             settings=settings,
         )
@@ -114,7 +144,7 @@ def build_embedding_model() -> EmbeddingModel:
             "Provider '%s' has no embeddings API; using Google embeddings for RAG.", prov
         )
         return GoogleEmbeddingModel(
-            model_name or _DEFAULT_EMBEDDING_MODEL["google"],
+            model_name,
             provider=GoogleProvider(api_key=gemini_key),
             settings=settings,
         )

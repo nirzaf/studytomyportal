@@ -21,6 +21,7 @@ from src.services.ai.llm import generate, model_for_tier
 from src.services.ai.rag.content_extraction import extract_all_course_content
 from src.services.ai.schemas.assignment import (
     AIAssignmentPlan,
+    AIQuizQuestion,
     AITask,
     GeneratedAssignmentPlan,
     GeneratedTask,
@@ -93,8 +94,12 @@ async def _course_context(course_id: int, org_id: int, db_session: AsyncSession)
 
 
 def _quiz_contents(task: AITask) -> dict:
+    return native_quiz_contents(task.quiz.questions if task.quiz else [])
+
+
+def native_quiz_contents(quiz_questions: list[AIQuizQuestion]) -> dict:
     questions = []
-    for q in (task.quiz.questions if task.quiz else []):
+    for q in quiz_questions:
         options = [
             {
                 "optionUUID": f"option_{uuid4()}",

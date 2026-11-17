@@ -783,6 +783,11 @@ async def _exercise_publication(
         lesson.activity_uuid,
         native_activity.activity_uuid,
     }
+    owning_course = snapshot["curriculum"]["owner_course_uuid"]
+    catalogue_path = f"{base}/courses/{owning_course}/reviewed-curricula"
+    assert (await client.get(catalogue_path, headers=author_headers)).json() == {
+        "revisions": [], "next_cursor": None,
+    }
     endpoint = f"{base}/definitions/curriculum/{revision_uuid}"
     publication = {
         "expected_version": 4,
@@ -1003,6 +1008,20 @@ async def _exercise_publication(
     assert published.status_code == 200, published.text
     assert published.json()["status"] == "published"
     assert published.json()["content_digest"] == snapshot["content_digest"]
+    objectives_path = f"{base}/curriculum-revisions/{revision_uuid}/objectives"
+    objectives = await client.get(objectives_path, headers=author_headers)
+    assert objectives.status_code == 200, objectives.text
+    assert objectives.json() == {
+        "curriculum": published.json(),
+        "concepts": snapshot["concepts"],
+        "prerequisites": snapshot["prerequisites"],
+    }
+    catalogue = await client.get(catalogue_path, headers=author_headers)
+    assert catalogue.status_code == 200
+    assert catalogue.json() == {"revisions": [published.json()], "next_cursor": None}
+    assert (await client.get(catalogue_path, headers=author_headers, params={"after": revision_uuid})).json() == {
+        "revisions": [], "next_cursor": None,
+    }
     assert (
         await client.post(
             f"{endpoint}/publish", json=publication, headers=reviewer_headers
@@ -1182,6 +1201,12 @@ async def _exercise_publication(
     assert retirement.status_code == 200, retirement.text
     assert retirement.json()["status"] == "retired"
     assert retirement.json()["content_digest"] == published.json()["content_digest"]
+    historical = await client.get(objectives_path, headers=author_headers)
+    assert historical.status_code == 200, historical.text
+    assert historical.json() == {**objectives.json(), "curriculum": retirement.json()}
+    assert (await client.get(catalogue_path, headers=reviewer_headers)).json() == {
+        "revisions": [retirement.json()], "next_cursor": None,
+    }
     audit = (
         (
             await db.execute(

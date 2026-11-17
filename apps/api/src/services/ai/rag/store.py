@@ -23,12 +23,15 @@ def _owned_by(ref: ContentRef):
     return (CourseEmbedding.course_id == ref.id, CourseEmbedding.activity_id.is_(None))  # type: ignore[union-attr]
 
 
-async def current_hash(ref: ContentRef, db: AsyncSession) -> Optional[str]:
-    """The content hash of a ref's rows, if they were all written together."""
-    hashes = set((await db.execute(
-        select(CourseEmbedding.content_hash).where(*_owned_by(ref)).distinct()
-    )).scalars().all())
-    return hashes.pop() if len(hashes) == 1 else None
+async def current_hash(ref: ContentRef, db: AsyncSession, *, embedding_space: str | None = None) -> Optional[str]:
+    """The content hash of a ref's rows, if they share the required provenance."""
+    rows = (await db.execute(
+        select(CourseEmbedding.content_hash, CourseEmbedding.embedding_space).where(*_owned_by(ref)).distinct()
+    )).all()
+    if len(rows) != 1:
+        return None
+    content_hash, stored_space = rows[0]
+    return content_hash if embedding_space is None or stored_space == embedding_space else None
 
 
 async def replace(ref: ContentRef, rows: list[CourseEmbedding], db: AsyncSession) -> None:
