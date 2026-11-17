@@ -41,9 +41,15 @@ feature-level old-application compatibility acceptance.
 | Isolation | Disposable Docker PostgreSQL 16 with pgvector, an empty synthetic database, and a loopback-only ephemeral port. |
 | Result | Direct inspection of `alembic_version` confirmed the target revision `61e73f9b4c20`. The test container was removed. |
 
-This rehearsal exercised the schema upgrade from the initialized parent without
-production records. Representative data backfill, backup restore, and older
-application behavior at this target revision still require separate evidence.
+A follow-up run at `2124b593516a546bff11c4b95527ba69a5c425b2` seeded a
+synthetic organization, user and public published course at `f5a8b3d0c2e4`.
+After upgrade to `61e73f9b4c20`, all three rows were present, the course still
+belonged to the same organization, and the new managed-course flag was false.
+A custom-format PostgreSQL dump taken before the upgrade restored into a
+separate database in the disposable container. The restored sample and parent
+revision matched. This verifies one local backup-and-restore path. Historical
+business-data backfill, production snapshot restore, and older application
+behavior at this target revision still require separate evidence.
 
 ## Determine the current graph before changing a database
 
