@@ -1,4 +1,4 @@
-# StudyTOMY Managed-Course Access Path Inventory
+# Studytomy Managed-Course Access Path Inventory
 
 **Review date:** 2026-11-16<br>
 **Checkout HEAD:** `2c1062a6872cb5c9bc041c6258e2c79085a1f897` (`main`, same as `origin/main`)<br>
