@@ -79,6 +79,7 @@ from src.services.auth.session import mint_session_tokens
 from src.services.courses.activities.assignments import retry_assignment_submission
 from src.services.studytomy.adaptive_attempt_access import (
     require_diagnostic_access,
+    require_mapped_release_source,
     require_mapped_source,
 )
 from src.services.studytomy.adaptive_guidance import load_guidance_context
@@ -440,6 +441,17 @@ async def _exercise_authoring(
             published=True,
             activity_type=ActivityTypeEnum.TYPE_DYNAMIC,
             activity_sub_type=ActivitySubTypeEnum.SUBTYPE_DYNAMIC_PAGE,
+            content={
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Synthetic released lesson."}
+                        ],
+                    }
+                ],
+            },
         )
         db.add(lesson)
         await db.commit()
@@ -560,18 +572,24 @@ async def _exercise_authoring(
         assert (await client.get(configuration, headers=direct)).status_code == 404
         if session_factory is not None:
             await _characterize_managed_course_diagnostic_conflict(
-                db, org, owned, lesson, draft["uuid"], admin_user, regular_user
+                db,
+                org,
+                other_org,
+                owned,
+                lesson,
+                draft["uuid"],
+                admin_user,
+                regular_user,
             )
 
 
 async def _characterize_managed_course_diagnostic_conflict(
-    db, org, course, lesson, curriculum_uuid, staff, learner
+    db, org, other_org, course, lesson, curriculum_uuid, staff, learner
 ):
-    """AUD-01: prove the reviewed-release/grant path still hits native publication.
+    """AUD-01/AUD-03: characterize managed private access and exact release sources.
 
     Every policy, review, release and learner record below is synthetic test data,
-    not a real approval. The desired follow-up is exact release-aware source
-    resolution while the managed Course remains private and unpublished.
+    not a real approval. Managed learner access remains private and unpublished.
     """
     token = uuid4().hex
     now = datetime.now(UTC)
@@ -651,6 +669,29 @@ async def _characterize_managed_course_diagnostic_conflict(
         lesson.activity_uuid,
     )
     assert native_source.id == lesson.id
+
+    # The adaptive authoring fixture mapped the lesson but did not place it in
+    # the native course sequence. A releasable lesson must have a chapter link.
+    chapter = (
+        await db.execute(
+            select(Chapter).where(
+                Chapter.org_id == org.id,
+                Chapter.course_id == course.id,
+            )
+        )
+    ).scalar_one()
+    db.add(
+        ChapterActivity(
+            org_id=org.id,
+            course_id=course.id,
+            chapter_id=chapter.id,
+            activity_id=lesson.id,
+            order=1,
+            creation_date="",
+            update_date="",
+        )
+    )
+    await db.commit()
 
     policies = []
     for key in (
@@ -746,6 +787,264 @@ async def _characterize_managed_course_diagnostic_conflict(
     assert [row.id for row in active_grants] == [grant.id]
 
     assert course.public is False and course.published is False
+
+    # AUD-03: a granted learner resolves only the exact reviewed frozen source.
+    # The following policy and consent values are synthetic test data; they do
+    # not represent owner approval or enable a real learner service.
+    d11 = await _seed_approved_policy(
+        db,
+        org,
+        staff.id,
+        StudyPolicyKey.D_11,
+        specified={
+            "community_audiences": {"fixture": True},
+            "adult_contact_boundaries": {"fixture": True},
+            "moderation": {"fixture": True},
+        },
+    )
+    safeguarding_owner = await _seed_active_owner(
+        db,
+        org,
+        staff.id,
+        staff.id,
+        StudyOwnerFunction.SAFEGUARDING,
+    )
+    db.add(
+        StudyPolicyApproval(
+            org_id=org.id,
+            policy_version_id=d11.id,
+            responsibility=StudyOwnerFunction.SAFEGUARDING.value,
+            owner_assignment_id=safeguarding_owner.id,
+            approver_user_id=staff.id,
+            evidence_reference="synthetic-aud03-policy",
+            rationale="Synthetic managed-release test fixture",
+            approved_at=now,
+        )
+    )
+    await db.commit()
+
+    source = await require_mapped_release_source(
+        db,
+        org,
+        learner,
+        profile,
+        curriculum,
+        concept_uuids,
+        course.course_uuid,
+        release.uuid,
+        lesson.activity_uuid,
+        now,
+    )
+    frozen_activity = next(
+        row
+        for row in release.snapshot["activities"]
+        if row["activity_uuid"] == lesson.activity_uuid
+    )
+    assert source.activity_snapshot == frozen_activity
+    assert source.activity_digest == next(
+        row.activity_digest
+        for row in (
+            await db.execute(
+                select(StudyConceptActivity).where(
+                    StudyConceptActivity.curriculum_revision_id == curriculum.id,
+                    StudyConceptActivity.activity_uuid == lesson.activity_uuid,
+                    StudyConceptActivity.archived.is_(False),
+                )
+            )
+        ).scalars()
+    )
+    assert source.authorization.release.id == release.id
+    assert source.authorization.profile.id == profile.id
+    assert [row.id for row in source.authorization.grants] == [grant.id]
+    assert len(source.authorization.current_policy_version_ids) == 4
+    assert (
+        source.authorization.progression_policy.id
+        in source.authorization.current_policy_version_ids
+    )
+
+    with pytest.raises(HTTPException) as native_draft_denied:
+        await require_mapped_source(
+            request,
+            db,
+            org,
+            learner,
+            curriculum,
+            concept_uuids,
+            lesson.activity_uuid,
+        )
+    assert native_draft_denied.value.status_code == 404
+
+    sibling = Course(
+        org_id=org.id,
+        course_uuid=f"course_{uuid4()}",
+        name="Synthetic sibling course",
+        public=False,
+        published=False,
+        open_to_contributors=False,
+    )
+    db.add(sibling)
+    await db.flush()
+
+    for unauthorized_org, unauthorized_course, unauthorized_release, unauthorized_actor, unauthorized_activity in (
+        (other_org, course.course_uuid, release.uuid, learner, lesson.activity_uuid),
+        (org, course.course_uuid, f"course_release_{uuid4()}", learner, lesson.activity_uuid),
+        (org, sibling.course_uuid, release.uuid, learner, lesson.activity_uuid),
+        (org, course.course_uuid, release.uuid, staff, lesson.activity_uuid),
+        (org, course.course_uuid, release.uuid, learner, f"activity_{uuid4()}"),
+    ):
+        with pytest.raises(HTTPException) as denied_release:
+            await require_mapped_release_source(
+                db,
+                unauthorized_org,
+                unauthorized_actor,
+                profile,
+                curriculum,
+                concept_uuids,
+                unauthorized_course,
+                unauthorized_release,
+                unauthorized_activity,
+                now,
+            )
+        assert denied_release.value.status_code == 404
+
+    first_use = StudyCourseAccessGrant(
+        org_id=org.id,
+        learner_profile_id=profile.id,
+        course_uuid=course.course_uuid,
+        release_id=release.id,
+        source_kind="free",
+        source_uuid=f"aud03-first-use-{token}",
+        start_basis="after_first_access",
+        duration_days=2,
+        created_at=now - timedelta(minutes=2),
+    )
+    db.add(first_use)
+    await db.flush()
+    with pytest.raises(HTTPException) as unsupported_before_first_use:
+        await require_mapped_release_source(
+            db,
+            org,
+            learner,
+            profile,
+            curriculum,
+            concept_uuids,
+            course.course_uuid,
+            release.uuid,
+            f"activity_{uuid4()}",
+            now,
+            claim_first_use=True,
+        )
+    assert unsupported_before_first_use.value.status_code == 404
+    assert first_use.starts_at is None and first_use.ends_at is None
+    claimed = await require_mapped_release_source(
+        db,
+        org,
+        learner,
+        profile,
+        curriculum,
+        concept_uuids,
+        course.course_uuid,
+        release.uuid,
+        lesson.activity_uuid,
+        now,
+        claim_first_use=True,
+    )
+    assert first_use.starts_at == now
+    assert first_use.ends_at == now + timedelta(days=2)
+    assert {row.id for row in claimed.authorization.grants} == {
+        grant.id,
+        first_use.id,
+    }
+    first_use.revoked_at = now
+    await db.flush()
+
+    expired_grant = StudyCourseAccessGrant(
+        org_id=org.id,
+        learner_profile_id=profile.id,
+        course_uuid=course.course_uuid,
+        release_id=release.id,
+        source_kind="free",
+        source_uuid=f"aud03-expired-{token}",
+        start_basis="fixed_period",
+        starts_at=now - timedelta(days=2),
+        ends_at=now - timedelta(seconds=1),
+        created_at=now - timedelta(days=3),
+    )
+    db.add(expired_grant)
+    await db.flush()
+    with_expired = await require_mapped_release_source(
+        db,
+        org,
+        learner,
+        profile,
+        curriculum,
+        concept_uuids,
+        course.course_uuid,
+        release.uuid,
+        lesson.activity_uuid,
+        now,
+    )
+    assert {row.id for row in with_expired.authorization.grants} == {grant.id}
+
+    overlapping = StudyCourseAccessGrant(
+        org_id=org.id,
+        learner_profile_id=profile.id,
+        course_uuid=course.course_uuid,
+        release_id=release.id,
+        source_kind="free",
+        source_uuid=f"aud03-overlap-{token}",
+        start_basis="fixed_period",
+        starts_at=now - timedelta(minutes=1),
+        ends_at=now + timedelta(days=1),
+        created_at=now - timedelta(minutes=2),
+    )
+    db.add(overlapping)
+    await db.flush()
+    both = await require_mapped_release_source(
+        db,
+        org,
+        learner,
+        profile,
+        curriculum,
+        concept_uuids,
+        course.course_uuid,
+        release.uuid,
+        lesson.activity_uuid,
+        now,
+    )
+    assert {row.id for row in both.authorization.grants} == {grant.id, overlapping.id}
+    grant.revoked_at = now
+    await db.flush()
+    remaining = await require_mapped_release_source(
+        db,
+        org,
+        learner,
+        profile,
+        curriculum,
+        concept_uuids,
+        course.course_uuid,
+        release.uuid,
+        lesson.activity_uuid,
+        now,
+    )
+    assert [row.id for row in remaining.authorization.grants] == [overlapping.id]
+    overlapping.revoked_at = now
+    await db.flush()
+    with pytest.raises(HTTPException) as revoked:
+        await require_mapped_release_source(
+            db,
+            org,
+            learner,
+            profile,
+            curriculum,
+            concept_uuids,
+            course.course_uuid,
+            release.uuid,
+            lesson.activity_uuid,
+            now,
+        )
+    assert revoked.value.status_code == 404
+    await db.commit()
 
     for field in ("public", "published"):
         with pytest.raises(IntegrityError, match="ck_course_studytomy_managed_private"):
@@ -1096,6 +1395,11 @@ async def _exercise_publication(
             },
         },
         StudyPolicyKey.D_09: {
+            "release_schedule": {
+                "ungated_text_activities": {
+                    owning_course: [lesson.activity_uuid],
+                },
+            },
             "mastery_gate": {
                 "adaptive_curriculum_policies": {revision_uuid: "synthetic-mastery-v1"},
                 "adaptive_recommendation_support": "return_to_lesson",
@@ -2207,6 +2511,7 @@ async def _exercise_learner_attempt(
                 "progress_report_notifications": ["email"],
                 "ai_assistance": ["adaptive_guidance"],
                 "learning_terms": [
+                    "course_release",
                     "adaptive_diagnostics",
                     "adaptive_practice",
                     "adaptive_native_assignments",
@@ -2307,6 +2612,7 @@ async def _exercise_learner_attempt(
             choice="accept",
             notice_version="fixture-v1",
             scope_codes=[
+                "course_release",
                 "adaptive_diagnostics",
                 "adaptive_practice",
                 "adaptive_native_assignments",

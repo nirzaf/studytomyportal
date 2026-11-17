@@ -99,6 +99,18 @@ class ManagedActivityMedia:
             await asyncio.to_thread(self.file.close)
 
 
+@dataclass(frozen=True, slots=True)
+class ManagedReleaseAuthorization:
+    """Current actor and grant authority for one exact immutable release."""
+
+    profile: StudyLearnerProfile
+    release: StudyCourseRelease
+    progression_policy: StudyPolicyVersion
+    grants: tuple[StudyCourseAccessGrant, ...]
+    course_id: int
+    current_policy_version_ids: tuple[int, ...]
+
+
 class ManagedReleaseCatalog(BaseModel):
     releases: list[ManagedReleaseOverview]
     next_cursor: str | None
@@ -131,7 +143,7 @@ def _unavailable() -> HTTPException:
 
 async def _authorized_learner(
     db: AsyncSession, org: Organization, actor: PublicUser, now: datetime,
-) -> tuple[StudyLearnerProfile, StudyPolicyVersion]:
+) -> tuple[StudyLearnerProfile, StudyPolicyVersion, tuple[int, ...]]:
     profile = (await db.execute(select(StudyLearnerProfile).where(
         StudyLearnerProfile.org_id == org.id, StudyLearnerProfile.user_id == actor.id,
         StudyLearnerProfile.status == "active", StudyLearnerProfile.control_mode == "independent",
@@ -154,7 +166,7 @@ async def _authorized_learner(
     ):
         raise _unavailable()
     progression = next(policy for policy in policies if policy.policy_key == StudyPolicyKey.D_09.value)
-    return profile, progression
+    return profile, progression, tuple(int(policy.id) for policy in policies if policy.id is not None)
 
 
 def _reviewed_releases(org_id: int):
@@ -164,7 +176,10 @@ def _reviewed_releases(org_id: int):
               & (Course.course_uuid == StudyCourseRelease.course_uuid))
         .join(StudyCourseReview, StudyCourseReview.id == StudyCourseRelease.review_id)
         .where(
-            StudyCourseRelease.org_id == org_id, Course.studytomy_managed.is_(True),
+            StudyCourseRelease.org_id == org_id,
+            Course.studytomy_managed.is_(True),
+            Course.public.is_(False),
+            Course.published.is_(False),
             StudyCourseRelease.policy_binding.is_not(None),
             StudyCourseReview.org_id == org_id,
             StudyCourseReview.course_uuid == StudyCourseRelease.course_uuid,
@@ -174,12 +189,92 @@ def _reviewed_releases(org_id: int):
     )
 
 
+async def resolve_managed_release_authority(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    *,
+    now: datetime,
+    include_unstarted: bool = False,
+) -> ManagedReleaseAuthorization:
+    """Resolve current learner authority and every grant for one frozen release.
+
+    ``include_unstarted`` is only for a caller that will finish validating the
+    requested released source before claiming a first-use grant.
+    """
+    if now.utcoffset() is None:
+        raise ValueError("Release authorization requires a timezone-aware time")
+    now = now.astimezone(UTC)
+    profile, progression, current_policy_ids = await _authorized_learner(
+        db, org, actor, now
+    )
+    release = (
+        await db.execute(
+            _reviewed_releases(org.id).where(
+                StudyCourseRelease.course_uuid == course_uuid,
+                StudyCourseRelease.uuid == release_uuid,
+            )
+        )
+    ).scalar_one_or_none()
+    if release is None or canonical_request_hash(release.snapshot) != release.snapshot_sha256:
+        raise _unavailable()
+
+    course_ids = (
+        await db.execute(
+            select(Course.id).where(
+                Course.org_id == org.id,
+                Course.course_uuid == course_uuid,
+                Course.studytomy_managed.is_(True),
+                Course.public.is_(False),
+                Course.published.is_(False),
+            )
+        )
+    ).scalars().all()
+    snapshot_course = release.snapshot.get("course")
+    if (
+        len(course_ids) != 1
+        or not isinstance(snapshot_course, dict)
+        or type(snapshot_course.get("id")) is not int
+        or snapshot_course.get("id") != course_ids[0]
+        or snapshot_course.get("org_id") != org.id
+        or snapshot_course.get("course_uuid") != course_uuid
+        or release.progression_policy_id != progression.id
+    ):
+        raise _unavailable()
+
+    grants = tuple(
+        await resolve_active_course_grants(
+            db,
+            org_id=org.id,
+            learner_profile_id=profile.id,
+            course_uuid=course_uuid,
+            release_id=release.id,
+            now=now,
+            include_unstarted=include_unstarted,
+        )
+    )
+    if not grants:
+        raise _unavailable()
+    return ManagedReleaseAuthorization(
+        profile=profile,
+        release=release,
+        progression_policy=progression,
+        grants=grants,
+        course_id=course_ids[0],
+        current_policy_version_ids=current_policy_ids,
+    )
+
+
 async def _authorized_release(
     db: AsyncSession, org: Organization, actor: PublicUser, course_uuid: str, release_uuid: str,
     *, require_active_grant: bool = True,
 ) -> tuple[StudyCourseRelease, StudyPolicyVersion, int]:
     now = datetime.now(UTC)
-    profile, progression = await _authorized_learner(db, org, actor, now)
+    profile, progression, _current_policy_ids = await _authorized_learner(
+        db, org, actor, now
+    )
     release = (await db.execute(_reviewed_releases(org.id).where(
         StudyCourseRelease.course_uuid == course_uuid, StudyCourseRelease.uuid == release_uuid,
     ))).scalar_one_or_none()
@@ -199,7 +294,7 @@ async def list_my_managed_releases(
     db: AsyncSession, org: Organization, actor: PublicUser, *, after: str | None, limit: int,
 ) -> ManagedReleaseCatalog:
     now = datetime.now(UTC)
-    profile, _ = await _authorized_learner(db, org, actor, now)
+    profile, _, _ = await _authorized_learner(db, org, actor, now)
     grant = StudyCourseAccessGrant
     available = select(grant.id).where(
         grant.org_id == org.id, grant.learner_profile_id == profile.id,
@@ -263,7 +358,7 @@ async def list_my_managed_access_history(
     db: AsyncSession, org: Organization, actor: PublicUser, *, after: str | None, limit: int,
 ) -> ManagedReleaseCatalog:
     now = datetime.now(UTC)
-    profile, _ = await _authorized_learner(db, org, actor, now)
+    profile, _, _ = await _authorized_learner(db, org, actor, now)
     retention, _ = await _history_retention_policy(db, org, now)
     grant = StudyCourseAccessGrant
     history = select(grant.id).where(

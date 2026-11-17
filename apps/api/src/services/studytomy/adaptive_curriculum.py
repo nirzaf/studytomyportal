@@ -386,15 +386,24 @@ async def replace_curriculum_graph(
     return result
 
 
-def curriculum_activity_digest(activity: Activity) -> str:
+def curriculum_activity_snapshot_digest(activity: dict[str, object]) -> str:
+    """Hash the stable source fields from either a live row or frozen release."""
     return canonical_request_hash(
         {
             "schema": "adaptive_lesson_source_v1",
-            "activity": activity.model_dump(
-                mode="json",
-                exclude={"id", "creation_date", "update_date", "last_modified_by_id"},
-            ),
+            "activity": {
+                key: value
+                for key, value in activity.items()
+                if key
+                not in {"id", "creation_date", "update_date", "last_modified_by_id"}
+            },
         }
+    )
+
+
+def curriculum_activity_digest(activity: Activity) -> str:
+    return curriculum_activity_snapshot_digest(
+        activity.model_dump(mode="json")
     )
 
 

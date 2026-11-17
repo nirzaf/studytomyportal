@@ -1,6 +1,7 @@
 """Resolve current learner and source authority for diagnostic attempts."""
 
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from fastapi import HTTPException, Request
@@ -24,12 +25,22 @@ from src.db.users import PublicUser
 from src.security.rbac import AccessAction
 from src.services.ai.rag.access import can_read_activity
 from src.services.courses.activities.assignments import authorize_assignment_access
+from src.services.studytomy.access_policy import (
+    ManagedReleaseAuthorization,
+    _project_media_activity,
+    _project_text_lesson,
+    _unavailable,
+    resolve_managed_release_authority,
+)
 from src.services.studytomy.adaptive_access import (
     _LEARNING_POLICIES,
     _is_learning_eligible,
     adaptive_enabled,
 )
-from src.services.studytomy.adaptive_curriculum import curriculum_activity_digest
+from src.services.studytomy.adaptive_curriculum import (
+    curriculum_activity_digest,
+    curriculum_activity_snapshot_digest,
+)
 from src.services.studytomy.adaptive_curriculum_review import CurriculumPublish
 from src.services.studytomy.adaptive_diagnostic_selection import (
     SELECTOR_VERSION,
@@ -46,12 +57,14 @@ from src.services.studytomy.adaptive_mastery import (
     resolve_mastery_policy,
 )
 from src.services.studytomy.consents import has_current_consent_scope
+from src.services.studytomy.entitlements import resolve_active_course_grants
 from src.services.studytomy.errors import (
     POLICY_NOT_APPROVED,
     STALE_VERSION,
     studytomy_http_error,
 )
 from src.services.studytomy.learners import _current_policies
+from src.services.studytomy.policies import lock_organization
 
 DIAGNOSTIC_SCOPE = "adaptive_diagnostics"
 PRACTICE_SCOPE = "adaptive_practice"
@@ -84,6 +97,18 @@ class DiagnosticAccess:
             self.definition.status == "published"
             and self.curriculum.status == "published"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedManagedReleaseSource:
+    """Exact released activity plus the authority used to resolve it."""
+
+    authorization: ManagedReleaseAuthorization
+    curriculum: StudyCurriculumRevision
+    activity_uuid: str
+    activity_version: int
+    activity_digest: str
+    activity_snapshot: dict[str, object]
 
 
 async def lock_attempt_learner(
@@ -128,6 +153,156 @@ async def lock_attempt_learner(
             "Current learner approval and consent for this activity are required.",
         )
     return profile
+
+
+async def require_mapped_release_source(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    profile: StudyLearnerProfile,
+    curriculum: StudyCurriculumRevision,
+    concept_uuids: tuple[str, ...],
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    now: datetime,
+    *,
+    for_practice: bool = False,
+    claim_first_use: bool = False,
+) -> ResolvedManagedReleaseSource:
+    """Resolve an adaptive source from its authorized immutable course release.
+
+    Native non-managed sources continue through ``require_mapped_source``.
+    Managed-course authoring rows are never returned by this branch.
+    """
+    if (
+        profile.org_id != org.id
+        or profile.user_id != actor.id
+        or profile.status != "active"
+        or profile.control_mode != "independent"
+        or curriculum.org_id != org.id
+        or curriculum.status not in {"published", "retired"}
+        or curriculum.owner_course_uuid != course_uuid
+        or not curriculum.content_digest
+        or not concept_uuids
+    ):
+        raise _unavailable()
+
+    # Serialize this authorization/read operation with grant and policy changes;
+    # no external storage I/O is performed while this lock is held.
+    await lock_organization(db, org.id)
+    authorization = await resolve_managed_release_authority(
+        db,
+        org,
+        actor,
+        course_uuid,
+        release_uuid,
+        now=now,
+        include_unstarted=claim_first_use,
+    )
+    if authorization.profile.id != profile.id:
+        raise _unavailable()
+
+    snapshot = authorization.release.snapshot
+    if snapshot.get("schema") != "course_content_evidence_v4":
+        raise _unavailable()
+    activity_rows = snapshot.get("activities")
+    activities = (
+        [
+            row
+            for row in activity_rows
+            if isinstance(row, dict) and row.get("activity_uuid") == activity_uuid
+        ]
+        if isinstance(activity_rows, list)
+        else []
+    )
+    if len(activities) != 1:
+        raise _unavailable()
+    activity = activities[0]
+    activity_id = activity.get("id")
+    activity_version = activity.get("current_version")
+    if (
+        type(activity_id) is not int
+        or activity_id < 1
+        or type(activity_version) is not int
+        or activity_version < 1
+        or activity.get("published") is not True
+    ):
+        raise _unavailable()
+    try:
+        activity_digest = curriculum_activity_snapshot_digest(activity)
+    except (TypeError, ValueError):
+        raise _unavailable() from None
+
+    mapping_query = (
+        select(StudyConceptActivity.id)
+        .join(StudyConcept, StudyConcept.id == StudyConceptActivity.concept_id)
+        .where(
+            StudyConceptActivity.org_id == org.id,
+            StudyConceptActivity.curriculum_revision_id == curriculum.id,
+            StudyConceptActivity.course_id == authorization.course_id,
+            StudyConceptActivity.course_uuid == course_uuid,
+            StudyConceptActivity.activity_id == activity_id,
+            StudyConceptActivity.activity_uuid == activity_uuid,
+            StudyConceptActivity.activity_version == activity_version,
+            StudyConceptActivity.activity_digest == activity_digest,
+            StudyConceptActivity.archived.is_(False),
+            StudyConcept.uuid.in_(concept_uuids),
+            StudyConcept.archived.is_(False),
+        )
+    )
+    if for_practice:
+        mapping_query = mapping_query.where(StudyConceptActivity.usage == "practice")
+    if await db.scalar(mapping_query.limit(1)) is None:
+        raise _unavailable()
+
+    # The current release projector is the authority for what this learner can
+    # actually open. Unsupported/native-only formats stay unavailable here.
+    try:
+        subtype = activity.get("activity_sub_type")
+        if subtype == "SUBTYPE_DYNAMIC_PAGE":
+            _project_text_lesson(
+                authorization.release,
+                authorization.progression_policy,
+                activity_uuid,
+            )
+        elif subtype in {"SUBTYPE_DOCUMENT_PDF", "SUBTYPE_VIDEO_HOSTED"}:
+            _project_media_activity(
+                authorization.release,
+                authorization.progression_policy,
+                activity_uuid,
+            )
+        else:
+            raise _unavailable()
+    except HTTPException as error:
+        if error.status_code == 404:
+            raise _unavailable() from error
+        raise
+
+    if claim_first_use:
+        grants = tuple(
+            await resolve_active_course_grants(
+                db,
+                org_id=org.id,
+                learner_profile_id=profile.id,
+                course_uuid=course_uuid,
+                release_id=authorization.release.id,
+                now=now,
+                claim_first_use=True,
+            )
+        )
+        if not grants:
+            raise _unavailable()
+        authorization = replace(authorization, grants=grants)
+
+    return ResolvedManagedReleaseSource(
+        authorization=authorization,
+        curriculum=curriculum,
+        activity_uuid=activity_uuid,
+        activity_version=activity_version,
+        activity_digest=activity_digest,
+        activity_snapshot=deepcopy(activity),
+    )
 
 
 async def require_mapped_source(
