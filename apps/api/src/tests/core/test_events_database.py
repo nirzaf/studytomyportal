@@ -1,4 +1,4 @@
-import importlib
+from importlib.util import module_from_spec, spec_from_file_location
 import logging
 from types import SimpleNamespace
 
@@ -388,6 +388,16 @@ async def test_register_cache_hooks_cover_fallback_queries_and_commit_warning(db
     assert sync_session._course_uuids_to_invalidate == set()
 
 
+def _load_isolated_database_module():
+    # In-place reloads replace the shared engine and dependency functions used
+    # by FastAPI routes that were already imported during collection.
+    spec = spec_from_file_location("src.core.events._database_test", database.__file__)
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_reload_module_covers_production_branch(monkeypatch, caplog):
     class _FakeDatabaseConfig:
         sql_connection_string = "postgresql://example"
@@ -431,7 +441,7 @@ def test_reload_module_covers_production_branch(monkeypatch, caplog):
     )
 
     with caplog.at_level(logging.WARNING):
-        reloaded = importlib.reload(database)
+        reloaded = _load_isolated_database_module()
     assert reloaded.is_testing is False
     assert reloaded.engine is not None
     sync_eng = reloaded.engine.sync_engine
@@ -477,7 +487,7 @@ def test_reload_module_covers_production_branch(monkeypatch, caplog):
         lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("listen failed")),
     )
     with caplog.at_level(logging.WARNING):
-        reloaded = importlib.reload(database)
+        reloaded = _load_isolated_database_module()
     assert "Failed to register cache invalidation hooks" in caplog.text
 
     monkeypatch.setenv("TESTING", "true")
@@ -486,7 +496,7 @@ def test_reload_module_covers_production_branch(monkeypatch, caplog):
     )
     monkeypatch.setattr(sa_event, "listen", lambda *args, **kwargs: None)
     monkeypatch.setattr(sa_event, "listens_for", lambda *args, **kwargs: (lambda fn: fn))
-    restored = importlib.reload(database)
+    restored = _load_isolated_database_module()
     assert restored.is_testing is True
 
 
@@ -520,7 +530,7 @@ def _reload_with_url(monkeypatch, url: str, fake_create_async_engine=None):
     monkeypatch.setattr("sqlalchemy.ext.asyncio.create_async_engine", fake_create_async_engine)
     monkeypatch.setattr(sa_event, "listens_for", lambda *a, **kw: (lambda fn: fn))
     monkeypatch.setattr(sa_event, "listen", lambda *a, **kw: None)
-    return importlib.reload(database)
+    return _load_isolated_database_module()
 
 
 def test_psycopg2_url_is_rewritten_to_asyncpg(monkeypatch):
