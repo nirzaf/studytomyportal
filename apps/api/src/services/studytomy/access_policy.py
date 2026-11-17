@@ -1,7 +1,15 @@
 """Self-service access to reviewed managed course releases."""
 
+import asyncio
+import hashlib
+import re
+from collections.abc import AsyncIterator
+from contextlib import aclosing
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from pathlib import PurePosixPath
+from tempfile import TemporaryFile
+from typing import BinaryIO, Literal
 
 from fastapi import HTTPException
 from pydantic import BaseModel
@@ -31,9 +39,23 @@ from src.services.studytomy.entitlements import (
     current_allocation_delivery_policy,
     resolve_active_course_grants,
 )
+from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
+from src.services.studytomy.releases import (
+    _NATIVE_ACTIVITY_MEDIA,
+    _RELEASE_MEDIA_TYPES,
+)
+from src.services.utils.upload_content import open_content_stream
+
+_MAX_RELEASE_MEDIA_BYTES = 500 * 1024 * 1024
+_RELEASE_MEDIA_FILENAME = {
+    "application/pdf": "lesson.pdf",
+    "video/mp4": "lesson.mp4",
+    "video/webm": "lesson.webm",
+}
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ManagedReleaseOverview(BaseModel):
@@ -45,6 +67,36 @@ class ManagedReleaseOverview(BaseModel):
 class ManagedTextLesson(ManagedReleaseOverview):
     activity_uuid: str
     paragraphs: list[str]
+
+
+@dataclass(slots=True)
+class ManagedActivityMedia:
+    file: BinaryIO
+    media_type: str
+    filename: str
+    size_bytes: int
+    start: int
+    end: int
+    status_code: int
+
+    async def stream(self) -> AsyncIterator[bytes]:
+        remaining = self.end - self.start + 1
+        try:
+            await asyncio.to_thread(self.file.seek, self.start)
+            while remaining > 0:
+                chunk = await asyncio.to_thread(
+                    self.file.read, min(64 * 1024, remaining)
+                )
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+        finally:
+            await asyncio.to_thread(self.file.close)
+
+    async def close(self) -> None:
+        if not self.file.closed:
+            await asyncio.to_thread(self.file.close)
 
 
 class ManagedReleaseCatalog(BaseModel):
@@ -357,6 +409,290 @@ def _project_text_lesson(
     return ManagedTextLesson(
         course_uuid=release.course_uuid, release_uuid=release.uuid, activity_uuid=activity_uuid,
         name=lesson["name"], paragraphs=_plain_paragraphs(lesson.get("content")),
+    )
+
+
+def _project_media_activity(
+    release: StudyCourseRelease,
+    policy: StudyPolicyVersion,
+    activity_uuid: str,
+) -> tuple[str, dict, str]:
+    snapshot = release.snapshot
+    course = snapshot.get("course")
+    if (
+        not isinstance(course, dict)
+        or course.get("drip_settings")
+        or snapshot.get("schema") != "course_content_evidence_v4"
+    ):
+        raise _unavailable()
+    matches = [
+        row
+        for row in snapshot.get("activities", [])
+        if isinstance(row, dict) and row.get("activity_uuid") == activity_uuid
+    ]
+    if len(matches) != 1:
+        raise _unavailable()
+    activity = matches[0]
+    subtype = activity.get("activity_sub_type")
+    directory = _NATIVE_ACTIVITY_MEDIA.get(subtype)
+    if (
+        directory is None
+        or activity.get("published") is not True
+        or activity.get("lock_type") not in ("public", "authenticated")
+        or (
+            subtype == "SUBTYPE_DOCUMENT_PDF"
+            and activity.get("activity_type") != "TYPE_DOCUMENT"
+        )
+        or (
+            subtype == "SUBTYPE_VIDEO_HOSTED"
+            and activity.get("activity_type") != "TYPE_VIDEO"
+        )
+    ):
+        raise _unavailable()
+    parent_ids = [
+        row[0]
+        for row in snapshot.get("activity_order", [])
+        if isinstance(row, list)
+        and len(row) == 3
+        and row[1] == activity.get("id")
+    ]
+    if len(parent_ids) != 1:
+        raise _unavailable()
+    chapters = [
+        row
+        for row in snapshot.get("chapters", [])
+        if isinstance(row, dict) and row.get("id") == parent_ids[0]
+    ]
+    if (
+        len(chapters) != 1
+        or chapters[0].get("lock_type") not in ("public", "authenticated")
+        or chapters[0].get("drip_rule")
+    ):
+        raise _unavailable()
+    body, blockers = inspect_study_policy_body(
+        StudyPolicyKey.D_09, policy.body
+    )
+    schedule = body.specified_value("release_schedule") if body else None
+    allowed = (
+        schedule.get("ungated_media_activities")
+        if isinstance(schedule, dict)
+        else None
+    )
+    course_activities = (
+        allowed.get(release.course_uuid) if isinstance(allowed, dict) else None
+    )
+    if (
+        policy.id != release.progression_policy_id
+        or any(blockers.values())
+        or not isinstance(course_activities, list)
+        or activity_uuid not in course_activities
+    ):
+        raise _unavailable()
+    content = activity.get("content")
+    filename = content.get("filename") if isinstance(content, dict) else None
+    normalized = (
+        filename.replace("\\", "/") if isinstance(filename, str) else ""
+    )
+    if (
+        not filename
+        or len(filename) > 255
+        or PurePosixPath(normalized).name != normalized
+        or normalized in {".", ".."}
+    ):
+        raise _unavailable()
+    media_type = _RELEASE_MEDIA_TYPES.get(PurePosixPath(normalized).suffix.lower())
+    if (
+        media_type is None
+        or (subtype == "SUBTYPE_DOCUMENT_PDF" and media_type != "application/pdf")
+        or (subtype == "SUBTYPE_VIDEO_HOSTED" and not media_type.startswith("video/"))
+    ):
+        raise _unavailable()
+    source_reference = (
+        f"courses/{release.course_uuid}/activities/{activity_uuid}/{directory}/{normalized}"
+    )
+    media = release.media_manifest.get(source_reference)
+    if (
+        not isinstance(media, dict)
+        or media.get("media_type") != media_type
+        or not _SHA256.fullmatch(str(media.get("sha256", "")))
+        or type(media.get("size_bytes")) is not int
+        or media["size_bytes"] < 1
+    ):
+        raise _unavailable()
+    storage_reference = media.get("storage_reference")
+    storage_path = PurePosixPath(
+        storage_reference.replace("\\", "/")
+        if isinstance(storage_reference, str)
+        else "."
+    )
+    if (
+        not isinstance(storage_reference, str)
+        or storage_path.parts[:2] != ("studytomy", "releases")
+        or len(storage_path.parts) != 4
+        or ".." in storage_path.parts
+        or storage_path.suffix != ".bin"
+        or str(storage_path) != storage_reference
+    ):
+        raise _unavailable()
+    return source_reference, media, media_type
+
+
+def _parse_media_range(range_header: str | None, size_bytes: int) -> tuple[int, int, int]:
+    def invalid() -> HTTPException:
+        return HTTPException(
+            416,
+            "Requested media range is not satisfiable.",
+            headers={
+                "Content-Range": f"bytes */{size_bytes}",
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "private, no-store",
+            },
+        )
+
+    if size_bytes < 1:
+        raise invalid()
+    if not range_header:
+        return 0, size_bytes - 1, 200
+    if not range_header.startswith("bytes=") or "," in range_header:
+        raise invalid()
+    start_text, separator, end_text = range_header[6:].partition("-")
+    if not separator or (not start_text and not end_text):
+        raise invalid()
+    if not start_text:
+        if not end_text.isdecimal() or int(end_text) < 1:
+            raise invalid()
+        length = min(int(end_text), size_bytes)
+        return size_bytes - length, size_bytes - 1, 206
+    if not start_text.isdecimal() or (end_text and not end_text.isdecimal()):
+        raise invalid()
+    start = int(start_text)
+    end = min(int(end_text), size_bytes - 1) if end_text else size_bytes - 1
+    if start >= size_bytes or end < start:
+        raise invalid()
+    return start, end, 206
+
+
+async def _stage_release_media(org_uuid: str, media: dict) -> BinaryIO:
+    # The response stream owns this spool and closes it after the final byte.
+    buffer = TemporaryFile(mode="w+b")  # noqa: SIM115
+    reference = media["storage_reference"]
+    directory, filename = reference.rsplit("/", 1)
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        stream = await open_content_stream(
+            directory=directory,
+            type_of_dir="orgs",
+            uuid=org_uuid,
+            file_and_format=filename,
+        )
+        async with aclosing(stream) as chunks:
+            async for chunk in chunks:
+                size += len(chunk)
+                if size > media["size_bytes"]:
+                    raise ValueError("Retained media exceeds its approved size.")
+                digest.update(chunk)
+                await asyncio.to_thread(buffer.write, chunk)
+        if size != media["size_bytes"] or digest.hexdigest() != media["sha256"]:
+            raise ValueError("Retained media does not match its approved digest.")
+        await asyncio.to_thread(buffer.seek, 0)
+        return buffer
+    except Exception as error:
+        await asyncio.to_thread(buffer.close)
+        raise studytomy_http_error(
+            503,
+            "RELEASE_STORAGE_INVALID",
+            "The retained course resource could not be verified for delivery.",
+        ) from error
+
+
+async def read_managed_activity_media(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    *,
+    range_header: str | None = None,
+    start_first_use: bool = False,
+) -> ManagedActivityMedia:
+    org = await lock_organization(db, org.id)
+    release, progression, profile_id = await _authorized_release(
+        db,
+        org,
+        actor,
+        course_uuid,
+        release_uuid,
+        require_active_grant=False,
+    )
+    candidates = await resolve_active_course_grants(
+        db,
+        org_id=org.id,
+        learner_profile_id=profile_id,
+        course_uuid=course_uuid,
+        release_id=release.id,
+        now=datetime.now(UTC),
+        include_unstarted=True,
+    )
+    if not candidates:
+        raise _unavailable()
+    _source_reference, media, media_type = _project_media_activity(
+        release, progression, activity_uuid
+    )
+    policies = await _current_policies(
+        db, org, (StudyPolicyKey.D_15,), datetime.now(UTC)
+    )
+    policy = policies[0]
+    body, blockers = inspect_study_policy_body(policy.policy_key, policy.body)
+    formats = body.specified_value("supported_formats") if body else None
+    max_bytes = formats.get("max_bytes") if isinstance(formats, dict) else None
+    media_types = formats.get("media_types") if isinstance(formats, dict) else None
+    if (
+        any(blockers.values())
+        or type(max_bytes) is not int
+        or not 1 <= max_bytes <= _MAX_RELEASE_MEDIA_BYTES
+        or not isinstance(media_types, list)
+        or any(not isinstance(value, str) for value in media_types)
+    ):
+        raise studytomy_http_error(
+            409,
+            "POLICY_NOT_APPROVED",
+            "The approved accessibility policy must define supported media formats and a size limit.",
+        )
+    if media_type not in media_types or media["size_bytes"] > max_bytes:
+        raise studytomy_http_error(
+            409,
+            "RELEASE_MEDIA_UNSUPPORTED",
+            "The approved accessibility policy does not authorize this resource format or size.",
+        )
+    start, end, status_code = _parse_media_range(range_header, media["size_bytes"])
+    staged = await _stage_release_media(org.org_uuid, media)
+    try:
+        now = datetime.now(UTC)
+        grants = await resolve_active_course_grants(
+            db,
+            org_id=org.id,
+            learner_profile_id=profile_id,
+            course_uuid=course_uuid,
+            release_id=release.id,
+            now=now,
+            claim_first_use=start_first_use,
+        )
+        if not grants:
+            raise _unavailable()
+        await _retain_allocation_delivery(db, org, actor, grants, now)
+    except Exception:
+        await asyncio.to_thread(staged.close)
+        raise
+    return ManagedActivityMedia(
+        file=staged,
+        media_type=media_type,
+        filename=_RELEASE_MEDIA_FILENAME[media_type],
+        size_bytes=media["size_bytes"],
+        start=start,
+        end=end,
+        status_code=status_code,
     )
 
 

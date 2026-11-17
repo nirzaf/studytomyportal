@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -116,10 +117,11 @@ async def test_checkout_rejects_client_price_and_missing_pilot_approval(db, org,
     [(125, False, False, False, None), (125, False, False, True, None), (0, False, False, False, None),
      (0, True, False, False, None), (0, True, True, False, None), (0, True, False, False, "retry"),
      (0, True, False, False, "race"), (0, True, False, False, "receipt_scope_absent"),
-     (125, False, False, False, "settled_refund"), (0, True, False, False, "reentry")],
+     (125, False, False, False, "settled_refund"), (0, True, False, False, "reentry"),
+     (0, True, False, False, "media_delivery")],
     ids=["paid", "paid-chargeback-first", "free-unapproved", "free-approved", "free-rollback-and-retry",
          "free-correction", "free-correction-first-open-race", "free-correction-receipt-scope-absent",
-         "paid-correction-settled-refund", "free-reentry"],
+         "paid-correction-settled-refund", "free-reentry", "free-release-media"],
 )
 async def test_signed_checkout_accepts_only_retained_approved_terms(
     postgres_session_factory, price_minor, free_approved, delay_remedy_policy, overlap_before_settlement, correction_scenario,
@@ -159,9 +161,22 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         db.add(profile)
         activity_uuid = f"activity_{uuid4()}"
         assessment_uuid = f"activity_{uuid4()}"
-        retained = {
-            "schema": "course_content_evidence_v4", "course": {"name": "Synthetic course"},
-            "activities": [{
+        media_activity_uuid = f"activity_{uuid4()}"
+        release_media_bytes = b"%PDF-1.4\nSynthetic approved lesson resource.\n%%EOF"
+        media_source_reference = (
+            f"courses/course_synthetic/activities/{media_activity_uuid}/documentpdf/lesson.pdf"
+        )
+        media_storage_reference = f"studytomy/releases/{token}/lesson.bin"
+        release_media_manifest = {
+            media_source_reference: {
+                "sha256": hashlib.sha256(release_media_bytes).hexdigest(),
+                "size_bytes": len(release_media_bytes),
+                "media_type": "application/pdf",
+                "storage_reference": media_storage_reference,
+            }
+        }
+        retained_activities = [
+            {
                 "id": 1, "activity_uuid": activity_uuid, "published": True,
                 "activity_type": "TYPE_DYNAMIC", "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE",
                 "name": "Reviewed lesson", "lock_type": "public",
@@ -173,9 +188,21 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 "activity_type": "TYPE_ASSIGNMENT", "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY",
                 "name": "Private assessment", "lock_type": "public",
                 "content": {"answer": "synthetic answer key"},
-            }],
+            },
+        ]
+        if correction_scenario == "media_delivery":
+            retained_activities.append({
+                "id": 3, "activity_uuid": media_activity_uuid, "published": True,
+                "activity_type": "TYPE_DOCUMENT", "activity_sub_type": "SUBTYPE_DOCUMENT_PDF",
+                "name": "Reviewed PDF", "lock_type": "public", "content": {"filename": "lesson.pdf"},
+            })
+        retained = {
+            "schema": "course_content_evidence_v4",
+            "course": {"name": "Synthetic course", "course_uuid": "course_synthetic"},
+            "activities": retained_activities,
             "chapters": [{"id": 1, "lock_type": "public"}],
-            "chapter_order": [[1, 1]], "activity_order": [[1, 1, 1], [1, 2, 2]],
+            "chapter_order": [[1, 1]],
+            "activity_order": [[1, 1, 1], [1, 2, 2], *([[1, 3, 3]] if correction_scenario == "media_delivery" else [])],
         }
         review, snapshot, release_policies = await _seed_postgres_release_sources(
             db, org, owner.id, token, snapshot=retained,
@@ -186,7 +213,8 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         )
         release = StudyCourseRelease(
             org_id=org.id, course_uuid=course.course_uuid, review_id=review.id,
-            snapshot_sha256=review.revision_sha256, snapshot=snapshot, media_manifest={},
+            snapshot_sha256=review.revision_sha256, snapshot=snapshot,
+            media_manifest=release_media_manifest if correction_scenario == "media_delivery" else {},
             assessment_policy_id=release_policies[0].id, progression_policy_id=release_policies[1].id,
             retention_policy_id=release_policies[2].id, rights_policy_id=release_policies[3].id,
             retention_category="synthetic",
@@ -247,9 +275,14 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         }).model_dump(mode="json")
         for row in release_policies:
             if row is not retention:
-                specified = {"release_schedule": {"ungated_text_activities": {
-                    course.course_uuid: [activity_uuid, assessment_uuid],
-                }}} if row.policy_key == StudyPolicyKey.D_09.value else None
+                specified = {"release_schedule": {
+                    "ungated_text_activities": {
+                        course.course_uuid: [activity_uuid, assessment_uuid],
+                    },
+                    **({"ungated_media_activities": {
+                        course.course_uuid: [media_activity_uuid],
+                    }} if correction_scenario == "media_delivery" else {}),
+                }} if row.policy_key == StudyPolicyKey.D_09.value else None
                 row.body = _synthetic_policy_body(StudyPolicyKey(row.policy_key), specified).model_dump(mode="json")
             row.effective_from = datetime.now(UTC)
         decisions = {
@@ -332,7 +365,7 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             decisions[StudyPolicyKey.D_05]["learner_allocation"]["free_order_offer_versions"] = {
                 offer_uuid: version_uuid,
             }
-        if correction_scenario == "reentry":
+        if correction_scenario in ("reentry", "media_delivery"):
             decisions[StudyPolicyKey.D_15] = {"supported_formats": {"max_bytes": 1024, "media_types": ["application/pdf"]}}
         if price_minor > 0:
             support_lead = await _seed_active_owner(db, org, owner.id, purchaser.id, StudyOwnerFunction.SUPPORT)
@@ -1567,7 +1600,12 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 StudyCourseAccessGrant.org_id == org.id,
             ))).scalar_one()
             assert (grant.learner_profile_id, grant.release_id) == (profile.id, release.id)
-            assert (grant.starts_at, grant.ends_at) == (command.settled_at, command.settled_at + timedelta(days=1))
+            if grant.start_basis == "after_first_access":
+                assert grant.starts_at is None and grant.ends_at is None
+            else:
+                assert (grant.starts_at, grant.ends_at) == (
+                    command.settled_at, command.settled_at + timedelta(days=1),
+                )
         org_path = f"/api/v1/studytomy/orgs/{org.org_uuid}"
         overview_path = f"{org_path}/learning/courses/{course.course_uuid}/releases/{release.uuid}"
         catalog_path = f"{org_path}/learning/releases"
@@ -1591,6 +1629,95 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         after = await client.get(catalog_path, headers=headers, params={"after": release.uuid, "limit": 1})
         assert after.json() == {"releases": [], "next_cursor": None}
         assert (await client.get(catalog_path, headers=finance_headers)).status_code == 404
+        if correction_scenario == "media_delivery":
+            media_path = (
+                f"{overview_path}/activities/{media_activity_uuid}/media"
+            )
+            storage_reads = []
+
+            async def open_synthetic_media(**kwargs):
+                storage_reads.append(kwargs)
+
+                async def chunks():
+                    yield release_media_bytes
+
+                return chunks()
+
+            monkeypatch.setattr(
+                "src.services.studytomy.access_policy.open_content_stream",
+                open_synthetic_media,
+            )
+            assert (await client.get(media_path, headers=finance_headers)).status_code == 404
+            assert (await client.get(
+                media_path.replace(course.course_uuid, f"{course.course_uuid}-other"),
+            )).status_code == 404
+            assert (await client.get(
+                media_path.replace(media_activity_uuid, f"activity_{uuid4()}"),
+            )).status_code == 404
+            assert (await client.get(
+                media_path.replace(org.org_uuid, f"org_{uuid4()}"),
+            )).status_code == 404
+            assert storage_reads == []
+
+            invalid_range = await client.post(
+                f"{media_path}/open", headers={**headers, "Range": f"bytes={len(release_media_bytes)}-"},
+            )
+            assert invalid_range.status_code == 416
+            assert invalid_range.headers["content-range"] == f"bytes */{len(release_media_bytes)}"
+            assert storage_reads == []
+            async with postgres_session_factory() as db:
+                unstarted = await db.get(StudyCourseAccessGrant, grant.id)
+                assert unstarted.starts_at is None and unstarted.ends_at is None
+
+            opened, replayed_open = await asyncio.gather(*[
+                client.post(f"{media_path}/open", headers=headers) for _ in range(2)
+            ])
+            for response in (opened, replayed_open):
+                assert response.status_code == 200, response.text
+                assert response.content == release_media_bytes
+                assert response.headers["content-type"] == "application/pdf"
+                assert response.headers["cache-control"] == "private, no-store"
+                assert response.headers["x-content-type-options"] == "nosniff"
+                assert response.headers["accept-ranges"] == "bytes"
+            assert len(storage_reads) == 2
+            async with postgres_session_factory() as db:
+                started = await db.get(StudyCourseAccessGrant, grant.id)
+                assert started.starts_at is not None and started.ends_at is not None
+                delivered = (await db.execute(select(StudyBusinessEvent).where(
+                    StudyBusinessEvent.org_id == org.id,
+                    StudyBusinessEvent.resource_uuid == str(grant.id),
+                    StudyBusinessEvent.action == "studytomy.course_grant.content_delivered",
+                ))).scalars().all()
+                assert len(delivered) == 1
+
+            ranged = await client.get(media_path, headers={**headers, "Range": "bytes=1-4"})
+            assert ranged.status_code == 206
+            assert ranged.content == release_media_bytes[1:5]
+            assert ranged.headers["content-range"] == f"bytes 1-4/{len(release_media_bytes)}"
+
+            async def open_tampered_media(**kwargs):
+                async def chunks():
+                    yield b"tampered" * 6
+
+                return chunks()
+
+            monkeypatch.setattr(
+                "src.services.studytomy.access_policy.open_content_stream",
+                open_tampered_media,
+            )
+            tampered = await client.get(media_path, headers=headers)
+            assert tampered.status_code == 503
+            assert tampered.json()["detail"]["code"] == "RELEASE_STORAGE_INVALID"
+            assert b"tampered" not in tampered.content
+
+            async with postgres_session_factory() as db:
+                revoked = await db.get(StudyCourseAccessGrant, grant.id)
+                revoked.revoked_at = datetime.now(UTC)
+                await db.commit()
+            reads_before_revoked = len(storage_reads)
+            assert (await client.get(media_path, headers=headers)).status_code == 404
+            assert len(storage_reads) == reads_before_revoked
+            return
         lesson_path = f"{overview_path}/lessons/{activity_uuid}"
         correction_review = f"{org_path}/learners/{profile.learner_uuid}/allocations/{ref}/correction-review"
         before_use = await client.get(correction_review, headers=finance_headers)

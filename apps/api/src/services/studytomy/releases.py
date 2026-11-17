@@ -5,6 +5,7 @@ import hashlib
 import re
 from contextlib import aclosing, suppress
 from datetime import datetime
+from pathlib import PurePosixPath
 from tempfile import TemporaryFile
 from typing import BinaryIO
 from uuid import uuid4
@@ -37,6 +38,11 @@ _RETENTION_CATEGORY = re.compile(r"[a-z][a-z0-9_]{0,63}")
 _NATIVE_ACTIVITY_MEDIA = {
     "SUBTYPE_VIDEO_HOSTED": "video",
     "SUBTYPE_DOCUMENT_PDF": "documentpdf",
+}
+_RELEASE_MEDIA_TYPES = {
+    ".pdf": "application/pdf",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
 }
 _TEXT_RELEASE_NODES = {
     "doc",
@@ -156,7 +162,10 @@ async def retain_reviewed_release_media(
                     destination=buffer,
                     size_limit=int(expected["size_bytes"]),
                 )
-                if observed != expected:
+                expected_bytes = {
+                    key: expected[key] for key in ("sha256", "size_bytes")
+                }
+                if observed != expected_bytes:
                     raise studytomy_http_error(
                         409,
                         "REVIEW_MEDIA_CHANGED",
@@ -174,14 +183,12 @@ async def retain_reviewed_release_media(
                     file_binary=buffer,
                     file_and_format=filename,
                 )
-            if (
-                await _read_release_media(
-                    org_uuid,
-                    reference,
-                    size_limit=int(expected["size_bytes"]),
-                )
-                != expected
-            ):
+            retained_bytes = await _read_release_media(
+                org_uuid,
+                reference,
+                size_limit=int(expected["size_bytes"]),
+            )
+            if retained_bytes != expected_bytes:
                 raise studytomy_http_error(
                     503,
                     "RELEASE_STORAGE_INVALID",
@@ -272,6 +279,7 @@ async def capture_native_release_media(
         assignment["id"]: assignment for assignment in snapshot["assignments"]
     }
     references = set()
+    delivery_media_types: dict[str, str] = {}
     for field in ("thumbnail_image", "thumbnail_video"):
         if course.get(field):
             references.add((f"{root}/thumbnails", course[field]))
@@ -283,6 +291,9 @@ async def capture_native_release_media(
             if (
                 not isinstance(filename, str)
                 or not filename
+                or PurePosixPath(filename.replace("\\", "/")).name != filename
+                or filename in {".", ".."}
+                or len(filename) > 255
                 or filename in _NATIVE_ACTIVITY_MEDIA.values()
             ):
                 raise studytomy_http_error(
@@ -290,9 +301,19 @@ async def capture_native_release_media(
                     "RELEASE_MEDIA_MISSING",
                     "A native course activity has no stored media.",
                 )
-            references.add(
-                (f"{root}/activities/{activity['activity_uuid']}/{directory}", filename)
+            source_reference = (
+                f"{root}/activities/{activity['activity_uuid']}/{directory}/{filename}"
             )
+            references.add((
+                f"{root}/activities/{activity['activity_uuid']}/{directory}",
+                filename,
+            ))
+            media_type = _RELEASE_MEDIA_TYPES.get(
+                PurePosixPath(filename.replace("\\", "/")).suffix.lower()
+            )
+            if media_type is None:
+                raise _release_media_unsupported()
+            delivery_media_types[source_reference] = media_type
     for assignment in assignments.values():
         if assignment.get("solution_file"):
             activity = activities.get(assignment["activity_id"])
@@ -320,12 +341,16 @@ async def capture_native_release_media(
             )
             references.add((directory, task["reference_file"]))
 
-    return {
-        reference: await _read_release_media(org_uuid, reference)
-        for reference in sorted(
-            f"{directory}/{filename}" for directory, filename in references
-        )
-    }
+    manifest = {}
+    for reference in sorted(
+        f"{directory}/{filename}" for directory, filename in references
+    ):
+        item = await _read_release_media(org_uuid, reference)
+        media_type = delivery_media_types.get(reference)
+        if media_type is not None:
+            item["media_type"] = media_type
+        manifest[reference] = item
+    return manifest
 
 
 def grounded_source_review_required(snapshot: dict) -> bool:

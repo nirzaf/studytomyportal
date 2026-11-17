@@ -3,7 +3,17 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Path,
+    Query,
+    Request,
+    Response,
+)
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -28,6 +38,7 @@ from src.services.studytomy.access_policy import (
     list_my_managed_access_history,
     list_my_managed_releases,
     read_managed_access_history,
+    read_managed_activity_media,
     read_managed_release_overview,
     read_managed_text_lesson,
 )
@@ -316,6 +327,102 @@ async def open_managed_text_lesson(
     await db.commit()
     response.headers["Cache-Control"] = "private, no-store"
     return lesson
+
+
+async def _managed_activity_media_response(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    request: Request,
+    actor: Purchaser,
+    db: Session,
+    *,
+    start_first_use: bool,
+) -> StreamingResponse:
+    org = await _member_org(org_uuid, actor, db)
+    media = await read_managed_activity_media(
+        db,
+        org,
+        actor,
+        course_uuid,
+        release_uuid,
+        activity_uuid,
+        range_header=request.headers.get("range"),
+        start_first_use=start_first_use,
+    )
+    try:
+        await db.commit()
+    except Exception:
+        await media.close()
+        raise
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": f'inline; filename="{media.filename}"',
+        "Content-Length": str(media.end - media.start + 1),
+        "X-Content-Type-Options": "nosniff",
+    }
+    if media.status_code == 206:
+        headers["Content-Range"] = (
+            f"bytes {media.start}-{media.end}/{media.size_bytes}"
+        )
+    return StreamingResponse(
+        media.stream(),
+        status_code=media.status_code,
+        media_type=media.media_type,
+        headers=headers,
+    )
+
+
+@router.get(
+    "/learning/courses/{course_uuid}/releases/{release_uuid}/activities/{activity_uuid}/media",
+    response_class=StreamingResponse,
+)
+async def get_managed_activity_media(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    request: Request,
+    actor: Purchaser,
+    db: Session,
+) -> StreamingResponse:
+    return await _managed_activity_media_response(
+        org_uuid,
+        course_uuid,
+        release_uuid,
+        activity_uuid,
+        request,
+        actor,
+        db,
+        start_first_use=False,
+    )
+
+
+@router.post(
+    "/learning/courses/{course_uuid}/releases/{release_uuid}/activities/{activity_uuid}/media/open",
+    response_class=StreamingResponse,
+)
+async def open_managed_activity_media(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    request: Request,
+    actor: Purchaser,
+    db: Session,
+) -> StreamingResponse:
+    return await _managed_activity_media_response(
+        org_uuid,
+        course_uuid,
+        release_uuid,
+        activity_uuid,
+        request,
+        actor,
+        db,
+        start_first_use=True,
+    )
 
 
 @router.put(_COLLECTION_PATH)

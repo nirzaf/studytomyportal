@@ -128,10 +128,12 @@ async def test_release_media_manifest_binds_native_file_bytes(tmp_path, monkeypa
         file.write_bytes(PDF)
     original = await capture_native_release_media("org_fixture", snapshot)
     assert set(original) == set(files)
+    assert original[files[1]]["media_type"] == "application/pdf"
     assert {item["size_bytes"] for item in original.values()} == {len(PDF)}
     monkeypatch.setattr(storage_utils, "get_content_delivery_type", lambda: "filesystem")
     retained = await retain_reviewed_release_media("org_fixture", original)
     assert set(retained) == set(files)
+    assert retained[files[1]]["media_type"] == "application/pdf"
     assert all(ref["storage_reference"].startswith("studytomy/releases/") for ref in retained.values())
     retained_files = {root / ref["storage_reference"] for ref in retained.values()}
     assert all(path.read_bytes() == PDF for path in retained_files)
