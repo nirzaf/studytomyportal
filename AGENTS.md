@@ -181,6 +181,8 @@ The existing [Studytomy website repository](https://github.com/nirzaf/studytomy-
 
 ## 7. Reference files and source of truth
 
+- **Architecture and agent navigation**: [Detailed architecture guide](docs/studytomy/AGENT-ARCHITECTURE-GUIDE.md), with dated source evidence, technical diagrams and explicit current-versus-planned boundaries.
+
 - **Project intent and status**: root `README.md` in the approved Studytomy fork, plus explicitly approved requirements and decisions.
 - **Source code**: current checked-out Studytomy branch and SHA; do not treat plans as implemented.
 - **Upstream source**: [learnhouse/learnhouse](https://github.com/learnhouse/learnhouse); inspect specific tag/SHA and edition gates.
