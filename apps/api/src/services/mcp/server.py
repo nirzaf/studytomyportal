@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Iterable, Any
 
 import mcp_types as types
@@ -43,7 +44,7 @@ from src.db.organization_config import OrganizationConfig
 from src.db.organizations import Organization
 from src.db.users import APITokenUser
 from src.security.mcp_auth import MCPPrincipal
-from src.services.ai.tools import known_toolsets, get_registry
+from src.services.ai.tools import ToolModule, build_registry, known_toolsets, get_registry
 from src.services.ai.tools.base import ActionTier, ToolContext, ToolSpec, make_synthetic_request
 from src.services.ai.tools.registry import (
     ToolRegistry,
@@ -129,6 +130,8 @@ retry; explain them to the user.
 
 
 def build_mcp_server(registry: ToolRegistry | None = None) -> Server:
+    if registry is None and os.getenv("LEARNHOUSE_STUDYTOMY_MCP_DRAFTS_ENABLED") == "true":
+        registry = build_registry(extra=[ToolModule("src.services.mcp.draft_authoring", "studytomy_drafts")])
     registry = registry or get_registry()
     from src.services.mcp.handlers import Handlers
 

@@ -753,6 +753,8 @@ async def create_course(
     thumbnail_file: UploadFile | None = None,
     thumbnail_type: ThumbnailType = ThumbnailType.IMAGE,
     creation_source: str = "manual",
+    *,
+    transactional_draft: bool = False,
 ):
     """
     Create a new course
@@ -764,6 +766,10 @@ async def create_course(
     - Course creation is subject to organization limits and permissions
     """
     course = Course.model_validate(course_object)
+    if transactional_draft:
+        if course.public or course.published or thumbnail_file is not None:
+            raise HTTPException(422, "A transactional draft must be private and have no upload.")
+        course.studytomy_managed = True
 
     # SECURITY: Check if user has permission to create courses in this organization
     # Since this is a new course, we need to check organization-level permissions
@@ -824,6 +830,12 @@ async def create_course(
         await db_session.flush()  # Get the ID without committing
         await db_session.refresh(course)
         db_session.add(resource_author)
+        if transactional_draft:
+            from src.security.features_utils.usage import log_usage_event
+
+            await db_session.flush()
+            await log_usage_event(org_id, "courses", "add", db_session, commit=False)
+            return CourseRead.model_validate({**course.model_dump(), "authors": []})
         await db_session.commit()  # Single commit for both
         await db_session.refresh(resource_author)
     except Exception:

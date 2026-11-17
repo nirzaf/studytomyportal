@@ -62,6 +62,8 @@ def record(
     )
     if status != "executed":
         return
+    if not spec.audit_arguments:
+        arguments = {}
     try:
         task = asyncio.get_running_loop().create_task(
             _to_org_log(principal, org_id, spec, arguments, approval)

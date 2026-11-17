@@ -188,6 +188,8 @@ async def log_usage_event(
     feature: str,
     event_type: Literal["add", "remove"],
     db_session: AsyncSession,
+    *,
+    commit: bool = True,
 ):
     """
     Log a usage event for billing tracking.
@@ -218,10 +220,11 @@ async def log_usage_event(
         usage_after=usage_after,
     )
     db_session.add(event)
-    await db_session.commit()
-
-    # Invalidate usage cache
-    _invalidate_usage_cache(org_id)
+    if commit:
+        await db_session.commit()
+        _invalidate_usage_cache(org_id)
+    else:
+        await db_session.flush()
 
 
 # ============================================================================

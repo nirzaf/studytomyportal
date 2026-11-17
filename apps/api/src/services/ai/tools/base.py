@@ -159,6 +159,8 @@ class ToolSpec:
     # Access checked on `target_param` when it differs from `access_action`
     # (posting in a community needs to read it, not to edit it).
     target_access: AccessAction | None = None
+    # Some tools accept private authoring content that audit storage must omit.
+    audit_arguments: bool = True
 
     @property
     def required_access(self) -> ToolAccess:

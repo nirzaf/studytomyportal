@@ -458,3 +458,24 @@ async def test_protected_learner_mcp_denies_before_resource_or_target_resolution
         token_result = await handlers.call_tool(ctx_for(token), call("list_courses"))
         assert body(token_result)["error"]["code"] == "org_policy"
     resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_draft_tools_are_opt_in_member_write_only(db, org, admin_user, sessions, monkeypatch):
+    from src.services.mcp.draft_authoring import SPECS
+
+    expected = {spec.name for spec in SPECS}
+    monkeypatch.setattr(srv, "Server", lambda *args, **kwargs: SimpleNamespace(**kwargs))
+
+    async def visible_names(principal):
+        server = srv.build_mcp_server()
+        result = await server.on_list_tools(ctx_for(principal), None)
+        return {tool.name for tool in result.tools}
+
+    monkeypatch.delenv("LEARNHOUSE_STUDYTOMY_MCP_DRAFTS_ENABLED", raising=False)
+    assert not (await visible_names(member(admin_user, org)) & expected)
+    monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_MCP_DRAFTS_ENABLED", "true")
+    assert expected <= await visible_names(member(admin_user, org))
+    assert not (await visible_names(member(admin_user, org, ("mcp:read",))) & expected)
+    assert not (await visible_names(None) & expected)
+    assert all(spec.may_need_approval and not spec.api_tokens for spec in SPECS)

@@ -67,6 +67,8 @@ async def create_activity(
     activity_object: ActivityCreate,
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
+    *,
+    transactional_draft: bool = False,
 ):
 
     # CHeck if org exists
@@ -90,6 +92,11 @@ async def create_activity(
         )
 
     await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.CREATE)
+
+    if transactional_draft and (
+        not course.studytomy_managed or course.public or course.published or activity_object.published
+    ):
+        raise HTTPException(409, "The activity must remain a private draft.")
 
     # Create Activity
     activity = Activity(**activity_object.model_dump())
@@ -133,6 +140,9 @@ async def create_activity(
 
     # Single atomic commit for both Activity and ChapterActivity
     db_session.add(activity_chapter)
+    if transactional_draft:
+        await db_session.flush()
+        return ActivityRead.model_validate(activity)
     await db_session.commit()
     await db_session.refresh(activity)
     index_activity(activity.id)

@@ -44,6 +44,8 @@ async def create_chapter(
     chapter_object: ChapterCreate,
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
+    *,
+    transactional_draft: bool = False,
 ) -> ChapterRead:
     chapter = Chapter.model_validate(chapter_object)
 
@@ -57,6 +59,9 @@ async def create_chapter(
             status_code=404,
             detail="Course not found",
         )
+
+    if transactional_draft and (not course.studytomy_managed or course.public or course.published):
+        raise HTTPException(422, "A transactional draft chapter requires a private managed course.")
 
     # RBAC check
     await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.CREATE)
@@ -95,6 +100,9 @@ async def create_chapter(
 
     # Single atomic commit for both Chapter and CourseChapter
     db_session.add(course_chapter)
+    if transactional_draft:
+        await db_session.flush()
+        return chapter_read
     await db_session.commit()
     index_course(course.id)
 
