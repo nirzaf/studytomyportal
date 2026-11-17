@@ -1,15 +1,15 @@
 # Studytomy architecture and agent navigation guide
 
-Evidence snapshot: 2026-11-17 UTC. Inspected local HEAD `43f314540404c1c1478744e6bf7a53802d1fb430`; the checkout contains extensive uncommitted implementation. This document is an orientation map, not release certification. Reinspect current source, applicable AGENTS.md, worktree and tests before editing. Preserve concurrent work.
+Evidence snapshot: 2026-11-17. Inspected local `main` at `4f3346af99b516bab2d422217905d078096d55ac` and its dirty worktree. Remote `main` was `a11289a01e83c1fcdcbbfc418f7340ffee697e59`; its one additional commit updates only the access inventory. Local adaptive, family and commerce source can differ from published main. Reinspect source and current approvals before relying on this map.
 
 ## 1. Purpose, provenance and status vocabulary
 
 One educator-led platform connects learner courses, native assignments, adaptive guidance, teacher/admin authoring and authorized guardian reports. It extends LearnHouse Community Edition; the legacy public website is a separate application. This guide expands the three conceptual views in the user-approved **Studytomy-Conceptual-Architecture.pdf** with current technical evidence and explicit implementation boundaries.
 
-- **Baseline source**: present in the inspected checkout independently of the newly requested work; not proof of deployed acceptance.
-- **Local implementation**: code exists in the dirty worktree, with bounded test evidence. Not committed, deployed or automatically approved for real users.
-- **Requested extension**: queued work; a target design, not an implemented capability.
-- **Unverified**: not established by this inspection. Synthetic or intercepted tests do not establish live-provider or real-user acceptance.
+- **Implemented (green)**: the named foundation or mechanism exists in inspected source. Some mechanisms are local worktree changes.
+- **Partially Implemented (blue)**: core local paths exist, with remaining integration, policy or acceptance work.
+- **Planned (purple)**: recommended target behavior without a verified end-to-end implementation.
+- **Approval-Gated (amber)**: use or disclosure requires verified decisions and current authority. A gate can have working code.
 
 ## 2. Experience and value
 
@@ -52,26 +52,13 @@ Do not upgrade these versions merely to match this document. Runtime observation
 
 ## 4. Platform and trust boundaries
 
-```mermaid
-flowchart TB
-  subgraph Clients
-    W[Next.js React web client]
-    M[Authenticated AI tool client]
-  end
-  W --> API[FastAPI routes]
-  M --> MCP[Existing MCP adapter and tool registry]
-  MCP --> AUTH[Shared identity, org scope and RBAC]
-  API --> AUTH
-  AUTH --> DOMAIN[Native learning and StudyTomy domain services]
-  DOMAIN --> PG[PostgreSQL records and immutable evidence]
-  DOMAIN --> FILES[Protected file or object storage]
-  DOMAIN --> CACHE[Redis and temporary state]
-  DOMAIN --> AI[AI orchestration and structured output validation]
-  AI --> RET[Authorized source retrieval]
-  RET --> PG
-  AI --> PROVIDER[Configured model provider]
-  DOMAIN --> COLLAB[Yjs and Hocuspocus collaboration]
-```
+![Studytomy system architecture](architecture/system.svg)
+
+[Editable Mermaid](architecture/system.mmd) · [PNG export](architecture/system.png)
+
+The two editable Mermaid files are the diagram sources. Regenerate their SVG and PNG exports with Mermaid CLI 12.2.0 and a local Chromium browser. Use a white background, `--size 1500 --scale 2 --no-font-embed`, and the matching output filename.
+
+Keep one FastAPI business-logic boundary inside LearnHouse. Next.js owns presentation and interactions. MCP and HTTP enter through their existing authentication paths and reuse server services. PostgreSQL owns identities, policies, grants, versioned domain records and immutable events. pgvector supports derived retrieval within PostgreSQL. Protected file storage holds the asset bytes referenced by those records. Redis supports transient coordination and cache state. Existing board collaboration continues through Hocuspocus. Model calls cross a separate trust boundary and require approved context transfer and server validation.
 
 Application services, not browser or MCP arguments, decide authority. The MCP adapter must reuse existing services and native course/assignment contracts. An API token or model response is not permission to publish, change grades or cross organization boundaries. Provider data transfer requires configured authorization and minimization.
 
@@ -81,10 +68,10 @@ Application services, not browser or MCP arguments, decide authority. The MCP ad
 |---|---|
 | Root instructions | `AGENTS.md`; more specific `apps/web/AGENTS.md` applies to web changes |
 | UI routes/components | `apps/web/app`, `apps/web/components`, `apps/web/components/Studytomy` |
-| API boundary | `apps/api/src/routers`; StudyTomy `routers/studytomy` |
+| API boundary | `apps/api/src/routers`; Studytomy `routers/studytomy` |
 | Native learning services | `apps/api/src/services/courses`, native assignment services and their callers |
 | Identity and authorization | `apps/api/src/security/auth.py`, `org_auth.py`, `rbac.py`, `mcp_auth.py` |
-| StudyTomy domain | `apps/api/src/services/studytomy`, `apps/api/src/db/studytomy` |
+| Studytomy domain | `apps/api/src/services/studytomy`, `apps/api/src/db/studytomy` |
 | AI planning/assignment drafts | `apps/api/src/services/ai/courseplanning.py`, `assignment_gen.py` |
 | RAG | `apps/api/src/services/ai/rag`; `apps/api/src/db/course_embeddings.py` |
 | Provider abstraction | `apps/api/src/services/ai/llm`, including `embeddings.py` |
@@ -142,21 +129,43 @@ Use audience-bound authentication; never pass arbitrary upstream tokens through.
 
 ## 7. Local adaptive learning and reporting design
 
+![Studytomy learning and content lifecycle](architecture/learning-content-lifecycle.svg)
+
+[Editable Mermaid](architecture/learning-content-lifecycle.mmd) · [PNG export](architecture/learning-content-lifecycle.png)
+
+**Curriculum → Approved Content → Diagnostic → Personalised Teaching → Practice → Assessment → Mastery → Progress Reporting.** Evidence can accumulate during diagnostics, practice and assessment. The server projects mastery from attributable observations, and mastery can inform the next objective or practice selection. Content and evidence retain the version they were issued against. A published report exposes a reviewed projection to a presently authorized recipient.
+
 Existing local `adaptive_*` services cover curriculum/objectives, item sourcing/review, attempts, diagnostics, scoring/mastery, practice/turns, evidence, teaching guidance, reports and retention. `assignment_adapter.py` connects native assignment behavior. These are extensive local changes, not a declaration that every ALE requirement or guardian journey is accepted.
 
-```mermaid
-flowchart LR
-  ACT[Authorized lesson or native assignment activity] --> ATT[Validated attempt and immutable evidence]
-  ATT --> EVAL[Server-owned grading and mastery evaluation]
-  EVAL --> NEXT[Next practice or guided tutoring]
-  NEXT --> ACT
-  EVAL --> DRAFT[Versioned report draft]
-  DRAFT --> REV[Independent review and publication controls]
-  REV --> GUARD[Guardian relationship and purpose authorization]
-  GUARD --> VIEW[Exact reviewed report view]
-```
+Never let generated output overwrite approved snapshots, final grades or historical evidence. An attempt freezes its issued items and scoring inputs. Server scoring uses those inputs, and incomplete or unsupported managed work requires review before finalization. Native assignment item evidence remains distinct from a reviewed final assessment result. Mastery should consume eligible evidence under the applicable rule version. Reports require current purpose, relationship and exact reviewed version. Withdrawal/revocation and cache clearing must prevent stale disclosure. No real-user activation is implied by synthetic policy records in tests.
 
-Never let generated output overwrite approved snapshots, final grades or historical evidence. Reports require current purpose, relationship and exact reviewed version. Withdrawal/revocation and cache clearing must prevent stale disclosure. No real-user activation is implied by synthetic policy records in tests.
+### Status and source evidence
+
+Line links refer to the inspected local worktree. References to pending implementation files resolve in that checkout and may be absent from the published branch.
+
+| Capability | Status and code evidence |
+|---|---|
+| Platform and ingress | **Implemented.** [Mounted Studytomy routers](../../apps/api/src/router.py#L100), [MCP transport](../../apps/api/src/services/mcp/server.py#L191), and [MCP member rights](../../apps/api/src/services/mcp/server.py#L275). Teacher/admin parity for the proposed grounded workflow remains unverified. |
+| Curriculum and released content | **Partially Implemented.** [Versioned curriculum models](../../apps/api/src/db/studytomy/adaptive.py#L35), [course review](../../apps/api/src/services/studytomy/publication.py#L275) and [release recording](../../apps/api/src/services/studytomy/publication.py#L191) support local paths. Actual curriculum, rights and publication approvals remain required. |
+| Source-grounded authoring | **Planned end-to-end.** [Existing chunk metadata](../../apps/api/src/db/course_embeddings.py#L8) and [course retrieval](../../apps/api/src/services/ai/rag/query_service.py#L42) supply reuse points. Exact lesson-linked retrieval, claim support and frozen citations are target requirements. |
+| Diagnostic, tutor and practice | **Partially Implemented.** [Diagnostic issuance](../../apps/api/src/services/studytomy/adaptive_attempts.py#L545), [tutor session](../../apps/api/src/services/studytomy/adaptive_guidance.py#L357) and [tutor turns](../../apps/api/src/services/studytomy/adaptive_turns.py#L234) are local paths. Live-provider quality and full learner journeys remain unverified. |
+| Grades, evidence and mastery | **Implemented mechanisms; Partially Implemented lifecycle.** [Diagnostic response processing](../../apps/api/src/services/studytomy/adaptive_attempts.py#L906), [native assignment grade journal](../../apps/api/src/services/studytomy/assignment_adapter.py#L652) and [mastery observations](../../apps/api/src/services/studytomy/adaptive_mastery.py#L74) reflect server ownership. Native grading stays with LearnHouse. |
+| Learner and guardian access | **Approval-Gated.** [Exact active grants](../../apps/api/src/services/studytomy/entitlements.py#L88), [current guardian scope](../../apps/api/src/services/studytomy/authority.py#L1113), [report publication](../../apps/api/src/services/studytomy/adaptive_reports.py#L752) and [report retrieval](../../apps/api/src/services/studytomy/adaptive_reports.py#L1047) enforce distinct decisions. Real approvals and dependent guardian acceptance remain unverified. |
+
+### Authoritative records and dependencies
+
+| Boundary | Authority and dependency |
+|---|---|
+| Content → delivery | A [managed release](../../apps/api/src/db/studytomy/education.py#L78) binds reviewed content. Lesson delivery resolves the learner's current exact release grant before using the snapshot. |
+| Assessment → evidence → mastery | [Attempt items](../../apps/api/src/db/studytomy/adaptive_evidence.py#L138) preserve issued context. The [native grade finalizer](../../apps/api/src/services/courses/activities/assignments.py#L3916) and adaptive scorer own grading. [Learning evidence](../../apps/api/src/db/studytomy/adaptive_evidence.py#L238) feeds a separate [mastery projection](../../apps/api/src/db/studytomy/adaptive_evidence.py#L355). |
+| Mastery → review → guardian disclosure | The [progress report](../../apps/api/src/db/studytomy/adaptive_reports.py#L19) and [recipient record](../../apps/api/src/db/studytomy/adaptive_reports.py#L92) capture the version and intended disclosure. The read path rechecks current relationship and permitted scope. |
+
+### Architecture decisions
+
+- Retain the modular monolith and native LearnHouse courses, assignments, identity and licensing boundaries. Keep the legacy public website outside the portal.
+- Use immutable release, assessment and evidence references for reproducibility. Keep mastery and report drafts as derived, versioned outputs. A tutor suggestion has no write authority over grades or permissions.
+- Publish through human review and exact policy scope. Authoring tools may prepare drafts. Guardian report release requires a reviewed version, current relationship and authorized purpose, with withdrawal and access rechecked on reads.
+- Reuse PostgreSQL and pgvector for authorized retrieval. Add neither a vector database nor a separate AI backend. Evaluate retrieval quality and missing-source failure without widening access.
 
 ## 8. Local content, access and commercial boundaries
 
