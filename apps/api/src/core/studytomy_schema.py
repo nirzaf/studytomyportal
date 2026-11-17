@@ -78,6 +78,44 @@ _REPORT_HISTORY_SQLITE_GUARDS = tuple(
     for action in ("UPDATE", "DELETE")
 )
 
+_GROUNDED_EVIDENCE_TABLES = (
+    "st_grounded_lesson_evidence",
+    "st_grounded_quiz_evidence",
+)
+_GROUNDED_EVIDENCE_POSTGRES_GUARDS = tuple(
+    (
+        table,
+        f"{table}_immutable",
+        """
+        CREATE OR REPLACE FUNCTION reject_st_grounded_source_evidence_mutation() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+            RAISE EXCEPTION 'Grounded source evidence is immutable' USING ERRCODE = '23514';
+        END;
+        $$
+        """,
+        f"""
+        CREATE TRIGGER {table}_immutable
+        BEFORE UPDATE OR DELETE ON {table}
+        FOR EACH ROW EXECUTE FUNCTION reject_st_grounded_source_evidence_mutation()
+        """,
+    )
+    for table in _GROUNDED_EVIDENCE_TABLES
+)
+_GROUNDED_EVIDENCE_SQLITE_GUARDS = tuple(
+    (
+        table,
+        f"{table}_immutable_{action.lower()}",
+        f"""
+        CREATE TRIGGER IF NOT EXISTS {table}_immutable_{action.lower()}
+        BEFORE {action} ON {table}
+        BEGIN SELECT RAISE(ABORT, 'Grounded source evidence is immutable'); END
+        """,
+    )
+    for table in _GROUNDED_EVIDENCE_TABLES
+    for action in ("UPDATE", "DELETE")
+)
+
 _COURSE_RELEASE_REFERENCE_CHECK = """
     NOT EXISTS (
         SELECT 1 FROM st_course_review AS review
@@ -436,6 +474,7 @@ _POSTGRES_GUARDS = (
     COURSE_GRANT_GUARD,
     *_PRACTICE_POSTGRES_GUARDS,
     *_REPORT_HISTORY_POSTGRES_GUARDS,
+    *_GROUNDED_EVIDENCE_POSTGRES_GUARDS,
     (
         "st_course_release",
         "st_course_release_reference_guard",
@@ -623,6 +662,7 @@ _SQLITE_GUARDS = (
     *ASSESSMENT_ARCHIVE_SQLITE_GUARDS,
     *_PRACTICE_SQLITE_GUARDS,
     *_REPORT_HISTORY_SQLITE_GUARDS,
+    *_GROUNDED_EVIDENCE_SQLITE_GUARDS,
     (
         "st_course_release",
         "st_course_release_reference_guard",

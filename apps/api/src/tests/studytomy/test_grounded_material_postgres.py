@@ -9,7 +9,8 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import update
+from sqlalchemy import delete, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from src.core.events.database import get_db_session
@@ -466,6 +467,28 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         quiz_evidence = await db.get(StudyGroundedQuizEvidence, task_uuid)
         question_uuid = task.contents["questions"][0]["questionUUID"]
         assert quiz_evidence.citations[question_uuid]["source_uuid"] == quiz_source.json()["source_uuid"]
+        evidence_mutations = (
+            update(StudyGroundedLessonEvidence)
+            .where(
+                StudyGroundedLessonEvidence.activity_id == lesson.id,
+                StudyGroundedLessonEvidence.activity_version == 3,
+            )
+            .values(content_sha256="0" * 64),
+            delete(StudyGroundedLessonEvidence).where(
+                StudyGroundedLessonEvidence.activity_id == lesson.id,
+                StudyGroundedLessonEvidence.activity_version == 3,
+            ),
+            update(StudyGroundedQuizEvidence)
+            .where(StudyGroundedQuizEvidence.task_uuid == task_uuid)
+            .values(content_sha256="0" * 64),
+            delete(StudyGroundedQuizEvidence).where(
+                StudyGroundedQuizEvidence.task_uuid == task_uuid
+            ),
+        )
+        for statement in evidence_mutations:
+            with pytest.raises(IntegrityError, match="Grounded source evidence is immutable"):
+                async with db.begin_nested():
+                    await db.execute(statement)
         assert source.pages == [{"page": 1, "text": "first page"}, {"page": 3, "text": source_text}]
         events = (await db.exec(select(StudyBusinessEvent).where(
             StudyBusinessEvent.org_id == org.id, StudyBusinessEvent.resource_uuid == source.source_uuid,

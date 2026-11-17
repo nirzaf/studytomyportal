@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import (
+    JSON,
     Column,
     Enum,
     Index,
@@ -120,6 +121,20 @@ class TestEnsureSchema:
             Column("version_no", Integer),
             Column("content_sha256", String),
         )
+        grounded_lesson_table = Table(
+            "st_grounded_lesson_evidence",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("content_sha256", String),
+            Column("citations", JSON),
+        )
+        grounded_quiz_table = Table(
+            "st_grounded_quiz_evidence",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("content_sha256", String),
+            Column("citations", JSON),
+        )
 
         report = ensure_schema(db_url, metadata=metadata)
         assert report.state == "empty"
@@ -142,6 +157,10 @@ class TestEnsureSchema:
                     "st_offer_draft_root_protected_delete",
                     "st_offer_version_immutable_update",
                     "st_offer_version_immutable_delete",
+                    "st_grounded_lesson_evidence_immutable_update",
+                    "st_grounded_lesson_evidence_immutable_delete",
+                    "st_grounded_quiz_evidence_immutable_update",
+                    "st_grounded_quiz_evidence_immutable_delete",
                 } <= trigger_names
 
                 connection.execute(event_table.insert().values(id=1, action="test.action"))
@@ -167,12 +186,34 @@ class TestEnsureSchema:
                         content_sha256="a" * 64,
                     )
                 )
+                connection.execute(
+                    grounded_lesson_table.insert().values(
+                        id=1, content_sha256="a" * 64, citations=[]
+                    )
+                )
+                connection.execute(
+                    grounded_quiz_table.insert().values(
+                        id=1, content_sha256="a" * 64, citations={}
+                    )
+                )
 
                 immutable_rows = (
                     (event_table, "action", "changed", "st_business_event rows are immutable"),
                     (decision_table, "outcome", "ineligible", "st_eligibility_decision rows are immutable"),
                     (consent_table, "choice", "decline", "st_consent_event rows are immutable"),
                     (offer_version_table, "content_sha256", "b" * 64, "st_offer_version rows are immutable"),
+                    (
+                        grounded_lesson_table,
+                        "content_sha256",
+                        "b" * 64,
+                        "Grounded source evidence is immutable",
+                    ),
+                    (
+                        grounded_quiz_table,
+                        "content_sha256",
+                        "b" * 64,
+                        "Grounded source evidence is immutable",
+                    ),
                 )
                 for table, column, value, error_message in immutable_rows:
                     for mutation in ("update", "delete"):

@@ -100,6 +100,8 @@ def _check_migrated_schema(connection) -> None:
         ("st_business_event", "st_business_event_immutable"),
         ("st_eligibility_decision", "st_eligibility_decision_immutable"),
         ("st_consent_event", "st_consent_event_immutable"),
+        ("st_grounded_lesson_evidence", "st_grounded_lesson_evidence_immutable"),
+        ("st_grounded_quiz_evidence", "st_grounded_quiz_evidence_immutable"),
         ("st_offer", "st_offer_draft_root_protected"),
         ("st_offer_version", "st_offer_version_immutable"),
     }
