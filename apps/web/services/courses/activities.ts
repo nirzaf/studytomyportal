@@ -413,10 +413,15 @@ export async function getActivityState(
 export async function restoreActivityVersion(
   activity_uuid: string,
   version_number: number,
-  access_token: string
+  access_token: string,
+  expectedCurrentVersion?: number
 ) {
   const result = await fetch(
-    `${getAPIUrl()}activities/${activity_uuid}/versions/${version_number}/restore`,
+    `${getAPIUrl()}activities/${activity_uuid}/versions/${version_number}/restore${
+      expectedCurrentVersion === undefined
+        ? ''
+        : `?expected_current_version=${encodeURIComponent(expectedCurrentVersion)}`
+    }`,
     RequestBodyWithAuthHeader('POST', null, null, access_token)
   )
   const res = await getResponseMetadata(result)

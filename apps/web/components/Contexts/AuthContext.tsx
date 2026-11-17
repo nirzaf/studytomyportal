@@ -26,6 +26,7 @@ import {
   createAuthSyncReceiver,
   publishAuthSync,
 } from '@/lib/auth/authSync'
+import { clearAdaptiveTutorRecovery } from '@/lib/auth/sessionScope'
 
 // Types matching NextAuth's session structure
 export interface Session {
@@ -281,6 +282,7 @@ export function SessionProvider({
 
   const clearAuthState = useCallback((clearMarker: boolean = true, broadcastLogout = false) => {
     authEpochRef.current++
+    try { clearAdaptiveTutorRecovery(window.sessionStorage) } catch { /* Storage may be unavailable. */ }
     sessionRef.current = null
     setSession(null)
     setAccessToken(null)
@@ -1168,6 +1170,7 @@ export function SessionProvider({
     // (like clearAuthState + the cross-tab handler) so an in-flight refresh racing
     // this same-tab logout can't resurrect the session it's clearing.
     authEpochRef.current++
+    try { clearAdaptiveTutorRecovery(window.sessionStorage) } catch { /* Storage may be unavailable. */ }
     sessionRef.current = null
     setSession(null)
     setAccessToken(null)

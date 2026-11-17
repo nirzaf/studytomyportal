@@ -48,3 +48,12 @@ export function getOrganizationScope(
   const pathSlug = pathname.match(/^\/(?:orgs|embed)\/([^/]+)/)?.[1]
   return pathSlug && ORGANIZATION_SLUG.test(pathSlug) ? pathSlug : 'global'
 }
+
+
+// Tutor recovery stores opaque operation references only. Drop them on logout.
+export function clearAdaptiveTutorRecovery(storage: Storage): void {
+  for (let index = storage.length - 1; index >= 0; index--) {
+    const key = storage.key(index)
+    if (key?.startsWith('lesson-tutor:')) storage.removeItem(key)
+  }
+}

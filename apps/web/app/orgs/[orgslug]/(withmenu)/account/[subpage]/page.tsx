@@ -10,7 +10,7 @@ type MetadataProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
-const VALID_SUBPAGES = ['general', 'profile', 'security', 'purchases', 'ai-apps']
+const VALID_SUBPAGES = ['general', 'profile', 'security', 'purchases', 'ai-apps', 'privacy', 'reports', 'learning']
 
 const getSubpageTitle = (subpage: string): string => {
   const titles: Record<string, string> = {
@@ -19,6 +19,9 @@ const getSubpageTitle = (subpage: string): string => {
     'security': 'Security',
     'purchases': 'Purchases',
     'ai-apps': 'AI apps',
+    'privacy': 'Privacy',
+    'reports': 'Progress reports',
+    'learning': 'My learning',
   }
   return titles[subpage] || 'Account'
 }
@@ -56,7 +59,7 @@ export async function generateMetadata(props: MetadataProps): Promise<Metadata> 
   }
 }
 
-const AccountSubPage = async (props: { params: Promise<{ orgslug: string; subpage: string }> }) => {
+const AccountSubPage = async (props: MetadataProps) => {
   const params = await props.params
   const session = await getServerSession()
 
@@ -77,11 +80,18 @@ const AccountSubPage = async (props: { params: Promise<{ orgslug: string; subpag
     tags: ['organizations'],
   })
 
+  const query = await props.searchParams
+  const selected = params.subpage === 'reports' ? query.report : undefined
+  const order = params.subpage === 'purchases' ? query.order : undefined
+
   return (
     <AccountClient
       orgslug={params.orgslug}
       org_id={org.id}
+      org_uuid={org.org_uuid}
       subpage={params.subpage}
+      reportUuid={typeof selected === "string" ? selected : undefined}
+      orderRef={typeof order === 'string' ? order : undefined}
     />
   )
 }

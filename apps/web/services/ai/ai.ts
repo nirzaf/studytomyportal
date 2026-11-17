@@ -1,6 +1,114 @@
 import { getAPIUrl } from '@services/config/config'
 import { RequestBodyWithAuthHeader, detailMessage } from '@services/utils/ts/requests'
 import type { CopilotSource } from '@/lib/copilot/sources'
+import {
+  isLearningSurface, readLearningSurface, type LearningActionRequest, type LearningSurfaceRequest,
+} from './learningSurface'
+
+export class LearningRequestError extends Error {
+  constructor(readonly status: number, readonly code?: string) {
+    super('Lesson practice request failed')
+  }
+}
+
+function learningRequestError(response: Response, result: unknown): LearningRequestError {
+  const detail = result && typeof result === 'object' && 'detail' in result ? result.detail : null
+  const code = detail && typeof detail === 'object' && 'code' in detail && typeof detail.code === 'string'
+    ? detail.code : undefined
+  return new LearningRequestError(response.status, code)
+}
+
+export async function getActivityLearningAvailability(
+  activityUuid: string, accessToken: string, signal: AbortSignal,
+) {
+  const response = await fetch(
+    `${getAPIUrl()}ai/activity/${encodeURIComponent(activityUuid)}/learning_surface`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+      cache: 'no-store',
+    },
+  )
+  const result: unknown = await response.json().catch(() => null)
+  if (!response.ok) throw learningRequestError(response, result)
+  if (!result || typeof result !== 'object' || !('available' in result) || typeof result.available !== 'boolean' ||
+    !('surface' in result) || Object.keys(result).length !== 2 ||
+    (result.surface !== null && (!result.available || !isLearningSurface(result.surface) ||
+      result.surface.activity_id !== activityUuid))) {
+    throw new Error('Invalid lesson practice availability')
+  }
+  return { available: result.available, surface: result.surface }
+}
+
+export async function startActivityLearningSurface(
+  request: LearningSurfaceRequest,
+  accessToken: string,
+  signal: AbortSignal,
+) {
+  const response = await fetch(`${getAPIUrl()}ai/stream/start/learning_surface`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(request),
+    signal,
+    cache: 'no-store',
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw learningRequestError(response, error)
+  }
+  return readLearningSurface(response, request)
+}
+
+export async function sendActivityLearningAction(
+  activityUuid: string,
+  request: LearningActionRequest,
+  accessToken: string,
+  signal: AbortSignal,
+) {
+  const response = await fetch(
+    `${getAPIUrl()}ai/activity/${encodeURIComponent(activityUuid)}/learning_surface/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(request),
+      signal,
+      cache: 'no-store',
+    },
+  )
+  const result = await readActivityLearningProjection(response, activityUuid, request.surface_id)
+  if (result.revision !== request.expected_revision + 1) {
+    throw new Error('Practice result did not match this request')
+  }
+  return result
+}
+
+export async function recoverActivityLearningSurface(
+  activityUuid: string,
+  surfaceId: string,
+  accessToken: string,
+  signal: AbortSignal,
+) {
+  const response = await fetch(
+    `${getAPIUrl()}ai/activity/${encodeURIComponent(activityUuid)}/learning_surface/${encodeURIComponent(surfaceId)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+      cache: 'no-store',
+    },
+  )
+  return readActivityLearningProjection(response, activityUuid, surfaceId)
+}
+
+async function readActivityLearningProjection(response: Response, activityUuid: string, surfaceId: string) {
+  const result: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw learningRequestError(response, result)
+  }
+  if (!isLearningSurface(result) || result.surface_id !== surfaceId || result.activity_id !== activityUuid) {
+    throw new Error('Practice result did not match this lesson')
+  }
+  return result
+}
 
 export async function startActivityAIChatSession(
   message: string,

@@ -10,8 +10,12 @@ import { getUriWithOrg } from '@services/config/config'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { useTranslation } from 'react-i18next'
 import AccountGeneral from '@components/Objects/Account/subpages/AccountGeneral'
+import AccountLearning from '@components/Objects/Account/subpages/AccountLearning'
 import AccountProfile from '@components/Objects/Account/subpages/AccountProfile'
+import AccountReports from '@components/Objects/Account/subpages/AccountReports'
 import AccountSecurity from '@components/Objects/Account/subpages/AccountSecurity'
+import StudyTomyPurchases from '@components/Objects/Account/subpages/StudyTomyPurchases'
+import PrivacySettings from '@components/Studytomy/PrivacySettings'
 import AccountPurchases from '@ee/components/Payments/AccountPurchases'
 import OrgEditMCP from '@components/Dashboard/Pages/Org/OrgEditMCP/OrgEditMCP'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
@@ -19,7 +23,10 @@ import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 interface AccountClientProps {
   orgslug: string
   org_id: number
+  org_uuid: string
   subpage: string
+  reportUuid?: string
+  orderRef?: string
 }
 
 const getSubpageTitle = (subpage: string, t: (_key: string) => string): string => {
@@ -29,11 +36,14 @@ const getSubpageTitle = (subpage: string, t: (_key: string) => string): string =
     'security': t('account.security'),
     'purchases': t('account.purchases'),
     'ai-apps': t('account.ai_apps'),
+    'privacy': t('account.privacy'),
+    'reports': t('account.reports'),
+    'learning': t('account.learning'),
   }
   return titles[subpage] || t('account.title')
 }
 
-const AccountClient = ({ orgslug, org_id, subpage }: AccountClientProps) => {
+const AccountClient = ({ orgslug, org_id, org_uuid, subpage, reportUuid, orderRef }: AccountClientProps) => {
   const session = useLHSession() as any
   const user = session?.data?.user
   const { t } = useTranslation()
@@ -58,9 +68,20 @@ const AccountClient = ({ orgslug, org_id, subpage }: AccountClientProps) => {
       case 'security':
         return <AccountSecurity />
       case 'purchases':
-        return <AccountPurchases orgId={org_id} orgslug={orgslug} />
+        return (
+          <>
+            <StudyTomyPurchases orgUuid={org_uuid} orgSlug={orgslug} orderRef={orderRef} />
+            {orderRef === undefined && <AccountPurchases orgId={org_id} orgslug={orgslug} />}
+          </>
+        )
       case 'ai-apps':
         return <OrgEditMCP scope="mine" />
+      case 'reports':
+        return <AccountReports orgUuid={org_uuid} orgSlug={orgslug} selected={reportUuid} />
+      case 'learning':
+        return <AccountLearning orgUuid={org_uuid} />
+      case 'privacy':
+        return <PrivacySettings orgUuid={org_uuid} />
       default:
         return <AccountGeneral />
     }

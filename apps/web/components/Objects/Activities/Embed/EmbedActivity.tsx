@@ -38,7 +38,10 @@ function EmbedActivity({ activity, editable = false, style }: EmbedActivityProps
     setSaving(true)
     try {
       await updateActivity(
-        { content: { embed_url: validatedUrl } },
+        {
+          content: { embed_url: validatedUrl },
+          expected_current_version: activity.current_version || 1,
+        },
         activity.activity_uuid,
         access_token
       )

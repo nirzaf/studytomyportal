@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  clearAdaptiveTutorRecovery,
   getAuthenticatedSessionIdentity,
   getOrganizationScope,
 } from "../lib/auth/sessionScope.ts";
@@ -42,4 +43,19 @@ describe("getOrganizationScope", () => {
   test("uses a stable global partition when there is no tenant route", () => {
     expect(getOrganizationScope("/account/general", {})).toBe("global");
   });
+});
+
+
+test("clears every tutor recovery reference while preserving unrelated session storage", () => {
+  const values = new Map([
+    ["lesson-tutor:school-a:learner-a", "first"],
+    ["other-app-state", "preserve"],
+    ["lesson-tutor:school-b:learner-b", "second"],
+  ]);
+  clearAdaptiveTutorRecovery({
+    get length() { return values.size; },
+    key: index => [...values.keys()][index] ?? null,
+    removeItem: key => { values.delete(key); },
+  });
+  expect([...values]).toEqual([["other-app-state", "preserve"]]);
 });

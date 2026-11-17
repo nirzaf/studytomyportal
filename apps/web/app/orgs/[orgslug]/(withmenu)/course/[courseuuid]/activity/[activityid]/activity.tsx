@@ -52,6 +52,8 @@ import { useDirection } from '@hooks/useDirection'
 import { formatDate } from '@/lib/format'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 import LearnerContextBanner from '@components/Studytomy/LearnerContextBanner'
+import AssessmentAppeal from '@components/Studytomy/AssessmentAppeal'
+import { formatDateTime } from '@/lib/format'
 
 const ReactConfetti = dynamic(() => import('react-confetti'), { ssr: false })
 
@@ -66,6 +68,7 @@ const AssignmentStudentActivity = lazy(() => import('@components/Objects/Activit
 // gating render on the lazy chunk would flash the wrong control.
 import { isAssignmentPastDue } from '@components/Objects/Activities/Assignment/AssignmentStudentActivity'
 const AIActivityAsk = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk'))
+const AdaptiveAttemptPanel = lazy(() => import('@components/Objects/Activities/AdaptiveAttemptPanel'))
 const AISidePanelContentWrapper = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk').then(mod => ({ default: mod.AISidePanelContentWrapper })))
 const AISidePanelInline = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk').then(mod => ({ default: mod.AISidePanelInline })))
 const AIChatBotProvider = lazy(() => import('@components/Contexts/AI/AIChatBotContext'))
@@ -830,6 +833,9 @@ function ActivityClient(props: ActivityClientProps) {
                               {/* Activity Types */}
                               <div className={activity.activity_type === 'TYPE_SCORM' ? 'overflow-hidden' : ''}>
                                 {activityContent}
+                                <Suspense fallback={null}>
+                                  <AdaptiveAttemptPanel orgUuid={org?.org_uuid} orgSlug={orgslug} activityUuid={activity.activity_uuid} />
+                                </Suspense>
                               </div>
                             </motion.div>
                           )}
@@ -1097,12 +1103,17 @@ function ActivityClient(props: ActivityClientProps) {
                               </div>
                             </div>
                           </div>
+                          {activity?.published && activity.content.paid_access !== false && (
+                            <AuthenticatedClientElement checkMethod="authentication">
+                              <AIActivityAsk activity={activity} orgUuid={org?.org_uuid}
+                                guidedOnly={activity.activity_type === 'TYPE_ASSIGNMENT'} />
+                            </AuthenticatedClientElement>
+                          )}
                           <div className="hidden sm:flex space-x-2 items-center relative shrink-0" style={{ zIndex: 'var(--z-interactive)' }}>
                             {activity && activity.published == true && activity.content.paid_access != false && (
                               <AuthenticatedClientElement checkMethod="authentication">
                                 {activity.activity_type != 'TYPE_ASSIGNMENT' && (
                                   <>
-                                    <AIActivityAsk activity={activity} />
                                     <ActivityChapterDropdown
                                       course={course}
                                       currentActivityId={activity.activity_uuid ? activity.activity_uuid.replace('activity_', '') : activityid.replace('activity_', '')}
@@ -1176,9 +1187,12 @@ function ActivityClient(props: ActivityClientProps) {
                                 </button>
                                 )}
                                 {activityContent}
+                                <Suspense fallback={null}>
+                                  <AdaptiveAttemptPanel orgUuid={org?.org_uuid} orgSlug={orgslug} activityUuid={activity.activity_uuid} />
+                                </Suspense>
                               </div>
                               <Suspense fallback={null}>
-                                <AISidePanelInline activity={activity} />
+                                <AISidePanelInline activity={activity} orgUuid={org?.org_uuid} />
                               </Suspense>
                             </div>
                             </div>
@@ -1787,7 +1801,8 @@ function AssignmentTools(props: {
   orgslug: string
   assignment: any
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const org = useOrg() as any
   const submission = useAssignmentSubmission() as any
   const session = useLHSession() as any;
   const queryClient = useQueryClient();
@@ -1896,6 +1911,7 @@ function AssignmentTools(props: {
       // no client-side math.
       setGradeData(res.data);
     }
+    return res.success;
   };
 
   useEffect(() => {
@@ -2101,15 +2117,23 @@ function AssignmentTools(props: {
     // gated, so a retry here would destroy graded work with no way back. Mirror
     // that client-side rather than offering a button that 403s.
     const retryPastDue = isAssignmentPastDue(props.assignment?.due_date);
+    const grantDeadline = gradeData?.reviewed_retry_expires_at;
+    const hasReviewedRetry = typeof grantDeadline === 'string' && Date.parse(grantDeadline) > Date.now();
+    const retryMessage = hasReviewedRetry
+      ? t('assignments.reviewed_retry_confirm')
+      : t('assignments.retry_assignment_confirm');
     const canRetry =
-      allowRetries && !retryPastDue && (maxRetries === 0 || currentAttempt < maxRetries);
+      hasReviewedRetry || (allowRetries && !retryPastDue && (maxRetries === 0 || currentAttempt < maxRetries));
 
     return (
       <>
         {/* Compact pill: same footprint and alignment as the Next button */}
         <button
           type="button"
-          onClick={() => setIsGradeModalOpen(true)}
+          onClick={() => {
+            setIsGradeModalOpen(true);
+            void getGradingBasedOnMethod();
+          }}
           className={`${pillBg} rounded-md px-3 sm:px-4 nice-shadow flex flex-col items-start text-start p-2 sm:p-2.5 text-white hover:cursor-pointer transition delay-150 duration-300 ease-in-out`}
         >
           <span className="text-[10px] font-bold mb-1 uppercase text-white/90 flex items-center gap-1.5">
@@ -2285,7 +2309,22 @@ function AssignmentTools(props: {
                   </p>
                 )}
 
-                {allowRetries && (
+                {isGradeModalOpen && org?.org_uuid && props.course?.course_uuid &&
+                  props.assignment?.assignment_uuid && gradeData?.submission_uuid &&
+                  gradeData?.result_uuid && session.data?.tokens?.access_token && (
+                    <AssessmentAppeal
+                      key={`${session.data?.user?.id}:${gradeData.result_uuid}`}
+                      orgUuid={org.org_uuid}
+                      courseUuid={props.course.course_uuid}
+                      assignmentUuid={props.assignment.assignment_uuid}
+                      submissionUuid={gradeData.submission_uuid}
+                      resultUuid={gradeData.result_uuid}
+                      accessToken={session.data.tokens.access_token}
+                      onRefreshGrade={getGradingBasedOnMethod}
+                    />
+                )}
+
+                {(allowRetries || hasReviewedRetry) && (
                   <div className="pt-2">
                     {canRetry ? (
                       <div className="rounded-xl border border-fuchsia-100 bg-gradient-to-br from-fuchsia-50 via-pink-50 to-rose-50 p-4">
@@ -2298,10 +2337,14 @@ function AssignmentTools(props: {
                               {t('assignments.retry_assignment_title')}
                             </p>
                             <p className="text-xs text-gray-600 mt-1 leading-snug">
-                              {t('assignments.retry_assignment_confirm')}
+                              {retryMessage}
                             </p>
                             <p className="text-[11px] text-fuchsia-700 mt-2 font-semibold flex items-center gap-1.5">
-                              {maxRetries === 0 ? (
+                              {hasReviewedRetry ? (
+                                <span>{t('assignments.reviewed_retry_available_until', {
+                                  deadline: formatDateTime(grantDeadline, i18n.language),
+                                })}</span>
+                              ) : maxRetries === 0 ? (
                                 <>
                                   <InfinityIcon size={11} />
                                   <span>
@@ -2320,7 +2363,7 @@ function AssignmentTools(props: {
                         </div>
                         <ConfirmationModal
                           confirmationButtonText={t('assignments.retry_assignment')}
-                          confirmationMessage={t('assignments.retry_assignment_confirm')}
+                          confirmationMessage={retryMessage}
                           dialogTitle={t('assignments.retry_assignment_title')}
                           dialogTrigger={
                             <button

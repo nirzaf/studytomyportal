@@ -57,6 +57,7 @@ export type StudytomyCapabilityName =
   | 'financial_reconciliation'
   | 'refund_approval'
   | 'offer_publication'
+  | 'adaptive_curriculum_author'
   | 'content_release_review'
   | 'assessment_moderation'
   | 'progress_report_review'
@@ -69,6 +70,7 @@ export interface StudytomyCapabilities {
   financial_reconciliation: boolean
   refund_approval: boolean
   offer_publication: boolean
+  adaptive_curriculum_author: boolean
   content_release_review: boolean
   assessment_moderation: boolean
   progress_report_review: boolean
@@ -82,6 +84,7 @@ export const DEFAULT_DENY_STUDYTOMY_CAPABILITIES: Readonly<StudytomyCapabilities
   financial_reconciliation: false,
   refund_approval: false,
   offer_publication: false,
+  adaptive_curriculum_author: false,
   content_release_review: false,
   assessment_moderation: false,
   progress_report_review: false,
@@ -145,6 +148,37 @@ export interface StudyPrivacyStatus {
   learner_profile_protected: boolean
   visibility_mode: 'private_default' | 'standard_account_profile'
   publicity_controls_available: false
+}
+
+export type StudyConsentPurpose =
+  | 'learning_terms'
+  | 'ai_assistance'
+  | 'community'
+  | 'sharing'
+  | 'marketing'
+  | 'publicity'
+
+export type StudyConsentChoice = 'accept' | 'decline' | 'withdraw'
+
+export interface StudyConsentNoticeRead {
+  purpose: StudyConsentPurpose
+  notice_version: string
+  notice_text: string
+  scope_codes: string[]
+  policy_version_ids: number[]
+}
+
+export interface StudyConsentEventRead {
+  event_uuid: string
+  purpose: StudyConsentPurpose
+  choice: StudyConsentChoice
+  withdraws_event_uuid: string | null
+  notice_version: string
+  scope_codes: string[]
+  policy_version_ids: number[]
+  provenance: string
+  effective_at: string
+  created_at: string
 }
 
 export type StudyRelationshipStatus =

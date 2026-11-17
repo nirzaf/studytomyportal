@@ -21,6 +21,8 @@ import UserAvatar from '@components/Objects/UserAvatar'
 import { useTranslation } from 'react-i18next'
 import AIMarkdownRenderer from './AIMarkdownRenderer'
 import AIFollowUpSuggestions from './AIFollowUpSuggestions'
+import ActivityPracticePanel from './ActivityPracticePanel'
+import { LessonTutorContent, useLessonTutor } from './LessonTutorPanel'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 
 // Phones (<768px, the shell's breakpoint) can't spare a 380px column for the
@@ -41,10 +43,14 @@ function useIsPhone() {
 
 type AIActivityAskProps = {
   activity: any
+  orgUuid?: string
+  guidedOnly?: boolean
 }
 
 function AIActivityAsk(props: AIActivityAskProps) {
   const { t } = useTranslation()
+  const tutor = useLessonTutor(props.orgUuid, props.activity.activity_uuid)
+  const guided = tutor.options?.mode === 'guided'
   const is_ai_feature_enabled = useGetAIFeatures({ feature: 'activity_ask' })
   const [isButtonAvailable, setIsButtonAvailable] = React.useState(false)
   const dispatchAIChatBot = useAIChatBotDispatch() as any
@@ -68,10 +74,11 @@ function AIActivityAsk(props: AIActivityAskProps) {
 
   return (
     <>
-      {isButtonAvailable && (
-        <div>
-          <ActivityChatMessageBox activity={props.activity} />
-          <div
+      {(guided || (isButtonAvailable && !props.guidedOnly && tutor.options?.mode !== 'unavailable')) && (
+        <div className={guided ? '' : 'hidden sm:block'}>
+          <ActivityChatMessageBox activity={props.activity} orgUuid={props.orgUuid} />
+          <button
+            type="button"
             onClick={handleOpenAI}
             style={{
               background:
@@ -88,8 +95,8 @@ function AIActivityAsk(props: AIActivityAskProps) {
                 alt=""
               />
             </i>{' '}
-            <i className="not-italic text-xs font-bold">{t('ai.ask_ai')}</i>
-          </div>
+            <i className="not-italic text-xs font-bold">{guided ? t('ai.guided.open', 'Lesson guidance') : t('ai.ask_ai')}</i>
+          </button>
         </div>
       )}
     </>
@@ -102,12 +109,11 @@ export type AIMessage = {
   type: 'ai' | 'user'
 }
 
-type ActivityChatMessageBoxProps = {
-  activity: any
-}
+type ActivityChatMessageBoxProps = AIActivityAskProps
 
 function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
   const { t } = useTranslation()
+  const tutor = useLessonTutor(props.orgUuid, props.activity.activity_uuid)
   const session = useLHSession() as any
   const access_token = session?.data?.tokens?.access_token;
   const aiChatBotState = useAIChatBot() as AIChatBotStateTypes
@@ -120,11 +126,10 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
     : 'ring-1 ring-inset ring-white/10 bg-gray-950/40 w-full rounded-lg outline-hidden px-4 py-2 text-white text-sm placeholder:text-white/30'
 
   useEffect(() => {
-    if (aiChatBotState.isModalOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'unset'
-    }
+    if (!aiChatBotState.isModalOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
   }, [aiChatBotState.isModalOpen])
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -337,11 +342,11 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                       <Maximize2 size={18} />
                     )}
                   </button>
-                  <X
-                    size={20}
-                    className="text-white/50 hover:cursor-pointer bg-white/10 p-1 rounded-full items-center"
-                    onClick={closeModal}
-                  />
+                  <button type="button" aria-label={t('ai.guided.closePanel', 'Close AI panel')}
+                    className="inline-flex size-11 items-center justify-center rounded-full bg-white/10 text-white/70"
+                    onClick={closeModal}>
+                    <X size={18} aria-hidden="true" />
+                  </button>
                 </div>
                 <div
                   className={`flex space-x-2 items-center -ms-[100px] ${isInputDisabled ? 'animate-pulse' : ''
@@ -370,18 +375,18 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                 className={`w-100 h-0.5 bg-white/5 rounded-full mx-auto mb-3 ${isInputDisabled ? 'animate-pulse' : ''
                   }`}
               ></div>
-              {aiChatBotState.messages.length > 0 &&
-                !aiChatBotState.error.isError ? (
-                <div
+          {tutor.options?.mode === 'legacy' ? <>
+              <div
                   ref={messagesContainerRef}
-                  className={`flex flex-col w-full space-y-3 overflow-y-auto scroll-smooth pe-2 ${
-                    aiChatBotState.isFullscreen ? 'flex-1' : 'h-[237px]'
-                  }`}
+                  className="flex min-h-0 flex-1 flex-col w-full space-y-3 overflow-y-auto scroll-smooth pe-2"
                   style={{
                     scrollbarWidth: 'thin',
                     scrollbarColor: 'rgba(255,255,255,0.1) transparent'
                   }}
-                >
+              >
+                <ActivityPracticePanel activityUuid={props.activity.activity_uuid} />
+                {aiChatBotState.messages.length > 0 && !aiChatBotState.error.isError ? (
+                <>
                   <AnimatePresence mode="popLayout">
                     {aiChatBotState.messages.map(
                       (message: AIMessage, index: number) => {
@@ -513,7 +518,7 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                     )}
                   </AnimatePresence>
                   <div ref={messagesEndRef} />
-                </div>
+                </>
               ) : (
                 <AIMessagePlaceHolder
                   sendMessage={sendMessage}
@@ -521,6 +526,7 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                   isFullscreen={aiChatBotState.isFullscreen}
                 />
               )}
+              </div>
               {aiChatBotState.error.isError && (
                 <div className={`flex items-center justify-center ${aiChatBotState.isFullscreen ? 'flex-1' : 'h-[237px]'}`}>
                   <div className="flex flex-col mx-auto w-full max-w-[600px] space-y-2 p-5 rounded-lg bg-red-500/20 outline outline-1 outline-red-500">
@@ -567,6 +573,8 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                   />
                 </div>
               </div>
+          </> : <LessonTutorContent tutor={tutor} activityUuid={props.activity.activity_uuid} />}
+
             </div>
           </motion.div>
         </>
@@ -719,13 +727,12 @@ const AIChatPredefinedQuestion = (props: {
   )
 }
 
-type AISidePanelProps = {
-  activity: any
-}
+type AISidePanelProps = AIActivityAskProps
 
 // Inline sticky side panel that sits next to content
 function AISidePanelInline(props: AISidePanelProps) {
   const { t } = useTranslation()
+  const tutor = useLessonTutor(props.orgUuid, props.activity.activity_uuid)
   const session = useLHSession() as any
   const access_token = session?.data?.tokens?.access_token
   const aiChatBotState = useAIChatBot() as AIChatBotStateTypes
@@ -945,11 +952,11 @@ function AISidePanelInline(props: AISidePanelProps) {
               >
                 <PanelTop size={18} />
               </button>
-              <X
-                size={20}
-                className="text-white/50 hover:cursor-pointer bg-white/10 p-1 rounded-full items-center"
-                onClick={closeSidePanel}
-              />
+              <button type="button" aria-label={t('ai.guided.closePanel', 'Close AI panel')}
+                className="inline-flex size-11 items-center justify-center rounded-full bg-white/10 text-white/70"
+                onClick={closeSidePanel}>
+                <X size={18} aria-hidden="true" />
+              </button>
             </div>
             <div
               className={`flex space-x-2 items-center ${isInputDisabled ? 'animate-pulse' : ''}`}
@@ -974,16 +981,19 @@ function AISidePanelInline(props: AISidePanelProps) {
             className={`w-full h-0.5 bg-white/5 rounded-full mx-auto mb-3 ${isInputDisabled ? 'animate-pulse' : ''}`}
           ></div>
 
+          {tutor.options?.mode === 'legacy' ? <>
           {/* Messages Area */}
-          {aiChatBotState.messages.length > 0 && !aiChatBotState.error.isError ? (
-            <div
+          <div
               ref={messagesContainerRef}
-              className="flex flex-col flex-1 w-full space-y-3 overflow-y-auto scroll-smooth pe-2"
+              className="flex min-h-0 flex-col flex-1 w-full space-y-3 overflow-y-auto scroll-smooth pe-2"
               style={{
                 scrollbarWidth: 'thin',
                 scrollbarColor: 'rgba(255,255,255,0.1) transparent'
               }}
-            >
+          >
+            <ActivityPracticePanel activityUuid={props.activity.activity_uuid} />
+            {aiChatBotState.messages.length > 0 && !aiChatBotState.error.isError ? (
+            <>
               <AnimatePresence mode="popLayout">
                 {aiChatBotState.messages.map((message: AIMessage, index: number) => (
                   <motion.div
@@ -1111,13 +1121,14 @@ function AISidePanelInline(props: AISidePanelProps) {
                 )}
               </AnimatePresence>
               <div ref={messagesEndRef} />
-            </div>
+            </>
           ) : (
             <AISidePanelPlaceholder
               sendMessage={sendMessage}
               activity_uuid={props.activity.activity_uuid}
             />
           )}
+          </div>
 
           {/* Error state */}
           {aiChatBotState.error.isError && (
@@ -1166,6 +1177,8 @@ function AISidePanelInline(props: AISidePanelProps) {
               />
             </div>
           </div>
+          </> : <LessonTutorContent tutor={tutor} activityUuid={props.activity.activity_uuid} />}
+
         </motion.div>
   )
 }

@@ -101,7 +101,10 @@ function MarkdownActivity({ activity, editable = false, style }: MarkdownActivit
     setSaving(true)
     try {
       await updateActivity(
-        { content: { markdown_url: editUrl.trim() } },
+        {
+          content: { markdown_url: editUrl.trim() },
+          expected_current_version: activity.current_version || 1,
+        },
         activity.activity_uuid,
         access_token
       )

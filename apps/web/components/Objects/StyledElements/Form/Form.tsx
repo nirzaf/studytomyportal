@@ -6,11 +6,12 @@ interface FormLayoutProps {
   children: React.ReactNode
   onSubmit: (e: any) => void
   className?: string
+  method?: 'post' | 'get'
 }
 
-const FormLayout = ({ children, onSubmit, className }: FormLayoutProps) => {
+const FormLayout = ({ children, onSubmit, className, method }: FormLayoutProps) => {
   return (
-    <Form.Root onSubmit={onSubmit} className={className}>
+    <Form.Root onSubmit={onSubmit} className={className} method={method}>
       {children}
     </Form.Root>
   )
