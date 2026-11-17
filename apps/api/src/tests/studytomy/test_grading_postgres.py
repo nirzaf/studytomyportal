@@ -1,6 +1,6 @@
 """Verify managed grade finalization against the migrated PostgreSQL database."""
 
-from asyncio import Event, TaskGroup, sleep, timeout
+from asyncio import Barrier, Event, TaskGroup, sleep, timeout
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -633,10 +633,57 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                     params={"attempt_number": stored.attempt_number + 1},
                 )
                 assert stale.status_code == 409
-                intake = await client.post(
-                    integrity_path, headers=direct, json={"source": "automated_signal"},
-                    params=attempt_query,
+                from src.services.studytomy import assessment_integrity
+
+                # Release the preflight transaction held by the fixture's shared session.
+                await db.commit()
+                barrier = Barrier(2)
+                intake_sessions = set()
+                lock_organization = assessment_integrity.lock_organization
+
+                async def intake_db_session():
+                    async with postgres_session_factory() as session:
+                        yield session
+
+                async def synchronized_lock(session, org_id):
+                    intake_sessions.add(session)
+                    await barrier.wait()
+                    await lock_organization(session, org_id)
+
+                def send_intake():
+                    return client.post(
+                        integrity_path,
+                        headers=direct,
+                        json={"source": "automated_signal"},
+                        params=attempt_query,
+                    )
+
+                with monkeypatch.context() as concurrent_intake:
+                    concurrent_intake.setitem(
+                        app.dependency_overrides, get_db_session, intake_db_session
+                    )
+                    concurrent_intake.setattr(
+                        assessment_integrity, "lock_organization", synchronized_lock
+                    )
+                    async with timeout(15), TaskGroup() as concurrent:
+                        first = concurrent.create_task(send_intake())
+                        second = concurrent.create_task(send_intake())
+                assert len(intake_sessions) == 2
+                intake = first.result()
+                assert intake.status_code == second.result().status_code == 200, (
+                    intake.text, second.result().text
                 )
+                assert intake.json() == second.result().json()
+                events = (
+                    await db.exec(
+                        select(StudyBusinessEvent.event_uuid).where(
+                            StudyBusinessEvent.org_id == org.id,
+                            StudyBusinessEvent.action == assessment_integrity.CONCERN_RECORDED,
+                            StudyBusinessEvent.resource_uuid == result["round_uuid"],
+                        )
+                    )
+                ).all()
+                assert events == [intake.json()["reference"]]
                 assert (
                     await client.get(eligibility_path, headers=direct, params=attempt_query)
                 ).json() == {"can_record": False}
@@ -658,9 +705,7 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 assert responded.status_code == 200, responded.text
                 assert responded.json()["status"] == "response_received"
                 assert "no-store" in responded.headers["cache-control"]
-                from src.services.studytomy.assessment_integrity import (
-                    round_has_open_integrity_concern,
-                )
+                round_has_open_integrity_concern = assessment_integrity.round_has_open_integrity_concern
 
                 assert await round_has_open_integrity_concern(
                     db, org.id, result["round_uuid"]
