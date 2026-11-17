@@ -12,7 +12,7 @@ from sqlmodel import select
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from src.db.users import APITokenUser, User
+from src.db.users import APITokenUser, PublicUser, User
 from src.db.organizations import Organization
 from src.db.user_organizations import UserOrganization
 from src.db.courses.courses import Course
@@ -25,6 +25,7 @@ from src.db.trail_runs import TrailRun
 from src.db.trail_steps import TrailStep
 from src.db.api_tokens import APIToken
 from src.db.roles import Role, RoleTypeEnum
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.usergroup_resources import UserGroupResource
 from src.db.usergroups import UserGroup
 from src.db.usergroup_user import UserGroupUser
@@ -70,6 +71,7 @@ from src.services.admin.admin import (
     unenroll_user,
     update_user_profile,
 )
+from src.services.trail.trail import remove_activity_from_trail, remove_course_from_trail
 
 
 # Admin API endpoints enforce the token's rights buckets; these fixtures exercise
@@ -2095,7 +2097,8 @@ class TestListCourseEnrollments:
 
 class TestResetUserProgress:
 
-    async def test_deletes_steps(self, token_user, user, course, activity, chapter_activity, mock_request, db, mock_admin_side_effects):
+    @pytest.mark.parametrize("managed", [False, True], ids=["native", "managed"])
+    async def test_deletes_steps(self, token_user, user, course, activity, chapter_activity, mock_request, db, mock_admin_side_effects, managed):
         # Enroll then complete an activity to create a step
         await bulk_enroll_users(
             token_user=token_user, course_uuid=course.course_uuid,
@@ -2119,6 +2122,30 @@ class TestResetUserProgress:
         )
         db.add(step)
         await db.commit()
+
+        if managed:
+            course.studytomy_managed = True
+            course.public = False
+            course.published = False
+            db.add(course)
+            await db.commit()
+            learner = PublicUser.model_validate(user)
+            for remove, args in (
+                (reset_user_progress, (token_user, user.id, course.course_uuid)),
+                (unenroll_user, (token_user, user.id, course.course_uuid)),
+                (bulk_unenroll_users, (token_user, course.course_uuid, [user.id])),
+                (uncomplete_activity, (token_user, user.id, activity.activity_uuid)),
+                (remove_course_from_trail, (mock_request, learner, course.course_uuid)),
+                (remove_activity_from_trail, (mock_request, learner, activity.activity_uuid)),
+            ):
+                with pytest.raises(HTTPException) as blocked:
+                    await remove(*args, db)
+                assert blocked.value.status_code == 409
+                assert blocked.value.detail["code"] == "MANAGED_PROGRESS_REVIEW_REQUIRED"
+            await db.refresh(step)
+            await db.refresh(trailrun)
+            assert step.complete is True and step.trailrun_id == trailrun.id
+            return
 
         result = await reset_user_progress(token_user, user.id, course.course_uuid, db)
         assert result["steps_deleted"] == 1
@@ -2145,6 +2172,15 @@ class TestResetUserProgress:
 
 
 class TestAwardCertificate:
+
+    async def test_managed_course_requires_reviewed_award(self, token_user, user, course, certification, mock_request, db):
+        course.studytomy_managed = True
+        course.public = course.published = False
+        await db.commit()
+        with pytest.raises(HTTPException) as exc:
+            await award_certificate(token_user, user.id, course.course_uuid, mock_request, db)
+        assert exc.value.status_code == 409 and exc.value.detail["code"] == "MANAGED_AWARD_REVIEW_REQUIRED"
+        assert (await db.execute(select(CertificateUser.id).where(CertificateUser.user_id == user.id))).first() is None
 
     @patch("src.services.courses.certifications.dispatch_webhooks", new_callable=AsyncMock)
     @patch("src.services.courses.certifications.track", new_callable=AsyncMock)
@@ -2201,6 +2237,17 @@ class TestAwardCertificate:
 
 
 class TestRevokeCertificate:
+
+    async def test_managed_award_revocation_requires_review(self, token_user, user, course, certification, db):
+        course.studytomy_managed = True
+        course.public = course.published = False
+        award = CertificateUser(user_id=user.id, certification_id=certification.id, user_certification_uuid="synthetic-retained-award")
+        db.add(award)
+        await db.commit()
+        with pytest.raises(HTTPException) as blocked:
+            await revoke_certificate(token_user, user.id, award.user_certification_uuid, db)
+        assert blocked.value.status_code == 409 and blocked.value.detail["code"] == "MANAGED_AWARD_REVIEW_REQUIRED"
+        assert await db.get(CertificateUser, award.id) is not None
 
     @patch("src.services.courses.certifications.dispatch_webhooks", new_callable=AsyncMock)
     @patch("src.services.courses.certifications.track", new_callable=AsyncMock)
@@ -2578,6 +2625,25 @@ class TestBulkUnenroll:
 
 
 # ── GDPR export / anonymize tests ───────────────────────────────────────────
+
+
+@pytest.mark.parametrize("operation", [export_user_data, anonymize_user])
+async def test_managed_learner_record_requests_require_review(operation, token_user, learner_user, db):
+    original_email = learner_user.email
+    db.add(StudyLearnerProfile(
+        org_id=token_user.org_id, user_id=learner_user.id, created_by_user_id=learner_user.id,
+        status="active", control_mode="independent",
+    ))
+    await db.commit()
+
+    with pytest.raises(HTTPException) as blocked:
+        await operation(token_user, learner_user.id, db)
+
+    assert blocked.value.status_code == 409
+    assert blocked.value.detail["code"] == "MANAGED_RECORD_REVIEW_REQUIRED"
+    assert blocked.value.headers == {"Cache-Control": "private, no-store"}
+    await db.refresh(learner_user)
+    assert learner_user.email == original_email
 
 
 class TestExportUserData:
