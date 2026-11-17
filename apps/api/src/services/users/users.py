@@ -6,7 +6,7 @@ from typing import Literal
 from uuid import uuid4
 from fastapi import HTTPException, Request, UploadFile, status
 import redis
-from sqlmodel import select, func
+from sqlmodel import select, func, or_
 from sqlmodel.ext.asyncio.session import AsyncSession
 from config.config import get_learnhouse_config
 from src.security.superadmin import is_user_superadmin
@@ -49,6 +49,10 @@ from src.services.security.profile_validation import validate_profile_fields
 from src.services.analytics.analytics import track
 from src.services.analytics import events as analytics_events
 from src.services.webhooks.dispatch import dispatch_webhooks
+from src.services.studytomy.privacy import (
+    can_read_public_profile,
+    is_protected_studytomy_learner,
+)
 
 
 def _session_epoch_now() -> datetime:
@@ -548,7 +552,7 @@ async def update_user(
     user_object: UserUpdate,
 ):
     # Get user
-    statement = select(User).where(User.id == user_id)
+    statement = select(User).where(User.id == user_id).with_for_update()
     user = (await db_session.execute(statement)).scalars().first()
 
     if not user:
@@ -661,9 +665,19 @@ async def update_user(
     if email_changed:
         await _after_email_change(request, db_session, user, previous_email)
 
-    user = UserRead.model_validate(user)
+    user_read = UserRead.model_validate(user)
+    if not is_owner and user.id is not None and await is_protected_studytomy_learner(
+        db_session, user.id
+    ):
+        # Generic org-admin profile edits must not return protected learner
+        # contact details, signup answers or free-form support data.
+        user_read.email = ""
+        user_read.bio = ""
+        user_read.details = None
+        user_read.profile = None
+        user_read.extra_metadata = None
 
-    return user
+    return user_read
 
 
 async def _check_org_admin_can_edit_account(user: User, db_session: AsyncSession) -> None:
@@ -960,7 +974,11 @@ async def read_user_by_id(
     statement = select(User).where(User.id == user_id)
     user = (await db_session.execute(statement)).scalars().first()
 
-    if not user or not await _can_see_user(current_user, user, db_session):
+    if (
+        not user
+        or not await _can_see_user(current_user, user, db_session)
+        or not await can_read_public_profile(db_session, current_user, user)
+    ):
         raise HTTPException(
             status_code=404,
             detail="Resource not found",  # Generic message prevents enumeration
@@ -985,7 +1003,11 @@ async def read_user_by_uuid(
     statement = select(User).where(User.user_uuid == user_uuid)
     user = (await db_session.execute(statement)).scalars().first()
 
-    if not user or not await _can_see_user(current_user, user, db_session):
+    if (
+        not user
+        or not await _can_see_user(current_user, user, db_session)
+        or not await can_read_public_profile(db_session, current_user, user)
+    ):
         raise HTTPException(
             status_code=404,
             detail="Resource not found",  # Generic message prevents enumeration
@@ -1010,7 +1032,11 @@ async def read_user_by_username(
     statement = select(User).where(User.username == username)
     user = (await db_session.execute(statement)).scalars().first()
 
-    if not user or not await _can_see_user(current_user, user, db_session):
+    if (
+        not user
+        or not await _can_see_user(current_user, user, db_session)
+        or not await can_read_public_profile(db_session, current_user, user)
+    ):
         raise HTTPException(
             status_code=404,
             detail="Resource not found",  # Generic message prevents enumeration
@@ -1160,6 +1186,165 @@ async def delete_user_by_id(
             UserOrganization.role_id == ADMIN_ROLE_ID,
         )
     )).scalars().all()
+
+    # Governance records retain named approvers and owners. Account deletion
+    # must wait for the approved retention/redaction workflow instead of
+    # failing later on a restrictive foreign key or erasing that history.
+    from src.db.studytomy.commerce import StudyOffer, StudyOfferVersion
+    from src.db.studytomy.governance import (
+        StudyBusinessEvent,
+        StudyOwnerAssignment,
+        StudyPolicyApproval,
+        StudyPolicyVersion,
+        StudyStaffScope,
+    )
+    from src.db.studytomy.family import (
+        StudyEligibilityDecision,
+        StudyLearnerProfile,
+        StudyRelationship,
+        StudySharingGrant,
+    )
+    from src.db.studytomy.operations import (
+        StudyEvidenceFile,
+        StudyIdempotencyRecord,
+        StudyOutboxRecord,
+    )
+    from src.db.studytomy.practice import StudyLearningSurface
+    from src.db.studytomy.privacy import StudyConsentEvent
+
+    from src.services.studytomy.adaptive_retention import (
+        ensure_adaptive_org_deletable,
+        ensure_adaptive_user_deletable,
+    )
+
+    await ensure_adaptive_user_deletable(db_session, user_id)
+
+    governance_user_refs = [
+        (StudyOffer, StudyOffer.created_by_user_id == user_id),
+        (StudyOfferVersion, StudyOfferVersion.created_by_user_id == user_id),
+        (
+            StudyConsentEvent,
+            or_(
+                StudyConsentEvent.subject_user_id == user_id,
+                StudyConsentEvent.actor_user_id == user_id,
+            ),
+        ),
+        (StudyOwnerAssignment, StudyOwnerAssignment.user_id == user_id),
+        (StudyOwnerAssignment, StudyOwnerAssignment.assigned_by_user_id == user_id),
+        (StudyOwnerAssignment, StudyOwnerAssignment.ended_by_user_id == user_id),
+        (StudyStaffScope, StudyStaffScope.created_by_user_id == user_id),
+        (StudyStaffScope, StudyStaffScope.revoked_by_user_id == user_id),
+        (StudyBusinessEvent, StudyBusinessEvent.actor_user_id == user_id),
+        (StudyIdempotencyRecord, StudyIdempotencyRecord.actor_user_id == user_id),
+        (StudyOutboxRecord, StudyOutboxRecord.recipient_user_id == user_id),
+        (StudyOutboxRecord, StudyOutboxRecord.created_by_user_id == user_id),
+        (StudyPolicyApproval, StudyPolicyApproval.approver_user_id == user_id),
+        (StudyPolicyVersion, StudyPolicyVersion.created_by_user_id == user_id),
+        (StudyPolicyVersion, StudyPolicyVersion.approved_by_user_id == user_id),
+        (StudyLearnerProfile, StudyLearnerProfile.user_id == user_id),
+        (StudyLearnerProfile, StudyLearnerProfile.created_by_user_id == user_id),
+        (StudyEligibilityDecision, StudyEligibilityDecision.reviewer_user_id == user_id),
+        (
+            StudyRelationship,
+            or_(
+                StudyRelationship.adult_user_id == user_id,
+                StudyRelationship.requested_by_user_id == user_id,
+                StudyRelationship.decided_by_user_id == user_id,
+            ),
+        ),
+        (
+            StudySharingGrant,
+            or_(
+                StudySharingGrant.recipient_user_id == user_id,
+                StudySharingGrant.created_by_user_id == user_id,
+            ),
+        ),
+        (StudyEvidenceFile, StudyEvidenceFile.uploaded_by_user_id == user_id),
+        (StudyLearningSurface, StudyLearningSurface.user_id == user_id),
+    ]
+    for model, user_filter in governance_user_refs:
+        reference = (await db_session.execute(
+            select(1).select_from(model).where(user_filter).limit(1)
+        )).first()
+        if reference:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This account is referenced by Studytomy governance records. "
+                    "Resolve their approved retention or transfer path before deletion."
+                ),
+            )
+
+    # A sole-admin deletion would also remove its whole organization. Refuse
+    # before any cascade can reach governance history tied to that org.
+    for org_id in admin_org_ids:
+        other_admins = (await db_session.execute(
+            select(func.count()).select_from(UserOrganization).where(
+                UserOrganization.org_id == org_id,
+                UserOrganization.role_id == ADMIN_ROLE_ID,
+                UserOrganization.user_id != user_id,
+            )
+        )).scalar_one()
+        if other_admins:
+            continue
+        await db_session.execute(
+            select(Organization.id).where(Organization.id == org_id).with_for_update()
+        )
+        await ensure_adaptive_org_deletable(db_session, org_id)
+        org_policy = (await db_session.execute(
+            select(StudyPolicyVersion.id)
+            .where(StudyPolicyVersion.org_id == org_id)
+            .limit(1)
+        )).first()
+        org_owner = (await db_session.execute(
+            select(StudyOwnerAssignment.id)
+            .where(StudyOwnerAssignment.org_id == org_id)
+            .limit(1)
+        )).first()
+        org_operation = (await db_session.execute(
+            select(StudyIdempotencyRecord.id)
+            .where(StudyIdempotencyRecord.org_id == org_id)
+            .limit(1)
+        )).first()
+        org_delivery = (await db_session.execute(
+            select(StudyOutboxRecord.id)
+            .where(StudyOutboxRecord.org_id == org_id)
+            .limit(1)
+        )).first()
+        org_learners = (await db_session.execute(
+            select(StudyLearnerProfile.id)
+            .where(StudyLearnerProfile.org_id == org_id)
+            .limit(1)
+        )).first()
+        org_eligibility = (await db_session.execute(
+            select(StudyEligibilityDecision.id)
+            .where(StudyEligibilityDecision.org_id == org_id)
+            .limit(1)
+        )).first()
+        org_evidence = (await db_session.execute(
+            select(StudyEvidenceFile.id)
+            .where(StudyEvidenceFile.org_id == org_id)
+            .limit(1)
+        )).first()
+        org_practice = (await db_session.execute(
+            select(StudyLearningSurface.surface_uuid)
+            .where(StudyLearningSurface.org_id == org_id)
+            .limit(1)
+        )).first()
+        org_offer = (await db_session.execute(
+            select(StudyOffer.id).where(StudyOffer.org_id == org_id).limit(1)
+        )).first()
+        if (
+            org_policy or org_owner or org_operation or org_delivery
+            or org_learners or org_eligibility or org_evidence or org_practice or org_offer
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This account is the sole admin of an organization with Studytomy governance records. "
+                    "Transfer or resolve the records before deletion."
+                ),
+            )
 
     for org_id in admin_org_ids:
         other_admins = (await db_session.execute(

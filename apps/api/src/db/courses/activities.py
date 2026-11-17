@@ -87,6 +87,7 @@ class ActivityCreate(ActivityBase):
 class ActivityUpdate(SQLModel):
     name: Optional[str] = None
     content: Optional[dict] = None
+    expected_current_version: Optional[int] = Field(default=None, ge=1)
     activity_type: Optional[ActivityTypeEnum] = None
     activity_sub_type: Optional[ActivitySubTypeEnum] = None
     details: Optional[dict] = None

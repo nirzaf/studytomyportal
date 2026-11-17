@@ -12,7 +12,7 @@ applied to the retrieved rows afterwards.
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Union
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -97,16 +97,27 @@ async def build_rag_access_scope(
     scope = RagAccessScope(request=request, current_user=current_user, org_id=org_id)
 
     if course is not None:
+        native_course_id = (await db_session.execute(
+            select(Course.id).where(
+                Course.id == course.id,
+                Course.course_uuid == course.course_uuid,
+                Course.org_id == org_id,
+                Course.studytomy_managed.is_(False),
+            )
+        )).scalar_one_or_none()
+        if native_course_id is None:
+            raise HTTPException(status_code=403, detail="Course unavailable for AI search")
         grant = await _grant_for_course(
             request, current_user, course.course_uuid, db_session, raise_on_deny=True
         )
-        if grant is not None and course.id is not None:
-            scope.courses[course.id] = grant
+        if grant is not None:
+            scope.courses[native_course_id] = grant
         return scope
 
     indexed_courses = (await db_session.execute(
         select(Course.id, Course.course_uuid)
         .where(Course.org_id == org_id)
+        .where(Course.studytomy_managed.is_(False))
         .where(Course.id.in_(  # type: ignore
             select(CourseEmbedding.course_id).where(CourseEmbedding.org_id == org_id)
         ))

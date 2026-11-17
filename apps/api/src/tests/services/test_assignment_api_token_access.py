@@ -36,10 +36,13 @@ from src.db.trails import Trail
 from src.services.courses.activities.assignments import (
     create_assignment,
     create_assignment_submission,
+    get_grade_assignment_submission,
     grade_assignment_submission,
     handle_assignment_task_submission,
     read_assignment,
     read_assignment_submissions,
+    read_assignment_task,
+    read_assignment_task_submissions,
     retry_assignment_submission,
 )
 from sqlmodel import select
@@ -288,6 +291,55 @@ class TestTokenGrading:
                 mock_request, regular_user.id, "assignment_token_test", token, db,
             )
         assert exc.value.status_code == 403
+
+    async def test_assignment_token_cannot_read_or_write_managed_assessment(
+        self, mock_request, db, org, course, chapter, activity, regular_user
+    ):
+        course.studytomy_managed = True
+        course.public = False
+        course.published = False
+        db.add(course)
+        assignment = await self._seed_submission(db, org, course, chapter, activity, regular_user)
+        token = _token(assignments=_assignments_rights(create=True, update=True, read=True))
+
+        for read, args in (
+            (read_assignment, (assignment.assignment_uuid,)),
+            (read_assignment_task, ("assignmenttask_token_test",)),
+            (read_assignment_submissions, (assignment.assignment_uuid,)),
+            (read_assignment_task_submissions, ("assignmenttask_token_test",)),
+            (get_grade_assignment_submission, (regular_user.id, assignment.assignment_uuid)),
+        ):
+            with pytest.raises(HTTPException, match="direct session") as exc:
+                await read(mock_request, *args, token, db)
+            assert exc.value.status_code == 403
+
+        with pytest.raises(HTTPException, match="direct session") as exc:
+            await handle_assignment_task_submission(
+                mock_request,
+                "assignmenttask_token_test",
+                AssignmentTaskSubmissionUpdate(task_submission={"answer": "changed"}),
+                token,
+                db,
+                on_behalf_of_user_id=regular_user.id,
+            )
+        assert exc.value.status_code == 403
+        with pytest.raises(HTTPException, match="direct session") as exc:
+            await create_assignment_submission(
+                mock_request, assignment.assignment_uuid, token, db,
+                on_behalf_of_user_id=regular_user.id,
+            )
+        assert exc.value.status_code == 403
+        with pytest.raises(HTTPException, match="direct session") as exc:
+            await grade_assignment_submission(
+                mock_request, regular_user.id, assignment.assignment_uuid, token, db,
+            )
+        assert exc.value.status_code == 403
+
+        stored_task = (await db.execute(select(AssignmentTaskSubmission))).scalar_one()
+        stored_attempt = (await db.execute(select(AssignmentUserSubmission))).scalar_one()
+        assert stored_task.task_submission == {"answer": "4"}
+        assert stored_attempt.submission_status == AssignmentUserSubmissionStatus.SUBMITTED
+        assert stored_attempt.grade == 0
 
 
 # ---------------------------------------------------------------------------

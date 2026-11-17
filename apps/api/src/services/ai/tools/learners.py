@@ -548,8 +548,17 @@ class GetLearnerProgressParams(results.Paging):
 # ─── executors ─────────────────────────────────────────────────────────────
 
 
+def require_course_insight_access(course: Course) -> None:
+    if course.studytomy_managed is True:
+        raise HTTPException(
+            status_code=403,
+            detail="Managed course progress is available through the course review workflow.",
+        )
+
+
 async def _list_course_learners(ctx: ToolContext, p: ListCourseLearnersParams):
     course = await refs.load(ctx, "course", p.course_uuid)
+    require_course_insight_access(course)
     if _is_token(ctx):
         await _require_pro_for_token(ctx)
     elif not await can_see_course_learners(ctx, course):
@@ -664,6 +673,8 @@ async def _list_course_learners(ctx: ToolContext, p: ListCourseLearnersParams):
 
 async def _get_learner_progress(ctx: ToolContext, p: GetLearnerProgressParams):
     course = await refs.load(ctx, "course", p.course_uuid) if p.course_uuid else None
+    if course is not None:
+        require_course_insight_access(course)
 
     if p.user_uuid:
         learner = await refs.load_member(ctx, p.user_uuid)
@@ -696,7 +707,8 @@ async def _get_learner_progress(ctx: ToolContext, p: GetLearnerProgressParams):
         await _check_visible(ctx, learner)
 
     statement = select(TrailRun, Course).join(Course, Course.id == TrailRun.course_id).where(  # type: ignore[arg-type]
-        TrailRun.user_id == learner.id, TrailRun.org_id == ctx.org.id
+        TrailRun.user_id == learner.id, TrailRun.org_id == ctx.org.id,
+        Course.studytomy_managed.is_(False),
     )
     if course is not None:
         statement = statement.where(TrailRun.course_id == course.id)
@@ -777,10 +789,20 @@ async def _get_learner_progress(ctx: ToolContext, p: GetLearnerProgressParams):
     if p.include:
         unavailable: dict[str, str] = {}
         gate = await _audit_gate(ctx)
+        managed_course_exists = False
+        if "engagement" in p.include or (course is None and "timeline" in p.include):
+            managed_course_exists = await ctx.db_session.scalar(
+                select(Course.id).where(
+                    Course.org_id == ctx.org.id, Course.studytomy_managed.is_(True)
+                ).limit(1)
+            ) is not None
         for section in dict.fromkeys(p.include):
             allowed = gate is None or (section == "code" and own)
             if not allowed:
                 unavailable[section] = gate
+                continue
+            if managed_course_exists and (section == "engagement" or (section == "timeline" and course is None)):
+                unavailable[section] = "This section includes organization-wide activity and cannot be limited to unmanaged courses."
                 continue
             if section == "timeline":
                 extra["timeline"] = await _timeline(ctx, learner.id, p.days, course)
@@ -1106,7 +1128,11 @@ async def _engagement(ctx: ToolContext, user_id: int, days: int, course: Course 
 async def _code_exercises(ctx: ToolContext, user_id: int, course: Course | None) -> list[dict]:
     """Code exercise attempts per exercise: how many, passed or not, best test
     result and when. Source code is not returned."""
-    statement = select(Activity).where(Activity.org_id == ctx.org.id)
+    statement = select(Activity).join(Course, Course.id == Activity.course_id).where(
+        Activity.org_id == ctx.org.id,
+        Course.org_id == ctx.org.id,
+        Course.studytomy_managed.is_(False),
+    )
     if course is not None:
         statement = statement.where(Activity.course_id == course.id)
     activities = {a.activity_uuid: a for a in (await ctx.db_session.execute(statement)).scalars().all()}

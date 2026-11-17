@@ -69,6 +69,7 @@ from src.services.ai.tools.learners import (
     member_refs,
     may_see_assignment_work,
     published_activities,
+    require_course_insight_access,
     work_status,
 )
 from src.services.audit.answers import humanize_task_answer
@@ -180,6 +181,7 @@ async def _get_course_stats(ctx: ToolContext, p: GetCourseStatsParams):
     else:
         course = await refs.load(ctx, "course", p.course_uuid)
 
+    require_course_insight_access(course)
     if _is_token(ctx):
         await _require_pro_for_token(ctx)
     elif not await can_see_course_learners(ctx, course):

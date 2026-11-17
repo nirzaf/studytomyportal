@@ -14,9 +14,10 @@ from src.security.features_utils.usage import (
     increase_feature_usage,
 )
 from src.db.resource_authors import ResourceAuthor, ResourceAuthorshipEnum, ResourceAuthorshipStatusEnum
-from src.db.users import PublicUser, AnonymousUser, User, UserReadAuthor, APITokenUser
+from src.db.users import PublicUser, AnonymousUser, User, APITokenUser
 from src.security.api_token_utils import require_token_content_read
 from src.security.auth import resolve_acting_user_id
+from src.services.studytomy.privacy import project_public_author
 from src.security.org_auth import require_org_create_permission
 from src.db.podcasts.podcasts import (
     Podcast,
@@ -169,7 +170,7 @@ async def get_podcast(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -242,7 +243,7 @@ async def get_podcast_meta(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -413,7 +414,7 @@ async def get_podcasts_orgslug(
             podcast_authors[resource_author.resource_uuid] = []
         podcast_authors[resource_author.resource_uuid].append(
             AuthorWithRole(
-                user=UserReadAuthor.model_validate(user),
+                user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
                 authorship=resource_author.authorship,
                 authorship_status=resource_author.authorship_status,
                 creation_date=resource_author.creation_date,
@@ -567,7 +568,7 @@ async def create_podcast(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -644,7 +645,7 @@ async def update_podcast_thumbnail(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -746,7 +747,7 @@ async def update_podcast(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,

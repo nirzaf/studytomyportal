@@ -18,7 +18,7 @@ from src.security.features_utils.usage import (
     increase_feature_usage,
 )
 from src.db.resource_authors import ResourceAuthor, ResourceAuthorshipEnum, ResourceAuthorshipStatusEnum
-from src.db.users import PublicUser, AnonymousUser, User, UserReadAuthor, APITokenUser
+from src.db.users import PublicUser, AnonymousUser, User, APITokenUser, SuperadminAPITokenUser
 from src.db.courses.courses import (
     Course,
     CourseCreate,
@@ -31,6 +31,7 @@ from src.db.courses.courses import (
 from src.security.api_token_utils import require_token_right
 from src.security.auth import resolve_acting_user_id
 from src.services.orgs.auth_policy import viewer_for_org
+from src.services.studytomy.privacy import project_public_author
 from src.security.org_auth import require_org_create_permission
 from src.security.rbac.rbac import (
     authorization_verify_if_user_is_anon,
@@ -105,7 +106,7 @@ async def get_course(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -151,7 +152,7 @@ async def get_course_by_id(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -242,7 +243,7 @@ async def get_course_meta(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -397,6 +398,10 @@ async def get_courses_orgslug(
             )
 
     # Apply ordering and pagination; only use DISTINCT when outerjoins may produce duplicates
+    if isinstance(current_user, (APITokenUser, SuperadminAPITokenUser)):
+        query = query.where(Course.studytomy_managed.is_(False))
+    elif not isinstance(current_user, AnonymousUser) and not can_view_unpublished:
+        query = query.where(_native_or_managed_author(acting_user_id))
     query = query.order_by(Course.creation_date.desc()).offset(offset).limit(limit)
     if needs_distinct:
         query = query.distinct()
@@ -428,7 +433,7 @@ async def get_courses_orgslug(
             course_authors[resource_author.resource_uuid] = []
         course_authors[resource_author.resource_uuid].append(
             AuthorWithRole(
-                user=UserReadAuthor.model_validate(user),
+                user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
                 authorship=resource_author.authorship,
                 authorship_status=resource_author.authorship_status,
                 creation_date=resource_author.creation_date,
@@ -522,8 +527,29 @@ async def get_courses_count_orgslug(
             ))
         )
 
+        query = query.where(_native_or_managed_author(acting_user_id))
+    if isinstance(current_user, SuperadminAPITokenUser):
+        query = query.where(Course.studytomy_managed.is_(False))
     count = (await db_session.execute(query)).scalar_one()
     return count
+
+
+def _native_or_managed_author(user_id: int):
+    authorized_author = select(ResourceAuthor.id).where(
+        ResourceAuthor.resource_uuid == Course.course_uuid,
+        ResourceAuthor.user_id == user_id,
+        ResourceAuthor.authorship_status == ResourceAuthorshipStatusEnum.ACTIVE,
+        ResourceAuthor.authorship.in_((
+            ResourceAuthorshipEnum.CREATOR,
+            ResourceAuthorshipEnum.MAINTAINER,
+            ResourceAuthorshipEnum.CONTRIBUTOR,
+        )),
+    ).correlate(Course).exists()
+    current_member = select(UserOrganization.id).where(
+        UserOrganization.user_id == user_id,
+        UserOrganization.org_id == Course.org_id,
+    ).correlate(Course).exists()
+    return or_(Course.studytomy_managed.is_(False), and_(authorized_author, current_member))
 
 
 def accessible_courses_filter(
@@ -590,11 +616,14 @@ def accessible_courses_filter(
         )
         .exists()
     )
-    return or_(
-        and_(Course.published == True, Course.public == True),  # noqa: E712
-        and_(Course.published == True, ~in_any_usergroup, is_org_member),  # noqa: E712
-        and_(Course.published == True, in_users_usergroup),  # noqa: E712
-        is_active_author,
+    return and_(
+        _native_or_managed_author(acting_user_id),
+        or_(
+            and_(Course.published == True, Course.public == True),  # noqa: E712
+            and_(Course.published == True, ~in_any_usergroup, is_org_member),  # noqa: E712
+            and_(Course.published == True, in_users_usergroup),  # noqa: E712
+            is_active_author,
+        ),
     )
 
 
@@ -662,6 +691,8 @@ async def search_courses(
         and not is_api_token
         and await is_user_superadmin(search_acting_user_id, db_session)
     )
+    if isinstance(current_user, SuperadminAPITokenUser):
+        query = query.where(Course.studytomy_managed.is_(False))
     query = query.where(
         accessible_courses_filter(
             search_acting_user_id,
@@ -693,7 +724,7 @@ async def search_courses(
     for resource_author, user in author_results:
         course_authors.setdefault(resource_author.resource_uuid, []).append(
             AuthorWithRole(
-                user=UserReadAuthor.model_validate(user),
+                user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
                 authorship=resource_author.authorship,
                 authorship_status=resource_author.authorship_status,
                 creation_date=resource_author.creation_date,
@@ -814,7 +845,7 @@ async def create_course(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -915,7 +946,7 @@ async def update_course_thumbnail(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -1000,6 +1031,15 @@ async def update_course(
                 detail=f"You must be the course owner (CREATOR or MAINTAINER) or have admin role to change access settings: {', '.join(sensitive_fields_updated)}",
             )
 
+    if course.studytomy_managed and (course_object.public is True or course_object.published is True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "MANAGED_COURSE_PUBLICATION_REQUIRED",
+                "message": "Managed courses require a reviewed release and scoped learner access.",
+            },
+        )
+
     # SECURITY: thumbnail names end up in storage paths (clone copies them);
     # only accept bare file names. Unchanged values are echoed back by the
     # dashboard on every save, so leave those alone.
@@ -1060,7 +1100,7 @@ async def update_course(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -1143,6 +1183,18 @@ async def delete_course(
     # RBAC check
     await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.DELETE)
 
+    from src.services.studytomy.assignment_adapter import ensure_native_source_deletable
+
+    await ensure_native_source_deletable(db_session, course.org_id, "course", course.course_uuid)
+
+    from src.services.studytomy.adaptive_retention import (
+        ensure_adaptive_course_deletable,
+        ensure_managed_progress_source_deletable,
+    )
+
+    await ensure_adaptive_course_deletable(db_session, course.org_id, course.course_uuid)
+    await ensure_managed_progress_source_deletable(db_session, course.org_id, course.id)
+
     # Clean up content files from storage
     org_statement = select(Organization).where(Organization.id == course.org_id)
     org = (await db_session.execute(org_statement)).scalars().first()
@@ -1221,6 +1273,10 @@ async def get_user_courses(
     )
     if not can_see_unpublished:
         statement = statement.where(Course.published == True, Course.public == True)
+    elif isinstance(current_user, (APITokenUser, SuperadminAPITokenUser)):
+        statement = statement.where(Course.studytomy_managed.is_(False))
+    elif not isinstance(current_user, PublicUser) or not current_user.is_superadmin:
+        statement = statement.where(_native_or_managed_author(int(current_user.id)))
     statement = (
         statement
         .offset((page - 1) * limit)
@@ -1247,7 +1303,7 @@ async def get_user_courses(
     for resource_author, user in author_results:
         course_authors.setdefault(resource_author.resource_uuid, []).append(
             AuthorWithRole(
-                user=UserReadAuthor.model_validate(user),
+                user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
                 authorship=resource_author.authorship,
                 authorship_status=resource_author.authorship_status,
                 creation_date=resource_author.creation_date,
@@ -1780,7 +1836,7 @@ async def clone_course(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,

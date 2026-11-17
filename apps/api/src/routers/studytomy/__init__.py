@@ -1,0 +1,1 @@
+"""Studytomy API routes."""

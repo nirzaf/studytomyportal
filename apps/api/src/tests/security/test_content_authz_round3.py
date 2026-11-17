@@ -42,6 +42,11 @@ from src.db.usergroup_user import UserGroupUser
 from src.db.usergroups import UserGroup
 from src.routers.code_submissions import router as code_submissions_router
 from src.security.auth import get_current_user
+from src.services.courses.courses import (
+    get_courses_count_orgslug,
+    get_courses_orgslug,
+    search_courses,
+)
 from src.tests.fixtures.rows import activity_row
 
 NOW = "2024-01-01"
@@ -93,6 +98,61 @@ async def _status(coro):
     except HTTPException as exc:
         return exc.status_code
     return 200
+
+
+async def test_managed_draft_hidden_from_group_listing_and_count(
+    db, org, course, admin_user, regular_user, mock_request,
+):
+    course.public = False
+    course.published = False
+    await _usergroup(db, org.id, 721, course.course_uuid, regular_user.id)
+    await db.commit()
+    native = await get_courses_orgslug(mock_request, regular_user, org.slug, db)
+    assert [item.course_uuid for item in native] == [course.course_uuid]
+    assert await get_courses_count_orgslug(mock_request, regular_user, org.slug, db) == 1
+    course.studytomy_managed = True
+    await db.commit()
+    assert await get_courses_orgslug(mock_request, regular_user, org.slug, db) == []
+    assert await get_courses_count_orgslug(mock_request, regular_user, org.slug, db) == 0
+    assert await search_courses(mock_request, regular_user, org.slug, course.name, db) == []
+    dashboard = await get_courses_orgslug(mock_request, admin_user, org.slug, db, include_unpublished=True)
+    assert [item.course_uuid for item in dashboard] == [course.course_uuid]
+    authorship = ResourceAuthor(
+        resource_uuid=course.course_uuid, user_id=regular_user.id,
+        authorship=ResourceAuthorshipEnum.REPORTER,
+        authorship_status=ResourceAuthorshipStatusEnum.ACTIVE,
+    )
+    db.add(authorship)
+    await db.commit()
+    assert await search_courses(mock_request, regular_user, org.slug, course.name, db) == []
+    authorship.authorship = ResourceAuthorshipEnum.CONTRIBUTOR
+    await db.commit()
+    scoped = await search_courses(mock_request, regular_user, org.slug, course.name, db)
+    assert [item.course_uuid for item in scoped] == [course.course_uuid]
+
+
+@pytest.mark.parametrize("router", ROUTERS)
+async def test_managed_course_files_require_staff_and_private_cache(
+    router, db, org, other_org, course, activity, admin_user, regular_user, anonymous_user, mock_request,
+):
+    native = f"orgs/{org.org_uuid}/courses/{course.course_uuid}/thumbnails/cover.png"
+    assert await router._check_content_access(native, anonymous_user, db, mock_request) is True
+    course.public = False
+    course.published = False
+    course.studytomy_managed = True
+    await db.commit()
+    root = f"orgs/{org.org_uuid}/courses/{course.course_uuid}"
+    paths = (
+        native, f"{root}/metadata.json",
+        f"{root}/activities/{activity.activity_uuid}/documentpdf/lesson.pdf",
+        f"orgs/{org.org_uuid}/courses/{course.course_uuid.upper()}/thumbnails/cover.png",
+    )
+    for path in paths:
+        assert await _status(router._check_content_access(path, anonymous_user, db, mock_request)) == 403
+        assert await _status(router._check_content_access(path, regular_user, db, mock_request)) == 403
+    assert await router._check_content_access(native, admin_user, db, mock_request) is False
+    forged = f"orgs/{other_org.org_uuid}/courses/{course.course_uuid}/thumbnails/cover.png"
+    assert await _status(router._check_content_access(forged, admin_user, db, mock_request)) == 404
 
 
 # ---------------------------------------------------------------------------

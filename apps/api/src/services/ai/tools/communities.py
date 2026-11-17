@@ -51,6 +51,10 @@ from src.services.communities.discussions import (
     pin_discussion,
     update_discussion,
 )
+from src.services.studytomy.privacy import (
+    is_protected_studytomy_learner,
+    studytomy_work_ai_visibility_filter,
+)
 
 DiscussionLabel = Literal["general", "question", "idea", "announcement", "showcase"]
 
@@ -143,6 +147,7 @@ async def _comment_counts(ctx: ToolContext, discussion_ids: list[int]) -> dict[i
         await ctx.db_session.execute(
             select(DiscussionComment.discussion_id, func.count(DiscussionComment.id))
             .where(DiscussionComment.discussion_id.in_(discussion_ids))
+            .where(studytomy_work_ai_visibility_filter(DiscussionComment.author_id))
             .group_by(DiscussionComment.discussion_id)
         )
     ).all()
@@ -182,6 +187,8 @@ async def _discussion_items(ctx: ToolContext, discussions: list[Discussion]) -> 
     counts = await _comment_counts(ctx, [d.id for d in discussions])
     items = []
     for d in discussions:
+        if await is_protected_studytomy_learner(ctx.db_session, d.author_id):
+            continue
         community = communities.get(d.community_id)
         if community is None:
             continue
@@ -342,6 +349,7 @@ async def _list_communities(ctx: ToolContext, p: ListCommunitiesParams):
                 await ctx.db_session.execute(
                     select(Discussion.community_id, func.count(Discussion.id))
                     .where(Discussion.community_id.in_([c.id for c in rows]))
+                    .where(studytomy_work_ai_visibility_filter(Discussion.author_id))
                     .group_by(Discussion.community_id)
                 )
             ).all()
@@ -369,13 +377,17 @@ async def _get_community(ctx: ToolContext, p: GetCommunityParams):
         await ctx.db_session.execute(
             select(Discussion)
             .where(Discussion.community_id == row.id)
+            .where(studytomy_work_ai_visibility_filter(Discussion.author_id))
             .order_by(Discussion.creation_date.desc(), Discussion.id.desc())
             .limit(5)
         )
     ).scalars().all()
     total = (
         await ctx.db_session.execute(
-            select(func.count()).select_from(Discussion).where(Discussion.community_id == row.id)
+            select(func.count()).select_from(Discussion).where(
+                Discussion.community_id == row.id,
+                studytomy_work_ai_visibility_filter(Discussion.author_id),
+            )
         )
     ).scalar() or 0
     out: dict[str, Any] = {
@@ -494,6 +506,7 @@ async def _list_discussions(ctx: ToolContext, p: ListDiscussionsParams):
         conditions.append(Discussion.community_id == community.id)
     else:
         conditions.append(Discussion.community_id.in_(await _visible_community_ids(ctx)))
+    conditions.append(studytomy_work_ai_visibility_filter(Discussion.author_id))
     if p.label:
         conditions.append(Discussion.label == p.label)
     if p.pinned is not None:
@@ -557,12 +570,16 @@ async def _get_discussion(ctx: ToolContext, p: GetDiscussionParams):
     total = (
         await ctx.db_session.execute(
             select(func.count()).select_from(DiscussionComment).where(DiscussionComment.discussion_id == row.id)
+            .where(studytomy_work_ai_visibility_filter(DiscussionComment.author_id))
         )
     ).scalar() or 0
     comments = (
         await ctx.db_session.execute(
             select(DiscussionComment)
-            .where(DiscussionComment.discussion_id == row.id)
+            .where(
+                DiscussionComment.discussion_id == row.id,
+                studytomy_work_ai_visibility_filter(DiscussionComment.author_id),
+            )
             .order_by(DiscussionComment.creation_date.asc(), DiscussionComment.id.asc())
             .offset(offset)
             .limit(p.limit)

@@ -1,5 +1,5 @@
 from typing import Literal, Optional
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, StrictBool, field_validator
 from sqlalchemy import JSON, BigInteger, Column, ForeignKey
 from sqlmodel import Field, SQLModel
 
@@ -173,6 +173,7 @@ class SecurityAdminToggle(BaseModel):
 
 class AdminToggles(BaseModel):
     security: SecurityAdminToggle = SecurityAdminToggle()
+    studytomy_adaptive_enabled: StrictBool = False
     ai: AIAdminToggle = AIAdminToggle()
     analytics: FeatureAdminToggle = FeatureAdminToggle()
     api: FeatureAdminToggle = FeatureAdminToggle()

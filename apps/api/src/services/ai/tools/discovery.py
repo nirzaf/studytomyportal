@@ -29,6 +29,7 @@ from src.services.ai.tools import refs
 from src.services.ai.tools.base import ActionTier, ToolContext, ToolSpec, jsonable
 from src.services.ai.tools.registry import _token_bucket_allows
 from src.services.ai.tools.results import clip, untrusted
+from src.services.studytomy.privacy import is_protected_studytomy_learner
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +291,11 @@ async def _from_org_search(ctx: ToolContext, p: SearchParams, wanted: set[str]) 
             ))
     if "discussion" in wanted:
         for d in data.get("discussions") or []:
+            author_id = d.get("author_id")
+            if not isinstance(author_id, int) or await is_protected_studytomy_learner(
+                ctx.db_session, author_id
+            ):
+                continue
             out.append(refs.ref(
                 "discussion", d.get("discussion_uuid"), clip(d.get("title"), 160),
                 await refs.web_url(
@@ -310,6 +316,11 @@ async def _from_org_search(ctx: ToolContext, p: SearchParams, wanted: set[str]) 
             ))
     if "member" in wanted:
         for u in data.get("users") or []:
+            user_id = u.get("id")
+            if not isinstance(user_id, int) or await is_protected_studytomy_learner(
+                ctx.db_session, user_id
+            ):
+                continue
             name = " ".join(x for x in (u.get("first_name"), u.get("last_name")) if x)
             out.append(refs.ref(
                 "member", u.get("user_uuid"), name or u.get("username"),

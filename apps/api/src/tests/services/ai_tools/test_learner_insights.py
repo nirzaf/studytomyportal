@@ -423,6 +423,36 @@ async def test_demo_org_hides_other_visitors(registry, db, org, admin_user, regu
 # ─── get_course_stats ────────────────────────────────────────────────────────
 
 
+async def test_managed_learning_records_are_excluded_from_shared_insight_tools(
+    registry, db, org, admin_user, course, setup, pro,
+):
+    course.studytomy_managed = True
+    course.public = False
+    course.published = False
+    db.add(course)
+    await db.commit()
+    ctx = ctx_for(db, org, admin_user)
+    for tool, params in (
+        ("list_course_learners", {"course_uuid": "course_test"}),
+        ("get_learner_progress", {"course_uuid": "course_test", "user_uuid": "user_regular"}),
+        ("get_course_stats", {"course_uuid": "course_test"}),
+        ("get_course_stats", {"assignment_uuid": "assignment_hw"}),
+    ):
+        result = await call(registry, ctx, tool, params)
+        assert result.denied_code == "http_403"
+        assert "course review workflow" in result.reason
+
+    cross_course = ok(await call(registry, ctx, "get_learner_progress", {
+        "user_uuid": "user_regular",
+        "include": ["timeline", "engagement", "code"],
+    }))
+    assert cross_course["items"] == []
+    assert cross_course["summary"]["courses_enrolled"] == 0
+    assert cross_course["code_exercises"] == []
+    assert {"timeline", "engagement"} <= cross_course["unavailable"].keys()
+    assert "timeline" not in cross_course and "engagement" not in cross_course
+
+
 async def test_course_stats_course_view(registry, db, org, admin_user, setup):
     out = ok(await call(registry, ctx_for(db, org, admin_user), "get_course_stats", {"course_uuid": "course_test"}))
     assert out["summary"]["enrolled"] == 3 and out["summary"]["completion_rate"] == 33.3

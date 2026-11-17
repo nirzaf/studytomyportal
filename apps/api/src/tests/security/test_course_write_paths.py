@@ -27,8 +27,10 @@ from src.db.resource_authors import (
 )
 from src.db.roles import Role, RoleTypeEnum
 from src.db.user_organizations import UserOrganization
-from src.db.users import APITokenUser, PublicUser, User
+from src.db.users import APITokenUser, PublicUser, SuperadminAPITokenUser, User
 from src.routers.courses.courses import api_apply_course_contributor
+from src.security.rbac import AccessAction, AccessContext
+from src.security.rbac.resource_access import ResourceAccessChecker
 from src.services.courses.contributors import (
     apply_course_contributor,
     update_course_contributor,
@@ -44,6 +46,43 @@ from src.tests.conftest import ADMIN_RIGHTS
 
 IMPORT_MOD = "src.services.courses.transfer.import_service"
 COURSES_MOD = "src.services.courses.courses"
+
+
+async def test_managed_course_update_refuses_native_publication(db, course, admin_user, mock_request):
+    course.public = False
+    course.published = False
+    course.studytomy_managed = True
+    await db.commit()
+    requested = CourseUpdate.model_validate({"published": True, "studytomy_managed": False})
+    with pytest.raises(HTTPException) as refused:
+        await update_course(mock_request, requested, course.course_uuid, admin_user, db)
+    assert refused.value.status_code == 409
+    assert refused.value.detail["code"] == "MANAGED_COURSE_PUBLICATION_REQUIRED"
+    await db.refresh(course)
+    assert course.studytomy_managed and not course.published
+
+
+async def test_managed_course_draft_reads_require_staff_session(
+    db, course, chapter, activity, admin_user, regular_user, mock_request,
+):
+    platform_token = SuperadminAPITokenUser(created_by_user_id=admin_user.id)
+    native = ResourceAccessChecker(mock_request, db, platform_token)
+    assert (await native.check_access(activity.activity_uuid, AccessAction.READ)).allowed
+    course.public = False
+    course.published = False
+    course.studytomy_managed = True
+    await db.commit()
+    org_token = APITokenUser(org_id=course.org_id, rights={"courses": {"action_read": True}})
+    for actor in (regular_user, org_token, platform_token):
+        checker = ResourceAccessChecker(mock_request, db, actor)
+        with patch.object(checker, "_check_usergroup_membership", new=AsyncMock(return_value=True)) as group:
+            for resource in (course.course_uuid, chapter.chapter_uuid, activity.activity_uuid):
+                result = await checker.check_access(resource, AccessAction.READ, AccessContext.DASHBOARD)
+                assert not result.allowed
+            group.assert_not_awaited()
+    staff = ResourceAccessChecker(mock_request, db, admin_user)
+    assert (await staff.check_access(chapter.chapter_uuid, AccessAction.READ, AccessContext.DASHBOARD)).allowed
+    assert (await staff.check_access(activity.activity_uuid, AccessAction.READ, AccessContext.DASHBOARD)).allowed
 
 
 # ---------------------------------------------------------------------------

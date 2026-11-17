@@ -18,6 +18,10 @@ from src.services.ai.schemas.editor import (
     SendEditorAIChatMessage,
     EDITOR_AI_SYSTEM_PROMPT,
 )
+from src.services.studytomy.privacy import (
+    project_public_author,
+    require_studytomy_learner_ai_policy,
+)
 
 
 # ProseMirror only defines heading levels 1-6.
@@ -172,6 +176,7 @@ async def _authorize_editor_ai_access(
             detail="You are not a member of this organization",
         )
     await enforce_org_mfa(acting_user_id, org_id, db_session)
+    await require_studytomy_learner_ai_policy(db_session, current_user)
     if request is not None:
         await check_resource_access(
             request, db_session, current_user, course.course_uuid, AccessAction.UPDATE
@@ -214,7 +219,6 @@ async def editor_ai_start_chat_session_stream(
     from src.db.resource_authors import ResourceAuthor
     from src.db.users import User
     from src.db.courses.courses import AuthorWithRole
-    from src.db.users import UserReadAuthor
 
     authors_statement = (
         select(ResourceAuthor, User)
@@ -226,7 +230,7 @@ async def editor_ai_start_chat_session_stream(
 
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -329,7 +333,6 @@ async def editor_ai_send_message_stream(
     from src.db.resource_authors import ResourceAuthor
     from src.db.users import User
     from src.db.courses.courses import AuthorWithRole
-    from src.db.users import UserReadAuthor
 
     authors_statement = (
         select(ResourceAuthor, User)
@@ -341,7 +344,7 @@ async def editor_ai_send_message_stream(
 
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,

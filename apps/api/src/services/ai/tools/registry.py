@@ -266,6 +266,21 @@ async def run_tool(
                 f"{_ACTION_FIELD[spec.access_action]}",
             )
 
+    # The in-app AI routers enforce this before provider invocation. MCP and
+    # other registry callers use the shared tool path, so apply the same
+    # learner policy gate here before resolving targets or executing a tool.
+    from src.services.studytomy.privacy import require_studytomy_learner_ai_policy
+
+    try:
+        await require_studytomy_learner_ai_policy(ctx.db_session, ctx.user)
+    except HTTPException as e:
+        detail = e.detail
+        if isinstance(detail, dict):
+            reason = str(detail.get("message", "AI assistance is unavailable."))
+        else:
+            reason = str(detail)
+        return ToolOutcome.denied("policy_not_approved", reason)
+
     with org_scope(ctx.org.id):
         # 4. Names given where an id goes ("the solar course") become ids,
         #    looked up only where the caller can see.

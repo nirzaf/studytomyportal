@@ -488,6 +488,7 @@ class TestDashboardContext:
         checker._is_public_and_published = AsyncMock(
             return_value=overrides.get("public_published", (False, False))
         )
+        checker._get_resource = AsyncMock(return_value=Mock(studytomy_managed=False))
         checker._check_usergroup_membership = AsyncMock(
             return_value=overrides.get("usergroup", False)
         )

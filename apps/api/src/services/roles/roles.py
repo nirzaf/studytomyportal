@@ -13,6 +13,7 @@ from src.db.users import AnonymousUser, APITokenUser, PublicUser
 from src.security.auth import resolve_acting_user_id
 from src.db.roles import Rights, Role, RoleCreate, RoleRead, RoleUpdate, RoleTypeEnum
 from src.db.organizations import Organization
+from src.db.user_organizations import UserOrganization
 from fastapi import HTTPException, Request
 from datetime import datetime
 from types import SimpleNamespace
@@ -310,6 +311,22 @@ async def update_role(
     # model_dump() has already turned a Rights model into a plain dict.
     new_rights = update_data.get("rights")
 
+    # The general role editor predates Studytomy capabilities and does not send
+    # that bucket. Preserve it at the service boundary so an ordinary course or
+    # organization permission edit cannot silently erase separately administered
+    # safeguarding, family, or finance grants.
+    if isinstance(new_rights, dict) and "studytomy" not in new_rights:
+        existing_rights = role.rights if isinstance(role.rights, dict) else (
+            role.rights.model_dump() if role.rights is not None else {}
+        )
+        existing_studytomy = existing_rights.get("studytomy")
+        if not isinstance(existing_studytomy, dict):
+            from src.db.roles import StudytomyCapabilities
+
+            existing_studytomy = StudytomyCapabilities().model_dump()
+        new_rights = {**new_rights, "studytomy": dict(existing_studytomy)}
+        update_data["rights"] = new_rights
+
     # Every check runs on the new rights BEFORE the row changes: with
     # autoflush, a value set on the row reaches the database at the next
     # query, and a refused escalation could then be committed by whoever
@@ -491,7 +508,29 @@ async def _enforce_rights_subset(
     held = user_role.rights if user_role and user_role.rights else {}
     if not isinstance(held, dict):
         held = held.model_dump()
+    studytomy_flags = role_rights.get("studytomy")
+    if isinstance(studytomy_flags, dict) and any(value is True for value in studytomy_flags.values()):
+        from src.security.rbac.constants import ADMIN_OR_MAINTAINER_ROLE_IDS
+
+        is_superadmin = await is_user_superadmin(acting_user_id, db_session)
+        admin_membership = await db_session.execute(
+            select(UserOrganization.id).where(
+                UserOrganization.org_id == org_id,
+                UserOrganization.user_id == acting_user_id,
+                UserOrganization.role_id.in_(ADMIN_OR_MAINTAINER_ROLE_IDS),
+            ).limit(1)
+        )
+        if not is_superadmin and admin_membership.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Only an organization administrator can delegate Studytomy capabilities",
+            )
     for bucket, perms in role_rights.items():
+        if bucket == "studytomy":
+            # The capability bit is an explicit administrator-managed switch, but it
+            # is never sufficient for access: service-owner, policy, and exact resource
+            # scope checks still run at the protected service boundary.
+            continue
         if not isinstance(perms, dict):
             continue
         held_perms = held.get(bucket)

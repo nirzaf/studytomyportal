@@ -207,7 +207,7 @@ async def _load_path_courses(
         await db_session.execute(
             select(PathCourse, Course)
             .join(Course, Course.id == PathCourse.course_id)
-            .where(PathCourse.path_id == path.id)
+            .where(PathCourse.path_id == path.id, Course.studytomy_managed.is_(False))
             .order_by(PathCourse.position.asc(), PathCourse.id.asc())
         )
     ).all()
@@ -585,13 +585,19 @@ async def set_path_courses(
         courses = {
             c.course_uuid: c
             for c in (
-                await db_session.execute(select(Course).where(Course.course_uuid.in_(uuids)))
+                await db_session.execute(
+                    select(Course).where(
+                        Course.course_uuid.in_(uuids),
+                        Course.org_id == path.org_id,
+                        Course.studytomy_managed.is_(False),
+                    )
+                )
             ).scalars().all()
         }
     for course_uuid in uuids:
         course = courses.get(course_uuid)
         # A course from another org reads as missing: no cross-tenant probing.
-        if not course or course.org_id != path.org_id:
+        if not course:
             raise HTTPException(status_code=404, detail=f"Course not found: {course_uuid}")
 
     existing = (
@@ -628,7 +634,11 @@ async def get_paths_for_course(
     """Published paths the viewer can see that include this course, so the
     course page can point learners at the bigger journey."""
     course = (
-        await db_session.execute(select(Course).where(Course.course_uuid == course_uuid))
+        await db_session.execute(
+            select(Course).where(
+                Course.course_uuid == course_uuid, Course.studytomy_managed.is_(False)
+            )
+        )
     ).scalars().first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
@@ -935,9 +945,11 @@ async def check_paths_for_completed_course(
             await db_session.execute(
                 select(Path)
                 .join(PathCourse, PathCourse.path_id == Path.id)
+                .join(Course, Course.id == PathCourse.course_id)
                 .join(PathEnrollment, PathEnrollment.path_id == Path.id)
                 .where(
                     PathCourse.course_id == course_id,
+                    Course.studytomy_managed.is_(False),
                     PathEnrollment.user_id == user_id,
                     PathEnrollment.completed_at.is_(None),
                     Path.published == True,  # noqa: E712

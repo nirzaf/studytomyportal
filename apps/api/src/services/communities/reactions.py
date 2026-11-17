@@ -20,6 +20,7 @@ from src.services.communities.access import require_community_participant
 from src.security.auth import resolve_acting_user_id
 from src.services.analytics import events as analytics_events
 from src.services.analytics.analytics import track
+from src.services.studytomy.privacy import require_studytomy_work_read
 
 
 async def get_reactions(
@@ -41,6 +42,8 @@ async def get_reactions(
 
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
+
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
 
     # Get the community and check read access
     community_statement = select(Community).where(
@@ -140,6 +143,8 @@ async def toggle_reaction(
 
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
+
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
 
     # Get the community and check read access
     community_statement = select(Community).where(

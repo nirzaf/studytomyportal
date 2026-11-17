@@ -19,6 +19,7 @@ from src.db.communities.discussion_comment_votes import (
 from src.security.rbac import check_resource_access, AccessAction, authorization_verify_if_user_is_anon
 from src.services.communities.access import require_community_participant
 from src.services.analytics import events as analytics_events
+from src.services.studytomy.privacy import require_studytomy_work_read
 from src.services.analytics.analytics import track
 
 
@@ -46,6 +47,8 @@ async def upvote_comment(
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
 
+    await require_studytomy_work_read(db_session, current_user, comment.author_id)
+
     # Get the discussion
     discussion_statement = select(Discussion).where(
         Discussion.id == comment.discussion_id
@@ -54,6 +57,8 @@ async def upvote_comment(
 
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
+
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
 
     # Get the community and check read access
     community_statement = select(Community).where(
@@ -150,10 +155,17 @@ async def remove_comment_upvote(
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
 
+    await require_studytomy_work_read(db_session, current_user, comment.author_id)
+
+    discussion = (await db_session.execute(
+        select(Discussion).where(Discussion.id == comment.discussion_id)
+    )).scalars().first()
+    if not discussion:
+        raise HTTPException(status_code=404, detail="Discussion not found")
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
+
     community = (await db_session.execute(
-        select(Community)
-        .join(Discussion, Discussion.community_id == Community.id)
-        .where(Discussion.id == comment.discussion_id)
+        select(Community).where(Community.id == discussion.community_id)
     )).scalars().first()
     if not community:
         raise HTTPException(status_code=404, detail="Community not found")

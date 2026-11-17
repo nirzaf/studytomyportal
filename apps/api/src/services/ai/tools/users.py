@@ -57,6 +57,7 @@ from src.services.orgs.users import (
     update_user_role,
 )
 from src.services.security.rate_limiting import INVITE_MAX_BATCH_SIZE
+from src.services.studytomy.privacy import require_studytomy_learner_ai_lookup
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +207,7 @@ async def _list_members(ctx: ToolContext, p: ListMembersParams):
         usergroup_filter="in_group" if usergroup_id else None,
         sort_order="desc",
         role_id=role_id,
+        exclude_protected_learners=True,
     )
     group_url = await refs.web_url(ctx, "usergroup")
     role_url = await refs.web_url(ctx, "role")
@@ -286,6 +288,8 @@ async def _get_member(ctx: ToolContext, p: GetMemberParams):
         # Probing emails would tell anyone who is in the organization.
         raise HTTPException(status_code=403, detail=refs.EMAIL_LOOKUP_DENIED)
     user = await refs.load_member(ctx, p.member)
+    if user.id is not None:
+        await require_studytomy_learner_ai_lookup(ctx.db_session, user.id)
     out = await _member_ref(ctx, user)
     out["bio"] = clip(user.bio or "", DETAIL_TEXT) or None
     if not staff:

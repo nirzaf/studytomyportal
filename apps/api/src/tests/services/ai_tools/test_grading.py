@@ -608,6 +608,54 @@ async def test_update_assignment_rejects_bad_grading_type(registry, db, org, adm
 # ─── grading flows ──────────────────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("finalize", [False, True])
+async def test_ai_tool_cannot_grade_managed_assignment(
+    registry, db, org, admin_user, course, assignment_task, user_submission,
+    task_submission, finalize,
+):
+    course.studytomy_managed = True
+    course.public = False
+    course.published = False
+    db.add(course)
+    await db.commit()
+    before = (task_submission.grade, task_submission.manually_graded)
+
+    out = await call(registry, ctx_for(db, org, admin_user), "grade_submission", {
+        "assignment_uuid": "assignment_test",
+        "user_uuid": "user_regular",
+        "finalize": finalize,
+        "task_grades": [{"assignment_task_uuid": "assignmenttask_test", "grade": 75}],
+    })
+
+    assert out.denied_code == "http_403"
+    assert "educator review" in out.reason
+    await db.refresh(task_submission)
+    await db.refresh(user_submission)
+    assert (task_submission.grade, task_submission.manually_graded) == before
+    assert user_submission.submission_status == AssignmentUserSubmissionStatus.SUBMITTED
+
+
+@pytest.mark.parametrize("tool", ["get_submission", "list_submissions"])
+async def test_ai_tool_cannot_read_managed_assignment_submissions(
+    registry, db, org, admin_user, course, assignment_task, user_submission, task_submission, tool,
+):
+    course.studytomy_managed = True
+    course.public = False
+    course.published = False
+    db.add(course)
+    await db.commit()
+    ctx = ctx_for(db, org, admin_user)
+    params = {"assignment_uuid": "assignment_test"}
+    if tool == "get_submission":
+        params["user_uuid"] = "user_regular"
+    out = await call(registry, ctx, tool, params)
+
+    assert out.denied_code == "http_403"
+    assert "course review workflow" in out.reason
+    metadata = ok(await call(registry, ctx, "get_assignment", {"assignment_uuid": "assignment_test"}))
+    assert "submissions" not in metadata
+
+
 async def test_grade_without_finalizing(registry, db, org, admin_user, assignment_task, user_submission, task_submission):
     out = ok(await call(registry, ctx_for(db, org, admin_user), "grade_submission", {
         "assignment_uuid": "assignment_test", "user_uuid": "user_regular", "finalize": False,

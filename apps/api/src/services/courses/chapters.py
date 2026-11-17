@@ -251,6 +251,15 @@ async def delete_chapter(
                 Activity.course_id == course.id,
             )
         )).scalars().all()
+        from src.services.studytomy.adaptive_retention import ensure_managed_progress_source_deletable
+        from src.services.studytomy.assignment_adapter import ensure_native_source_deletable
+
+        for activity in activities:
+            await ensure_native_source_deletable(db_session, course.org_id, "activity", activity.activity_uuid)
+        if activities:
+            await ensure_managed_progress_source_deletable(
+                db_session, course.org_id, course.id, activity_ids=[activity.id for activity in activities],
+            )
         org = (await db_session.execute(
             select(Organization).where(Organization.id == course.org_id)
         )).scalars().first()

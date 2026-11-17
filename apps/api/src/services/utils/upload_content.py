@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import shutil
-from typing import BinaryIO, Literal, Optional, Union
+from typing import AsyncIterator, BinaryIO, Literal, Optional, Union
 import boto3
 import botocore.config
 from botocore.exceptions import BotoCoreError, ClientError
@@ -219,6 +219,102 @@ async def read_content(
     if not os.path.exists(safe_path):
         raise HTTPException(status_code=404, detail="File not found")
     return await asyncio.to_thread(_read_file_bytes, safe_path)
+
+
+async def open_content_stream(
+    directory: str,
+    type_of_dir: Literal["orgs", "users"],
+    uuid: str,
+    file_and_format: str,
+    *,
+    chunk_size: int = 64 * 1024,
+) -> AsyncIterator[bytes]:
+    """Open a private storage object for authenticated server-side streaming.
+
+    Unlike the media redirect helper, this never returns or logs a presigned
+    URL. Opening happens before the response is sent so missing objects can be
+    reported as an HTTP error instead of a truncated successful download.
+    """
+    normalized_directory = directory.replace("\\", "/")
+    directory_parts = normalized_directory.split("/")
+    if (
+        type_of_dir not in {"orgs", "users"}
+        or not uuid
+        or any(not (char.isascii() and (char.isalnum() or char in "_-")) for char in uuid)
+        or not normalized_directory
+        or normalized_directory.startswith("/")
+        or any(part in {"", ".", ".."} or "\x00" in part for part in directory_parts)
+        or not file_and_format
+        or "/" in file_and_format
+        or "\\" in file_and_format
+        or ".." in file_and_format
+        or "\x00" in file_and_format
+        or len(file_and_format) > 255
+        or any(not (char.isascii() and (char.isalnum() or char in "._-")) for char in file_and_format)
+        or not 1 <= chunk_size <= 1024 * 1024
+    ):
+        raise HTTPException(status_code=400, detail="Invalid private storage reference")
+
+    directory = normalized_directory
+    learnhouse_config = get_learnhouse_config()
+    content_delivery = learnhouse_config.hosting_config.content_delivery.type
+    if content_delivery == "s3api":
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=learnhouse_config.hosting_config.content_delivery.s3api.endpoint_url,
+            config=botocore.config.Config(
+                connect_timeout=10,
+                read_timeout=60,
+                retries={"max_attempts": 2},
+            ),
+        )
+        bucket_name = learnhouse_config.hosting_config.content_delivery.s3api.bucket_name or "learnhouse-media"
+        s3_key = f"content/{type_of_dir}/{uuid}/{directory}/{file_and_format}"
+        try:
+            response = await asyncio.to_thread(s3.get_object, Bucket=bucket_name, Key=s3_key)
+        except ClientError as error:
+            code = str(error.response.get("Error", {}).get("Code", ""))
+            if code in {"NoSuchKey", "NotFound", "404"}:
+                raise HTTPException(status_code=404, detail="File not found") from error
+            raise HTTPException(status_code=503, detail="Private file storage is unavailable") from error
+        except BotoCoreError as error:
+            raise HTTPException(status_code=503, detail="Private file storage is unavailable") from error
+        body = response["Body"]
+
+        async def s3_chunks() -> AsyncIterator[bytes]:
+            try:
+                while True:
+                    chunk = await asyncio.to_thread(body.read, chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                await asyncio.to_thread(body.close)
+
+        return s3_chunks()
+
+    if content_delivery != "filesystem":
+        raise HTTPException(status_code=503, detail="Private file storage is unavailable")
+
+    safe_path = _safe_content_path(type_of_dir, uuid, directory, file_and_format)
+    try:
+        handle = await asyncio.to_thread(open, safe_path, "rb")
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="File not found") from error
+    except OSError as error:
+        raise HTTPException(status_code=503, detail="Private file storage is unavailable") from error
+
+    async def filesystem_chunks() -> AsyncIterator[bytes]:
+        try:
+            while True:
+                chunk = await asyncio.to_thread(handle.read, chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            await asyncio.to_thread(handle.close)
+
+    return filesystem_chunks()
 
 
 def _read_file_bytes(path: str) -> bytes:

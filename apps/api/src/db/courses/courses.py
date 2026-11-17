@@ -1,5 +1,5 @@
 from typing import List, Optional
-from sqlalchemy import Column, Enum as SAEnum, ForeignKey, Index, Integer
+from sqlalchemy import Boolean, CheckConstraint, Column, Enum as SAEnum, ForeignKey, Index, Integer, false
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 from enum import Enum
@@ -65,9 +65,16 @@ class CourseBase(SQLModel):
 class Course(CourseBase, table=True):
     __table_args__ = (
         Index("ix_course_org_public_published_created", "org_id", "public", "published", "creation_date"),
+        CheckConstraint(
+            "NOT studytomy_managed OR (public IS FALSE AND published IS FALSE)",
+            name="ck_course_studytomy_managed_private",
+        ),
         {"extend_existing": True},
     )
     id: Optional[int] = Field(default=None, primary_key=True)
+    studytomy_managed: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=false()),
+    )
     thumbnail_type: Optional[ThumbnailType] = Field(
         default=ThumbnailType.IMAGE,
         sa_column=Column(SAEnum(ThumbnailType, name="thumbnail_type"), nullable=True),

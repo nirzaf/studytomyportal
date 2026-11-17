@@ -1,7 +1,8 @@
 import json
 import logging
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -18,6 +19,9 @@ from src.services.ai.editor import (
 )
 from src.services.ai.base import ask_ai_stream, save_message_to_history, generate_follow_up_suggestions
 from src.services.ai.llm.errors import ai_error_message, log_ai_failure
+from src.services.ai.learning_generation import start_learning_surface
+from src.services.ai.learning_actions import apply_learning_action
+from src.services.ai.learning_practice import get_learning_availability, recover_learning_surface
 from src.services.ai.schemas.ai import (
     ActivityAIChatSessionResponse,
     SendActivityAIChatMessage,
@@ -27,6 +31,7 @@ from src.services.ai.schemas.editor import (
     StartEditorAIChatSession,
     SendEditorAIChatMessage,
 )
+from src.services.ai.schemas.learning_surface import ActionRequest, LearningAvailability, LearningSurface, StartLearningSurface
 from src.core.events.database import get_db_session
 from src.db.users import PublicUser
 from src.security.auth import get_authenticated_user, resolve_acting_user_id
@@ -34,6 +39,60 @@ from src.security.auth import get_authenticated_user, resolve_acting_user_id
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post("/stream/start/learning_surface")
+async def api_start_learning_surface(
+    request: Request,
+    start: StartLearningSurface,
+    current_user: PublicUser = Depends(get_authenticated_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    surface = await start_learning_surface(request, db_session, current_user, start)
+    event = {"type": "learning_surface", "surface": surface.model_dump(mode="json")}
+    return StreamingResponse(
+        iter([f"data: {json.dumps(event)}\n\n"]),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/activity/{activity_uuid}/learning_surface", response_model=LearningAvailability)
+async def api_learning_availability(
+    request: Request,
+    response: Response,
+    activity_uuid: str,
+    current_user: PublicUser = Depends(get_authenticated_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LearningAvailability:
+    response.headers["Cache-Control"] = "no-store"
+    return await get_learning_availability(request, db_session, current_user, activity_uuid)
+
+
+@router.get("/activity/{activity_uuid}/learning_surface/{surface_id}", response_model=LearningSurface)
+async def api_recover_learning_surface(
+    request: Request,
+    response: Response,
+    activity_uuid: str,
+    surface_id: UUID,
+    current_user: PublicUser = Depends(get_authenticated_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LearningSurface:
+    response.headers["Cache-Control"] = "no-store"
+    return await recover_learning_surface(request, db_session, current_user, activity_uuid, surface_id)
+
+
+@router.post("/activity/{activity_uuid}/learning_surface/actions", response_model=LearningSurface)
+async def api_apply_learning_action(
+    request: Request,
+    response: Response,
+    activity_uuid: str,
+    operation: ActionRequest,
+    current_user: PublicUser = Depends(get_authenticated_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> LearningSurface:
+    response.headers["Cache-Control"] = "no-store"
+    return await apply_learning_action(request, db_session, current_user, activity_uuid, operation)
 
 
 @router.post(

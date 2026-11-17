@@ -29,7 +29,22 @@ async def create_activity_version(
     Creates a new version snapshot of the activity content.
     Called before updating an activity to preserve the current state.
     """
-    # Create new version
+    version = await stage_activity_version(activity, user_id, db_session)
+    await db_session.commit()
+    await db_session.refresh(version)
+
+    # Cleanup old versions
+    await cleanup_old_versions(activity.id, db_session)
+    await dispatch_activity_version_created(version, activity, user_id)
+    return version
+
+
+async def stage_activity_version(
+    activity: Activity,
+    user_id: Optional[int],
+    db_session: AsyncSession,
+) -> ActivityVersion:
+    """Add a version snapshot to the caller's transaction without committing."""
     version = ActivityVersion(
         activity_id=activity.id,
         org_id=activity.org_id,
@@ -40,11 +55,16 @@ async def create_activity_version(
     )
 
     db_session.add(version)
-    await db_session.commit()
-    await db_session.refresh(version)
+    await db_session.flush()
+    return version
 
-    # Cleanup old versions
-    await cleanup_old_versions(activity.id, db_session)
+
+async def dispatch_activity_version_created(
+    version: ActivityVersion,
+    activity: Activity,
+    user_id: Optional[int],
+) -> None:
+    """Publish the version-created webhook after its transaction commits."""
 
     await dispatch_webhooks(
         event_name="activity_version_created",
@@ -56,12 +76,12 @@ async def create_activity_version(
         },
     )
 
-    return version
-
 
 async def cleanup_old_versions(
     activity_id: int,
     db_session: AsyncSession,
+    *,
+    commit: bool = True,
 ) -> None:
     """
     Removes old versions keeping only the last MAX_ACTIVITY_VERSIONS.
@@ -79,7 +99,8 @@ async def cleanup_old_versions(
         versions_to_delete = versions[MAX_ACTIVITY_VERSIONS:]
         for version in versions_to_delete:
             await db_session.delete(version)
-        await db_session.commit()
+        if commit:
+            await db_session.commit()
 
 
 async def get_activity_versions(
@@ -274,13 +295,19 @@ async def restore_activity_version(
     version_number: int,
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
+    expected_current_version: int | None = None,
 ) -> Activity:
     """
     Restores an activity to a specific version.
     Creates a new version with the restored content.
     """
     # Get activity
-    statement = select(Activity).where(Activity.activity_uuid == activity_uuid)
+    statement = (
+        select(Activity)
+        .where(Activity.activity_uuid == activity_uuid)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     activity = (await db_session.execute(statement)).scalars().first()
 
     if not activity:
@@ -304,6 +331,14 @@ async def restore_activity_version(
 
     await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.UPDATE)
 
+    from src.services.studytomy.concurrency import require_expected_version
+
+    require_expected_version(
+        resource="Activity",
+        expected_version=expected_current_version,
+        current_version=activity.current_version or 1,
+    )
+
     # Get the version to restore
     statement = (
         select(ActivityVersion)
@@ -324,7 +359,7 @@ async def restore_activity_version(
     # tokens via resolve_acting_user_id, because raw current_user.id is 0 on a
     # token, and created_by_id is an FK to user.id (writing 0 fails).
     user_id = resolve_acting_user_id(current_user)
-    await create_activity_version(activity, user_id, db_session)
+    current_version = await stage_activity_version(activity, user_id, db_session)
 
     # Restore content and update metadata
     activity.content = version.content
@@ -337,8 +372,11 @@ async def restore_activity_version(
     flag_modified(activity, "content")
 
     db_session.add(activity)
+    await cleanup_old_versions(activity.id, db_session, commit=False)
     await db_session.commit()
     await db_session.refresh(activity)
+    await db_session.refresh(current_version)
+    await dispatch_activity_version_created(current_version, activity, user_id)
     index_activity(activity.id)
 
     await dispatch_webhooks(

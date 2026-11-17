@@ -108,9 +108,11 @@ class UserReadPublic(SQLModel):
     It must therefore NOT inherit from ``UserBase``, because ``UserBase`` (and
     ``UserRead``) expose PII / internal fields (``email``, ``signup_method``,
     ``is_superadmin``, ``extra_metadata``) that would leak to anyone who can
-    enumerate user ids. ``details`` and ``profile`` ARE included: they are the
-    user's own public profile content (bio extension, links, etc.) that the
-    public profile page renders, so they are intentionally exposed.
+    enumerate user ids. ``details`` and ``profile`` remain in this compatibility
+    schema for ordinary public profiles. Response services must use the
+    Studytomy privacy projection: profiles linked to an individual learner are
+    not enumerable by other users, and free-form fields are stripped from
+    managed rosters.
     """
     id: int
     user_uuid: str
@@ -131,7 +133,9 @@ class UserReadAuthor(SQLModel):
     thread (often anonymous). It must therefore expose ONLY the fields needed to
     render an author chip, never ``email``, ``is_superadmin``, ``signup_method``
     or the raw ``details``/``profile``/``extra_metadata`` blobs that ``UserRead``
-    carries. The frontend reads only id/user_uuid/username/name/avatar.
+    carries. Public read services additionally route through the Studytomy
+    privacy projection, which replaces a protected learner with a per-resource
+    pseudonym. The frontend reads only id/user_uuid/username/name/avatar.
     """
     id: int
     user_uuid: str
@@ -150,7 +154,9 @@ class OrgMemberUserRead(SQLModel):
     this view drops ``is_superadmin`` and the caller filters ``extra_metadata``
     down to the keys of the viewing org's own declared signup fields (see
     ``for_org``). ``signup_method``/``last_login_at`` stay: the members table
-    renders them.
+    renders them. Async response services also apply the Studytomy privacy
+    projection, which removes contact and free-form fields for explicit learner
+    profiles until a purpose-specific staff permission is approved.
     """
     id: int
     user_uuid: str

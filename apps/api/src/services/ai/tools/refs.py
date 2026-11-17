@@ -21,6 +21,7 @@ from fastapi import HTTPException
 from sqlmodel import select
 
 from src.services.ai.tools.base import ToolContext
+from src.services.studytomy.privacy import require_studytomy_work_ai_processing
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,15 @@ async def load(ctx: ToolContext, kind: str, uuid: str) -> Any:
         raise not_found(kind, uuid)
     if not await _in_org(ctx, kind, row):
         raise not_found(kind, uuid)
+    if kind == "discussion":
+        await require_studytomy_work_ai_processing(ctx.db_session, row.author_id)
+    elif kind == "comment":
+        from src.db.communities.discussions import Discussion
+
+        await require_studytomy_work_ai_processing(ctx.db_session, row.author_id)
+        discussion = await ctx.db_session.get(Discussion, row.discussion_id)
+        if discussion is not None:
+            await require_studytomy_work_ai_processing(ctx.db_session, discussion.author_id)
     return row
 
 

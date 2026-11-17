@@ -6,7 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from fastapi import HTTPException, Request
 
 from src.core.ee_hooks import require_ee_resource_paid_access
-from src.db.users import PublicUser, AnonymousUser, APITokenUser, User, UserReadAuthor
+from src.db.users import PublicUser, AnonymousUser, APITokenUser, User
 from src.db.communities.communities import Community
 from src.db.communities.discussions import Discussion
 from src.db.communities.discussion_comments import (
@@ -27,6 +27,23 @@ from src.services.communities.access import (
 from src.services.communities.discussions import _can_moderate
 from src.security.api_token_utils import token_has_right
 from src.security.auth import resolve_acting_user_id
+from src.services.studytomy.privacy import (
+    is_protected_studytomy_learner,
+    project_public_author,
+    require_studytomy_work_read,
+    studytomy_work_visibility_filter,
+)
+
+
+async def _comment_response_fields(
+    db_session: AsyncSession,
+    current_user: Union[PublicUser, AnonymousUser, APITokenUser],
+    comment: DiscussionComment,
+) -> dict:
+    """Return comment fields only after enforcing default-private work access."""
+    await require_studytomy_work_read(db_session, current_user, comment.author_id)
+    values = comment.model_dump()
+    return values
 
 
 async def _is_comment_author(
@@ -72,6 +89,8 @@ async def create_comment(
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
 
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
+
     # Get the community and check read access
     community_statement = select(Community).where(
         Community.id == discussion.community_id
@@ -115,38 +134,43 @@ async def create_comment(
     await db_session.commit()
     await db_session.refresh(comment)
 
-    await track(
-        event_name=analytics_events.COMMENT_POSTED,
-        org_id=community.org_id,
-        user_id=author_id,
-        properties={
-            "community_uuid": community.community_uuid,
-            "discussion_uuid": discussion.discussion_uuid,
-        },
-    )
+    protected_author = await is_protected_studytomy_learner(db_session, author_id)
+    if not protected_author:
+        await track(
+            event_name=analytics_events.COMMENT_POSTED,
+            org_id=community.org_id,
+            user_id=author_id,
+            properties={
+                "community_uuid": community.community_uuid,
+                "discussion_uuid": discussion.discussion_uuid,
+            },
+        )
 
     # Get author info
     author_statement = select(User).where(User.id == comment.author_id)
     author = (await db_session.execute(author_statement)).scalars().first()
 
-    await dispatch_webhooks(
-        event_name="comment_created",
-        org_id=community.org_id,
-        data={
-            "user": {
-                "user_uuid": author.user_uuid if author else "",
-                "email": author.email if author else "",
-                "username": author.username if author else "",
+    if not protected_author:
+        await dispatch_webhooks(
+            event_name="comment_created",
+            org_id=community.org_id,
+            data={
+                "user": {
+                    "user_uuid": author.user_uuid if author else "",
+                    "email": author.email if author else "",
+                    "username": author.username if author else "",
+                },
+                "comment": {"comment_uuid": comment.comment_uuid},
+                "discussion": {"discussion_uuid": discussion.discussion_uuid, "title": discussion.title},
+                "community": {"community_uuid": community.community_uuid},
             },
-            "comment": {"comment_uuid": comment.comment_uuid},
-            "discussion": {"discussion_uuid": discussion.discussion_uuid, "title": discussion.title},
-            "community": {"community_uuid": community.community_uuid},
-        },
-    )
+        )
 
     return DiscussionCommentReadWithVoteStatus(
-        **comment.model_dump(),
-        author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+        **await _comment_response_fields(db_session, current_user, comment),
+        author=await project_public_author(
+            db_session, author, scope_uuid=comment.comment_uuid
+        ) if author else None,
         has_voted=False,  # User just created it, hasn't voted yet
     )
 
@@ -171,6 +195,8 @@ async def get_comments_by_discussion(
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
 
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
+
     # Get the community and check read access
     community_statement = select(Community).where(
         Community.id == discussion.community_id
@@ -190,7 +216,10 @@ async def get_comments_by_discussion(
     # Get comments
     query = (
         select(DiscussionComment)
-        .where(DiscussionComment.discussion_id == discussion.id)
+        .where(
+            DiscussionComment.discussion_id == discussion.id,
+            studytomy_work_visibility_filter(DiscussionComment.author_id, current_user),
+        )
         .order_by(DiscussionComment.creation_date.asc())  # type: ignore
         .offset(offset)
         .limit(limit)
@@ -216,8 +245,10 @@ async def get_comments_by_discussion(
         author = authors_map.get(comment.author_id)
         result.append(
             DiscussionCommentReadWithVoteStatus(
-                **comment.model_dump(),
-                author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+                **await _comment_response_fields(db_session, current_user, comment),
+                author=await project_public_author(
+                    db_session, author, scope_uuid=comment.comment_uuid
+                ) if author else None,
                 has_voted=user_votes.get(comment.id, False),
             )
         )
@@ -248,6 +279,8 @@ async def update_comment(
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
 
+    await require_studytomy_work_read(db_session, current_user, comment.author_id)
+
     # Check if user is the author
     if not await _is_comment_author(current_user, comment, db_session):
         raise HTTPException(
@@ -260,6 +293,8 @@ async def update_comment(
         Discussion.id == comment.discussion_id
     )
     discussion = (await db_session.execute(discussion_statement)).scalars().first()
+    if discussion is not None:
+        await require_studytomy_work_read(db_session, current_user, discussion.author_id)
     community = None
     if discussion:
         community = (await db_session.execute(
@@ -304,8 +339,10 @@ async def update_comment(
     )
 
     return DiscussionCommentReadWithVoteStatus(
-        **comment.model_dump(),
-        author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+        **await _comment_response_fields(db_session, current_user, comment),
+        author=await project_public_author(
+            db_session, author, scope_uuid=comment.comment_uuid
+        ) if author else None,
         has_voted=user_votes.get(comment.id, False),
     )
 
@@ -397,6 +434,8 @@ async def get_comment_count(
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
 
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
+
     community = (await db_session.execute(
         select(Community).where(Community.id == discussion.community_id)
     )).scalars().first()
@@ -410,7 +449,8 @@ async def get_comment_count(
 
     from sqlalchemy import func
     count_statement = select(func.count(DiscussionComment.id)).where(
-        DiscussionComment.discussion_id == discussion.id
+        DiscussionComment.discussion_id == discussion.id,
+        studytomy_work_visibility_filter(DiscussionComment.author_id, current_user),
     )
     count = (await db_session.execute(count_statement)).scalar_one_or_none()
 

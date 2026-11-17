@@ -34,6 +34,7 @@ from src.security.submission_file_access import (
     enforce_solution_file_access,
     enforce_submission_file_access,
     is_private_studytomy_path,
+    enforce_managed_course_file_access,
     is_solution_file,
     is_submission_file,
     split_content_path,
@@ -256,6 +257,7 @@ async def _check_content_access(
     parts = split_content_path(file_path)
     if is_private_studytomy_path(parts):
         raise HTTPException(status_code=403, detail="Access denied")
+    managed_course = await enforce_managed_course_file_access(parts, request, current_user, db_session)
 
     # Course activity files (including submission files): the org segment must
     # be the course's org, so one org's path can't front another org's file.
@@ -327,7 +329,7 @@ async def _check_content_access(
     if len(parts) >= 3 and parts[0] == 'orgs' and parts[2] == 'courses':
         if len(parts) > 5 and parts[4] != 'thumbnails':
             raise HTTPException(status_code=403, detail="Access denied")
-        return True
+        return not managed_course
 
     # Course metadata (thumbnails, etc.) and org-level content: always public
     if len(parts) >= 2 and parts[0] == 'orgs':

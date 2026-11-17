@@ -39,9 +39,19 @@ from src.routers.podcasts import episodes as episodes_router_module
 from src.routers.boards import boards as boards_router_module
 from src.routers.playgrounds import playgrounds as playgrounds_router_module
 from src.routers.playgrounds import playgrounds_generator as playgrounds_generator_router
+from src.routers.studytomy import governance as studytomy_governance_router
+from src.routers.studytomy import family as studytomy_family_router
+from src.routers.studytomy import files as studytomy_files_router
+from src.routers.studytomy import privacy as studytomy_privacy_router
+from src.routers.studytomy import offers as studytomy_offers_router
+from src.routers.studytomy import commerce as studytomy_commerce_router
+from src.routers.studytomy import consents as studytomy_consents_router
+from src.routers.studytomy import adaptive as studytomy_adaptive_router
 from src.core.ee_hooks import register_ee_routers
 from src.core.deployment_mode import get_deployment_mode
+from src.core.events.database import get_db_session
 from src.services.dev.dev import isDevModeEnabledOrRaise
+from src.services.studytomy.privacy import require_studytomy_learner_ai_policy
 from src.routers.utils import router as utils_router
 from src.security.auth import get_current_user
 from src.security.api_token_utils import (
@@ -53,6 +63,49 @@ from src.security.features_utils.plan_check import require_plan, require_plan_fo
 
 
 v1_router = APIRouter(prefix="/api/v1")
+
+# Studytomy's additive family-learning governance layer. Each endpoint requires
+# a real user session and applies organization/owner scope checks itself.
+v1_router.include_router(
+    studytomy_governance_router.router,
+    prefix="/studytomy",
+    tags=["studytomy-governance"],
+)
+v1_router.include_router(
+    studytomy_family_router.router,
+    prefix="/studytomy",
+    tags=["studytomy-family"],
+)
+v1_router.include_router(
+    studytomy_files_router.router,
+    prefix="/studytomy",
+    tags=["studytomy-evidence"],
+)
+v1_router.include_router(
+    studytomy_privacy_router.router,
+    prefix="/studytomy",
+    tags=["studytomy-privacy"],
+)
+v1_router.include_router(
+    studytomy_consents_router.router,
+    prefix="/studytomy",
+    tags=["studytomy-consent"],
+)
+v1_router.include_router(
+    studytomy_offers_router.router,
+    prefix="/studytomy",
+    tags=["studytomy-offers"],
+)
+v1_router.include_router(
+    studytomy_commerce_router.router,
+    prefix="/studytomy",
+    tags=["studytomy-checkout"],
+)
+v1_router.include_router(
+    studytomy_adaptive_router.router,
+    prefix="/studytomy/adaptive",
+    tags=["studytomy-adaptive"],
+)
 
 # Helper dependency to reject API token access (still admits AnonymousUser;
 # use on routers that contain at least one deliberately-public endpoint).
@@ -67,6 +120,14 @@ async def get_non_api_token_user(user = Depends(get_current_user)):
 # anonymous callers, which is the wrong default for admin-only or
 # billing/compute-sensitive routes.
 require_authenticated_user = get_authenticated_non_api_token_user
+
+
+async def _require_studytomy_ai_policy(
+    current_user=Depends(get_current_user),
+    db_session=Depends(get_db_session),
+):
+    """Require the dedicated guidance contract for managed learners."""
+    await require_studytomy_learner_ai_policy(db_session, current_user)
 
 # API Routes
 v1_router.include_router(
@@ -314,55 +375,82 @@ v1_router.include_router(
     ai.router,
     prefix="/ai",
     tags=["ai"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     magicblocks.router,
     prefix="/ai",
     tags=["ai", "magicblocks"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     courseplanning.router,
     prefix="/ai",
     tags=["ai", "courseplanning"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     rag.router,
     prefix="/ai",
     tags=["ai", "rag"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     images.router,
     prefix="/ai",
     tags=["ai", "images"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     audio.router,
     prefix="/ai",
     tags=["ai", "audio"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     quiz.router,
     prefix="/ai",
     tags=["ai", "quiz"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     assignment_gen.router,
     prefix="/ai",
     tags=["ai", "assignment-gen"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     scenario.router,
     prefix="/ai",
     tags=["ai", "scenario"],
-    dependencies=[Depends(require_authenticated_user)]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+    ],
 )
 v1_router.include_router(
     boards_playground.router,
@@ -380,7 +468,11 @@ v1_router.include_router(
     playgrounds_generator_router.router,
     prefix="/playgrounds",
     tags=["playgrounds", "playgrounds-generator"],
-    dependencies=[Depends(require_authenticated_user), Depends(require_plan_for_playgrounds("personal", "Playgrounds"))]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+        Depends(require_plan_for_playgrounds("personal", "Playgrounds")),
+    ],
 )
 
 # Org analytics (dashboards, the browser beacon, settings, the per-student

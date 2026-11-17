@@ -11,6 +11,7 @@ from mcp.shared.exceptions import MCPError
 from pydantic import BaseModel
 
 from src.db.organization_config import OrganizationConfig
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.users import APITokenUser, PublicUser
 from src.security.mcp_auth import MCPPrincipal
 from src.security.rbac import AccessAction
@@ -428,3 +429,32 @@ async def test_prompts():
         await handlers.get_prompt(ctx_for(None), types.GetPromptRequestParams(name="nope"))
 
 
+async def test_protected_learner_mcp_denies_before_resource_or_target_resolution(
+    db, org, admin_user, regular_user, sessions
+):
+    db.add(
+        StudyLearnerProfile(
+            org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id
+        )
+    )
+    await db.commit()
+    handlers = h.Handlers(_registry())
+    ctx = ctx_for(member(regular_user, org))
+    with patch.object(h, "resolve_names", new_callable=AsyncMock) as resolve:
+        assert (await handlers.list_tools(ctx, None)).tools == []
+        assert (await handlers.list_resources(ctx, None)).resources == []
+        reply = await handlers.call_tool(ctx, call("list_courses"))
+        assert body(reply)["error"]["code"] == "org_policy"
+        token = MCPPrincipal(
+            user=APITokenUser(
+                org_id=org.id,
+                created_by_user_id=regular_user.id,
+                rights={"courses": {"action_read": True}},
+            ),
+            org_id=org.id,
+            scopes=frozenset({"mcp:read"}),
+            kind="api_token",
+        )
+        token_result = await handlers.call_tool(ctx_for(token), call("list_courses"))
+        assert body(token_result)["error"]["code"] == "org_policy"
+    resolve.assert_not_awaited()

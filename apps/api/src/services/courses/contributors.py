@@ -2,7 +2,7 @@ from datetime import datetime
 from fastapi import HTTPException, Request
 from sqlmodel import select, and_
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.db.users import PublicUser, AnonymousUser, APITokenUser, User, UserReadAuthor
+from src.db.users import PublicUser, AnonymousUser, APITokenUser, User
 from src.db.courses.courses import Course
 from src.db.user_organizations import UserOrganization
 from src.db.resource_authors import ResourceAuthor, ResourceAuthorshipEnum, ResourceAuthorshipStatusEnum
@@ -14,6 +14,10 @@ from src.security.rbac.constants import ADMIN_ROLE_IDS
 from src.security.org_auth import get_user_org
 from src.security.superadmin import is_user_superadmin
 from src.services.webhooks.dispatch import dispatch_webhooks
+from src.services.studytomy.privacy import (
+    is_protected_studytomy_learner,
+    project_public_author,
+)
 from typing import List
 
 
@@ -262,12 +266,20 @@ async def get_course_contributors(
         raise_on_deny=False,
     )).allowed
 
-    def user_view(user: User) -> dict:
+    async def user_view(user: User) -> dict:
         # SECURITY: editors get the author chip plus email (the contributors
         # table shows it), never the full account record: is_superadmin,
         # extra_metadata, signup/login details are not a course editor's.
-        data = UserReadAuthor.model_validate(user).model_dump()
-        if can_manage:
+        # Protected learner identities stay private even in public contributor
+        # lists and course-management tables until specific publicity consent
+        # and a policy scope exist.
+        data = (
+            await project_public_author(db_session, user, scope_uuid=course_uuid)
+        ).model_dump()
+        protected_learner = user.id is not None and await is_protected_studytomy_learner(
+            db_session, user.id
+        )
+        if can_manage and not protected_learner:
             data["email"] = user.email
         return data
 
@@ -279,17 +291,27 @@ async def get_course_contributors(
     )
     results = (await db_session.execute(statement)).all()
 
-    return [
-        {
-            "user_id": contributor.user_id,
-            "authorship": contributor.authorship,
-            "authorship_status": contributor.authorship_status,
-            "creation_date": contributor.creation_date,
-            "update_date": contributor.update_date,
-            "user": user_view(user)
-        }
-        for contributor, user in results
-    ]
+    contributors = []
+    for contributor, user in results:
+        protected_learner = user.id is not None and await is_protected_studytomy_learner(
+            db_session, user.id
+        )
+        contributors.append(
+            {
+                "user_id": (
+                    contributor.user_id
+                    if can_manage or not protected_learner
+                    else 0
+                ),
+                "authorship": contributor.authorship,
+                "authorship_status": contributor.authorship_status,
+                "creation_date": contributor.creation_date,
+                "update_date": contributor.update_date,
+                "user": await user_view(user),
+            }
+        )
+
+    return contributors
 
 
 async def add_bulk_course_contributors(

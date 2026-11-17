@@ -36,6 +36,33 @@ class DashboardPermission(BaseModel):
         return getattr(self, item)
 
 
+class StudytomyCapabilities(BaseModel):
+    """Explicit default-deny capabilities for Studytomy staff operations.
+
+    Teaching/course administration (`courses`, `activities`, `assignments`) stays in
+    the standard `Rights` buckets. Safeguarding, family authority, learner dossier,
+    financial reconciliation/refunds, and privacy retention default to `False` even
+    for organization administrators unless explicitly granted and paired with an
+    active scope/owner assignment.
+    """
+
+    family_authority_review: bool = False
+    learner_eligibility_review: bool = False
+    learner_dossier_read: bool = False
+    safeguarding_case_review: bool = False
+    financial_reconciliation: bool = False
+    refund_approval: bool = False
+    offer_publication: bool = False
+    adaptive_curriculum_author: bool = False
+    content_release_review: bool = False
+    assessment_moderation: bool = False
+    progress_report_review: bool = False
+    privacy_retention_review: bool = False
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+
 class Rights(BaseModel):
     courses: PermissionsWithOwn
     users: Permission
@@ -86,6 +113,7 @@ class Rights(BaseModel):
         action_delete=False,
         action_delete_own=False,
     )  # Default: read-only for backward compat with existing roles
+    studytomy: StudytomyCapabilities = StudytomyCapabilities()
 
     def __getitem__(self, item):
         return getattr(self, item)

@@ -33,6 +33,7 @@ from src.services.ai.rag.query_service import (
     search_course_content,
     source_from_row,
 )
+from src.services.studytomy.privacy import require_studytomy_learner_ai_policy
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,7 @@ async def _open_rag(
         )
     # Org-wide two-factor policy, applied after the membership gate.
     await enforce_org_mfa(resolve_acting_user_id(current_user), org_id, db_session)
+    await require_studytomy_learner_ai_policy(db_session, current_user)
 
     # Check if AI and the copilot are enabled for this org
     org_config = (await db_session.execute(

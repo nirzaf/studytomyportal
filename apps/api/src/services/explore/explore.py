@@ -6,13 +6,14 @@ from sqlalchemy import func, cast, String, literal
 
 from src.db.courses.courses import Course, CourseRead, AuthorWithRole
 from src.db.organizations import Organization, OrganizationRead
-from src.db.users import User, UserReadAuthor
+from src.db.users import User
 from src.db.resource_authors import ResourceAuthor
 from src.services.search.normalization import (
     LIKE_ESCAPE_CHAR,
     build_like_pattern,
     normalize_search_term,
 )
+from src.services.studytomy.privacy import project_public_author
 
 
 def _get_sort_expression(salt: str):
@@ -134,7 +135,7 @@ async def get_course_for_explore(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,

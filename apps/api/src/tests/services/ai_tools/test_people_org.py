@@ -21,6 +21,7 @@ from sqlmodel import select
 from src.db.courses.courses import Course
 from src.db.organization_config import OrganizationConfig
 from src.db.roles import Role, RoleTypeEnum
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.user_organizations import UserOrganization
 from src.db.usergroup_resources import UserGroupResource
 from src.db.usergroup_user import UserGroupUser
@@ -36,6 +37,7 @@ from src.services.ai.tools import org as org_tools
 from src.services.ai.tools import roles as role_tools
 from src.services.ai.tools import usergroups as group_tools
 from src.services.ai.tools import users as user_tools
+from src.services.ai.tools.discovery import SearchParams, _from_org_search
 from src.tests.conftest import ADMIN_RIGHTS, USER_RIGHTS
 
 BASE = "https://test-org.example"
@@ -351,6 +353,97 @@ async def test_get_member_views(registry, db, org, admin_user, regular_user, set
     denied(await call(registry, "get_member", {"member": "out@other.com"}, _ctx(db, org, admin_user)), "http_404")
 
 
+async def test_ai_member_tools_and_search_exclude_protected_learners(
+    registry, db, org, admin_user, regular_user, setup
+):
+    db.add(
+        StudyLearnerProfile(
+            org_id=org.id,
+            user_id=regular_user.id,
+            created_by_user_id=admin_user.id,
+        )
+    )
+    await db.commit()
+
+    context = _ctx(db, org, admin_user)
+    listed = ok(await call(registry, "list_members", {"limit": 20}, context))
+    assert listed["total"] == 2
+    assert {item["user_uuid"] for item in listed["items"]} == {
+        "user_admin",
+        "user_maint",
+    }
+
+    by_group = ok(
+        await call(
+            registry,
+            "list_members",
+            {"usergroup_uuid": "usergroup_a"},
+            context,
+        )
+    )
+    assert by_group["items"] == []
+    assert by_group["total"] == 0
+
+    for member in ("user_regular", "regular", "regular@test.com"):
+        denied(
+            await call(registry, "get_member", {"member": member}, context),
+            "http_404",
+        )
+
+    with patch(
+        "src.services.ai.tools.discovery._org_search",
+        new_callable=AsyncMock,
+        return_value={
+            "users": [
+                {
+                    "id": regular_user.id,
+                    "user_uuid": regular_user.user_uuid,
+                    "first_name": "Regular",
+                    "last_name": "User",
+                    "username": "regular",
+                },
+                {
+                    "id": admin_user.id,
+                    "user_uuid": admin_user.user_uuid,
+                    "first_name": "Admin",
+                    "last_name": "User",
+                    "username": "admin",
+                },
+                {"user_uuid": "user_missing_id", "username": "unknown"},
+            ]
+        },
+    ):
+        matches = await _from_org_search(
+            context,
+            SearchParams(query="member", kinds=["member"]),
+            {"member"},
+        )
+    assert [match["uuid"] for match in matches] == ["user_admin"]
+
+
+async def test_protected_learner_cannot_execute_ai_tools_before_policy_approval(
+    registry, db, org, admin_user, regular_user
+):
+    db.add(
+        StudyLearnerProfile(
+            org_id=org.id,
+            user_id=regular_user.id,
+            created_by_user_id=admin_user.id,
+        )
+    )
+    await db.commit()
+
+    outcome = await call(
+        registry,
+        "get_member",
+        {"member": "admin"},
+        _ctx(db, org, regular_user, can_admin=False),
+    )
+
+    denied(outcome, "policy_not_approved")
+    assert "AI assistance for this learner is unavailable" in outcome.reason
+
+
 # ─── invitations ─────────────────────────────────────────────────────────────
 
 
@@ -632,7 +725,8 @@ async def test_create_role_from_base_with_patch(registry, db, org, admin_user, s
     assert row.rights["courses"]["action_update"] is True
     assert row.rights["courses"]["action_read"] is True  # from the base role
     assert row.rights["users"]["action_delete"] is False
-    assert set(row.rights) == set(role_tools._BUCKETS)
+    assert set(row.rights) == set(role_tools._BUCKETS) | {"studytomy"}
+    assert not any(row.rights["studytomy"].values())
 
     empty = ok(await call(registry, "create_role", {"name": "Nothing"}, _ctx(db, org, admin_user, approved=True)))
     blank = (await db.execute(select(Role).where(Role.role_uuid == empty["role"]["uuid"]))).scalars().first()
@@ -677,6 +771,52 @@ async def test_update_and_delete_roles(registry, db, org, admin_user, setup):
     denied(await call(registry, "delete_role", {"role_uuid": "role_reviewer"}, _ctx(db, org, admin_user)), "approval_required")
     ok(await call(registry, "delete_role", {"role_uuid": "role_reviewer"}, _ctx(db, org, admin_user, approved=True)))
     assert (await db.execute(select(Role).where(Role.id == 8))).first() is None
+
+
+async def test_generic_role_tools_hide_and_preserve_studytomy_capabilities(
+    registry, db, org, admin_user, setup
+):
+    role = (await db.execute(select(Role).where(Role.role_uuid == "role_reviewer"))).scalars().first()
+    role_rights = dict(role.rights)
+    role_rights["studytomy"] = {
+        "family_authority_review": True,
+        "learner_eligibility_review": False,
+        "learner_dossier_read": False,
+        "safeguarding_case_review": False,
+        "financial_reconciliation": False,
+        "refund_approval": False,
+        "offer_publication": False,
+        "content_release_review": False,
+        "adaptive_curriculum_author": False,
+        "assessment_moderation": False,
+        "progress_report_review": False,
+        "privacy_retention_review": False,
+    }
+    role.rights = role_rights
+    db.add(role)
+    await db.commit()
+
+    result = ok(await call(registry, "get_role", {"role_uuid": "role_reviewer"}, _ctx(db, org, admin_user)))
+    assert "studytomy" not in result["rights"]
+
+    updated = ok(await call(
+        registry,
+        "update_role",
+        {"role_uuid": "role_reviewer", "rights": {"courses": {"action_read": True}}},
+        _ctx(db, org, admin_user, approved=True),
+    ))
+    persisted = (await db.execute(select(Role).where(Role.role_uuid == "role_reviewer"))).scalars().first()
+    assert persisted.rights["studytomy"]["family_authority_review"] is True
+    assert updated["rights"] is not None and "studytomy" not in updated["rights"]
+
+    created = ok(await call(
+        registry,
+        "create_role",
+        {"name": "Reviewer copy", "base_role_uuid": "role_reviewer"},
+        _ctx(db, org, admin_user, approved=True),
+    ))
+    copied = (await db.execute(select(Role).where(Role.role_uuid == created["role"]["uuid"]))).scalars().first()
+    assert not any(copied.rights["studytomy"].values())
 
 
 # ─── organization ────────────────────────────────────────────────────────────

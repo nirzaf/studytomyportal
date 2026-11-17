@@ -86,18 +86,25 @@ async def _build_trail_read(
     trail_runs = []
     for tr in trail_runs_raw:
         course = course_map.get(tr.course_id)
+        if course and course.studytomy_managed:
+            continue
         run = TrailRunRead(
             **tr.model_dump(),
-            course=course.model_dump() if course else {},
+            course=course.model_dump(exclude={"studytomy_managed"}) if course else {},
             steps=[],
             course_total_steps=course_total_steps_map.get(tr.course_id, 0) if with_course_info else 0,
         )
 
         # Attach steps with course data (expunge to avoid dirty-tracking the data override)
         for step in steps_by_run.get(tr.id, []):
-            db_session.expunge(step)
             step_course = course_map.get(step.course_id)
-            step.data = {"course": step_course.model_dump() if step_course else None}
+            if step_course and step_course.studytomy_managed:
+                continue
+            db_session.expunge(step)
+            step.data = {
+                "course": step_course.model_dump(exclude={"studytomy_managed"})
+                if step_course else None
+            }
             run.steps.append(step)
 
         trail_runs.append(run)
@@ -250,6 +257,8 @@ async def add_activity_to_trail(
             status_code=status.HTTP_404_NOT_FOUND, detail="Activity not found"
         )
     activity, course, parent_chapter = row
+    if course and course.studytomy_managed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activity not found")
 
     # An assignment is completed by its submission/grading flow, never by a
     # learner self-marking it done.
@@ -437,7 +446,10 @@ async def remove_activity_from_trail(
             status_code=status.HTTP_404_NOT_FOUND, detail="Activity not found"
         )
 
-    statement = select(Course).where(Course.id == activity.course_id)
+    statement = (
+        select(Course).where(Course.id == activity.course_id)
+        .with_for_update().execution_options(populate_existing=True)
+    )
     course = (await db_session.execute(statement)).scalars().first()
 
     if not course:
@@ -445,6 +457,7 @@ async def remove_activity_from_trail(
             status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
         )
 
+    require_native_progress_removal(course)
     statement = select(Trail).where(
         Trail.org_id == course.org_id, Trail.user_id == user.id
     )
@@ -494,7 +507,7 @@ async def add_course_to_trail(
     statement = select(Course).where(Course.course_uuid == course_uuid)
     course = (await db_session.execute(statement)).scalars().first()
 
-    if not course:
+    if not course or course.studytomy_managed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
         )
@@ -571,6 +584,17 @@ async def add_course_to_trail(
     return await _build_trail_read(trail, list(trail_runs_raw), db_session, user_id=user.id)
 
 
+def require_native_progress_removal(course: Course) -> None:
+    if course.studytomy_managed:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MANAGED_PROGRESS_REVIEW_REQUIRED",
+                "message": "Retained course progress requires a reviewed correction.",
+            },
+        )
+
+
 async def remove_course_from_trail(
     request: Request,
     user: PublicUser | AnonymousUser,
@@ -583,13 +607,18 @@ async def remove_course_from_trail(
             detail="Anonymous users cannot access this endpoint",
         )
 
-    statement = select(Course).where(Course.course_uuid == course_uuid)
+    statement = (
+        select(Course).where(Course.course_uuid == course_uuid)
+        .with_for_update().execution_options(populate_existing=True)
+    )
     course = (await db_session.execute(statement)).scalars().first()
 
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
         )
+
+    require_native_progress_removal(course)
 
     statement = select(Trail).where(
         Trail.org_id == course.org_id, Trail.user_id == user.id

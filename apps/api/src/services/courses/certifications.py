@@ -177,7 +177,8 @@ async def update_certification(
         )
 
     # Get course for RBAC check
-    statement = select(Course).where(Course.id == certification.course_id)
+    statement = (select(Course).where(Course.id == certification.course_id)
+                 .with_for_update().execution_options(populate_existing=True))
     course = (await db_session.execute(statement)).scalars().first()
 
     if not course:
@@ -188,6 +189,12 @@ async def update_certification(
 
     # RBAC check
     await _check_certification_access(request, db_session, current_user, course.course_uuid, AccessAction.UPDATE)
+    if course.studytomy_managed:
+        awarded = (await db_session.execute(select(CertificateUser.id).where(
+            CertificateUser.certification_id == certification.id,
+        ).limit(1))).scalar_one_or_none()
+        if awarded is not None:
+            require_native_award_changes(course)
 
     # Update only the fields that were passed in
     for var, value in vars(certification_object).items():
@@ -273,6 +280,14 @@ async def delete_certification(
 ####################################################
 
 
+def require_native_award_changes(course: Course) -> None:
+    if course.studytomy_managed:
+        raise HTTPException(status_code=409, detail={
+            "code": "MANAGED_AWARD_REVIEW_REQUIRED",
+            "message": "This course requires reviewed award handling.",
+        })
+
+
 async def create_certificate_user(
     request: Request,
     user_id: int,
@@ -299,20 +314,14 @@ async def create_certificate_user(
             detail="Certification not found",
         )
 
-    # SECURITY: If current_user is provided, perform RBAC check
+    course = (await db_session.execute(select(Course).where(Course.id == certification.course_id)
+        .with_for_update().execution_options(populate_existing=True))).scalars().first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
     if current_user:
-        # Get course for RBAC check
-        statement = select(Course).where(Course.id == certification.course_id)
-        course = (await db_session.execute(statement)).scalars().first()
-
-        if not course:
-            raise HTTPException(
-                status_code=404,
-                detail="Course not found",
-            )
-
-        # Require course ownership or instructor role for creating certificates
         await _check_certification_access(request, db_session, current_user, course.course_uuid, AccessAction.CREATE)
+    require_native_award_changes(course)
 
     # Check if certificate user already exists
     statement = select(CertificateUser).where(
@@ -465,15 +474,16 @@ async def revoke_user_certificate(
     if not cert_user:
         return False
 
+    course = (await db_session.execute(select(Course).where(Course.id == course_id)
+        .with_for_update().execution_options(populate_existing=True))).scalars().first()
+    if course and course.studytomy_managed:
+        return False
     revoked_uuid = cert_user.user_certification_uuid
     await db_session.delete(cert_user)
     await db_session.commit()
 
     # Best-effort revocation event (mirrors the claimed-event payload shape).
     try:
-        course = (await db_session.execute(
-            select(Course).where(Course.id == course_id)
-        )).scalars().first()
         user = (await db_session.execute(
             select(User).where(User.id == user_id)
         )).scalars().first()
@@ -846,6 +856,8 @@ async def check_course_completion_and_create_certificate(
                 await create_certificate_user(request, user_id, certification.id, db_session)
                 return True  # Newly completed
             except HTTPException as e:
+                if e.status_code == 409 and isinstance(e.detail, dict) and e.detail.get("code") == "MANAGED_AWARD_REVIEW_REQUIRED":
+                    return False
                 if e.status_code == 400 and "already has a certificate" in e.detail:
                     # Certificate already exists; the course was completed before
                     return False
@@ -895,7 +907,15 @@ async def get_certificate_by_user_certification_uuid(
             detail="Course not found",
         )
 
-    # No RBAC check - allow anyone to access certificates by UUID
+    from src.services.studytomy.privacy import is_protected_studytomy_learner
+
+    if course.studytomy_managed or (
+        getattr(current_user, "id", None) != certificate_user.user_id
+        and await is_protected_studytomy_learner(db_session, certificate_user.user_id)
+    ):
+        raise HTTPException(
+            status_code=404, detail="Certificate not found", headers={"Cache-Control": "private, no-store"},
+        )
 
     # The holder's name, which the certificate itself prints: a verification
     # page has to say who the credential belongs to. Nothing else about them.

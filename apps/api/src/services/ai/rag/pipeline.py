@@ -38,8 +38,15 @@ def _session():
 
 
 async def _org_of(ref: ContentRef, db) -> int | None:
-    model = Activity if ref.kind == "activity" else Course
-    return (await db.execute(select(model.org_id).where(model.id == ref.id))).scalars().first()
+    statement = select(Course.org_id).where(Course.studytomy_managed.is_(False))
+    if ref.kind == "activity":
+        statement = statement.join(Activity, Activity.course_id == Course.id).where(
+            Activity.id == ref.id,
+            Activity.org_id == Course.org_id,
+        )
+    else:
+        statement = statement.where(Course.id == ref.id)
+    return (await db.execute(statement)).scalar_one_or_none()
 
 
 async def run(ref: ContentRef, *, transcribe: bool = True) -> int:

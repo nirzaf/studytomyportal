@@ -145,6 +145,7 @@ async def generate(
     max_tokens: Optional[int] = None,
     temperature: Optional[float] = None,
     timeout: float = DEFAULT_TIMEOUT,
+    retries: int | None = None,
 ) -> Any:
     """Run a single (non-streaming) generation.
 
@@ -156,6 +157,7 @@ async def generate(
         user_prompt,
         message_history=_history_with_system(history, system_prompt),
         model_settings=_settings(max_tokens, temperature, timeout),
+        retries=retries,
     )
     return result.output
 

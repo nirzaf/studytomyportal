@@ -15,7 +15,7 @@ instead of only against a live deployment.
 
 import logging
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, literal, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.courses.courses import Course
@@ -28,6 +28,102 @@ from src.db.users import User
 from src.services.demo import flags
 
 logger = logging.getLogger(__name__)
+
+# Every direct organization reference in these tables is retention-sensitive.
+# Keep this list in sync with the scoped FK metadata test below.
+STUDYTOMY_ORG_RETENTION_TABLES = frozenset(
+    {
+        "st_assessment_response_archive",
+        "st_attempt_item",
+        "st_business_event",
+        "st_concept",
+        "st_concept_activity",
+        "st_concept_mastery",
+        "st_concept_prerequisite",
+        "st_consent_event",
+        "st_course_review",
+        "st_course_release",
+        "st_curriculum_revision",
+        "st_diagnostic_revision",
+        "st_eligibility_decision",
+        "st_evidence_file",
+        "st_idempotency_record",
+        "st_item_revision",
+        "st_learner_profile",
+        "st_learning_attempt",
+        "st_learning_evidence",
+        "st_learning_surface",
+        "st_offer",
+        "st_order",
+        "st_outbox_record",
+        "st_owner_assignment",
+        "st_policy_approval",
+        "st_policy_version",
+        "st_progress_report",
+        "st_relationship",
+        "st_report_recipient",
+        "st_report_review_request",
+        "st_sharing_grant",
+        "st_staff_scope",
+        "st_tutor_session",
+        "st_tutor_turn",
+    }
+)
+
+
+class DemoTeardownBlockedError(RuntimeError):
+    """A demo organization or seeded account still owns retained Study records."""
+
+
+async def _assert_no_studytomy_records(
+    db_session: AsyncSession,
+    org_ids: list[int],
+    student_ids: list[int],
+) -> None:
+    """Refuse demo deletion before any mutation if it would break Study history."""
+    if not org_ids and not student_ids:
+        return
+
+    from src.core.migrations import load_models
+
+    metadata = load_models()
+    for table_name in STUDYTOMY_ORG_RETENTION_TABLES:
+        table = metadata.tables[table_name]
+        if org_ids:
+            retained = await db_session.execute(
+                select(literal(1))
+                .select_from(table)
+                .where(table.c.org_id.in_(org_ids))
+                .limit(1)
+            )
+            if retained.first() is not None:
+                raise DemoTeardownBlockedError(
+                    "Demo teardown blocked: Studytomy records require retention review."
+                )
+
+    if not student_ids:
+        return
+
+    for table in metadata.tables.values():
+        if not table.name.startswith("st_"):
+            continue
+        user_columns = [
+            column
+            for column in table.columns
+            if any(fk.column.table.name == "user" for fk in column.foreign_keys)
+        ]
+        if not user_columns:
+            continue
+        retained = await db_session.execute(
+            select(literal(1))
+            .select_from(table)
+            .where(or_(*(column.in_(student_ids) for column in user_columns)))
+            .limit(1)
+        )
+        if retained.first() is not None:
+            raise DemoTeardownBlockedError(
+                "Demo teardown blocked: Studytomy records require retention review."
+            )
 
 
 async def teardown_demo(db_session: AsyncSession) -> list[str]:
@@ -46,9 +142,10 @@ async def teardown_demo(db_session: AsyncSession) -> list[str]:
 
     removed: list[str] = []
 
+    # Preflight every organization and seeded user before touching any row or
+    # file. If a later demo org is blocked, earlier orgs must not be half-removed.
+    students_by_org: dict[int, list[tuple[int, str]]] = {}
     for org in orgs:
-        # Collect the students before deleting the org: their membership rows
-        # are what identifies them, and the cascade removes those.
         students = (
             await db_session.execute(
                 select(User.id, User.user_uuid)
@@ -59,6 +156,18 @@ async def teardown_demo(db_session: AsyncSession) -> list[str]:
                 )
             )
         ).all()
+        students_by_org[org.id] = list(students)
+
+    await _assert_no_studytomy_records(
+        db_session,
+        [org.id for org in orgs],
+        [student_id for students in students_by_org.values() for student_id, _ in students],
+    )
+
+    for org in orgs:
+        # Collect the students before deleting the org: their membership rows
+        # are what identifies them, and the cascade removes those.
+        students = students_by_org[org.id]
         student_ids = [row[0] for row in students]
         student_uuids = [row[1] for row in students]
 

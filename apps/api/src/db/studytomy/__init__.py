@@ -1,0 +1,1 @@
+"""Studytomy-specific domain records."""

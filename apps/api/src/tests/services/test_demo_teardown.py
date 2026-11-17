@@ -19,6 +19,8 @@ import os
 import pytest
 from sqlmodel import SQLModel
 
+from src.services.demo.teardown import STUDYTOMY_ORG_RETENTION_TABLES
+
 
 def _import_all_models() -> None:
     """Register every model on SQLModel.metadata.
@@ -89,7 +91,6 @@ _SET_NULL_ALLOWED = {
     ("message", "sender_user_id"),
 }
 
-
 @pytest.mark.parametrize("parent", ["organization", "user"])
 def test_every_foreign_key_cascades_or_is_explicitly_allowed(parent):
     """No FK to org/user may quietly default to NO ACTION.
@@ -100,6 +101,18 @@ def test_every_foreign_key_cascades_or_is_explicitly_allowed(parent):
     """
     offenders = []
     for child_table, column, fk in _foreign_keys_to(parent):
+        if child_table in STUDYTOMY_ORG_RETENTION_TABLES and parent == "organization":
+            assert fk.ondelete == "RESTRICT", (
+                f"{child_table}.{column} is retention protected but declares "
+                f"ondelete={fk.ondelete!r}"
+            )
+            continue
+        if child_table.startswith("st_") and parent == "user":
+            assert fk.ondelete == "RESTRICT", (
+                f"{child_table}.{column} is retention protected but declares "
+                f"ondelete={fk.ondelete!r}"
+            )
+            continue
         if (child_table, column) in _SET_NULL_ALLOWED:
             assert fk.ondelete == "SET NULL", (
                 f"{child_table}.{column} is allowlisted as SET NULL but "
@@ -114,6 +127,20 @@ def test_every_foreign_key_cascades_or_is_explicitly_allowed(parent):
         f"would leave these rows behind or fail outright:\n  "
         + "\n  ".join(sorted(offenders))
     )
+
+
+def test_studytomy_org_retention_table_registry_covers_direct_org_foreign_keys():
+    actual = {
+        table.name
+        for table in SQLModel.metadata.tables.values()
+        if table.name.startswith("st_")
+        and "org_id" in table.columns
+        and any(
+            fk.column.table.name == "organization"
+            for fk in table.columns["org_id"].foreign_keys
+        )
+    }
+    assert actual == STUDYTOMY_ORG_RETENTION_TABLES
 
 
 def test_demo_tables_cascade_from_organization():
@@ -344,3 +371,99 @@ async def test_teardown_survives_unreachable_storage(db, monkeypatch):
         await db.execute(select(Organization).where(Organization.is_demo.is_(True)))
     ).scalars().all()
     assert remaining == []
+
+
+@pytest.mark.parametrize("record_kind", ["learner", "curriculum"])
+async def test_teardown_refuses_studytomy_records_before_any_deletion(db, record_kind):
+    from datetime import datetime
+
+    from sqlmodel import select
+
+    from src.db.organizations import Organization
+    from src.db.studytomy.adaptive import StudyCurriculumRevision
+    from src.db.studytomy.family import StudyLearnerProfile
+    from src.db.users import User
+    from src.services.demo.teardown import DemoTeardownBlockedError, teardown_demo
+
+    now = str(datetime.now())
+    org = Organization(
+        id=79, name="Demo with Study rows", slug="demo-study", email="study@example.com",
+        org_uuid="org_demo79", is_demo=True, creation_date=now, update_date=now,
+    )
+    user = User(
+        id=503, username="study-demo", first_name="Study", last_name="Learner",
+        email="study-demo@example.com", password="hashed", user_uuid="user_study_demo",
+        signup_method="demo", creation_date=now, update_date=now,
+    )
+    db.add_all([org, user])
+    await db.flush()
+    if record_kind == "learner":
+        record = StudyLearnerProfile(org_id=org.id, user_id=user.id, created_by_user_id=user.id)
+    else:
+        record = StudyCurriculumRevision(
+            org_id=org.id, curriculum_key="synthetic-retention", revision=1,
+            subject="Maths", level="Fixture", language="en", source_reference="fixture",
+            rights_reference="fixture",
+        )
+    db.add(record)
+    await db.commit()
+
+    with pytest.raises(DemoTeardownBlockedError, match="retention review"):
+        await teardown_demo(db)
+
+    assert (await db.execute(select(Organization).where(Organization.id == org.id))).scalars().first()
+    assert (await db.execute(select(User).where(User.id == user.id))).scalars().first()
+    assert await db.get(type(record), record.id) is not None
+
+
+async def test_teardown_refuses_to_delete_a_seeded_user_with_other_org_study_history(db):
+    from datetime import datetime
+
+    from sqlmodel import select
+
+    from src.db.organizations import Organization
+    from src.db.studytomy.governance import StudyBusinessEvent
+    from src.db.user_organizations import UserOrganization
+    from src.db.users import User
+    from src.services.demo.teardown import DemoTeardownBlockedError, teardown_demo
+
+    now = str(datetime.now())
+    demo_org = Organization(
+        id=81, name="Demo", slug="demo-user-history", email="demo@example.com",
+        org_uuid="org_demo81", is_demo=True, creation_date=now, update_date=now,
+    )
+    protected_org = Organization(
+        id=82, name="Protected", slug="protected", email="protected@example.com",
+        org_uuid="org_protected82", is_demo=False, creation_date=now, update_date=now,
+    )
+    seeded_user = User(
+        id=505, username="seeded-with-history", first_name="Seeded", last_name="User",
+        email="seeded-history@example.com", password="hashed", user_uuid="user_seeded_history",
+        signup_method="demo", creation_date=now, update_date=now,
+    )
+    db.add_all([demo_org, protected_org, seeded_user])
+    await db.flush()
+    db.add(
+        UserOrganization(
+            user_id=seeded_user.id,
+            org_id=demo_org.id,
+            role_id=1,
+            creation_date=now,
+            update_date=now,
+        )
+    )
+    db.add(
+        StudyBusinessEvent(
+            org_id=protected_org.id,
+            actor_user_id=seeded_user.id,
+            action="retention.guard.test",
+        )
+    )
+    await db.commit()
+
+    with pytest.raises(DemoTeardownBlockedError, match="retention review"):
+        await teardown_demo(db)
+
+    assert (await db.execute(select(Organization).where(Organization.id == demo_org.id))).scalars().first()
+    assert (await db.execute(select(User).where(User.id == seeded_user.id))).scalars().first()
+    assert (await db.execute(select(StudyBusinessEvent).where(StudyBusinessEvent.org_id == protected_org.id))).scalars().first()

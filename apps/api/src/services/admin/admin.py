@@ -40,13 +40,14 @@ from src.db.users import (
     User,
     UserRead,
 )
-from src.services.trail.trail import _build_trail_read
+from src.services.trail.trail import _build_trail_read, require_native_progress_removal
 from src.core.ee_hooks import notify_ee_learner_progress
 from src.services.courses.certifications import (
     check_course_completion_and_create_certificate,
     is_course_fully_completed,
     sync_trailrun_status,
     create_certificate_user,
+    require_native_award_changes,
 )
 from src.services.email.utils import get_base_url_from_request, get_org_signup_base_url
 from src.services.orgs.join_notifications import notify_user_joined_org
@@ -54,6 +55,10 @@ from src.services.orgs.users import _rights_within
 from src.services.analytics.analytics import track
 from src.services.analytics import events as analytics_events
 from src.services.webhooks.dispatch import dispatch_webhooks
+from src.services.studytomy.privacy import (
+    is_protected_studytomy_learner,
+    project_org_member_user,
+)
 from src.security.auth import create_access_token
 from src.security.org_auth import org_owns_account
 from src.security.session_context import AUTH_METHOD_API_TOKEN, session_claims
@@ -541,10 +546,11 @@ async def unenroll_user(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
-        )
+        ).with_for_update().execution_options(populate_existing=True)
     )).scalars().first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    require_native_progress_removal(course)
 
     trail_run = (await db_session.execute(
         select(TrailRun).where(
@@ -807,9 +813,13 @@ async def uncomplete_activity(
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    course = (await db_session.execute(select(Course).where(Course.id == activity.course_id))).scalars().first()
+    course = (await db_session.execute(
+        select(Course).where(Course.id == activity.course_id, Course.org_id == token_user.org_id)
+        .with_for_update().execution_options(populate_existing=True)
+    )).scalars().first()
     if not course or course.org_id != token_user.org_id:
         raise HTTPException(status_code=404, detail="Activity not found")
+    require_native_progress_removal(course)
 
     step = (await db_session.execute(
         select(TrailStep).where(
@@ -1457,9 +1467,11 @@ async def get_user_by_email(
     )).scalars().first()
     if not row:
         raise HTTPException(status_code=404, detail="User not found in this organization")
+    if row.id is not None and await is_protected_studytomy_learner(db_session, row.id):
+        raise HTTPException(status_code=404, detail="User not found in this organization")
     # The account is global: show only what this org may see of it.
     meta_keys = await _org_signup_field_keys(token_user.org_id, db_session)
-    return OrgMemberUserRead.for_org(row, meta_keys)
+    return await project_org_member_user(db_session, row, meta_keys)
 
 
 # -- Magic link ---------------------------------------------------------------
@@ -1951,7 +1963,7 @@ async def list_course_enrollments(
     meta_keys = await _org_signup_field_keys(token_user.org_id, db_session)
     return [
         {
-            "user": OrgMemberUserRead.for_org(user, meta_keys).model_dump(),
+            "user": (await project_org_member_user(db_session, user, meta_keys)).model_dump(),
             "enrolled_at": trail_run.creation_date,
             "status": trail_run.status.value if hasattr(trail_run.status, "value") else str(trail_run.status),
         }
@@ -1977,10 +1989,11 @@ async def reset_user_progress(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
-        )
+        ).with_for_update().execution_options(populate_existing=True)
     )).scalars().first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    require_native_progress_removal(course)
 
     steps = (await db_session.execute(
         select(TrailStep).where(
@@ -2093,9 +2106,11 @@ async def revoke_certificate(
 
     course = (await db_session.execute(
         select(Course).where(Course.id == certification.course_id)
+        .with_for_update().execution_options(populate_existing=True)
     )).scalars().first()
     if not course or course.org_id != token_user.org_id:
         raise HTTPException(status_code=404, detail="Certificate not found")
+    require_native_award_changes(course)
 
     await db_session.delete(cert_user)
     await db_session.commit()
@@ -2361,7 +2376,7 @@ async def update_user_profile(
         pass
 
     meta_keys = await _org_signup_field_keys(token_user.org_id, db_session)
-    return OrgMemberUserRead.for_org(user, meta_keys)
+    return await project_org_member_user(db_session, user, meta_keys)
 
 
 async def change_user_role(
@@ -2541,7 +2556,7 @@ async def list_usergroup_members(
     meta_keys = await _org_signup_field_keys(token_user.org_id, db_session)
     return [
         {
-            "user": OrgMemberUserRead.for_org(user, meta_keys).model_dump(),
+            "user": (await project_org_member_user(db_session, user, meta_keys)).model_dump(),
             "added_at": membership.creation_date,
         }
         for user, membership in rows
@@ -2692,10 +2707,11 @@ async def bulk_unenroll_users(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
-        )
+        ).with_for_update().execution_options(populate_existing=True)
     )).scalars().first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+    require_native_progress_removal(course)
 
     enrolled_ids = set(
         (await db_session.execute(
@@ -2758,6 +2774,7 @@ async def export_user_data(
     _require_token_right(token_user, "users", "read")
 
     user = await _get_user_in_org(user_id, token_user.org_id, db_session)
+    await _require_native_data_request_allowed(db_session, user_id)
 
     memberships = (await db_session.execute(
         select(UserOrganization).where(
@@ -2807,8 +2824,12 @@ async def export_user_data(
     )).all()
 
     return {
-        "profile": OrgMemberUserRead.for_org(
-            user, await _org_signup_field_keys(token_user.org_id, db_session)
+        "profile": (
+            await project_org_member_user(
+                db_session,
+                user,
+                await _org_signup_field_keys(token_user.org_id, db_session),
+            )
         ).model_dump(),
         "memberships": [m.model_dump() for m in memberships],
         "trails": [t.model_dump() for t in trails],
@@ -2822,6 +2843,27 @@ async def export_user_data(
         ],
         "exported_at": datetime.now().isoformat(),
     }
+
+
+async def _require_native_data_request_allowed(db_session: AsyncSession, user_id: int) -> None:
+    from src.db.studytomy.family import StudyLearnerProfile
+    from src.services.studytomy.policies import lock_users
+
+    # Learner intake takes the same identity lock. The account may be
+    # protected by a profile in a different organization.
+    await lock_users(db_session, [user_id])
+    profile = (await db_session.execute(select(StudyLearnerProfile.id).where(
+        StudyLearnerProfile.user_id == user_id,
+    ).limit(1))).scalar_one_or_none()
+    if profile is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MANAGED_RECORD_REVIEW_REQUIRED",
+                "message": "Learner record access or removal requires a reviewed request.",
+            },
+            headers={"Cache-Control": "private, no-store"},
+        )
 
 
 def _purge_user_ai_chats(user_id: int) -> int:
@@ -2873,6 +2915,7 @@ async def anonymize_user(
 
     user = await _get_user_in_org(user_id, token_user.org_id, db_session)
     await _check_token_can_edit_account(user, token_user.org_id, db_session)
+    await _require_native_data_request_allowed(db_session, user_id)
 
     # example.com is reserved by RFC 2606 and has no MX record, so the address
     # is undeliverable while still being a well-formed one. The previous

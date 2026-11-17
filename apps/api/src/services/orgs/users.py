@@ -24,7 +24,6 @@ from src.db.users import (
     AnonymousUser,
     APITokenUser,
     InternalUser,
-    OrgMemberUserRead,
     PublicUser,
     User,
     UserRead,
@@ -57,6 +56,10 @@ from src.services.users.emails import send_role_changed_email
 from src.services.webhooks.dispatch import dispatch_webhooks
 from src.services.analytics import events as analytics_events
 from src.services.analytics.analytics import track
+from src.services.studytomy.privacy import (
+    is_protected_studytomy_learner,
+    project_org_member_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +300,7 @@ async def get_organization_users(
     sort_order: str = "desc",
     role_id: int | None = None,
     status: str | None = None,
+    exclude_protected_learners: bool = False,
 ):
     """
     Get paginated list of users in an organization.
@@ -360,6 +364,13 @@ async def get_organization_users(
 
     base_statement = _hide_other_visitors(base_statement, org, acting_user_id)
 
+    if exclude_protected_learners:
+        from src.db.studytomy.family import StudyLearnerProfile
+
+        base_statement = base_statement.where(
+            ~User.id.in_(select(StudyLearnerProfile.user_id))
+        )
+
     # Apply search filter if provided
     if search:
         search_pattern = build_like_pattern(search)
@@ -403,6 +414,12 @@ async def get_organization_users(
         in_group_count_stmt = _hide_other_visitors(
             in_group_count_stmt, org, acting_user_id
         )
+        if exclude_protected_learners:
+            from src.db.studytomy.family import StudyLearnerProfile
+
+            in_group_count_stmt = in_group_count_stmt.where(
+                ~User.id.in_(select(StudyLearnerProfile.user_id))
+            )
         if search:
             search_pattern = build_like_pattern(search)
             in_group_count_stmt = in_group_count_stmt.where(
@@ -520,7 +537,9 @@ async def get_organization_users(
                 member_meta_keys = {
                     f.key for f in await get_org_signup_fields(org_id, db_session)
                 }
-            user_read = OrgMemberUserRead.for_org(user, member_meta_keys)
+            user_read = await project_org_member_user(
+                db_session, user, member_meta_keys
+            )
             role_read = RoleRead.model_validate(role)
             usergroups = user_usergroups_map.get(user.id, [])
 
@@ -716,9 +735,13 @@ async def export_organization_users_csv(
             role = role_map.get(user_org.role_id)
             groups = "; ".join(user_usergroups_map.get(user.id, []))
 
-            # Custom field answers are member-supplied text, exactly the
-            # untrusted input _csv_safe's formula-injection guard exists for.
-            metadata = user.extra_metadata or {}
+            protected_learner = user.id is not None and await is_protected_studytomy_learner(
+                db_session, user.id
+            )
+            # Protected learner contact and free-form signup values are not
+            # included in a generic organization export without a purpose
+            # specific permission path.
+            metadata = {} if protected_learner else user.extra_metadata or {}
             custom_values = []
             for field in custom_fields:
                 value = metadata.get(field.key)
@@ -732,7 +755,7 @@ async def export_organization_users_csv(
             writer.writerow([
                 _csv_safe(f"{user.first_name or ''} {user.last_name or ''}".strip()),
                 _csv_safe(user.username or ""),
-                _csv_safe(user.email or ""),
+                "" if protected_learner else _csv_safe(user.email or ""),
                 _csv_safe(groups),
                 _csv_safe(role.name if role else ""),
                 fmt_date(user_org.creation_date),
@@ -754,6 +777,25 @@ async def _disconnect_ai_apps(db_session: AsyncSession, user_id: int, org_id: in
     from src.services.mcp.oauth import revoke_member_grants
 
     await revoke_member_grants(db_session, user_id, org_id)
+
+
+async def _end_studytomy_owner_assignments(
+    db_session: AsyncSession,
+    org_id: int,
+    user_ids: list[int],
+    actor_user_id: int,
+) -> None:
+    """End Studytomy governance authority atomically with member removal."""
+    if not user_ids:
+        return
+    from src.services.studytomy.policies import end_owner_assignments_for_removed_members
+
+    await end_owner_assignments_for_removed_members(
+        db_session,
+        org_id,
+        user_ids,
+        actor_user_id,
+    )
 
 
 async def remove_user_from_org(
@@ -803,6 +845,12 @@ async def remove_user_from_org(
             detail="You can't remove the last admin of the organization",
         )
 
+    await _end_studytomy_owner_assignments(
+        db_session,
+        org.id,
+        [user_id],
+        resolve_acting_user_id(current_user),
+    )
     await db_session.delete(user_org)
     await _revoke_org_grants(db_session, org, [user_id])
     await _disconnect_ai_apps(db_session, user_id, org.id)
@@ -865,6 +913,12 @@ async def leave_org(
             detail="You are the last admin of this organization. Transfer ownership or delete the organization instead.",
         )
 
+    await _end_studytomy_owner_assignments(
+        db_session,
+        org.id,
+        [user_id],
+        resolve_acting_user_id(current_user),
+    )
     await db_session.delete(user_org)
     await _revoke_org_grants(db_session, org, [user_id])
     await _disconnect_ai_apps(db_session, user_id, org.id)
@@ -947,6 +1001,12 @@ async def remove_batch_users_from_org(
 
     removed_count = len(user_orgs_to_remove)
     removed_user_ids = [uo.user_id for uo in user_orgs_to_remove]
+    await _end_studytomy_owner_assignments(
+        db_session,
+        org.id,
+        removed_user_ids,
+        resolve_acting_user_id(current_user),
+    )
     for user_org in user_orgs_to_remove:
         await db_session.delete(user_org)
     await _revoke_org_grants(db_session, org, removed_user_ids)
@@ -1010,6 +1070,12 @@ async def remove_all_users_from_org(
     user_orgs_to_remove = (await db_session.execute(remove_stmt)).scalars().all()
 
     removed_user_ids = [uo.user_id for uo in user_orgs_to_remove]
+    await _end_studytomy_owner_assignments(
+        db_session,
+        org.id,
+        removed_user_ids,
+        resolve_acting_user_id(current_user),
+    )
     for user_org in user_orgs_to_remove:
         await db_session.delete(user_org)
     await _revoke_org_grants(db_session, org, removed_user_ids)

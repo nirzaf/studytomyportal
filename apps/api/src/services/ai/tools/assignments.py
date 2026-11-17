@@ -839,7 +839,9 @@ async def _list_assignments(ctx: ToolContext, p: ListAssignmentsParams):
     chapters = await _by_id(ctx, Chapter, {row.chapter_id for _, row, _ in chunk})
     activities = await _by_id(ctx, Activity, {row.activity_id for _, row, _ in chunk})
     task_counts = await _task_counts(ctx, ids)
-    counts = await _submission_counts(ctx, [row.id for _, row, i in chunk if i])
+    counts = await _submission_counts(
+        ctx, [row.id for course, row, instructor in chunk if instructor and not course.studytomy_managed]
+    )
 
     items = []
     for course, row, instructor in chunk:
@@ -859,7 +861,7 @@ async def _list_assignments(ctx: ToolContext, p: ListAssignmentsParams):
                 "tasks_count": task_counts.get(row.id, 0),
             }
         )
-        if instructor:
+        if instructor and not course.studytomy_managed:
             item["submissions"] = counts.get(row.id, {})
         items.append(item)
 
@@ -923,7 +925,7 @@ async def _get_assignment(ctx: ToolContext, p: GetAssignmentParams):
             item["content"] = _simple_contents(task.assignment_type, task.contents, with_keys=instructor)
         task_items.append(item)
     out["tasks"] = task_items
-    if instructor:
+    if instructor and not course.studytomy_managed:
         out["submissions"] = (await _submission_counts(ctx, [assignment.id])).get(assignment.id, {})
     return out
 
@@ -1123,12 +1125,21 @@ async def _delete_assignment_task(ctx: ToolContext, p: AssignmentTaskRefParams):
 # ─── executors: submissions and grading ─────────────────────────────────────
 
 
+def _require_tool_submission_access(course: Course) -> None:
+    if course.studytomy_managed is True:
+        raise HTTPException(
+            status_code=403,
+            detail="Managed assignment submissions are available through the course review workflow.",
+        )
+
+
 async def _list_submissions(ctx: ToolContext, p: ListSubmissionsParams):
     assignment = await refs.load(ctx, "assignment", p.assignment_uuid)
     course = await _course_of(ctx, assignment)
     # Same gate as GET /assignments/{uuid}/submissions: course read, and
     # anyone below instructor sees only their own row.
     await authorize_assignment_access(ctx.request, ctx.db_session, ctx.user, course.course_uuid, AccessAction.READ)
+    _require_tool_submission_access(course)
     instructor = await _instructor(ctx, course)
 
     statement = select(AssignmentUserSubmission).where(AssignmentUserSubmission.assignment_id == assignment.id)
@@ -1263,12 +1274,13 @@ def _answer(task: AssignmentTask, data: Any) -> Any:
 
 async def _get_submission(ctx: ToolContext, p: GetSubmissionParams):
     assignment = await refs.load(ctx, "assignment", p.assignment_uuid)
+    course = await _course_of(ctx, assignment)
+    _require_tool_submission_access(course)
     member = await refs.load_member(ctx, p.user_uuid)
     # Course read plus "only your own unless you can grade it".
     rows = await read_user_assignment_submissions(
         ctx.request, assignment.assignment_uuid, member.id, ctx.user, ctx.db_session
     )
-    course = await _course_of(ctx, assignment)
     instructor = await _instructor(ctx, course)
     row = rows[0] if rows else None
 
@@ -1334,6 +1346,11 @@ async def _grade_submission(ctx: ToolContext, p: GradeSubmissionParams):
     course = await _course_of(ctx, assignment)
     # Grading is an instructor action on the course, checked before any write.
     await authorize_assignment_access(ctx.request, ctx.db_session, ctx.user, course.course_uuid, AccessAction.UPDATE)
+    if course.studytomy_managed is True:
+        raise HTTPException(
+            status_code=403,
+            detail="Managed assignments require grading through the educator review workflow.",
+        )
 
     tasks = await _tasks_of(ctx, assignment.id)
     by_uuid = {t.assignment_task_uuid: t for t in tasks}

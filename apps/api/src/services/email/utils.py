@@ -523,6 +523,8 @@ def send_email(
     body: str,
     headers: Optional[dict[str, str]] = None,
     sender_name: Optional[str] = None,
+    *,
+    single_attempt: bool = False,
 ):
     """Send one HTML email.
 
@@ -580,10 +582,11 @@ def send_email(
         )
         return None
 
-    if mailing.email_provider == "smtp":
-        return _send_email_smtp(sender, to_addr, subject, body, mailing, headers)
-    else:
-        return _send_email_resend(sender, to_addr, subject, body, mailing, headers)
+    transport = _send_email_smtp if mailing.email_provider == "smtp" else _send_email_resend
+    if single_attempt:
+        return transport(sender, to_addr, subject, body, mailing, headers, single_attempt=True)
+    return transport(sender, to_addr, subject, body, mailing, headers)
+
 
 
 # Transient provider hiccups (read timeouts, connection resets, 5xx) usually
@@ -630,6 +633,8 @@ def _send_email_resend(
     body: str,
     mailing,
     headers: Optional[dict[str, str]] = None,
+    *,
+    single_attempt: bool = False,
 ):
     from fastapi import HTTPException
     resend.api_key = mailing.resend_api_key
@@ -641,6 +646,8 @@ def _send_email_resend(
     }
     if headers:
         payload["headers"] = dict(headers)
+    if single_attempt:
+        return resend.Emails.send(payload)
     for attempt in range(_RESEND_RETRIES + 1):
         try:
             return resend.Emails.send(payload)
@@ -694,6 +701,8 @@ def _send_email_smtp(
     body: str,
     mailing,
     headers: Optional[dict[str, str]] = None,
+    *,
+    single_attempt: bool = False,
 ):
     from fastapi import HTTPException
     msg = MIMEMultipart("alternative")
@@ -741,9 +750,13 @@ def _send_email_smtp(
         server.sendmail(mailing.system_email_address, to, msg.as_string())
         return {"id": None, "to": to}
     except smtplib.SMTPException as e:
+        if single_attempt:
+            raise
         logger.error("SMTP error sending to %s: %s", to, e, exc_info=True)
         raise HTTPException(status_code=503, detail="Email service error")
     except ssl.SSLError as e:
+        if single_attempt:
+            raise
         # SSLError subclasses OSError, so this must stay above the OSError arm.
         logger.error(
             "SMTP TLS verification failed for %s:%s: %s. The relay's certificate "
@@ -758,6 +771,8 @@ def _send_email_smtp(
             status_code=503, detail="Email service TLS verification failed"
         )
     except OSError as e:
+        if single_attempt:
+            raise
         logger.error("SMTP connection error to %s:%s: %s", mailing.smtp_host, mailing.smtp_port, e, exc_info=True)
         raise HTTPException(status_code=503, detail="Email service unavailable")
     finally:

@@ -18,6 +18,10 @@ from src.services.communities.access import require_community_participant
 from src.security.auth import resolve_acting_user_id
 from src.services.analytics import events as analytics_events
 from src.services.analytics.analytics import track
+from src.services.studytomy.privacy import (
+    can_read_studytomy_work,
+    require_studytomy_work_read,
+)
 
 
 async def upvote_discussion(
@@ -43,6 +47,8 @@ async def upvote_discussion(
 
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
+
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
 
     # Get the community and check read access
     community_statement = select(Community).where(
@@ -142,6 +148,8 @@ async def remove_upvote(
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
 
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
+
     community = (await db_session.execute(
         select(Community).where(Community.id == discussion.community_id)
     )).scalars().first()
@@ -202,7 +210,11 @@ async def get_user_votes_for_discussions(
         Discussion.discussion_uuid.in_(discussion_uuids)  # type: ignore
     )
     discussions = (await db_session.execute(discussions_statement)).scalars().all()
-    discussion_id_to_uuid = {d.id: d.discussion_uuid for d in discussions}
+    visible_discussions = [
+        d for d in discussions
+        if await can_read_studytomy_work(db_session, current_user, d.author_id)
+    ]
+    discussion_id_to_uuid = {d.id: d.discussion_uuid for d in visible_discussions}
 
     # Get user's votes for these discussions
     votes_statement = select(DiscussionVote).where(

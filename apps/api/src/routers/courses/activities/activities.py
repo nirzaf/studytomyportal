@@ -237,6 +237,7 @@ async def api_restore_activity_version(
     request: Request,
     activity_uuid: str,
     version_number: int,
+    expected_current_version: Optional[int] = Query(default=None, ge=1),
     current_user: PublicUser = Depends(get_current_user),
     db_session=Depends(get_db_session),
 ) -> ActivityRead:
@@ -245,7 +246,12 @@ async def api_restore_activity_version(
     Creates a new version with the restored content.
     """
     return await restore_activity_version(
-        request, activity_uuid, version_number, current_user, db_session
+        request,
+        activity_uuid,
+        version_number,
+        current_user,
+        db_session,
+        expected_current_version,
     )
 
 

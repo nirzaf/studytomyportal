@@ -27,6 +27,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
+from sqlmodel import select
 
 from src.core.events.database import get_db_session
 from src.routers.courses.assignments import router as assignments_router
@@ -36,6 +37,7 @@ from src.db.courses.assignments import (
     Assignment,
     AssignmentCreate,
     AssignmentTask,
+    AssignmentTaskSubmission,
     AssignmentTaskTypeEnum,
     AssignmentUpdate,
     AssignmentUserSubmission,
@@ -44,6 +46,8 @@ from src.db.courses.assignments import (
     SolutionRevealEnum,
 )
 from src.db.trails import Trail
+from src.db.studytomy.governance import StudyBusinessEvent
+from src.db.studytomy.family import StudyLearnerProfile
 from src.services.courses.activities.assignments import (
     _apply_grade_and_finalize,
     _student_may_see_solution,
@@ -54,6 +58,7 @@ from src.services.courses.activities.assignments import (
     get_grade_assignment_submission,
     grade_assignment_submission,
     put_assignment_solution_file,
+    read_assignment_submissions,
     read_assignment,
     read_assignment_from_activity_uuid,
     retry_assignment_submission,
@@ -561,6 +566,178 @@ class TestFormativeSubmission:
 # --------------------------------------------------------------------------- #
 # Grading is refused
 # --------------------------------------------------------------------------- #
+async def test_managed_assessment_waits_for_a_valid_manual_mark(
+    db, org, course, chapter, activity, regular_user, admin_user, mock_request
+):
+    from src.services.studytomy.grading import record_grading_contract
+
+    course.studytomy_managed = True
+    course.public = False
+    course.published = False
+    db.add(course)
+    assignment = await _make_formative(db, org, course, chapter, activity, ungraded=False)
+    task = await _make_file_task(db, assignment)
+    submission = await _make_submission(
+        db, assignment, regular_user, AssignmentUserSubmissionStatus.SUBMITTED
+    )
+    grade_args = dict(
+        assignment=assignment,
+        course=course,
+        user_id=regular_user.id,
+        assignment_user_submission=submission,
+        db_session=db,
+        dispatch_webhook=False,
+        reviewer=admin_user,
+    )
+    task_submission = AssignmentTaskSubmission(
+        assignment_task_submission_uuid="ats_managed_manual_review",
+        task_submission={"fileUUID": "synthetic-response.pdf"},
+        grade=80,
+        task_submission_grade_feedback="",
+        assignment_type=task.assignment_type,
+        user_id=regular_user.id,
+        activity_id=activity.id,
+        course_id=course.id,
+        chapter_id=chapter.id,
+        assignment_task_id=task.id,
+        creation_date=task.creation_date,
+        update_date=task.update_date,
+    )
+    module = "src.services.courses.activities.assignments"
+
+    async def read_grade():
+        return await get_grade_assignment_submission(
+            mock_request, regular_user.id, assignment.assignment_uuid, regular_user, db
+        )
+
+    async def read_list_row():
+        [row] = await read_assignment_submissions(
+            mock_request, assignment.assignment_uuid, regular_user, db
+        )
+        return row
+
+    with (
+        patch(f"{module}.record_audit_event", new_callable=AsyncMock) as audit,
+        patch(f"{module}.notify_ee_learner_progress"),
+        patch(_AUTHZ, new_callable=AsyncMock),
+        patch(f"{module}._is_assignment_instructor", new_callable=AsyncMock, return_value=False),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await read_grade()
+        assert exc.value.status_code == 409
+        assert (await read_list_row())["grade_display"] is None
+
+        assert await _apply_grade_and_finalize(**grade_args) == {
+            "finalized": False,
+            "reason": "managed_assessment_contract_unverified",
+        }
+        await record_grading_contract(db, assignment, submission, regular_user, issued=True)
+        await db.commit()
+        for state in ("missing", "unreviewed", "invalid_mark"):
+            if state == "unreviewed":
+                db.add(task_submission)
+            if state == "invalid_mark":
+                task_submission.manually_graded = True
+                task_submission.grade = 101
+                db.add(task_submission)
+            await db.flush()
+
+            computed = await _apply_grade_and_finalize(**grade_args)
+            assert computed == {
+                "finalized": False,
+                "reason": "managed_assessment_review_pending",
+            }
+            assert submission.submission_status == AssignmentUserSubmissionStatus.SUBMITTED
+            assert submission.grade == 0
+            audit.assert_not_awaited()
+
+        task_submission.grade = 80
+        db.add(task_submission)
+        task.contents = {"rubric": "changed after hand-in"}
+        db.add(task)
+        await db.flush()
+        await record_grading_contract(db, assignment, submission, regular_user)
+        assert await _apply_grade_and_finalize(**grade_args) == {
+            "finalized": False,
+            "reason": "managed_assessment_contract_unverified",
+        }
+        assert submission.submission_status == AssignmentUserSubmissionStatus.SUBMITTED
+        assert submission.grade == 0
+        audit.assert_not_awaited()
+
+        task.contents = {}
+        db.add(task)
+        await db.flush()
+        computed = await _apply_grade_and_finalize(**grade_args)
+        assert computed["grade"] == 80
+        assert submission.submission_status == AssignmentUserSubmissionStatus.GRADED
+        audit.assert_awaited_once()
+        assert (await read_grade())["tasks"][0]["grade"] == 80
+
+        task_submission.grade = 60
+        db.add(task_submission)
+        await db.flush()
+        read = await read_grade()
+        assert read["grade"] == 80
+        assert read["tasks"] == []
+        assert (await _apply_grade_and_finalize(**grade_args))["grade"] == 60
+        assert (await _apply_grade_and_finalize(**grade_args))["grade"] == 60
+        task.max_grade_value = 200
+        db.add(task)
+        await db.flush()
+        read = await read_grade()
+        assert (read["grade"], read["max_grade"], read["passed"]) == (60, 100, True)
+        assert read["tasks"] == []
+        listed = (await read_list_row())["grade_display"]
+        assert (listed["grade"], listed["max_grade"], listed["passed"]) == (60, 100, True)
+        assert listed["tasks"] == []
+
+    events = (await db.execute(
+        select(StudyBusinessEvent)
+        .where(StudyBusinessEvent.action == "studytomy.assessment.result_recorded")
+        .order_by(StudyBusinessEvent.id)
+    )).scalars().all()
+    assert [event.actor_user_id for event in events] == [admin_user.id, admin_user.id]
+    assert [event.after_state["version"] for event in events] == [1, 2]
+    assert [event.after_state["score_points"] for event in events] == [80, 60]
+    assert events[0].resource_uuid == events[1].resource_uuid
+    assert events[1].after_state["previous_event_uuid"] == events[0].event_uuid
+    assert events[0].after_state["source_snapshot_digest"] == events[1].after_state["source_snapshot_digest"]
+    assert submission.grade == 60
+    contract = (await db.execute(
+        select(StudyBusinessEvent).where(
+            StudyBusinessEvent.action == "studytomy.assessment.contract_frozen"
+        )
+    )).scalar_one()
+    assert contract.reason == "ASSESSMENT_ISSUED"
+
+    from src.services.studytomy import assessment_reviews
+
+    profile = StudyLearnerProfile(
+        org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id,
+    )
+    db.add(profile)
+    await db.commit()
+    reviewer = admin_user.model_copy(update={"id": 999})
+    route_ids = (course.course_uuid, assignment.assignment_uuid, submission.assignmentusersubmission_uuid)
+    with (
+        patch.object(assessment_reviews, "authorize_studytomy_staff_action", new_callable=AsyncMock) as scope,
+        patch.object(assessment_reviews, "_current_policies", new_callable=AsyncMock) as policies,
+    ):
+        policies.side_effect = HTTPException(409, "Policy approval required")
+        with pytest.raises(HTTPException) as denied:
+            await assessment_reviews.read_assessment_review_evidence(db, org, reviewer, *route_ids)
+        assert denied.value.status_code == 409
+        policies.side_effect = None
+        evidence = await assessment_reviews.read_assessment_review_evidence(db, org, reviewer, *route_ids)
+        assert evidence.result_uuid == events[1].event_uuid
+        assert (evidence.version, evidence.score_points, evidence.maximum_points) == (2, 60, 100)
+        assert {call.kwargs["target_scope_kind"] for call in scope.await_args_list} == {"course", "learner"}
+        with pytest.raises(HTTPException) as denied:
+            await assessment_reviews.read_assessment_review_evidence(db, org, admin_user, *route_ids)
+        assert denied.value.status_code == 404
+
+
 class TestGradingRefused:
     async def test_apply_grade_and_finalize_raises(
         self, db, org, course, chapter, activity, regular_user

@@ -8,7 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from fastapi import HTTPException, Request
 
 from src.core.ee_hooks import require_ee_resource_paid_access
-from src.db.users import PublicUser, AnonymousUser, APITokenUser, User, UserReadAuthor
+from src.db.users import PublicUser, AnonymousUser, APITokenUser, User
 from src.security.auth import resolve_acting_user_id
 from src.db.communities.communities import Community
 from src.services.analytics.analytics import track
@@ -39,12 +39,33 @@ from src.services.communities.access import (
     require_token_in_community_org,
 )
 from src.security.api_token_utils import token_has_right
+from src.services.studytomy.privacy import (
+    is_protected_studytomy_learner,
+    project_public_author,
+    require_studytomy_work_read,
+    studytomy_work_visibility_filter,
+)
 
 
 class DiscussionSortBy(str, Enum):
     RECENT = "recent"      # ORDER BY creation_date DESC
     UPVOTES = "upvotes"    # ORDER BY upvote_count DESC
     HOT = "hot"            # ORDER BY hot_score DESC
+
+
+async def _discussion_response_fields(
+    db_session: AsyncSession,
+    current_user: Union[PublicUser, AnonymousUser, APITokenUser],
+    discussion: Discussion,
+) -> dict:
+    """Hide the underlying learner user ID from readers other than its owner."""
+    values = discussion.model_dump()
+    if (
+        discussion.author_id != resolve_acting_user_id(current_user)
+        and await is_protected_studytomy_learner(db_session, discussion.author_id)
+    ):
+        values["author_id"] = 0
+    return values
 
 
 def calculate_hot_score(upvotes: int, creation_date: str) -> float:
@@ -119,7 +140,7 @@ def _is_author(
 
 
 async def _comment_counts(
-    db_session: AsyncSession, discussion_ids: List[int]
+    db_session: AsyncSession, discussion_ids: List[int], viewer_id: int = 0
 ) -> dict[int, int]:
     """Comment totals per discussion, in one grouped query.
 
@@ -131,6 +152,7 @@ async def _comment_counts(
     statement = (
         select(DiscussionComment.discussion_id, func.count(DiscussionComment.id))
         .where(DiscussionComment.discussion_id.in_(discussion_ids))  # type: ignore
+        .where(studytomy_work_visibility_filter(DiscussionComment.author_id, viewer_id))
         .group_by(DiscussionComment.discussion_id)
     )
     rows = (await db_session.execute(statement)).all()
@@ -220,38 +242,42 @@ async def create_discussion(
     await db_session.commit()
     await db_session.refresh(discussion)
 
-    # Track discussion posted event
-    await track(
-        event_name=analytics_events.DISCUSSION_POSTED,
-        org_id=community.org_id,
-        user_id=author_id,
-        properties={
-            "community_uuid": community_uuid,
-            "discussion_uuid": discussion.discussion_uuid,
-            "label": validated_label,
-        },
-    )
+    protected_author = await is_protected_studytomy_learner(db_session, author_id)
+    if not protected_author:
+        await track(
+            event_name=analytics_events.DISCUSSION_POSTED,
+            org_id=community.org_id,
+            user_id=author_id,
+            properties={
+                "community_uuid": community_uuid,
+                "discussion_uuid": discussion.discussion_uuid,
+                "label": validated_label,
+            },
+        )
     # Get author info (the real user, also for API-token callers)
     author_statement = select(User).where(User.id == discussion.author_id)
     author = (await db_session.execute(author_statement)).scalars().first()
 
-    await dispatch_webhooks(
-        event_name=analytics_events.DISCUSSION_POSTED,
-        org_id=community.org_id,
-        data={
-            "user": {
-                "user_uuid": author.user_uuid if author else "",
-                "email": author.email if author else "",
-                "username": author.username if author else "",
+    if not protected_author:
+        await dispatch_webhooks(
+            event_name=analytics_events.DISCUSSION_POSTED,
+            org_id=community.org_id,
+            data={
+                "user": {
+                    "user_uuid": author.user_uuid if author else "",
+                    "email": author.email if author else "",
+                    "username": author.username if author else "",
+                },
+                "discussion": {"discussion_uuid": discussion.discussion_uuid, "title": discussion.title},
+                "community": {"community_uuid": community_uuid},
             },
-            "discussion": {"discussion_uuid": discussion.discussion_uuid, "title": discussion.title},
-            "community": {"community_uuid": community_uuid},
-        },
-    )
+        )
 
     return DiscussionReadWithVoteStatus(
-        **discussion.model_dump(),
-        author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+        **await _discussion_response_fields(db_session, current_user, discussion),
+        author=await project_public_author(
+            db_session, author, scope_uuid=discussion.discussion_uuid
+        ) if author else None,
         has_voted=True,
     )
 
@@ -271,6 +297,8 @@ async def get_discussion(
 
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
+
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
 
     # Get community and check access
     community_statement = select(Community).where(Community.id == discussion.community_id)
@@ -297,11 +325,15 @@ async def get_discussion(
         vote = (await db_session.execute(vote_statement)).scalars().first()
         has_voted = vote is not None
 
-    comment_counts = await _comment_counts(db_session, [discussion.id])
+    comment_counts = await _comment_counts(
+        db_session, [discussion.id], resolve_acting_user_id(current_user)
+    )
 
     return DiscussionReadWithCounts(
-        **discussion.model_dump(),
-        author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+        **await _discussion_response_fields(db_session, current_user, discussion),
+        author=await project_public_author(
+            db_session, author, scope_uuid=discussion.discussion_uuid
+        ) if author else None,
         has_voted=has_voted,
         comment_count=comment_counts.get(discussion.id, 0),
     )
@@ -339,7 +371,10 @@ async def get_discussions_by_community(
     offset = (page - 1) * limit
 
     # Base query
-    query = select(Discussion).where(Discussion.community_id == community.id)
+    query = select(Discussion).where(
+        Discussion.community_id == community.id,
+        studytomy_work_visibility_filter(Discussion.author_id, current_user),
+    )
 
     # Apply label filter if specified
     if label:
@@ -350,7 +385,8 @@ async def get_discussions_by_community(
     if page == 1:
         pinned_query = select(Discussion).where(
             Discussion.community_id == community.id,
-            Discussion.is_pinned == True,
+            Discussion.is_pinned.is_(True),
+            studytomy_work_visibility_filter(Discussion.author_id, current_user),
         )
         if label:
             pinned_query = pinned_query.where(Discussion.label == label)
@@ -359,7 +395,8 @@ async def get_discussions_by_community(
     # Get non-pinned discussions with sorting
     non_pinned_query = select(Discussion).where(
         Discussion.community_id == community.id,
-        Discussion.is_pinned == False,
+        Discussion.is_pinned.is_(False),
+        studytomy_work_visibility_filter(Discussion.author_id, current_user),
     )
     if label:
         non_pinned_query = non_pinned_query.where(Discussion.label == label)
@@ -418,7 +455,9 @@ async def get_discussions_by_community(
         user_votes = {v.discussion_id for v in votes}
 
     # Batch fetch comment counts for the page
-    comment_counts = await _comment_counts(db_session, discussion_ids)
+    comment_counts = await _comment_counts(
+        db_session, discussion_ids, resolve_acting_user_id(current_user)
+    )
 
     # Build response
     result = []
@@ -428,8 +467,10 @@ async def get_discussions_by_community(
 
         result.append(
             DiscussionReadWithCounts(
-                **discussion.model_dump(),
-                author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+                **await _discussion_response_fields(db_session, current_user, discussion),
+                author=await project_public_author(
+                    db_session, author, scope_uuid=discussion.discussion_uuid
+                ) if author else None,
                 has_voted=has_voted,
                 comment_count=comment_counts.get(discussion.id, 0),
             )
@@ -464,6 +505,8 @@ async def update_discussion(
 
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
+
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
 
     # Get community
     community_statement = select(Community).where(Community.id == discussion.community_id)
@@ -539,8 +582,10 @@ async def update_discussion(
     vote = (await db_session.execute(vote_statement)).scalars().first()
 
     return DiscussionReadWithVoteStatus(
-        **discussion.model_dump(),
-        author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+        **await _discussion_response_fields(db_session, current_user, discussion),
+        author=await project_public_author(
+            db_session, author, scope_uuid=discussion.discussion_uuid
+        ) if author else None,
         has_voted=vote is not None,
     )
 
@@ -564,6 +609,8 @@ async def pin_discussion(
 
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
+
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
 
     community_statement = select(Community).where(Community.id == discussion.community_id)
     community = (await db_session.execute(community_statement)).scalars().first()
@@ -610,8 +657,10 @@ async def pin_discussion(
     vote = (await db_session.execute(vote_statement)).scalars().first()
 
     return DiscussionReadWithVoteStatus(
-        **discussion.model_dump(),
-        author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+        **await _discussion_response_fields(db_session, current_user, discussion),
+        author=await project_public_author(
+            db_session, author, scope_uuid=discussion.discussion_uuid
+        ) if author else None,
         has_voted=vote is not None,
     )
 
@@ -635,6 +684,8 @@ async def lock_discussion(
 
     if not discussion:
         raise HTTPException(status_code=404, detail="Discussion not found")
+
+    await require_studytomy_work_read(db_session, current_user, discussion.author_id)
 
     community_statement = select(Community).where(Community.id == discussion.community_id)
     community = (await db_session.execute(community_statement)).scalars().first()
@@ -681,8 +732,10 @@ async def lock_discussion(
     vote = (await db_session.execute(vote_statement)).scalars().first()
 
     return DiscussionReadWithVoteStatus(
-        **discussion.model_dump(),
-        author=UserReadAuthor.model_validate(author.model_dump()) if author else None,
+        **await _discussion_response_fields(db_session, current_user, discussion),
+        author=await project_public_author(
+            db_session, author, scope_uuid=discussion.discussion_uuid
+        ) if author else None,
         has_voted=vote is not None,
     )
 

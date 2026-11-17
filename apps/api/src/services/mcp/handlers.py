@@ -54,6 +54,16 @@ def _rate_limited(principal: MCPPrincipal) -> bool:
     return not allowed
 
 
+async def _managed_learner_block(principal: MCPPrincipal, db_session) -> str | None:
+    from src.services.studytomy.privacy import require_studytomy_learner_ai_policy
+
+    try:
+        await require_studytomy_learner_ai_policy(db_session, principal.user)
+    except HTTPException:
+        return "Use approved lesson guidance for this learner."
+    return None
+
+
 async def _apply_org_policy(principal: MCPPrincipal, org_id: int, db_session) -> str | None:
     """The org's 2FA and sign-in method rules, evaluated as if the member
     were still holding the session they consented with."""
@@ -169,6 +179,8 @@ class Handlers:
             org, config = await srv.load_org_and_config(db_session, principal.org_id)
             if org is None or not srv.mcp_allowed(config):
                 return types.ListToolsResult(tools=[])
+            if await _managed_learner_block(principal, db_session):
+                return types.ListToolsResult(tools=[])
             role_rights = await srv.member_role_rights(principal, org.id, db_session)
         tools = [
             srv.tool_definition(spec)
@@ -233,6 +245,9 @@ class Handlers:
             org, config = await srv.load_org_and_config(db_session, principal.org_id)
             if org is None:
                 return srv.error_result("org_not_found", "The connected organization no longer exists")
+            managed = await _managed_learner_block(principal, db_session)
+            if managed:
+                return srv.error_result("org_policy", managed)
             # A rollback expires ORM rows; keep the id as a plain value.
             org_id = org.id
             if not srv.mcp_allowed(config):
@@ -360,6 +375,9 @@ class Handlers:
             org, config = await srv.load_org_and_config(db_session, principal.org_id)
             if org is None or spec is None or not srv.mcp_allowed(config):
                 raise MCPError(_RESOURCE_NOT_FOUND, "Resource not available")
+            managed = await _managed_learner_block(principal, db_session)
+            if managed:
+                raise MCPError(_RESOURCE_NOT_FOUND, managed)
             blocked = await _apply_org_policy(principal, org.id, db_session)
             if blocked:
                 raise MCPError(_RESOURCE_NOT_FOUND, blocked)
@@ -380,6 +398,8 @@ class Handlers:
         async with _async_session_factory() as db_session:
             org, config = await srv.load_org_and_config(db_session, principal.org_id)
             if org is None or not srv.mcp_allowed(config):
+                return None
+            if await _managed_learner_block(principal, db_session):
                 return None
             org_id = org.id
             rights = await srv.member_role_rights(principal, org_id, db_session)

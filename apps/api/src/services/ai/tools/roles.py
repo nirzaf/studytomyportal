@@ -67,7 +67,8 @@ _PATCH_FOR = {
     PermissionsWithOwn: OwnPermissionPatch,
     DashboardPermission: DashboardPatch,
 }
-_BUCKETS = list(Rights.model_fields)
+_STUDYTOMY_BUCKET = "studytomy"
+_BUCKETS = [bucket for bucket in Rights.model_fields if bucket != _STUDYTOMY_BUCKET]
 
 RightsPatch = create_model(  # type: ignore[call-overload]
     "RightsPatch",
@@ -75,6 +76,7 @@ RightsPatch = create_model(  # type: ignore[call-overload]
     **{
         bucket: (_PATCH_FOR[field.annotation] | None, None)
         for bucket, field in Rights.model_fields.items()
+        if bucket in _BUCKETS
     },
 )
 
@@ -88,8 +90,13 @@ def _perms_of(bucket: str) -> list[str]:
     return list(Rights.model_fields[bucket].annotation.model_fields)
 
 
-def _full_rights(base: dict | None, patch: BaseModel | None) -> dict:
-    """Every bucket and flag, from `base` (missing flags off) plus `patch`."""
+def _full_rights(
+    base: dict | None,
+    patch: BaseModel | None,
+    *,
+    preserve_studytomy: bool = False,
+) -> dict:
+    """Build generic role-tool rights, optionally retaining hidden fields on update."""
     base = base if isinstance(base, dict) else {}
     out: dict[str, dict[str, bool]] = {}
     for bucket in _BUCKETS:
@@ -98,6 +105,12 @@ def _full_rights(base: dict | None, patch: BaseModel | None) -> dict:
     if patch is not None:
         for bucket, flags in patch.model_dump(exclude_none=True).items():
             out[bucket].update({k: bool(v) for k, v in flags.items()})
+    # AI role tools can edit the existing teaching/organization permission buckets,
+    # but must neither inspect nor mutate Studytomy family, safeguarding, or finance
+    # capabilities. Preserve the server-side value when updating an existing role.
+    studytomy_rights = base.get(_STUDYTOMY_BUCKET)
+    if preserve_studytomy and isinstance(studytomy_rights, dict):
+        out[_STUDYTOMY_BUCKET] = dict(studytomy_rights)
     return out
 
 
@@ -109,11 +122,18 @@ def _rights_dict(rights) -> dict:
     return rights.model_dump()
 
 
+def _public_rights(rights) -> dict[str, dict[str, bool]]:
+    """Project only the buckets exposed to generic role tools."""
+    full = _full_rights(_rights_dict(rights), None)
+    return {bucket: full[bucket] for bucket in _BUCKETS}
+
+
 def _summary(rights) -> dict[str, str]:
     """Granted flags per bucket, e.g. {"courses": "create, read, update_own"}."""
-    full = _full_rights(_rights_dict(rights), None)
+    full = _public_rights(rights)
     out = {}
-    for bucket, flags in full.items():
+    for bucket in _BUCKETS:
+        flags = full[bucket]
         granted = [k.removeprefix("action_") for k, v in flags.items() if v]
         if granted:
             out[bucket] = ", ".join(granted)
@@ -181,7 +201,7 @@ async def _get_role(ctx: ToolContext, p: GetRoleParams):
         editable=not _is_global(role),
         description=clip(role.description, DETAIL_TEXT) or None,
         members=counts.get(role.id, 0),
-        rights=_full_rights(_rights_dict(role.rights), None),
+        rights=_public_rights(role.rights),
     )
 
 
@@ -251,7 +271,9 @@ async def _update_role(ctx: ToolContext, p: UpdateRoleParams):
     if p.description is not None:
         changes["description"] = p.description.strip()
     if p.rights is not None and p.rights.model_dump(exclude_none=True):
-        changes["rights"] = _full_rights(_rights_dict(role.rights), p.rights)
+        changes["rights"] = _full_rights(
+            _rights_dict(role.rights), p.rights, preserve_studytomy=True
+        )
     if not changes:
         raise HTTPException(status_code=400, detail="Nothing to change: pass name, description or rights.")
     before = _summary(role.rights)

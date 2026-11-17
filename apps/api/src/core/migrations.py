@@ -8,7 +8,8 @@ What it does depends on the database it finds:
 
 - **empty**: create every table from the models, then stamp the current
   Alembic head. The migration chain starts from a ``create_all`` schema, so
-  it can't build a database from nothing.
+  it can't build a database from nothing. Non-model database guards are
+  installed explicitly because stamping does not execute migration bodies.
 - **stamped** (``alembic_version`` present): ``alembic upgrade heads``.
 - **unstamped with tables**: an install made by ``create_all`` before this
   existed, at an unknown version. Add whatever the models have and the
@@ -308,6 +309,17 @@ def ensure_schema(url: Optional[str] = None, *, metadata: Optional[MetaData] = N
                     # left to migrations here: building one can lock a large
                     # table for a while on a live database.
                     report.reconciled, report.skipped = reconcile(connection, metadata, indexes=False)
+                if not forward_compatible:
+                    from src.core.studytomy_schema import (
+                        ensure_studytomy_database_guards,
+                    )
+
+                    installed_guards = ensure_studytomy_database_guards(connection)
+                    if installed_guards:
+                        logger.info(
+                            "Installed missing Studytomy database guards: %s",
+                            ", ".join(installed_guards),
+                        )
                 report.after = current_revisions(connection)
                 if forward_compatible and report.after != report.before:
                     raise SchemaMigrationError(

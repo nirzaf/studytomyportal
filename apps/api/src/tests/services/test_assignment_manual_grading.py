@@ -19,16 +19,25 @@ from datetime import datetime
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+from fastapi import HTTPException
+from sqlmodel import select
+
 from src.db.courses.assignments import (
     Assignment,
     AssignmentTask,
     AssignmentTaskSubmission,
+    AssignmentTaskSubmissionUpdate,
     AssignmentTaskTypeEnum,
     AssignmentUserSubmission,
     AssignmentUserSubmissionStatus,
     GradingTypeEnum,
 )
-from src.services.courses.activities.assignments import _apply_grade_and_finalize
+from src.db.studytomy.governance import StudyBusinessEvent
+from src.services.courses.activities.assignments import (
+    _apply_grade_and_finalize,
+    handle_assignment_task_submission,
+)
 
 _PATCH_DISPATCH = "src.services.courses.activities.assignments.dispatch_webhooks"
 
@@ -108,6 +117,70 @@ async def _setup(db, org, course, chapter, activity, regular_user, *, student_an
     await db.refresh(user_submission)
     await db.refresh(task_submission)
     return assignment, user_submission
+
+
+async def test_managed_manual_mark_preserves_handed_in_answer(
+    db, org, course, chapter, activity, regular_user, admin_user, mock_request,
+):
+    course.studytomy_managed = True
+    course.public = False
+    course.published = False
+    db.add(course)
+    _, attempt = await _setup(
+        db, org, course, chapter, activity, regular_user,
+        student_answer="5", stored_grade=0,
+    )
+    module = "src.services.courses.activities.assignments"
+    with (
+        patch(f"{module}.authorization_verify_based_on_roles", new_callable=AsyncMock, return_value=True),
+        patch(f"{module}.check_resource_access", new_callable=AsyncMock),
+    ):
+        mark = AssignmentTaskSubmissionUpdate(
+            assignment_task_submission_uuid="ats_manual_test",
+            task_submission={"answer": "4"},
+            manually_graded=True,
+            grade=101,
+        )
+        with pytest.raises(HTTPException) as exc:
+            await handle_assignment_task_submission(
+                mock_request, "assignmenttask_manual_test", mark, admin_user, db
+            )
+        assert exc.value.status_code == 422
+
+        mark.grade = 80
+        marked = await handle_assignment_task_submission(
+            mock_request, "assignmenttask_manual_test", mark, admin_user, db
+        )
+        assert marked.task_submission == {"answer": "5"}
+        assert marked.grade == 80
+        assert marked.manually_graded is True
+
+        mark.grade = 85
+        await handle_assignment_task_submission(
+            mock_request, "assignmenttask_manual_test", mark, admin_user, db
+        )
+        attempt.submission_status = AssignmentUserSubmissionStatus.PENDING
+        db.add(attempt)
+        await db.flush()
+        with pytest.raises(HTTPException) as exc:
+            await handle_assignment_task_submission(
+                mock_request, "assignmenttask_manual_test", mark, admin_user, db
+            )
+        assert exc.value.status_code == 409
+
+    events = (await db.execute(
+        select(StudyBusinessEvent)
+        .where(StudyBusinessEvent.action == "studytomy.assessment.task_marked")
+        .order_by(StudyBusinessEvent.id)
+    )).scalars().all()
+    assert [event.actor_user_id for event in events] == [admin_user.id, admin_user.id]
+    assert events[0].operation_uuid == events[1].operation_uuid
+    assert [event.reason for event in events] == ["EDUCATOR_MARK_RECORDED", "EDUCATOR_MARK_UPDATED"]
+    assert [event.after_state for event in events] == [
+        {"score_points": 80, "maximum_points": 100},
+        {"score_points": 85, "maximum_points": 100},
+    ]
+    assert events[1].before_state == {"score_points": 80}
 
 
 class TestManualGradeOverridePreserved:

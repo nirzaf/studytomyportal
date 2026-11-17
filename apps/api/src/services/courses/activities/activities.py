@@ -28,7 +28,11 @@ from src.services.courses.activities.access import (
 )
 from src.security.rbac import check_resource_access, AccessAction
 from src.services.ai.rag.queue import index_activity
-from src.services.courses.activities.versioning import create_activity_version
+from src.services.courses.activities.versioning import (
+    cleanup_old_versions,
+    dispatch_activity_version_created,
+    stage_activity_version,
+)
 from src.services.courses.activities.utils import track_activity_created
 from src.services.courses.activities.dynamic_content import (
     conditional_blocks,
@@ -454,7 +458,12 @@ async def update_activity(
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
 ):
-    statement = select(Activity).where(Activity.activity_uuid == activity_uuid)
+    statement = (
+        select(Activity)
+        .where(Activity.activity_uuid == activity_uuid)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     activity = (await db_session.execute(statement)).scalars().first()
 
     if not activity:
@@ -478,6 +487,17 @@ async def update_activity(
     # Update only the fields that were explicitly set (not default values)
     # Using model_dump(exclude_unset=True) to get only the fields that were passed in
     update_data = activity_object.model_dump(exclude_unset=True)
+    expected_current_version = update_data.pop("expected_current_version", None)
+    version_snapshot = None
+
+    if "content" in update_data:
+        from src.services.studytomy.concurrency import require_expected_version
+
+        require_expected_version(
+            resource="Activity",
+            expected_version=expected_current_version,
+            current_version=activity.current_version or 1,
+        )
 
     # Create a version snapshot before updating content
     # This preserves the current state for version history.
@@ -485,9 +505,10 @@ async def update_activity(
     # because current_user.id on a token is 0 (the token id, not a user id)
     # and created_by_id is an FK to user.id, so writing 0 triggers a FK
     # violation and the whole update 500s.
-    if 'content' in update_data and activity.content:
+    if 'content' in update_data:
         user_id = resolve_acting_user_id(current_user)
-        await create_activity_version(activity, user_id, db_session)
+        if activity.content:
+            version_snapshot = await stage_activity_version(activity, user_id, db_session)
         # Increment version number
         activity.current_version = (activity.current_version or 1) + 1
         # Track who made the change
@@ -524,8 +545,17 @@ async def update_activity(
         flag_modified(activity, "content")
 
     db_session.add(activity)
+    if version_snapshot is not None:
+        await cleanup_old_versions(activity.id, db_session, commit=False)
     await db_session.commit()
     await db_session.refresh(activity)
+    if version_snapshot is not None:
+        await db_session.refresh(version_snapshot)
+        await dispatch_activity_version_created(
+            version_snapshot,
+            activity,
+            resolve_acting_user_id(current_user),
+        )
     if update_data.keys() & {"name", "published"}:
         notify_ee_course_content_changed(activity.course_id)
 
@@ -562,6 +592,14 @@ async def delete_activity(
         )
 
     await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.DELETE)
+
+    from src.services.studytomy.assignment_adapter import ensure_native_source_deletable
+
+    await ensure_native_source_deletable(db_session, course.org_id, "activity", activity.activity_uuid)
+
+    from src.services.studytomy.adaptive_retention import ensure_managed_progress_source_deletable
+
+    await ensure_managed_progress_source_deletable(db_session, course.org_id, course.id, activity_ids=[activity.id])
 
     # Clean up content files from storage
     from src.db.organizations import Organization

@@ -25,6 +25,7 @@ from src.db.usergroups import UserGroup, UserGroupCreate, UserGroupRead, UserGro
 from src.db.users import AnonymousUser, APITokenUser, InternalUser, PublicUser, User, UserReadPublic
 from src.services.webhooks.dispatch import dispatch_webhooks
 from src.services.security.rate_limiting import enforce_batch_size_limit
+from src.services.studytomy.privacy import project_public_user
 
 
 async def _validate_resource_exists_and_belongs_to_org(
@@ -270,8 +271,10 @@ async def get_users_linked_to_usergroup(
     users = (await db_session.execute(statement)).scalars().all()
 
     # SECURITY: learners hold usergroups read by default, so member lists use
-    # the public projection (no email). The router's response_model matches.
-    return [UserReadPublic.model_validate(user) for user in users]
+    # the public projection (no email). Free-form profile data is also removed
+    # for explicit Studytomy learner profiles until an approved sharing scope
+    # exists. The router's response_model remains compatible.
+    return [await project_public_user(db_session, user) for user in users]
 
 
 async def read_usergroups_by_org_id(

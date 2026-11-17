@@ -863,6 +863,98 @@ async def delete_org(
     await rbac_check(request, org.org_uuid, current_user, "delete", db_session)
     await require_org_destroy_right(_acting_user_id(current_user), org.id, db_session)
 
+    # Studytomy governance decisions and named-owner history must not be
+    # cascaded away by the existing whole-organization delete path.
+    from src.db.studytomy.commerce import StudyOffer
+    from src.db.studytomy.governance import (
+        StudyBusinessEvent,
+        StudyOwnerAssignment,
+        StudyPolicyVersion,
+    )
+    from src.db.studytomy.family import StudyEligibilityDecision, StudyLearnerProfile
+    from src.db.studytomy.operations import (
+        StudyEvidenceFile,
+        StudyIdempotencyRecord,
+        StudyOutboxRecord,
+    )
+    from src.db.studytomy.practice import StudyLearningSurface
+
+    await db_session.execute(
+        select(Organization).where(Organization.id == org.id).with_for_update()
+    )
+
+    from src.services.studytomy.adaptive_retention import ensure_adaptive_org_deletable
+
+    await ensure_adaptive_org_deletable(db_session, org.id)
+
+    has_policy_history = (await db_session.execute(
+        select(StudyPolicyVersion.id)
+        .where(StudyPolicyVersion.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_owner_history = (await db_session.execute(
+        select(StudyOwnerAssignment.id)
+        .where(StudyOwnerAssignment.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_business_history = (await db_session.execute(
+        select(StudyBusinessEvent.id)
+        .where(StudyBusinessEvent.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_operation_history = (await db_session.execute(
+        select(StudyIdempotencyRecord.id)
+        .where(StudyIdempotencyRecord.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_delivery_history = (await db_session.execute(
+        select(StudyOutboxRecord.id)
+        .where(StudyOutboxRecord.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_learner_history = (await db_session.execute(
+        select(StudyLearnerProfile.id)
+        .where(StudyLearnerProfile.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_eligibility_history = (await db_session.execute(
+        select(StudyEligibilityDecision.id)
+        .where(StudyEligibilityDecision.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_evidence_history = (await db_session.execute(
+        select(StudyEvidenceFile.id)
+        .where(StudyEvidenceFile.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_practice_history = (await db_session.execute(
+        select(StudyLearningSurface.surface_uuid)
+        .where(StudyLearningSurface.org_id == org.id)
+        .limit(1)
+    )).first()
+    has_offer_history = (await db_session.execute(
+        select(StudyOffer.id).where(StudyOffer.org_id == org.id).limit(1)
+    )).first()
+    if (
+        has_policy_history
+        or has_owner_history
+        or has_business_history
+        or has_operation_history
+        or has_delivery_history
+        or has_learner_history
+        or has_eligibility_history
+        or has_evidence_history
+        or has_practice_history
+        or has_offer_history
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This organization has Studytomy governance records. "
+                "Resolve their approved retention or transfer path before deletion."
+            ),
+        )
+
     # AUDIT LOG: Record the deletion for security audit trail
     user_id = current_user.id if hasattr(current_user, 'id') else 'unknown'
     logging.warning(

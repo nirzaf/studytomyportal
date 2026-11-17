@@ -25,6 +25,10 @@ from src.services.ai.llm import model_for_tier
 from src.services.ai.llm.errors import ai_error_message, is_quota_error
 from src.services.ai.rag.access import can_read_activity
 from src.services.courses.activities.dynamic_context import render_for_reader
+from src.services.studytomy.privacy import (
+    project_public_author,
+    require_studytomy_learner_ai_policy,
+)
 
 from src.services.ai.schemas.ai import (
     ActivityAIChatSessionResponse,
@@ -69,8 +73,8 @@ async def track_ai_message(
 
 async def _authorize_activity_ai_access(
     request: Request,
-    course: CourseRead,
-    activity: ActivityRead,
+    course: Course | CourseRead,
+    activity: Activity | ActivityRead,
     org_id: int,
     current_user: PublicUser,
     db_session: AsyncSession,
@@ -89,6 +93,7 @@ async def _authorize_activity_ai_access(
             detail="You are not a member of this organization",
         )
     await enforce_org_mfa(acting_user_id, org_id, db_session)
+    await require_studytomy_learner_ai_policy(db_session, current_user)
     # Course READ alone is not enough: the activity's content goes into the
     # model context, so drafts, chapter/activity locks and paid access apply
     # exactly as they do when the activity is opened directly.
@@ -155,7 +160,6 @@ async def ai_start_activity_chat_session(
     from src.db.resource_authors import ResourceAuthor
     from src.db.users import User
     from src.db.courses.courses import AuthorWithRole
-    from src.db.users import UserReadAuthor
 
     authors_statement = (
         select(ResourceAuthor, User)
@@ -168,7 +172,7 @@ async def ai_start_activity_chat_session(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -328,7 +332,6 @@ async def ai_send_activity_chat_message(
     from src.db.resource_authors import ResourceAuthor
     from src.db.users import User
     from src.db.courses.courses import AuthorWithRole
-    from src.db.users import UserReadAuthor
 
     authors_statement = (
         select(ResourceAuthor, User)
@@ -341,7 +344,7 @@ async def ai_send_activity_chat_message(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,
@@ -488,7 +491,6 @@ async def _get_activity_and_course_info(
     from src.db.resource_authors import ResourceAuthor
     from src.db.users import User
     from src.db.courses.courses import AuthorWithRole
-    from src.db.users import UserReadAuthor
 
     authors_statement = (
         select(ResourceAuthor, User)
@@ -501,7 +503,7 @@ async def _get_activity_and_course_info(
     # Convert to AuthorWithRole objects
     authors = [
         AuthorWithRole(
-            user=UserReadAuthor.model_validate(user),
+            user=await project_public_author(db_session, user, scope_uuid=resource_author.resource_uuid),
             authorship=resource_author.authorship,
             authorship_status=resource_author.authorship_status,
             creation_date=resource_author.creation_date,

@@ -194,11 +194,21 @@ class ResourceAccessChecker:
                 context=context.value,
             )
 
+        if action == AccessAction.READ and config.resource_type == "activities":
+            managed_course_uuid = await self._managed_activity_course_uuid(resource_uuid, config)
+            if managed_course_uuid is not None:
+                decision = await self.check_access(managed_course_uuid, action, context, require_ownership)
+                decision.resource_uuid = resource_uuid
+                return decision
+
         # Superadmin API tokens are cross-org by design and re-check at auth
         # time that their minter is still a superadmin. Their id is the token
         # row id, so they must never fall through to the user-id based checks
         # below, where that id would be read as some unrelated user's.
-        if isinstance(self.current_user, SuperadminAPITokenUser):
+        if isinstance(self.current_user, SuperadminAPITokenUser) and not (
+            action == AccessAction.READ
+            and config.resource_type in {"courses", "coursechapters"}
+        ):
             return AccessDecision(
                 allowed=True,
                 reason="Superadmin API token access",
@@ -228,7 +238,25 @@ class ResourceAccessChecker:
             decision.resource_uuid = resource_uuid
             return decision
 
-        # Handle API token users separately
+        # Managed drafts do not inherit ordinary course audience grants.
+        if (
+            action == AccessAction.READ
+            and config.resource_type == "courses"
+            and not isinstance(self.current_user, AnonymousUser)
+        ):
+            course = await self._get_resource(resource_uuid, config)
+            if getattr(course, "studytomy_managed", False) is True:
+                return await self._check_managed_course_read(resource_uuid, config)
+            if isinstance(self.current_user, SuperadminAPITokenUser):
+                return AccessDecision(
+                    allowed=True,
+                    reason="Superadmin API token access",
+                    via_admin=True,
+                    resource_uuid=resource_uuid,
+                    user_id=self.current_user.created_by_user_id,
+                    action=action.value,
+                    context=context.value,
+                )
         if isinstance(self.current_user, APITokenUser):
             return await self._check_api_token_access(resource_uuid, action, config)
 
@@ -245,6 +273,42 @@ class ResourceAccessChecker:
             return await self._check_read_access(resource_uuid, context, config)
         else:
             return await self._check_write_access(resource_uuid, action, config, require_ownership)
+
+    async def _managed_activity_course_uuid(
+        self, resource_uuid: str, config: ResourceConfig,
+    ) -> str | None:
+        from src.db.courses.courses import Course
+
+        activity = await self._get_resource(resource_uuid, config)
+        if activity is None or not activity.course_id:
+            return None
+        course = (await self.db_session.execute(select(Course).where(
+            Course.id == activity.course_id,
+            Course.studytomy_managed.is_(True),
+        ))).scalars().first()
+        if course is None:
+            return None
+        self._resource_cache[course.course_uuid] = course
+        return course.course_uuid
+
+    async def _check_managed_course_read(
+        self, resource_uuid: str, config: ResourceConfig,
+    ) -> AccessDecision:
+        """Only authenticated course staff may read managed draft content."""
+        if isinstance(self.current_user, PublicUser):
+            await self._enforce_org_mfa_policy(resource_uuid, config)
+            is_admin = await self._is_admin_or_maintainer(resource_uuid)
+            is_author = not is_admin and await self._is_resource_author(resource_uuid)
+            if is_admin or is_author:
+                return AccessDecision(
+                    allowed=True, reason="Managed course staff access",
+                    via_admin=is_admin, via_authorship=is_author,
+                    resource_uuid=resource_uuid, user_id=self.current_user.id, action="read",
+                )
+        return AccessDecision(
+            allowed=False, reason="User does not have access to this resource",
+            resource_uuid=resource_uuid, action="read",
+        )
 
     async def _check_read_access(
         self,

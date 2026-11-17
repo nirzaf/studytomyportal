@@ -1,10 +1,12 @@
 from typing import Any, List, Optional, Sequence
 from fastapi import Request
-from sqlalchemy import ColumnElement, func, true as sa_true
+from sqlalchemy import ColumnElement, exists, func, true as sa_true
 from sqlmodel import select, or_, and_
 from sqlmodel.ext.asyncio.session import AsyncSession
 from pydantic import BaseModel, ConfigDict
-from src.db.users import PublicUser, AnonymousUser, UserReadPublic, User, APITokenUser
+from src.db.users import PublicUser, AnonymousUser, UserReadPublic, User, APITokenUser, SuperadminAPITokenUser
+from src.db.studytomy.family import StudyLearnerProfile
+from src.services.studytomy.privacy import studytomy_work_visibility_filter
 from src.db.courses.courses import Course, CourseRead
 from src.db.courses.activities import Activity, ActivityLockType
 from src.db.courses.chapters import Chapter, LockType as ChapterLockType
@@ -298,6 +300,8 @@ async def search_across_org(
                 )
             )
         )
+        if isinstance(current_user, SuperadminAPITokenUser):
+            activities_q = activities_q.where(Course.studytomy_managed.is_(False))
         if not admin_for_locks:
             # Both columns are Postgres enums, so compare with enum members,
             # never strings. A chapter row predating the lock column is NULL
@@ -360,6 +364,15 @@ async def search_across_org(
                     patterns,
                 )
             )
+            # Study learner identities stay out of general peer search until a
+            # purpose-specific, revocable publicity permission is implemented.
+            .where(
+                ~exists(
+                    select(1)
+                    .select_from(StudyLearnerProfile)
+                    .where(StudyLearnerProfile.user_id == User.id)
+                )
+            )
         )
 
         # Membership is what gates this, and in the shared demo everyone who
@@ -403,6 +416,7 @@ async def search_across_org(
         select(Discussion, Community.community_uuid)
         .join(Community, Community.id == Discussion.community_id)
         .where(Discussion.org_id == org.id)
+        .where(studytomy_work_visibility_filter(Discussion.author_id, current_user))
         .where(_ilike_terms([Discussion.title, Discussion.content], patterns))
     )
     if community_filter is not None:

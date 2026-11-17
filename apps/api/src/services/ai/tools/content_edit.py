@@ -149,7 +149,11 @@ async def save(ctx: ToolContext, page: Page, doc: dict) -> tuple[int, int, dict 
     before = page.version
     had_content = bool(page.activity.content)
     updated = await update_activity(
-        ctx.request, ActivityUpdate(content=doc), page.uuid, ctx.user, ctx.db_session
+        ctx.request,
+        ActivityUpdate(content=doc, expected_current_version=page.version),
+        page.uuid,
+        ctx.user,
+        ctx.db_session,
     )
     after = int(jsonable(updated).get("current_version") or before)
     undo = None
@@ -828,7 +832,12 @@ async def _restore_version(ctx: ToolContext, p: RestoreVersionParams):
     before = page.version
     try:
         restored = await restore_activity_version(
-            ctx.request, p.activity_uuid, p.version, ctx.user, ctx.db_session
+            ctx.request,
+            p.activity_uuid,
+            p.version,
+            ctx.user,
+            ctx.db_session,
+            expected_current_version=before,
         )
     except HTTPException as e:
         if e.status_code == 404 and "version" in str(e.detail).lower():

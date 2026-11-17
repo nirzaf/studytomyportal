@@ -150,8 +150,8 @@ async def authorize_assignment_access(
     (published, paywall, locks): an assignment is activity content.
 
     Sessions keep the existing course-scoped RBAC (``check_resource_access``).
-    API tokens are authorized against the single ``assignments`` rights bucket,
-    with the organization boundary enforced via the parent course UUID.
+    API tokens are authorized against the single ``assignments`` rights bucket
+    and the parent course organization. Managed courses require direct sessions.
 
     ``token_action`` overrides the rights action checked for tokens when it should
     differ from the session ``access_action`` (e.g. listing per-task submissions
@@ -168,6 +168,17 @@ async def authorize_assignment_access(
             db_session,
             resource_type_override="assignments",
         )
+        managed_course = await db_session.scalar(
+            select(Course.studytomy_managed).where(
+                Course.course_uuid == course_uuid,
+                Course.org_id == current_user.org_id,
+            )
+        )
+        if managed_course is True:
+            raise HTTPException(
+                status_code=403,
+                detail="Managed assignment access requires a direct session.",
+            )
         return
     await check_resource_access(request, db_session, current_user, course_uuid, access_action)
     if activity_id is not None and access_action == AccessAction.READ:
@@ -199,23 +210,23 @@ async def _is_assignment_instructor(
     )
 
 
-def _is_assignment_past_due(assignment: Assignment) -> bool:
-    """Return True if the assignment has a due_date set and it is in the past.
+def _assignment_deadline(assignment: Assignment) -> datetime | None:
+    """Parse the native assignment deadline into its local-time cutoff.
 
     due_date is stored as a free-form string. We parse it defensively: if it
-    is empty or unparseable, we treat the deadline as NOT set (return False)
+    is empty or unparseable, we treat the deadline as unset
     so a malformed value never locks students out. Comparison is done with a
     naive ``datetime.now()`` to match the rest of this module (all timestamps
     here are naive local-time strings produced by ``datetime.now()``).
     """
     raw = getattr(assignment, "due_date", None)
     if not raw or not str(raw).strip():
-        return False
+        return None
     raw_str = str(raw).strip()
     try:
         parsed = datetime.fromisoformat(raw_str)
     except (ValueError, TypeError):
-        return False
+        return None
     if parsed.tzinfo is not None:
         parsed = parsed.replace(tzinfo=None)
     # A date-only deadline (e.g. "2026-06-12", produced by an HTML
@@ -224,7 +235,39 @@ def _is_assignment_past_due(assignment: Assignment) -> bool:
     # by shifting the cutoff to the following midnight.
     if "T" not in raw_str and ":" not in raw_str:
         parsed = parsed + timedelta(days=1)
-    return parsed < datetime.now()
+    return parsed
+
+
+def _is_assignment_past_due(assignment: Assignment) -> bool:
+    deadline = _assignment_deadline(assignment)
+    return deadline is not None and deadline < datetime.now()
+
+
+async def _learner_assignment_past_due(
+    db_session: AsyncSession, assignment: Assignment, course: Course, learner_id: int,
+) -> bool:
+    if not _is_assignment_past_due(assignment):
+        return False
+    if course.studytomy_managed is not True:
+        return True
+    from src.services.studytomy.assessment_reviews import assessment_deadline_extension
+
+    return await assessment_deadline_extension(db_session, assignment, learner_id) is None
+
+
+async def _project_assessment_deadline(
+    db_session: AsyncSession, result: AssignmentRead, assignment: Assignment,
+    managed: bool, actor: PublicUser | AnonymousUser | APITokenUser,
+) -> None:
+    if managed and isinstance(actor, PublicUser):
+        from src.services.studytomy.assessment_reviews import assessment_deadline_extension
+
+        original = _assignment_deadline(assignment)
+        if original is None:
+            return
+        deadline = await assessment_deadline_extension(db_session, assignment, actor.id)
+        if deadline is not None and deadline > original.astimezone(deadline.tzinfo):
+            result.due_date = deadline.isoformat()
 
 
 def _strip_answer_key(contents, keep_answer_keys: bool = False):
@@ -1188,7 +1231,7 @@ async def read_assignment(
     db_session: AsyncSession,
 ):
     statement = (
-        select(Assignment, Course.course_uuid, Activity.activity_uuid)
+        select(Assignment, Course.course_uuid, Activity.activity_uuid, Course.studytomy_managed)
         .join(Course, Course.id == Assignment.course_id)  # type: ignore
         .join(Activity, Activity.id == Assignment.activity_id)  # type: ignore
         .where(Assignment.assignment_uuid == assignment_uuid)
@@ -1201,7 +1244,7 @@ async def read_assignment(
             detail="Assignment not found",
         )
 
-    assignment, course_uuid, activity_uuid = row
+    assignment, course_uuid, activity_uuid, managed = row
 
     await authorize_assignment_access(
         request, db_session, current_user, course_uuid, AccessAction.READ,
@@ -1211,6 +1254,7 @@ async def read_assignment(
     result = AssignmentRead.model_validate(assignment)
     result.course_uuid = course_uuid
     result.activity_uuid = activity_uuid
+    await _project_assessment_deadline(db_session, result, assignment, managed, current_user)
     # The model answer is reveal-gated: an instructor always sees it, a learner
     # only once their own submission has unlocked it.
     unlocked = await _resolve_solution_visibility(
@@ -1226,7 +1270,7 @@ async def read_assignment_from_activity_uuid(
     db_session: AsyncSession,
 ):
     statement = (
-        select(Assignment, Course.course_uuid, Activity.activity_uuid)
+        select(Assignment, Course.course_uuid, Activity.activity_uuid, Course.studytomy_managed)
         .join(Activity, Activity.id == Assignment.activity_id)  # type: ignore
         .join(Course, Course.id == Assignment.course_id)  # type: ignore
         .where(Activity.activity_uuid == activity_uuid)
@@ -1239,7 +1283,7 @@ async def read_assignment_from_activity_uuid(
             detail="Assignment not found",
         )
 
-    assignment, course_uuid, activity_uuid_val = row
+    assignment, course_uuid, activity_uuid_val, managed = row
 
     await authorize_assignment_access(
         request, db_session, current_user, course_uuid, AccessAction.READ,
@@ -1249,6 +1293,7 @@ async def read_assignment_from_activity_uuid(
     result = AssignmentRead.model_validate(assignment)
     result.course_uuid = course_uuid
     result.activity_uuid = activity_uuid_val
+    await _project_assessment_deadline(db_session, result, assignment, managed, current_user)
     # Same reveal gate as read_assignment: this is the endpoint the learner's
     # activity page actually calls, so skipping it here would leak the corrige.
     unlocked = await _resolve_solution_visibility(
@@ -1497,6 +1542,9 @@ async def delete_assignment(
     # RBAC check
     await authorize_assignment_access(request, db_session, current_user, course.course_uuid, AccessAction.DELETE)
 
+    from src.services.studytomy.assignment_adapter import ensure_native_source_deletable
+
+    await ensure_native_source_deletable(db_session, course.org_id, "assignment", assignment.assignment_uuid)
     # Feature usage
     await decrease_feature_usage("assignments", course.org_id, db_session)
 
@@ -1550,7 +1598,10 @@ async def delete_assignment_from_activity_uuid(
     # RBAC check
     await authorize_assignment_access(request, db_session, current_user, course.course_uuid, AccessAction.DELETE)
 
-     # Feature usage
+    from src.services.studytomy.assignment_adapter import ensure_native_source_deletable
+
+    await ensure_native_source_deletable(db_session, course.org_id, "assignment", assignment.assignment_uuid)
+    # Feature usage
     await decrease_feature_usage("assignments", course.org_id, db_session)
 
     # Delete Assignment
@@ -1676,6 +1727,19 @@ async def read_assignment_tasks(
         not is_instructor
         and await _student_may_see_answer_key(current_user, assignment, db_session)
     )
+    captured = False
+    if (
+        isinstance(current_user, PublicUser) and not is_instructor
+        and not reveal_to_student
+        and not await _learner_assignment_past_due(db_session, assignment, course, current_user.id)
+    ):
+        from src.services.studytomy.assignment_adapter import capture_native_assignment_exposure
+
+        captured = await capture_native_assignment_exposure(db_session, assignment, current_user)
+        if course.studytomy_managed is True and not captured:
+            from src.services.studytomy.grading import issue_native_grading_contract
+
+            captured = await issue_native_grading_contract(db_session, assignment, current_user)
 
     result = []
     for assignment_task in (await db_session.execute(statement)).scalars().all():
@@ -1685,6 +1749,8 @@ async def read_assignment_tasks(
                 read.contents, keep_answer_keys=reveal_to_student
             )
         result.append(read)
+    if captured:
+        await db_session.commit()
     return result
 
 
@@ -1734,15 +1800,33 @@ async def read_assignment_task(
 
     # Strip the answer key unless instructor. A reveal-eligible student sees the
     # per-answer keys but never the CODE solution or hidden tests (keep_answer_keys).
-    read = AssignmentTaskRead.model_validate(assignmenttask)
     is_instructor = await _is_assignment_instructor(request, current_user, course.course_uuid, db_session)
+    captured = False
+    reveal_to_student = False
     if not is_instructor:
         reveal_to_student = await _student_may_see_answer_key(
             current_user, assignment, db_session
         )
+        if (
+            isinstance(current_user, PublicUser) and not reveal_to_student
+            and not await _learner_assignment_past_due(db_session, assignment, course, current_user.id)
+        ):
+            from src.services.studytomy.assignment_adapter import capture_native_assignment_exposure
+
+            captured = await capture_native_assignment_exposure(db_session, assignment, current_user)
+            if course.studytomy_managed is True and not captured:
+                from src.services.studytomy.grading import issue_native_grading_contract
+
+                captured = await issue_native_grading_contract(db_session, assignment, current_user)
+            if captured:
+                await db_session.refresh(assignmenttask)
+    read = AssignmentTaskRead.model_validate(assignmenttask)
+    if not is_instructor:
         read.contents = _strip_answer_key(
             read.contents, keep_answer_keys=reveal_to_student
         )
+    if captured:
+        await db_session.commit()
     return read
 
 
@@ -1889,7 +1973,7 @@ async def put_assignment_task_submission_file(
     is_instructor = await authorization_verify_based_on_roles(
         request, current_user.id, "update", course.course_uuid, db_session
     )
-    if not is_instructor and _is_assignment_past_due(assignment):
+    if not is_instructor and await _learner_assignment_past_due(db_session, assignment, course, current_user.id):
         raise HTTPException(
             status_code=403,
             detail="Assignment deadline has passed",
@@ -2084,6 +2168,9 @@ async def delete_assignment_task(
     # RBAC check
     await authorize_assignment_access(request, db_session, current_user, course.course_uuid, AccessAction.DELETE)
 
+    from src.services.studytomy.assignment_adapter import ensure_native_source_deletable
+
+    await ensure_native_source_deletable(db_session, course.org_id, "task", assignment_task.assignment_task_uuid)
     # Delete Assignment Task
     activity_id = assignment_task.activity_id
     await db_session.delete(assignment_task)
@@ -2161,15 +2248,26 @@ async def _regrade_graded_submissions(
     reissued if they now pass. Pass ``request`` to enable reissue.
     """
     graded = (await db_session.execute(
-        select(AssignmentUserSubmission).where(
+        select(AssignmentUserSubmission.id, AssignmentUserSubmission.attempt_number).where(
             AssignmentUserSubmission.assignment_id == assignment.id,
             AssignmentUserSubmission.submission_status
             == AssignmentUserSubmissionStatus.GRADED,
         )
-    )).scalars().all()
+    )).all()
 
-    for submission in graded:
-        if submission.user_id is None:
+    for submission_id, attempt_number in graded:
+        submission = (await db_session.execute(
+            select(AssignmentUserSubmission)
+            .where(
+                AssignmentUserSubmission.id == submission_id,
+                AssignmentUserSubmission.attempt_number == attempt_number,
+                AssignmentUserSubmission.submission_status
+                == AssignmentUserSubmissionStatus.GRADED,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )).scalar_one_or_none()
+        if submission is None or submission.user_id is None:
             continue
         try:
             await _apply_grade_and_finalize(
@@ -2327,40 +2425,10 @@ async def handle_assignment_task_submission(
                     detail="You must be enrolled in this course to submit assignments"
                 )
 
-            if _is_assignment_past_due(assignment):
+            if course.studytomy_managed is not True and _is_assignment_past_due(assignment):
                 raise HTTPException(
                     status_code=403,
                     detail="Assignment deadline has passed",
-                )
-
-            # SECURITY: answers are frozen once the attempt has been handed in.
-            # Without this, a learner could keep PUTting task answers after
-            # SUBMITTED/GRADED. Combined with show_correct_answers (which hands
-            # the key over post-grade), they could replay the correct answers and
-            # any later re-grade, which re-derives every non-manually-graded task
-            # from the CURRENT stored answers, would score the tampered version.
-            # Editing an existing attempt in place is exactly what the retry flow
-            # exists to prevent; retry deletes the task rows first and re-opens
-            # the submission as PENDING.
-            existing_user_submission = (await db_session.execute(
-                select(AssignmentUserSubmission).where(
-                    AssignmentUserSubmission.user_id == current_user.id,
-                    AssignmentUserSubmission.assignment_id == assignment.id,
-                )
-            )).scalars().first()
-            if existing_user_submission is not None and (
-                existing_user_submission.submission_status
-                not in (
-                    AssignmentUserSubmissionStatus.PENDING,
-                    AssignmentUserSubmissionStatus.NOT_SUBMITTED,
-                )
-            ):
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        "This assignment has already been handed in. "
-                        "Use retry to attempt it again."
-                    ),
                 )
 
         # SECURITY: answer submissions cannot carry grades - only check if actual values are being set
@@ -2397,6 +2465,39 @@ async def handle_assignment_task_submission(
     else:
         # SECURITY: Instructors/admins need update permission to grade
         await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.UPDATE)
+
+    managed_answer_save = course.studytomy_managed is True and (
+        not is_instructor or not assignment_task_submission_uuid
+    )
+    attempt = None
+    if managed_answer_save:
+        from src.services.studytomy.grading import lock_or_reserve_native_round
+
+        # Reserve a lock target even if the learner skipped task issuance.
+        attempt = await lock_or_reserve_native_round(db_session, assignment, submitter.id)
+        if not is_instructor and await _learner_assignment_past_due(
+            db_session, assignment, course, submitter.id,
+        ):
+            raise HTTPException(status_code=403, detail="Assignment deadline has passed")
+    elif not is_instructor and not is_token_submit:
+        attempt = (await db_session.execute(
+            select(AssignmentUserSubmission).where(
+                AssignmentUserSubmission.user_id == submitter.id,
+                AssignmentUserSubmission.assignment_id == assignment.id,
+            )
+        )).scalar_one_or_none()
+    if attempt is not None and attempt.submission_status not in (
+        AssignmentUserSubmissionStatus.PENDING,
+        AssignmentUserSubmissionStatus.NOT_SUBMITTED,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="This assignment has already been handed in. Use retry to attempt it again.",
+        )
+    if managed_answer_save and not assignment.ungraded:
+        from src.services.studytomy.grading import record_grading_contract
+
+        await record_grading_contract(db_session, assignment, attempt, submitter, issued=True)
 
     if assignment_task_submission_uuid:
         statement = select(AssignmentTaskSubmission).where(
@@ -2455,6 +2556,70 @@ async def handle_assignment_task_submission(
                 status_code=403,
                 detail="You can only update your own submissions"
             )
+
+        if course.studytomy_managed is True and is_instructor and assignment_task_submission_uuid:
+            attempt = (await db_session.execute(
+                select(AssignmentUserSubmission)
+                .where(
+                    AssignmentUserSubmission.assignment_id == assignment.id,
+                    AssignmentUserSubmission.user_id == assignment_task_submission.user_id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )).scalar_one_or_none()
+            if attempt is None or attempt.submission_status not in (
+                AssignmentUserSubmissionStatus.SUBMITTED,
+                AssignmentUserSubmissionStatus.GRADED,
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="The learner must hand in the attempt before it can be marked.",
+                )
+            from src.services.studytomy.grading import APPEAL_CORRECTION_REASON, latest_assessment_result
+
+            recorded_result = await latest_assessment_result(db_session, assignment, attempt)
+            if recorded_result and recorded_result.reason == APPEAL_CORRECTION_REASON:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This result was corrected on appeal and requires independent review.",
+                )
+            assignment_task_submission = (await db_session.execute(
+                statement.execution_options(populate_existing=True)
+            )).scalar_one_or_none()
+            if assignment_task_submission is None:
+                raise HTTPException(status_code=409, detail="The task response changed before marking.")
+            grade = assignment_task_submission_object.grade
+            if grade is not None and not 0 <= grade <= assignment_task.max_grade_value:
+                raise HTTPException(status_code=422, detail="The mark is outside the task score range.")
+            if (grade is not None) != (assignment_task_submission_object.manually_graded is True):
+                raise HTTPException(status_code=422, detail="A manual mark requires an explicit task score.")
+            if grade is not None:
+                from src.services.studytomy.assignment_adapter import native_round_uuid
+                from src.services.studytomy.business_events import append_business_event
+
+                previous_score = (
+                    assignment_task_submission.grade
+                    if assignment_task_submission.manually_graded
+                    else None
+                )
+                await append_business_event(
+                    db_session,
+                    org_id=course.org_id,
+                    actor_user_id=current_user.id,
+                    actor_capacity="educator",
+                    action="studytomy.assessment.task_marked",
+                    reason_code="EDUCATOR_MARK_UPDATED" if previous_score is not None else "EDUCATOR_MARK_RECORDED",
+                    resource_kind="assignment_task_submission",
+                    resource_uuid=assignment_task_submission_uuid,
+                    operation_uuid=native_round_uuid(
+                        course.org_id, attempt.assignmentusersubmission_uuid, attempt.attempt_number
+                    ),
+                    before_state={"score_points": previous_score},
+                    after_state={"score_points": grade, "maximum_points": assignment_task.max_grade_value},
+                )
+            # The educator client may echo the answer alongside the mark.
+            # Preserve the stored learner response.
+            assignment_task_submission_object.task_submission = None
 
         # Update only the fields that were passed in
         for var, value in vars(assignment_task_submission_object).items():
@@ -2895,6 +3060,11 @@ async def delete_assignment_task_submission(
     await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.DELETE)
 
     # Delete Assignment Task Submission
+    if course.studytomy_managed is True:
+        raise HTTPException(
+            status_code=409,
+            detail="Managed assessment responses cannot be removed through native deletion.",
+        )
     deleted_user_id = assignment_task_submission.user_id
     await db_session.delete(assignment_task_submission)
     await db_session.commit()
@@ -2993,11 +3163,16 @@ async def create_assignment_submission(
 
     # Session students are bound by the deadline; a token writing on behalf of a
     # learner is an authorized external writer (the custom frontend owns it).
-    if not is_instructor and not is_token_submit and _is_assignment_past_due(assignment):
+    if not is_instructor and not is_token_submit and course.studytomy_managed is not True and _is_assignment_past_due(assignment):
         raise HTTPException(
             status_code=403,
             detail="Assignment deadline has passed",
         )
+
+    if course.studytomy_managed is True:
+        from src.services.studytomy.grading import lock_managed_assessment_source
+
+        await lock_managed_assessment_source(db_session, assignment)
 
     # Check if the submission has already been made. A row in PENDING /
     # NOT_SUBMITTED state means the learner previously hit "Try again":
@@ -3008,9 +3183,14 @@ async def create_assignment_submission(
     statement = select(AssignmentUserSubmission).where(
         AssignmentUserSubmission.assignment_id == assignment.id,
         AssignmentUserSubmission.user_id == submitter.id,
-    )
+    ).with_for_update().execution_options(populate_existing=True)
 
     assignment_user_submission = (await db_session.execute(statement)).scalars().first()
+
+    if course.studytomy_managed is True and not is_instructor and await _learner_assignment_past_due(
+        db_session, assignment, course, submitter.id,
+    ):
+        raise HTTPException(status_code=403, detail="Assignment deadline has passed")
 
     if assignment_user_submission:
         reusable_states = (
@@ -3031,6 +3211,12 @@ async def create_assignment_submission(
     # and a stale original date would put a brand-new retry at the bottom
     # next to old submissions.
     if assignment_user_submission:
+        from src.services.studytomy.assignment_adapter import freeze_native_assignment_answers
+
+        await freeze_native_assignment_answers(
+            db_session, assignment, assignment_user_submission,
+            direct_learner=not is_token_submit and not is_instructor,
+        )
         assignment_user_submission.submission_status = (
             AssignmentUserSubmissionStatus.SUBMITTED
         )
@@ -3055,6 +3241,12 @@ async def create_assignment_submission(
     db_session.add(assignment_user_submission)
     won_insert = True
     try:
+        if course.studytomy_managed is True:
+            from src.services.studytomy.grading import record_assessment_responses, record_grading_contract
+
+            if not assignment.ungraded:
+                await record_grading_contract(db_session, assignment, assignment_user_submission, current_user)
+            await record_assessment_responses(db_session, assignment, assignment_user_submission, submitter)
         await db_session.commit()
     except IntegrityError:  # pragma: no cover - concurrent-submit race recovery
         # The unique (user_id, assignment_id) constraint (verified in
@@ -3331,6 +3523,36 @@ async def create_assignment_submission(
     return AssignmentUserSubmissionRead.model_validate(assignment_user_submission)
 
 
+def _managed_grade_display(
+    assignment: Assignment,
+    tasks: Sequence[AssignmentTask],
+    task_submissions: dict[int, AssignmentTaskSubmission],
+    contract_digest: str,
+    state: dict,
+    feedback: str | None = None,
+) -> dict | None:
+    from src.services.studytomy.grading import task_marks_digest
+
+    matching_contract = state["source_snapshot_digest"] == contract_digest
+    grade_type = state.get("grading_type")
+    if grade_type is None and not matching_contract:
+        return None
+    grade = compute_assignment_grade(
+        state["score_points"],
+        state["maximum_points"],
+        grade_type or assignment.grading_type,
+        overall_feedback=feedback,
+        pass_threshold_percentage=state["passing_threshold"],
+    )
+    grade["passed"] = state["passed"]
+    grade["tasks"] = []
+    if matching_contract:
+        breakdown = _build_tasks_breakdown(tasks, task_submissions, state["passing_threshold"])
+        if task_marks_digest(breakdown) == state["result_digest"]:
+            grade["tasks"] = breakdown
+    return grade
+
+
 async def read_assignment_submissions(
     request: Request,
     assignment_uuid: str,
@@ -3389,6 +3611,12 @@ async def read_assignment_submissions(
     max_grade = sum(int(t.max_grade_value or 0) for t in assignment_tasks)
 
     submissions = (await db_session.execute(statement)).scalars().all()
+    managed_course = course.studytomy_managed is True
+    if managed_course:
+        from src.services.studytomy.grading import grading_contract_digest, latest_assessment_results
+
+        managed_results = await latest_assessment_results(db_session, assignment, submissions)
+        contract_digest = grading_contract_digest(assignment, assignment_tasks)
 
     # Per-task breakdown for the whole page in ONE query, keyed by (user, task).
     # The analytics "task difficulty" chart reads grade_display.tasks, but this
@@ -3411,7 +3639,20 @@ async def read_assignment_submissions(
     results = []
     for sub in submissions:
         row = AssignmentUserSubmissionRead.model_validate(sub).model_dump()
-        if sub.submission_status == AssignmentUserSubmissionStatus.GRADED:
+        if managed_course:
+            result = managed_results.get(sub.id)
+            grade_display = _managed_grade_display(
+                assignment,
+                assignment_tasks,
+                submissions_by_user_task.get(sub.user_id, {}),
+                contract_digest,
+                result.after_state,
+            ) if result is not None else None
+            row["grade_display"] = grade_display
+            row["grade"] = grade_display["grade"] if grade_display is not None else 0
+            if grade_display is None and sub.submission_status == AssignmentUserSubmissionStatus.GRADED:
+                row["submission_status"] = AssignmentUserSubmissionStatus.SUBMITTED
+        elif sub.submission_status == AssignmentUserSubmissionStatus.GRADED:
             grade_display = compute_assignment_grade(
                 int(sub.grade or 0),
                 max_grade,
@@ -3559,6 +3800,12 @@ async def update_assignment_submission(
             if hasattr(assignment_user_submission_object, protected_field):
                 setattr(assignment_user_submission_object, protected_field, None)
 
+    if course.studytomy_managed is True:
+        raise HTTPException(
+            status_code=409,
+            detail="Use the managed assessment workflow to change an attempt or grade.",
+        )
+
     # The row's identity (which user, which assignment) is fixed by the lookup
     # keys above; never let the request body reassign them. Left writable, an
     # instructor (or student) could reparent the submission onto another
@@ -3633,6 +3880,11 @@ async def delete_assignment_submission(
     # Leave the per-task AssignmentTaskSubmission rows intact so the student
     # keeps the work they did and can edit + resubmit rather than starting
     # from scratch.
+    if course.studytomy_managed is True:
+        raise HTTPException(
+            status_code=409,
+            detail="Managed assessment attempts cannot be removed through native deletion.",
+        )
     trailstep_statement = select(TrailStep).where(
         TrailStep.activity_id == assignment.activity_id,
         TrailStep.user_id == user_id,
@@ -3646,6 +3898,9 @@ async def delete_assignment_submission(
         db_session.add(trailstep)
 
     # Delete Assignment User Submission (so the student can create a new one)
+    from src.services.studytomy.assignment_adapter import retract_rejected_native_round
+
+    await retract_rejected_native_round(db_session, assignment, assignment_user_submission, current_user)
     await db_session.delete(assignment_user_submission)
     await db_session.commit()
 
@@ -3697,12 +3952,6 @@ async def retry_assignment_submission(
             detail="Assignment not found",
         )
 
-    if not assignment.allow_retries:
-        raise HTTPException(
-            status_code=403,
-            detail="Retries are not enabled for this assignment",
-        )
-
     statement = select(Course).where(Course.id == assignment.course_id)
     course = (await db_session.execute(statement)).scalars().first()
     if not course:
@@ -3714,6 +3963,12 @@ async def retry_assignment_submission(
     # Only READ permission is required: the student is rescheduling their
     # own work, not editing the assignment configuration.
     await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.READ)
+    if course.studytomy_managed is not True and not assignment.allow_retries:
+        raise HTTPException(status_code=403, detail="Retries are not enabled for this assignment")
+    if course.studytomy_managed is True:
+        from src.services.studytomy.grading import lock_managed_assessment_source
+
+        await lock_managed_assessment_source(db_session, assignment)
 
     # Row-level lock on the user's submission so two concurrent retries can't
     # both read attempt_number=N, pass the cap check, and increment to N+1,
@@ -3765,7 +4020,15 @@ async def retry_assignment_submission(
     # (every write path 403s), so allowing it here destroyed graded work with no
     # way back. Every other learner write is deadline-gated (file upload, task
     # submission, submit-for-grading); this one was the sole gap.
-    if _is_assignment_past_due(assignment) and not await _is_assignment_instructor(
+    grant = None
+    if course.studytomy_managed is True:
+        from src.services.studytomy.assessment_reviews import resolve_assessment_retry_grant
+
+        grant = await resolve_assessment_retry_grant(db_session, assignment, assignment_user_submission)
+        if grant is None and not assignment.allow_retries:
+            raise HTTPException(status_code=403, detail="Retries are not enabled for this assignment")
+
+    if grant is None and _is_assignment_past_due(assignment) and not await _is_assignment_instructor(
         request, current_user, course.course_uuid, db_session
     ):
         raise HTTPException(
@@ -3778,7 +4041,7 @@ async def retry_assignment_submission(
     # increment below stays within bounds.
     current_attempt = int(assignment_user_submission.attempt_number or 1)
     max_attempts = int(assignment.max_retries or 0)
-    if max_attempts and current_attempt >= max_attempts:
+    if grant is None and max_attempts and current_attempt >= max_attempts:
         raise HTTPException(
             status_code=403,
             detail="No retry attempts remaining",
@@ -3787,6 +4050,13 @@ async def retry_assignment_submission(
     # Wipe per-task submissions so the student starts the next attempt with
     # an empty slate. Without this the prior answers stay on screen and the
     # auto-grader would just re-grade the existing work.
+    from src.services.studytomy.assignment_adapter import ensure_native_retry_round_frozen
+
+    await ensure_native_retry_round_frozen(db_session, assignment, assignment_user_submission)
+    if course.studytomy_managed is True:
+        from src.services.studytomy.grading import archive_assessment_responses_before_retry
+
+        await archive_assessment_responses_before_retry(db_session, assignment, assignment_user_submission)
     task_ids_statement = select(AssignmentTask.id).where(
         AssignmentTask.assignment_id == assignment.id
     )
@@ -3826,6 +4096,10 @@ async def retry_assignment_submission(
     assignment_user_submission.attempt_number = current_attempt + 1
     assignment_user_submission.update_date = str(datetime.now())
     db_session.add(assignment_user_submission)
+    if grant is not None:
+        from src.services.studytomy.assessment_reviews import record_granted_retry_window
+
+        await record_granted_retry_window(db_session, assignment, assignment_user_submission, grant, current_user)
 
     await db_session.commit()
     await db_session.refresh(assignment_user_submission)
@@ -3867,6 +4141,7 @@ async def _apply_grade_and_finalize(
     auto_graded: bool = False,
     dispatch_webhook: bool = True,
     assignment_tasks: Sequence[AssignmentTask] | None = None,
+    reviewer: PublicUser | APITokenUser | None = None,
 ) -> dict:
     """
     Core grading logic shared by manual and auto-grade flows. Computes the
@@ -3905,6 +4180,40 @@ async def _apply_grade_and_finalize(
             AssignmentTask.assignment_id == assignment.id
         )
         assignment_tasks = (await db_session.execute(tasks_statement)).scalars().all()
+    managed_course = course.studytomy_managed is True
+    if managed_course:
+        from src.services.studytomy.grading import (
+            APPEAL_CORRECTION_REASON, assessment_responses_match_hand_in,
+            has_matching_grading_contract, latest_assessment_result,
+        )
+
+        locked_attempt = (await db_session.execute(
+            select(AssignmentUserSubmission)
+            .where(
+                AssignmentUserSubmission.id == assignment_user_submission.id,
+                AssignmentUserSubmission.attempt_number == assignment_user_submission.attempt_number,
+                AssignmentUserSubmission.submission_status.in_([
+                    AssignmentUserSubmissionStatus.SUBMITTED,
+                    AssignmentUserSubmissionStatus.GRADED,
+                ]),
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )).scalar_one_or_none()
+        if locked_attempt is None:
+            return {"finalized": False, "reason": "managed_assessment_attempt_changed"}
+        assignment_user_submission = locked_attempt
+        recorded_result = await latest_assessment_result(db_session, assignment, locked_attempt)
+        if recorded_result and recorded_result.reason == APPEAL_CORRECTION_REASON:
+            return {"finalized": False, "reason": "managed_assessment_moderated"}
+
+        if not await has_matching_grading_contract(
+            db_session, assignment, assignment_user_submission, assignment_tasks
+        ):
+            return {"finalized": False, "reason": "managed_assessment_contract_unverified"}
+        if not await assessment_responses_match_hand_in(db_session, assignment, locked_attempt):
+            return {"finalized": False, "reason": "managed_assessment_responses_unverified"}
+
     max_grade = 0
     for task in assignment_tasks:
         max_grade += int(task.max_grade_value or 0)
@@ -3939,11 +4248,19 @@ async def _apply_grade_and_finalize(
     # a later re-grade instead. Manual grading (auto_graded=False) is unaffected:
     # the teacher is deliberately grading, so we keep existing per-task grades.
     code_unverifiable = False
+    managed_review_pending = managed_course and max_grade <= 0
     for task in assignment_tasks:
         ts = task_submissions_by_task_id.get(task.id)
+        if managed_course and (ts is None or not ts.task_submission):
+            managed_review_pending = True
+            continue
         if ts is not None and ts.manually_graded:
+            if managed_course and not 0 <= int(ts.grade or 0) <= int(task.max_grade_value or 0):
+                managed_review_pending = True
             continue
         verified = await _server_verified_task_grade(task, ts)
+        if managed_course and verified is None:
+            managed_review_pending = True
         if (
             verified is None
             and ts is not None
@@ -3961,11 +4278,17 @@ async def _apply_grade_and_finalize(
             )
             db_session.add(ts)
 
-    # Auto-grade + an unverifiable CODE task → don't finalize. Persist any
-    # re-verified sibling grades, keep the submission SUBMITTED, and skip the
-    # GRADED transition + graded webhook so completion/cert stay withheld until
-    # the CODE task can actually be graded (Judge0 recovers, or a teacher grades
-    # it manually). Returns finalized=False so callers know it stayed pending.
+    # Managed results require a response and a verified or reviewed mark for
+    # every task. Save any verified sibling grades for the pending review.
+    if managed_review_pending:
+        assignment_user_submission.submission_status = AssignmentUserSubmissionStatus.SUBMITTED
+        db_session.add(assignment_user_submission)
+        await db_session.commit()
+        await db_session.refresh(assignment_user_submission)
+        return {"finalized": False, "reason": "managed_assessment_review_pending"}
+
+    # Keep native auto-grades pending while a submitted CODE task cannot be
+    # verified. A later verification or teacher grade can finalize the result.
     if auto_graded and code_unverifiable:
         db_session.add(assignment_user_submission)
         await db_session.commit()
@@ -4002,6 +4325,24 @@ async def _apply_grade_and_finalize(
     )
 
     # Persist the clamped raw grade + flip status to GRADED in a single commit
+    from src.services.studytomy.assignment_adapter import journal_native_assignment_grade
+
+    await journal_native_assignment_grade(
+        db_session,
+        assignment,
+        assignment_user_submission,
+        frozenset(
+            task.assignment_task_uuid for task in assignment_tasks
+            if (submission := task_submissions_by_task_id.get(task.id)) is not None
+            and submission.manually_graded
+        ),
+    )
+    if managed_course:
+        from src.services.studytomy.grading import record_assessment_result
+
+        await record_assessment_result(
+            db_session, assignment, assignment_user_submission, assignment_tasks, computed, reviewer
+        )
     assignment_user_submission.grade = computed["grade"]
     assignment_user_submission.submission_status = AssignmentUserSubmissionStatus.GRADED
     db_session.add(assignment_user_submission)
@@ -4115,11 +4456,16 @@ async def grade_assignment_submission(
 
     # SECURITY: Require course ownership or instructor role for grading
     await authorize_assignment_access(request, db_session, current_user, course.course_uuid, AccessAction.UPDATE)
-
-    # Check if assignment user submission exists
-    statement = select(AssignmentUserSubmission).where(
-        AssignmentUserSubmission.user_id == user_id,
-        AssignmentUserSubmission.assignment_id == assignment.id,
+    # Retry locks this same row before clearing task answers. Read its
+    # current state under that lock before capturing a grade or evidence.
+    statement = (
+        select(AssignmentUserSubmission)
+        .where(
+            AssignmentUserSubmission.user_id == user_id,
+            AssignmentUserSubmission.assignment_id == assignment.id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     assignment_user_submission = (await db_session.execute(statement)).scalars().first()
 
@@ -4154,7 +4500,10 @@ async def grade_assignment_submission(
         db_session=db_session,
         overall_feedback=overall_feedback,
         auto_graded=False,
+        reviewer=current_user if isinstance(current_user, (PublicUser, APITokenUser)) else None,
     )
+    if computed.get("finalized") is False:
+        return {"message": "Assignment submission is awaiting review.", **computed}
 
     # Grading this submission may have made the course fully passed (e.g. the
     # teacher just graded the last outstanding assignment). The activities are
@@ -4243,9 +4592,18 @@ async def get_grade_assignment_submission(
             detail="Assignment User Submission not found",
         )
 
-    # Recompute max_grade from current task configuration. Doing this on read
-    # (rather than storing a stale value) means instructor edits to task
-    # max_grade_value are reflected immediately.
+    # Managed grades use the reviewed result. Legacy grades use current tasks.
+    managed_result = None
+    if course.studytomy_managed is True:
+        from src.services.studytomy.grading import latest_assessment_result
+
+        if assignment_user_submission.submission_status != AssignmentUserSubmissionStatus.GRADED:
+            raise HTTPException(status_code=409, detail="The assessment is awaiting a finalized result.")
+        result = await latest_assessment_result(db_session, assignment, assignment_user_submission)
+        if result is None:
+            raise HTTPException(status_code=409, detail="The assessment is awaiting a verified result.")
+        managed_result = result.after_state
+
     tasks_statement = select(AssignmentTask).where(
         AssignmentTask.assignment_id == assignment.id
     )
@@ -4266,6 +4624,29 @@ async def get_grade_assignment_submission(
         )
         for ts in (await db_session.execute(ts_statement)).scalars().all():
             task_submissions_by_task_id[ts.assignment_task_id] = ts
+
+    if managed_result is not None:
+        from src.services.studytomy.grading import grading_contract_digest
+
+        grade_obj = _managed_grade_display(
+            assignment,
+            assignment_tasks,
+            task_submissions_by_task_id,
+            grading_contract_digest(assignment, assignment_tasks),
+            managed_result,
+            assignment_user_submission.overall_feedback,
+        )
+        if grade_obj is None:
+            raise HTTPException(status_code=409, detail="The assessment result requires review.")
+        grade_obj["result_uuid"] = result.event_uuid
+        grade_obj["submission_uuid"] = assignment_user_submission.assignmentusersubmission_uuid
+        if isinstance(current_user, PublicUser) and current_user.id == assignment_user_submission.user_id:
+            from src.services.studytomy.assessment_reviews import learner_reviewed_retry_deadline
+
+            grade_obj["reviewed_retry_expires_at"] = await learner_reviewed_retry_deadline(
+                db_session, assignment, assignment_user_submission,
+            )
+        return grade_obj
 
     grade_obj = compute_assignment_grade(
         int(assignment_user_submission.grade or 0),

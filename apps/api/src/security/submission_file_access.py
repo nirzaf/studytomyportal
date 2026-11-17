@@ -18,6 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.courses.assignments import AssignmentTask, AssignmentTaskSubmission
 from src.db.courses.courses import Course
+from src.db.organizations import Organization
 from src.db.users import AnonymousUser, APITokenUser
 
 # Keys under which a FILE_SUBMISSION task_submission stores the uploaded
@@ -100,6 +101,31 @@ def split_content_path(file_path: str) -> list[str]:
 def is_private_studytomy_path(parts: list[str]) -> bool:
     """Reserve the organization Studytomy namespace for purpose-specific routes."""
     return len(parts) >= 3 and parts[0].casefold() == "orgs" and parts[2].casefold() == "studytomy"
+
+
+async def enforce_managed_course_file_access(
+    parts: list[str], request: Request | None, current_user, db_session: AsyncSession,
+) -> bool:
+    """Require staff authorization before delivery of any managed course file."""
+    if len(parts) < 5 or parts[0] != "orgs" or parts[2] != "courses":
+        return False
+    org_uuid, course_uuid = parts[1], parts[3]
+    result = await db_session.execute(select(Course).where(
+        Course.course_uuid == course_uuid.lower(), Course.studytomy_managed.is_(True)
+    ))
+    course = result.scalars().first()
+    if getattr(course, "studytomy_managed", False) is not True:
+        return False
+    managed_org = (await db_session.execute(
+        select(Organization.org_uuid).where(Organization.id == course.org_id)
+    )).scalar_one_or_none()
+    if managed_org != org_uuid:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    from src.security.rbac import AccessAction, check_resource_access
+
+    await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.READ)
+    return True
 
 
 def is_submission_file(parts: list[str]) -> bool:
