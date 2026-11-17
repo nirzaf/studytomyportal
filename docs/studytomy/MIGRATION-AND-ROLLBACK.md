@@ -1,4 +1,4 @@
-# StudyTOMY migration and rollback notes
+# Studytomy migration and rollback notes
 
 **Status:** local engineering guidance; not production approval.
 
@@ -20,7 +20,9 @@ until the applicable decisions and release gates are approved.
   schema, then run the opt-in PostgreSQL tests. Never point
   `STUDYTOMY_TEST_DATABASE_URL` at a runtime or production database.
 
-The current StudyTOMY suffix begins at `f5a8b3d0c2e4` and ends at
+## Historical foundation rehearsal
+
+The foundation checkpoint described here began at `f5a8b3d0c2e4` and ended at
 `8b53c0d1e6a4`. A disposable PostgreSQL 16 rehearsal created the parent schema
 with clean `main`, upgraded it with the working tree, and started the older app
 with the explicit rollback option. The old app reported `forward-compatible`,
@@ -29,6 +31,17 @@ PostgreSQL-enabled StudyTOMY suite then passed 169 tests. A separate local run
 downgraded and re-upgraded the suffix against a model-created schema. These are
 local schema/startup results; they are not production backup/restore or full
 feature-level old-application compatibility acceptance.
+
+## Determine the current graph before changing a database
+
+The active local checkout now contains additional family, commerce, adaptive and
+publication revisions beyond the historical head above. Inspect staged, unstaged
+and untracked migration files. From `apps/api`, run `uv run --no-sync alembic heads`
+and `uv run --no-sync alembic history`; compare with the target database revision
+using read-only inspection. Do not stamp or downgrade a database merely to match
+a number copied from this document. Local `ALE-LOCAL-PILOT.md` and
+`ALE-IMPLEMENTATION.md`, when present, hold later dated rehearsal records; their
+counts/heads are also checkpoint evidence, not universal current facts.
 
 ## Older-application rollback
 

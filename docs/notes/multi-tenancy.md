@@ -1,10 +1,12 @@
 # Multi-Tenancy
 
+**Applicability:** LearnHouse-derived tenancy design, not Studytomy deployment authorization. Verify current `apps/api/config/config.py`, auth/cookie helpers and `apps/web/proxy.ts` before changing routing. Preserve licensing gates; SaaS flags are not permission to enable commercial features. Historical rollout notes below refer to the upstream cookie transition, not a new rollout instruction.
+
 LearnHouse supports two tenancy modes, selected by a single environment variable: `LEARNHOUSE_TENANCY`.
 
 | Value      | Use case                                              | Hostname pattern                  | Default org? |
 |------------|-------------------------------------------------------|-----------------------------------|--------------|
-| `multi`    | SaaS-style hosting with multiple orgs (EE-only)       | `slug.your-domain.tld`            | No           |
+| `multi`    | SaaS-style hosting with multiple orgs (EE or SaaS)       | `slug.your-domain.tld`            | No           |
 | `single`   | Self-hosted dev (`localhost`) or self-hosted VPS      | Any host the request arrives on   | Always       |
 
 There is no third mode: `single` covers both `localhost:3000` and any production VPS hostname. The code path is the same; the only differences are derived from the request itself (e.g. `Secure` cookie flag from the request scheme).
@@ -116,11 +118,11 @@ Cookies are hints; the backend is the security boundary. Per-cookie:
 
 - **`LH_access` / `LH_refresh`**: signed JWTs (HS256, server-side secret). Tampering invalidates the signature → API rejects. Also bound to `password_changed_at` and a Redis revocation list, so stale-but-valid tokens get rejected after logout/password change.
 - **`LH_tenancy`, `LH_default_org`, `LH_frontend_domain`, `LH_top_domain`, `LH_mode`, `LH_custom_domain`**: UX hints only. The middleware fetches authoritative tenancy/mode from the backend (`/instance/info`, server-side config). Editing these cookies only affects the rendered UI in that user's browser; they cannot redirect routing to a different deployment shape.
-- **`LH_org`**: also a hint. The proxy may rewrite to `/orgs/{tampered-slug}/...`, but every API endpoint re-checks `require_org_membership(user_id, org_id)`. Worst case: the tamperer sees a broken UI shell with no data.
+- **`LH_org`**: also a hint. The proxy may rewrite to `/orgs/{tampered-slug}/...`, but server authorization must independently resolve the resource, organization and caller. Public native content intentionally has different rules from private content; managed Studytomy content adds eligibility and reviewed grant checks. Do not infer that every route calls one membership helper or that a routing-cookie test proves all data paths safe.
 - **`LH_session`**: non-httpOnly boolean. Setting it to `1` without a valid JWT just triggers the "redirect logged-in users away from /login" branch. The dashboard then fails real auth and redirects back. Annoyance, not breach.
 - **`LH_region`**: changes which currency Stripe shows. **Stripe enforces server-side prices at checkout**, so the user can change the display but not the charge.
 
-Defense in depth: cookies tell us what UI to render, the JWT tells us who you are, the database tells us what you're allowed to do. Every API endpoint enforces the last two regardless of the first.
+Defense in depth: cookies tell us what UI to render, the JWT tells us who you are, the database tells us what you're allowed to do. Each sensitive route must enforce identity and resource authorization independently of those hints; verify its actual dependency and service path rather than treating this architecture note as a complete route audit.
 
 ### Cookie domain rules
 

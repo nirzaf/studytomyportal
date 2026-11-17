@@ -1,6 +1,8 @@
 # Running the demo stack locally
 
-Everything below runs on this machine. Nothing is deployed anywhere.
+**Scope:** optional upstream demo fixture, not the Studytomy learner pilot. Use only disposable local data. The seed refresh intentionally resets demo content. Do not copy its SaaS flag, direct account-verification workaround, or fixture credentials into a real-user environment. This guide describes scripts, not a currently running stack.
+
+The commands below are for local execution only; they do not establish that any service is already running or deployed.
 
 ## URLs
 
@@ -26,8 +28,14 @@ watch a refresh land without waiting.
 ## Start it
 
 ```bash
-# 1. Postgres + Redis
+# 1. Provision disposable PostgreSQL + Redis using the root local setup guide.
+# .learnhouse/docker-compose.dev.yml is generated/local, not a tracked file.
+# Only run this if you have generated and reviewed that local Compose file:
 docker compose -f .learnhouse/docker-compose.dev.yml up -d
+
+# Each following service uses a SEPARATE terminal from the repository root.
+# The scripts assume PostgreSQL localhost:5432 and Redis localhost:6379/0.
+# Check port conflicts and database ownership before starting.
 
 # 2. API (exports its own env; see the file for why)
 cd apps/api && bash run_demo_api.sh
@@ -37,8 +45,11 @@ cd apps/api && bash run_demo_api.sh
 #    broken feature rather than a service nobody started.
 cd apps/collab && bash run_demo_collab.sh
 
-# 4. Web
-cd apps/web && bun run next build && bun run next start -p 3010
+# 4. Web: point this build at the demo API, not the default backend.
+cd apps/web
+export NEXT_PUBLIC_LEARNHOUSE_BACKEND_URL=http://lvh.me:1348/
+export NEXT_PUBLIC_LEARNHOUSE_API_URL=http://lvh.me:1348/api/v1/
+bun x next build && bun x next start -p 3010
 ```
 
 The demo builds itself on API startup and refreshes every 10 minutes after that.
@@ -51,9 +62,10 @@ the default org's dashboard. `run_demo_api.sh` therefore sets
 `LEARNHOUSE_TENANCY=multi` with `LEARNHOUSE_DOMAIN=lvh.me:3010`, which is how
 `demo.<domain>` would work in production too.
 
-Multi tenancy is gated on "EE available OR SaaS mode". The script uses
-`LEARNHOUSE_SAAS=true` because the EE checkout this worktree symlinks to expects
-a module this branch does not have; the demo needs nothing from EE.
+Multi tenancy is gated on "EE available OR SaaS mode". The script sets
+`LEARNHOUSE_SAAS=true` for this synthetic upstream demo. That flag is not
+a license grant or an approved Studytomy operating mode. An EE symlink is not
+required by this guide, and its availability must be checked rather than assumed.
 
 ## Watching it work
 
@@ -106,12 +118,15 @@ nor should override.
 
 ## Things to know
 
-- `apps/api/.env` deliberately holds credentials only. `config.py` calls
+- Keep demo/tenancy settings out of shared test configuration. The original fixture
+  kept `apps/api/.env` limited to credentials. `config.py` calls
   `load_dotenv()` while parsing, so anything in it also reaches the test
   process. Tenancy and demo flags there made four unrelated tests fail on this
   machine and nowhere else.
-- Redis caches `/instance/info` for 600s. After changing tenancy, run
-  `docker exec learnhouse-redis-dev redis-cli FLUSHALL`.
+- `/instance/info` caches organization/tenancy metadata for 600 seconds, while
+  deployment mode and feature availability are recomputed live (`apps/api/src/routers/instance.py`). Do not use `FLUSHALL`
+  to troubleshoot tenancy: it deletes unrelated Redis state. Inspect the response
+  and effective config first; use the existing targeted org-cache invalidation if needed.
 - The admin account must be marked email-verified directly in the database;
   SaaS mode requires verification and there is no mail provider configured here:
   `UPDATE "user" SET email_verified = true WHERE email = 'admin@school.dev';`

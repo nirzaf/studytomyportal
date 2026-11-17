@@ -31,6 +31,8 @@ No application tests, migrations or browser journey were run in this documentati
 
 ## Coverage and preservation decisions
 
+The table below records the first checkpoint. The extended pass following it supersedes the classification-only rows where stated.
+
 | Documents | Review depth / disposition |
 |---|---|
 | `AGENTS.md`, root `README.md`, `CONTRIBUTING.md`, `LOCAL-ONLY.md`, `PORTAL_GUIDE.md`, `docs/README.md`, `apps/e2e/README.md`, `apps/cli/README.md`, `apps/web/README.md`, `STUDYTOMY-ACCESS-PATH-INVENTORY.md` | Targeted source/contract reconciliation and corrections above; not every command and feature re-executed |
@@ -57,3 +59,32 @@ Documentation diff/whitespace and local links in changed files are checked befor
 | `apps/api/src/services/studytomy/adaptive_reports.py` | `6410466bbbe91f45bfe7ce52d76b6d610a9f8ddcc863b8bf81147565bac6bc54` |
 | `apps/api/src/services/studytomy/adaptive_attempts.py` | `61a60528f2574e32641357890e075bbd3a147f5a2d6bdba5e8ed9b9760909676` |
 | `apps/api/src/db/courses/courses.py` | `e4fb6472e669bdc38c38205a2c2cb5e9e269db78c86cba6dd14445aa58e3be07` |
+
+## Extended active-document pass
+
+All repository-owned Markdown files in the tracked inventory were considered for purpose and currency, including component/package guides, tenancy, demo operation, licensing/proposals and the active local evidence logs. This is documentation coverage, not exhaustive verification of every historical test result or every application behavior. MDX pages and vendored/generated dependency docs remain excluded.
+
+| Additional area | Source inspected and resulting correction |
+|---|---|
+| Demo operation | `apps/api/run_demo_api.sh`, `apps/collab/run_demo_collab.sh`, `apps/web/services/config/config.ts:155`, `apps/api/src/routers/instance.py:44-84` and `services/orgs/cache.py`: distinguish generated Compose prerequisites, separate terminals and explicit web API config; remove destructive Redis-wide cache advice; label fixture-only SaaS/verification behavior |
+| Security test guide | Actual test inventory and `apps/api/src/tests/conftest.py:14-52`: replace stale six-file/mock-only/CI claims with focused test navigation, correct API working directory and local fixture limitations |
+| E2E subguides | `apps/e2e/core/instance.ts:13-36`, SCORM fixture generator: correct relative fixture destination and split API origin; retain EE requirements and local disposable scope |
+| EE stubs | `apps/web/next.config.js:8-35`: document known-entrypoint detection and forced-off flags, not directory-exists-only behavior |
+| Tenancy | `apps/api/config/config.py:308-397,637-660`, web proxy/auth and resource authorization paths: qualify EE/SaaS selection and remove blanket all-endpoints-use-one-membership-helper claim |
+| Migration notes | Actual local revision files continue beyond the old foundation head; mark old 169-test rehearsal historical and require inspection of actual graph/target DB before operations |
+| SDK/renderers | Package manifests, SDK HTTP/auth/generator sources, React custom-element and Vue exports: preserve upstream API docs; clarify published-package/local-fork distinction and Windows Python resolution; keep unresolved licensing decisions intact |
+| Architecture evidence links | Nineteen references led to unpublished local source, not files in published main. Convert to explicit local path:line references without losing evidence or claiming code was published |
+| Historical CLI audit | Retain unique mutation results but prominently label them as historical, not freshly re-executed evidence |
+
+The credential ADR remains a pending decision: local `UserBase.email` and native authentication still require email, and profile creation is not credential provisioning. The virtual lab document is already a proposal pinned to source revisions, so it is retained. Demo provenance and license notices are retained without relicensing or asserting fresh provenance certification. The scoped web AGENTS block is generated Next.js guidance and remains intact.
+
+### Active writer-owned evidence logs
+
+Read-only cross-checks covered the current summaries, historical checkpoint structure, command paths and material permission/migration assertions in `IMPLEMENTATION-STATUS.md`, `CONTENT-PUBLICATION-PATHS.md`, `GENUI-IMPLEMENTATION.md`, `ALE-IMPLEMENTATION.md` and `ALE-LOCAL-PILOT.md`. Their local source references were checked against managed-course access, publication, report and practice services. Their dated counts were not rerun.
+
+- The current implementation summary supersedes early “Still open” claims: managed markers/grants, refund and retention mechanisms now exist locally. The old sections must not be treated as current absence claims.
+- Content-publication and ALE “missing” tables are initial baselines; later checkpoints and actual source supersede them.
+- GENUI HTTP routes exist, but `learning_practice.py:60-69` still denies practice pending approved policies. Do not confuse route presence with activation.
+- GENUI's retained `61b26e413fa2`, ALE's `b043fde62c98` chain and 494-test count are historical checkpoints. Inspect current graph and preserve actual target revision during rollback.
+
+These logs are concurrently owned by the implementation writer and partly unpublished. This documentation publication does not copy or stage its large unreviewed evidence files, nor change the live index. Navigation above and the current-source-first index provide the safe reading order; any local header refinements are tracked separately by coordination.

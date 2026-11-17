@@ -21,4 +21,5 @@ Three things are worth automating here, because all three fail silently:
 Run against a branch-built image rather than the published one, since the
 published image lags this branch:
 
+    # From apps/e2e; set E2E_API_URL too if API is on a separate port.
     E2E_BASE_URL=http://localhost:8080 bunx playwright test features/rtl

@@ -1,5 +1,7 @@
 # SCORM e2e
 
+Use an authorized, disposable EE development fixture only. Set both browser and API URLs to its actual ports; the split-port example below is not a claim that the stack is running. Do not enable EE or use real student accounts merely to run these tests.
+
 End-to-end coverage of the EE SCORM feature: upload → analyze → import →
 runtime tracking → resume → instructor reporting, plus a browser smoke of the
 player.
@@ -16,7 +18,7 @@ learnhouse dev --ee
 
 # Then, against that instance:
 cd apps/e2e
-E2E_BASE_URL=http://localhost:3000 \
+E2E_BASE_URL=http://localhost:3000 E2E_API_URL=http://localhost:1338/api/v1 \
 E2E_ADMIN_EMAIL=<admin email> E2E_ADMIN_PASSWORD=<admin password> \
 bun run test features/scorm
 ```
@@ -32,5 +34,5 @@ the player UI.
 
 ```bash
 cd apps/api
-uv run python -m src.tests.fixtures.scorm_packages ../apps/e2e/features/scorm/fixtures
+uv run python -m src.tests.fixtures.scorm_packages ../e2e/features/scorm/fixtures
 ```

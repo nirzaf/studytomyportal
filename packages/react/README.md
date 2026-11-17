@@ -1,5 +1,7 @@
 # @learnhouse/react
 
+**Studytomy fork scope:** retained upstream package API documentation. Installing the published `@learnhouse/*` package does not include unpublished Studytomy changes. Inspect this package’s manifest, source and generated/synced output before relying on version parity. Package names and upstream attribution are intentionally retained; this documentation update does not authorize npm publication or resolve licensing decisions.
+
 Render LearnHouse activities inside any React app. Pages, quizzes, flipcards, scenarios, code playgrounds, math, video and PDFs all look and behave as they do in LearnHouse.
 
 The package is compiled from the LearnHouse web app's own source at each release. Its version always matches the LearnHouse release it was built from, so `@learnhouse/react@1.4.3` renders exactly what LearnHouse 1.4.3 renders.

@@ -1,170 +1,31 @@
-# Security Module Tests
+# API security regression tests
 
-Unit tests for the security module of the LearnHouse API.
+This directory tests LearnHouse-derived and Studytomy security boundaries. It is not a certification that every route is secure, and a test file's presence is not a passing result.
 
-## Test Structure
+## Find the relevant checks
 
-The security tests are organized into the following files:
+| Concern | Representative tests |
+|---|---|
+| Authentication, revocation and cookies | `test_auth.py`, `test_auth_runtime.py`, `test_session_revocation.py`, `test_csrf.py` |
+| Roles, org scope and tokens | `test_rbac.py`, `test_rbac_cross_org.py`, `test_api_token_access.py`, `test_mcp_auth.py` |
+| Courses, assignments and media | `test_content_access.py`, `test_assignment_content_gates.py`, `test_media_file_access.py`, `test_submission_file_access.py` |
+| AI retrieval and limits | `test_rag_access_scope.py`, `test_ai_cross_org_credit_drain.py`, `test_feature_resolve.py` |
+| Input and resource boundaries | `test_file_validation.py`, `test_resource_exhaustion_limits.py`, `test_custom_domain_live_dns.py` |
 
-### Core Security Tests
-- **`test_security.py`**: Tests for password hashing, JWT constants, and core security functions
-- **`test_auth.py`**: Tests for JWT authentication, user authentication, and token management
+Use filename search and the current service callers to select additional tests; this is deliberately not an exhaustive copied inventory. `test_security_all.py` is a legacy combined test module, not a substitute for collecting this directory. Studytomy-specific authority, immutable evidence and PostgreSQL races also live in `../studytomy` in the development worktree.
 
-### Role-Based Access Control (RBAC) Tests
-- **`test_rbac.py`**: Tests for RBAC authorization functions and user permissions
-- **`test_rbac_utils.py`**: Tests for RBAC utility functions like element type checking
+## Run locally
 
-### Feature Usage Tests
-- **`test_features_utils.py`**: Tests for feature usage tracking and limits
+From the repository root, after installing locked API dependencies:
 
-### Combined Suite
-- **`test_security_all.py`**: Test suite that imports and validates all security modules
-
-## Test Coverage
-
-### Security Core (`test_security.py`)
-- Password hashing with `security_hash_password()`
-- Password verification with `security_verify_password()`
-- JWT constants validation
-- Edge cases (special characters, unicode, long passwords)
-- Password consistency and security
-
-### Authentication (`test_auth.py`)
-- JWT token creation and validation
-- User authentication flow
-- Anonymous user handling
-- Token expiry and validation
-- Error handling for invalid tokens
-- Settings and configuration validation
-
-### RBAC (`test_rbac.py`)
-- Public element authorization
-- User author verification
-- Role-based permissions
-- Organization admin status
-- Combined roles and authorship
-- Anonymous user restrictions
-
-### RBAC Utils (`test_rbac_utils.py`)
-- Element type detection for all supported types
-- Singular form conversion
-- ID identifier generation
-- Edge cases and error handling
-- Consistency validation
-
-### Feature Usage (`test_features_utils.py`)
-- Feature limit checking
-- Usage tracking (increase/decrease)
-- Redis integration
-- Organization configuration validation
-- Unlimited feature handling
-- Error handling for missing configs
-
-## Running the Tests
-
-### Run All Security Tests
 ```bash
-# From the project root
-pytest src/tests/security/ -v
-
-# Run with coverage
-pytest src/tests/security/ --cov=src.security --cov-report=html
+cd apps/api
+uv run --no-sync pytest src/tests/security/ --collect-only -q
+uv run --no-sync pytest src/tests/security/test_rag_access_scope.py -q
+# Broader suite, after reviewing fixture side effects:
+uv run --no-sync pytest src/tests/security/ -q
 ```
 
-### Run Specific Test Files
-```bash
-# Run only core security tests
-pytest src/tests/security/test_security.py -v
+The shared `../conftest.py` sets `TESTING=true`, forces OSS and disables the demo. It supplies in-memory SQLite fixtures as well as mocks; do not claim all tests are mock-only or establish PostgreSQL locking behavior. Check each test and fixture for its dependencies, skips and platform restrictions. Use the explicit disposable PostgreSQL fixtures for database concurrency acceptance, never runtime data. Record the exact command, checkout and result. Repository CI/CD is disabled by local-only project policy; run these checks locally.
 
-# Run only authentication tests
-pytest src/tests/security/test_auth.py -v
-
-# Run only RBAC tests
-pytest src/tests/security/test_rbac.py -v
-
-# Run only feature usage tests
-pytest src/tests/security/test_features_utils.py -v
-```
-
-### Run the Combined Suite
-```bash
-# Run the combined test suite
-pytest src/tests/security/test_security_all.py -v
-```
-
-## Test Dependencies
-
-The tests use the following dependencies:
-- `pytest`: Testing framework
-- `pytest-asyncio`: Async test support
-- `unittest.mock`: Mocking and patching
-- `fastapi`: HTTP exception testing
-- `sqlmodel`: Database session mocking
-
-## Mock Strategy
-
-The tests mock external dependencies to isolate the security code:
-
-1. **Database Sessions**: Mocked to avoid actual database connections
-2. **Redis Connections**: Mocked to avoid actual Redis dependencies
-3. **External Services**: Mocked to test error conditions
-4. **Configuration**: Mocked to test different config scenarios
-
-## Test Patterns
-
-### Async Testing
-Async functions are tested with the `@pytest.mark.asyncio` decorator.
-
-### Error Handling
-Tests verify that appropriate HTTP exceptions are raised with correct status codes and messages.
-
-### Edge Cases
-Tests cover edge cases like:
-- Empty or null values
-- Invalid UUIDs
-- Disabled features
-- Missing configurations
-- Network failures
-
-### Type Safety
-Tests use type annotations and cover type checking errors.
-
-## Adding New Tests
-
-When adding new security functionality:
-
-1. **Create a new test file** following the naming convention `test_<module_name>.py`
-2. **Add test cases** covering success, failure, and edge cases
-3. **Use proper mocking** to isolate the functionality being tested
-4. **Add async support** if the function is async
-5. **Update this README** to document the new tests
-
-## Test Data
-
-The tests use mock data:
-- Mock users with different permission levels
-- Mock organizations with various configurations
-- Mock resources with different access patterns
-- Mock Redis usage data
-
-## Continuous Integration
-
-These tests run in CI. They don't open real database or Redis connections, so they are fast and give the same results in any environment.
-
-## Security Considerations
-
-The tests avoid touching sensitive data:
-- No real passwords or tokens in test data
-- Mocked authentication flows
-- Isolated testing of security functions
-- No actual encryption/decryption of sensitive data
-
-## Contributing
-
-When contributing to security tests:
-
-1. Follow the existing patterns and conventions
-2. Ensure all edge cases are covered
-3. Use descriptive test names and docstrings
-4. Add appropriate error handling tests
-5. Update documentation as needed 
+Preserve real authorization checks in regression cases. Do not weaken guards to make a fixture pass or treat approved synthetic policy fixtures as permission for real learners.

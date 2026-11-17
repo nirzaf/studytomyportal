@@ -1,5 +1,7 @@
 # @learnhouse/sdk
 
+**Studytomy fork scope:** retained upstream package API documentation. Installing the published `@learnhouse/*` package does not include unpublished Studytomy changes. Inspect this package’s manifest, source and generated/synced output before relying on version parity. Package names and upstream attribution are intentionally retained; this documentation update does not authorize npm publication or resolve licensing decisions.
+
 Typed client for the [LearnHouse](https://learnhouse.app) API. No runtime
 dependencies: it only uses `fetch`, `AbortController`, `Headers` and
 `FormData`, so it runs in browsers, Node 18+, Bun, Deno, edge workers and
@@ -161,7 +163,7 @@ store each `deliveryId` and ignore repeats; retries reuse it.
 ```sh
 bun install
 bun run generate        # regenerate openapi.json + src/generated/schema.ts from apps/api
-bun run generate:check  # fail if the committed output is stale (CI)
+bun run generate:check  # local check: fail if the committed output is stale
 bun run sync-version    # copy apps/web's version into package.json + src/version.ts
 bun run build
 bun run test            # unit tests + an integration test that runs if an API answers on :1338
@@ -170,7 +172,8 @@ bun run typecheck
 
 `generate` imports the FastAPI app and dumps `app.openapi()`; no server or
 database is needed. It finds Python through `$LEARNHOUSE_API_PYTHON`, then
-`apps/api/.venv`, then `uv`. Internal, dev, demo, admin and EE-only routes are
+`apps/api/.venv/bin/python`, then `uv`. On Windows, set `LEARNHOUSE_API_PYTHON`
+to the verified `apps/api/.venv/Scripts/python.exe` path. Internal, dev, demo, admin and EE-only routes are
 left out.
 
 ## License

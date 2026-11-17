@@ -1,5 +1,7 @@
 # @learnhouse/vue
 
+**Studytomy fork scope:** retained upstream package API documentation. Installing the published `@learnhouse/*` package does not include unpublished Studytomy changes. Inspect this package’s manifest, source and generated/synced output before relying on version parity. Package names and upstream attribution are intentionally retained; this documentation update does not authorize npm publication or resolve licensing decisions.
+
 Render LearnHouse activities inside any Vue 3 or Nuxt app. Pages, quizzes, flipcards, scenarios, code playgrounds, math, video and PDFs look and behave as they do in LearnHouse.
 
 There is no second renderer: the component wraps `<learnhouse-activity>`, the custom element of [`@learnhouse/react`](https://www.npmjs.com/package/@learnhouse/react), which mounts LearnHouse's own blocks in a React root. Its version always matches the LearnHouse release it was built from.
