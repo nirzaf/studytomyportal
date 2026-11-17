@@ -1,3 +1,5 @@
+import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope';
+import AssessmentIntegrityReview from '@components/Studytomy/AssessmentIntegrityReview';
 import { useAssignments } from '@components/Contexts/Assignments/AssignmentContext';
 import { BookOpenCheck, Check, ClipboardCheck, Download, Info, MessageSquare, RotateCcw, UserCheck, X } from 'lucide-react';
 import Link from 'next/link';
@@ -127,6 +129,9 @@ function EvaluateAssignment({
     // the current per-task scores translate to before finalizing.
     const [gradePreview, setGradePreview] = useState<any>(null);
 
+    const sessionIdentity = getAuthenticatedSessionIdentity(
+        session?.data?.user?.id ?? session?.data?.user?.user_uuid, session?.data,
+    );
     const assignmentUuid = assignments?.assignment_object?.assignment_uuid;
     // Formative assignment: the API refuses to grade it, so the grade banner,
     // the per-task score chips and the two grading actions are all replaced by
@@ -281,6 +286,19 @@ function EvaluateAssignment({
                     </div>
                 </div>
             )}
+
+            {session?.status === 'authenticated' && access_token && org?.org_uuid && assignments?.course_object?.course_uuid &&
+                assignmentUuid && submission?.assignmentusersubmission_uuid && (
+                    <AssessmentIntegrityReview
+                        key={JSON.stringify([org.org_uuid, sessionIdentity, assignmentUuid, submission.assignmentusersubmission_uuid, attempt])}
+                        orgUuid={org.org_uuid}
+                        token={access_token}
+                        courseUuid={assignments.course_object.course_uuid}
+                        assignmentUuid={assignmentUuid}
+                        submissionUuid={submission.assignmentusersubmission_uuid}
+                        attempt={attempt}
+                    />
+                )}
 
             <div className='grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start'>
                 {/* Tasks */}
