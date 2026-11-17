@@ -9,7 +9,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.db.courses.assignments import AssignmentUserSubmissionStatus
+from src.db.courses.assignments import Assignment, AssignmentUserSubmissionStatus
 from src.db.organizations import Organization
 from src.db.studytomy.family import StudyLearnerProfile
 from src.db.studytomy.governance import (
@@ -58,6 +58,11 @@ class IntegrityReceipt(BaseModel):
     status: Literal["awaiting_review", "response_received", "dismissed"]
 
 
+class LearnerIntegrityReceipt(IntegrityReceipt):
+    assessment_title: str | None
+    attempt_number: int | None
+
+
 class IntegrityReviewReceipt(IntegrityReceipt):
     response: Literal["dispute_concern", "request_staff_contact"] | None
 
@@ -96,7 +101,7 @@ async def _integrity_intake(
     assignment_uuid: str,
     submission_uuid: str,
     expected_attempt: int | None,
-) -> tuple[str, str, list[int], StudyBusinessEvent | None]:
+) -> tuple[str, str, int, list[int], StudyBusinessEvent | None]:
     await lock_organization(db, org.id)
     course, _, submission, profile = await _review_subject(
         db,
@@ -140,7 +145,7 @@ async def _integrity_intake(
             StudyBusinessEvent.dedupe_key == dedupe,
         )
     )
-    return round_uuid, profile.learner_uuid, policy_refs, case
+    return round_uuid, profile.learner_uuid, submission.attempt_number, policy_refs, case
 
 
 async def read_integrity_intake_availability(
@@ -152,7 +157,7 @@ async def read_integrity_intake_availability(
     submission_uuid: str,
     expected_attempt: int,
 ) -> IntegrityIntakeAvailability:
-    _, _, _, case = await _integrity_intake(
+    _, _, _, _, case = await _integrity_intake(
         db, org, actor, course_uuid, assignment_uuid, submission_uuid, expected_attempt,
     )
     return IntegrityIntakeAvailability(can_record=case is None)
@@ -168,7 +173,7 @@ async def record_integrity_concern(
     body: IntegrityConcern,
     expected_attempt: int | None = None,
 ) -> IntegrityReceipt:
-    round_uuid, learner_uuid, policy_refs, case = await _integrity_intake(
+    round_uuid, learner_uuid, attempt_number, policy_refs, case = await _integrity_intake(
         db, org, actor, course_uuid, assignment_uuid, submission_uuid, expected_attempt,
     )
     reason = (
@@ -189,6 +194,7 @@ async def record_integrity_concern(
             subject_uuid=learner_uuid,
             resource_kind="assignment_round",
             resource_uuid=round_uuid,
+            after_state={"assignment_uuid": assignment_uuid, "attempt_number": attempt_number},
             policy_refs=policy_refs,
             dedupe_key=f"assessment_integrity:{round_uuid}",
         )
@@ -424,15 +430,26 @@ async def list_learner_integrity_cases(
     db: AsyncSession,
     org: Organization,
     actor: PublicUser,
-) -> list[IntegrityReceipt]:
+) -> list[LearnerIntegrityReceipt]:
     reply = aliased(StudyBusinessEvent)
     dismissal = aliased(StudyBusinessEvent)
     cases = (
         await db.execute(
-            select(StudyBusinessEvent.event_uuid, reply.id, dismissal.id)
+            select(
+                StudyBusinessEvent.event_uuid,
+                reply.id,
+                dismissal.id,
+                Assignment.title,
+                StudyBusinessEvent.after_state["attempt_number"].as_integer(),
+            )
             .join(
                 StudyLearnerProfile,
                 StudyLearnerProfile.learner_uuid == StudyBusinessEvent.subject_uuid,
+            )
+            .outerjoin(
+                Assignment,
+                (Assignment.org_id == org.id)
+                & (Assignment.assignment_uuid == StudyBusinessEvent.after_state["assignment_uuid"].as_string()),
             )
             .outerjoin(
                 reply,
@@ -457,11 +474,13 @@ async def list_learner_integrity_cases(
         )
     ).all()
     return [
-        IntegrityReceipt(
+        LearnerIntegrityReceipt(
             reference=reference,
+            assessment_title=title,
+            attempt_number=attempt,
             status="dismissed"
             if dismissal_id
             else ("response_received" if reply_id else "awaiting_review"),
         )
-        for reference, reply_id, dismissal_id in cases
+        for reference, reply_id, dismissal_id, title, attempt in cases
     ]

@@ -48,7 +48,7 @@ from src.services.studytomy.assessment_reviews import (
 from src.services.studytomy.assessment_archive_retention import ArchiveRemovalReceipt, remove_assessment_archive
 from src.services.studytomy.assessment_integrity import (
     IntegrityConcern, IntegrityDismissal, IntegrityReceipt, IntegrityResponse, dismiss_integrity_concern, learner_integrity_case,
-    IntegrityIntakeAvailability, IntegrityReviewReceipt, list_learner_integrity_cases,
+    IntegrityIntakeAvailability, IntegrityReviewReceipt, LearnerIntegrityReceipt, list_learner_integrity_cases,
     read_integrity_intake_availability, read_integrity_review,
     record_integrity_concern,
 )
@@ -256,7 +256,7 @@ async def api_read_integrity_intake_availability(
 @router.get("/orgs/{org_uuid}/me/assessment-integrity-cases")
 async def api_list_learner_assessment_integrity_cases(
     org: AdaptiveOrg, actor: AdaptiveActor, db: AdaptiveDB,
-) -> list[IntegrityReceipt]:
+) -> list[LearnerIntegrityReceipt]:
     return await list_learner_integrity_cases(db, org, actor)
 
 

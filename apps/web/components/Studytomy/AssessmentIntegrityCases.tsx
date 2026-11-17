@@ -6,12 +6,13 @@ import { Button } from '@components/ui/button'
 import { AdaptiveRequestError, adaptiveRequest } from '@services/studytomy/adaptive'
 
 type CaseReceipt = { reference: string; status: 'awaiting_review' | 'response_received' | 'dismissed' }
+type LearnerCase = CaseReceipt & { assessment_title?: string | null; attempt_number?: number | null }
 type ResponseChoice = 'dispute_concern' | 'request_staff_contact'
 const casesPath = 'me/assessment-integrity-cases'
 
 export default function AssessmentIntegrityCases({ orgUuid, token }: { orgUuid: string; token: string }) {
   const { t } = useTranslation()
-  const [cases, setCases] = useState<CaseReceipt[]>([])
+  const [cases, setCases] = useState<LearnerCase[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const [refresh, setRefresh] = useState(0)
@@ -19,7 +20,7 @@ export default function AssessmentIntegrityCases({ orgUuid, token }: { orgUuid: 
 
   useEffect(() => {
     const controller = new AbortController()
-    adaptiveRequest(orgUuid, token)<CaseReceipt[]>(casesPath, 'GET', undefined, undefined, controller.signal)
+    adaptiveRequest(orgUuid, token)<LearnerCase[]>(casesPath, 'GET', undefined, undefined, controller.signal)
       .then((rows) => {
         if (controller.signal.aborted) return
         setCases(rows)
@@ -43,7 +44,7 @@ export default function AssessmentIntegrityCases({ orgUuid, token }: { orgUuid: 
       const receipt = await adaptiveRequest(orgUuid, token)<CaseReceipt>(
         `${casesPath}/${encodeURIComponent(reference)}/response`, 'PUT', { response },
       )
-      setCases((current) => current.map((row) => row.reference === reference ? receipt : row))
+      setCases((current) => current.map((row) => row.reference === reference ? { ...row, ...receipt } : row))
     } catch {
       setError(true)
     } finally {
@@ -59,6 +60,10 @@ export default function AssessmentIntegrityCases({ orgUuid, token }: { orgUuid: 
       <ul className="space-y-3">
         {cases.map((row) => (
           <li className="space-y-2 rounded-lg border border-gray-200 p-4" key={row.reference}>
+            {row.assessment_title && <h3 className="text-sm font-semibold">{row.assessment_title}</h3>}
+            {row.attempt_number && (
+              <p className="text-sm">{t('assignments.integrity.attempt', { attempt: row.attempt_number })}</p>
+            )}
             <p role="status" className="text-sm font-medium">{t(`assignments.integrity.${row.status}`)}</p>
             <p className="text-sm break-all">{t('assignments.integrity.reference', { reference: row.reference })}</p>
             {row.status === 'awaiting_review' && (

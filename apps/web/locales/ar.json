@@ -2284,6 +2284,7 @@
     "task_breakdown": "تفصيل المهام",
     "no_grade_details": "لا توجد تفاصيل للدرجة بعد.",
     "integrity": {
+      "attempt": "المحاولة {{attempt}}",
       "record_concern": "تسجيل ملاحظة",
       "intake_description": "يبدأ تسجيل الملاحظة مراجعة بشرية. يمكن للمتعلم الرد وتبقى درجته كما هي.",
       "concern_recorded": "تم تسجيل الملاحظة للمراجعة المستقلة.",

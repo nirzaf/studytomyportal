@@ -23,6 +23,7 @@ test('learner can recover the case list, dispute a concern, and see its dismissa
   const requests = []
   let listUnavailable = true
   let pendingList
+  const assessmentTitle = 'Synthetic practice assessment'
   let receipt = { reference: 'fixture-case', status: 'awaiting_review' }
   const fetch = spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
     requests.push({ url, ...options })
@@ -32,7 +33,7 @@ test('learner can recover the case list, dispute a concern, and see its dismissa
     }
     if (listUnavailable) return new Response(null, { status: 500 })
     if (pendingList) await pendingList
-    return Response.json([receipt])
+    return Response.json([{ ...receipt, assessment_title: assessmentTitle, attempt_number: 2 }])
   })
 
   try {
@@ -46,6 +47,8 @@ test('learner can recover the case list, dispute a concern, and see its dismissa
     await act(async () => button(copy.refresh).click())
     expect(container.querySelector('[role=alert]')).toBeNull()
     expect(status()).toBe(copy.awaiting_review)
+    expect(container.querySelector('h3').textContent).toBe(assessmentTitle)
+    expect(container.textContent).toContain('Attempt 2')
     expect(button(copy.contact)).toBeDefined()
 
     let resolveList
@@ -63,6 +66,8 @@ test('learner can recover the case list, dispute a concern, and see its dismissa
     expect(requests[3].url).toEndWith('/orgs/org_fixture/me/assessment-integrity-cases/fixture-case/response')
     expect(JSON.parse(requests[3].body)).toEqual({ response: 'dispute_concern' })
     expect(status()).toBe(copy.response_received)
+    expect(container.querySelector('h3').textContent).toBe(assessmentTitle)
+    expect(container.textContent).toContain('Attempt 2')
     expect(button(copy.dispute)).toBeUndefined()
     expect(button(copy.contact)).toBeUndefined()
 

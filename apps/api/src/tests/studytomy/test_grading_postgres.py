@@ -689,10 +689,14 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 ).json() == {"can_record": False}
                 assert intake.status_code == 200, intake.text
                 assert intake.json()["status"] == "awaiting_review"
+                case_context = {
+                    "assessment_title": assignment.title,
+                    "attempt_number": stored.attempt_number,
+                }
                 owned_cases = f"/orgs/{org.org_uuid}/me/assessment-integrity-cases"
                 assert (
                     await client.get(owned_cases, headers=learner_headers)
-                ).json() == [intake.json()]
+                ).json() == [{**intake.json(), **case_context}]
                 assert (await client.get(owned_cases, headers=direct)).json() == []
                 response_path = f"{owned_cases}/{intake.json()['reference']}/response"
                 reply = {"response": "dispute_concern"}
@@ -791,7 +795,7 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 assert dismissed.json()["status"] == "dismissed"
                 assert (
                     await client.get(owned_cases, headers=learner_headers)
-                ).json() == [dismissed.json()]
+                ).json() == [{**dismissed.json(), **case_context}]
                 assert not await round_has_open_integrity_concern(
                     db, org.id, result["round_uuid"]
                 )

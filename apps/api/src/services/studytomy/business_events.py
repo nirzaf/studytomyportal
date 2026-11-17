@@ -19,6 +19,8 @@ _SAFE_REASON = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 _SAFE_STATE_KEYS = frozenset(
     {
         "status",
+        "assignment_uuid",
+        "attempt_number",
         "policy_key",
         "version",
         "responsibility",
