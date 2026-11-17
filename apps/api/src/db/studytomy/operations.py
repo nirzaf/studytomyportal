@@ -247,19 +247,27 @@ class StudyEvidenceFile(SQLModel, table=True):
             "created_at",
         ),
         CheckConstraint(
-            "purpose IN ('eligibility_evidence', 'content_rights', 'content_accessibility', 'record_request_evidence')",
+            "purpose IN ('eligibility_evidence', 'content_rights', 'content_accessibility', 'record_request_evidence', 'safeguarding_case_evidence')",
             name="ck_st_evidence_file_purpose",
         ),
         CheckConstraint(
             "(purpose = 'eligibility_evidence' AND learner_profile_id IS NOT NULL "
-            "AND course_uuid IS NULL AND revision_sha256 IS NULL AND record_request_event_uuid IS NULL) OR "
+            "AND course_uuid IS NULL AND revision_sha256 IS NULL AND record_request_event_uuid IS NULL AND safeguarding_case_uuid IS NULL) OR "
             "(purpose IN ('content_rights', 'content_accessibility') AND learner_profile_id IS NULL "
             "AND course_uuid IS NOT NULL AND revision_sha256 IS NOT NULL AND length(revision_sha256) = 64 "
-            "AND record_request_event_uuid IS NULL) OR "
+            "AND record_request_event_uuid IS NULL AND safeguarding_case_uuid IS NULL) OR "
             "(purpose = 'record_request_evidence' AND learner_profile_id IS NOT NULL "
-            "AND course_uuid IS NULL AND revision_sha256 IS NULL AND record_request_event_uuid IS NOT NULL)",
+            "AND course_uuid IS NULL AND revision_sha256 IS NULL AND record_request_event_uuid IS NOT NULL AND safeguarding_case_uuid IS NULL) OR "
+            "(purpose = 'safeguarding_case_evidence' AND learner_profile_id IS NULL "
+            "AND course_uuid IS NULL AND revision_sha256 IS NULL AND record_request_event_uuid IS NULL "
+            "AND safeguarding_case_uuid IS NOT NULL)",
             name="ck_st_evidence_file_scope",
         ),
+        ForeignKeyConstraint(
+            ["org_id", "safeguarding_case_uuid"], ["st_service_case.org_id", "st_service_case.case_uuid"],
+            name="fk_st_evidence_file_safeguarding_case", ondelete="RESTRICT",
+        ),
+        Index("ix_st_evidence_file_safeguarding_case", "org_id", "safeguarding_case_uuid"),
         Index("ix_st_evidence_file_course", "org_id", "course_uuid", "revision_sha256"),
         Index("ix_st_evidence_file_record_request", "org_id", "record_request_event_uuid"),
         ForeignKeyConstraint(
@@ -299,6 +307,7 @@ class StudyEvidenceFile(SQLModel, table=True):
     course_uuid: Optional[str] = Field(default=None, sa_column=Column(String(100)))
     revision_sha256: Optional[str] = Field(default=None, sa_column=Column(String(64)))
     record_request_event_uuid: Optional[str] = Field(default=None, sa_column=Column(String(100)))
+    safeguarding_case_uuid: Optional[str] = Field(default=None, sa_column=Column(String(36)))
     purpose: str = Field(sa_column=Column(String(32), nullable=False))
     storage_reference: str = Field(sa_column=Column(String(700), nullable=False))
     content_sha256: str = Field(sa_column=Column(String(64), nullable=False))

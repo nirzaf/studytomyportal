@@ -273,14 +273,29 @@ async def store_private_learner_evidence(
     file: UploadFile, idempotency_key: str, *, policies: list, file_rules: tuple[int, set[str], str],
     now: datetime, record_request_event_uuid: str | None = None,
 ) -> StudyEvidenceFile:
-    """Persist an authorized attachment with verified private bytes."""
+    """Persist an authorized learner attachment with verified private bytes."""
+    await lock_users(db_session, [actor.id, profile.user_id])
+    return await _store_private_evidence(
+        db_session, organization, actor, file, idempotency_key,
+        purpose="record_request_evidence" if record_request_event_uuid else "eligibility_evidence",
+        policy_ids=[int(policy.id) for policy in policies], file_rules=file_rules, now=now,
+        profile=profile, record_request_event_uuid=record_request_event_uuid,
+    )
+
+
+async def _store_private_evidence(
+    db_session: AsyncSession, organization: Organization, actor: PublicUser, file: UploadFile,
+    idempotency_key: str, *, purpose: str, policy_ids: list[int],
+    file_rules: tuple[int, set[str], str], now: datetime,
+    profile: StudyLearnerProfile | None = None, record_request_event_uuid: str | None = None,
+    safeguarding_case_uuid: str | None = None,
+) -> StudyEvidenceFile:
     max_bytes, allowed_media_types, retention_category = file_rules
-    purpose = "record_request_evidence" if record_request_event_uuid else "eligibility_evidence"
+    profile_id = profile.id if profile is not None else None
     content_sha256, size_bytes, media_type = await _validated_evidence_file(file, max_bytes, allowed_media_types)
     canonical_extension = _SUPPORTED_MEDIA[media_type][1]
-    policy_ids = [int(policy.id) for policy in policies]
     request_payload = {
-        "learner_uuid": profile.learner_uuid,
+        "learner_uuid": profile.learner_uuid if profile is not None else None,
         "purpose": purpose,
         "content_sha256": content_sha256,
         "size_bytes": size_bytes,
@@ -290,7 +305,8 @@ async def store_private_learner_evidence(
     }
     if record_request_event_uuid:
         request_payload["record_request_event_uuid"] = record_request_event_uuid
-    await lock_users(db_session, [actor.id, profile.user_id])
+    if safeguarding_case_uuid is not None:
+        request_payload["safeguarding_case_uuid"] = safeguarding_case_uuid
     replay = await claim_idempotency(
         db_session,
         org_id=organization.id,
@@ -304,7 +320,8 @@ async def store_private_learner_evidence(
             select(StudyEvidenceFile).where(
                 StudyEvidenceFile.org_id == organization.id,
                 StudyEvidenceFile.evidence_uuid == replay.resource_uuid,
-                StudyEvidenceFile.learner_profile_id == profile.id,
+                StudyEvidenceFile.learner_profile_id == profile_id,
+                StudyEvidenceFile.safeguarding_case_uuid == safeguarding_case_uuid,
                 StudyEvidenceFile.purpose == purpose,
                 StudyEvidenceFile.record_request_event_uuid == record_request_event_uuid,
                 StudyEvidenceFile.upload_status == "ready",
@@ -323,7 +340,8 @@ async def store_private_learner_evidence(
     record = StudyEvidenceFile(
         evidence_uuid=evidence_uuid,
         org_id=organization.id,
-        learner_profile_id=profile.id,
+        learner_profile_id=profile_id,
+        safeguarding_case_uuid=safeguarding_case_uuid,
         purpose=purpose,
         record_request_event_uuid=record_request_event_uuid,
         storage_reference=storage_reference,
@@ -356,8 +374,11 @@ async def store_private_learner_evidence(
             db_session,
             org_id=organization.id,
             actor_user_id=actor.id,
-            actor_capacity=StudyOwnerFunction.PRIVACY.value,
-            subject_uuid=profile.learner_uuid,
+            actor_capacity=(
+                StudyOwnerFunction.SAFEGUARDING.value if safeguarding_case_uuid is not None
+                else StudyOwnerFunction.PRIVACY.value
+            ),
+            subject_uuid=profile.learner_uuid if profile is not None else safeguarding_case_uuid,
             resource_kind="evidence_file",
             resource_uuid=record.evidence_uuid,
             action="studytomy.evidence.uploaded",

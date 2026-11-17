@@ -64,6 +64,7 @@ STUDYTOMY_ORG_RETENTION_TABLES = frozenset(
         "st_report_recipient",
         "st_report_review_request",
         "st_sharing_grant",
+        "st_service_case",
         "st_staff_scope",
         "st_tutor_session",
         "st_tutor_turn",

@@ -41,6 +41,7 @@ _SAFE_STATE_KEYS = frozenset(
         "evidence_reference",
         "evidence_sha256",
         "owner_assignment_id",
+        "case_owner_user_id",
         "effective_from",
         "effective_to",
         "decision_code",
