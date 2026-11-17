@@ -28,6 +28,7 @@ import {
   dropConnection,
   recheckConnections,
 } from './accessRecheck.js'
+import { loadBoardState } from './boardState.js'
 
 const PORT = parseInt(process.env.COLLAB_PORT || '4000', 10)
 const API_URL = process.env.LEARNHOUSE_API_URL || 'http://localhost:8000'
@@ -407,73 +408,48 @@ const server = new Server({
     new Database({
       async fetch({ documentName }) {
         const boardUuid = extractBoardUuid(documentName)
-        if (!boardUuid) return null
+        if (!boardUuid) throw new Error('Invalid board document name')
 
-        // 1. Try Redis first
-        try {
-          const r = getRedis()
-          const cached = await r.getBuffer(redisYdocKey(boardUuid))
-          if (cached && cached.byteLength > 0) {
-            console.log(
-              `[collab] Redis hit for ${boardUuid}: ${cached.byteLength} bytes`,
-            )
-            return new Uint8Array(cached)
-          }
-        } catch (err) {
-          console.error(
-            `[collab] Redis fetch error for ${boardUuid}:`,
-            err,
-          )
-        }
-
-        // 2. Fall back to database (with timeout)
-        try {
-          const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`
-          console.log(`[collab] Fetching ydoc from DB for ${boardUuid}`)
-          const response = await fetchWithTimeout(url, {
-            headers: {
-              'X-Internal-Key': INTERNAL_KEY,
-            },
-          })
-
-          if (!response.ok) {
-            console.error(
-              `[collab] Failed to fetch ydoc for ${boardUuid}: ${response.status} ${response.statusText}`,
-            )
-            return null
-          }
-
-          const buffer = await response.arrayBuffer()
-          if (buffer.byteLength === 0) return null
-
-          const state = new Uint8Array(buffer)
-          console.log(
-            `[collab] Fetched ydoc from DB for ${boardUuid}: ${buffer.byteLength} bytes`,
-          )
-
-          // Warm the Redis cache
-          try {
+        return loadBoardState(boardUuid, {
+          readCache: async () => {
+            const r = getRedis()
+            const cached = await r.getBuffer(redisYdocKey(boardUuid))
+            if (cached && cached.byteLength > 0) {
+              console.log(
+                `[collab] Redis hit for ${boardUuid}: ${cached.byteLength} bytes`,
+              )
+            }
+            return cached
+          },
+          fetchDatabase: async () => {
+            const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`
+            console.log(`[collab] Fetching ydoc from DB for ${boardUuid}`)
+            return fetchWithTimeout(url, {
+              headers: {
+                'X-Internal-Key': INTERNAL_KEY,
+              },
+            })
+          },
+          warmCache: async (state) => {
             const r = getRedis()
             await r.setex(
               redisYdocKey(boardUuid),
               REDIS_YDOC_TTL,
               Buffer.from(state),
             )
-          } catch (err) {
-            console.error(
-              `[collab] Redis warm error for ${boardUuid}:`,
-              err,
+            console.log(
+              `[collab] Fetched ydoc from DB for ${boardUuid}: ${state.byteLength} bytes`,
             )
-          }
-
-          return state
-        } catch (err) {
-          console.error(
-            `[collab] Error fetching ydoc for ${boardUuid}:`,
-            err,
-          )
-          return null
-        }
+          },
+          reportError: (stage, error) => {
+            const label = {
+              'redis-read': 'Redis fetch error',
+              'database-read': 'Error fetching ydoc from DB',
+              'redis-warm': 'Redis warm error',
+            }[stage]
+            console.error(`[collab] ${label} for ${boardUuid}:`, error)
+          },
+        })
       },
 
       async store({ documentName, state }) {

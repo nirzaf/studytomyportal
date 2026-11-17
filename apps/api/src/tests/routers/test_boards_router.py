@@ -563,6 +563,7 @@ class TestBoardsRouter:
                 )
             assert response.status_code == 200
             assert response.content == b"state"
+            assert response.headers["x-ydoc-state"] == "present"
 
             with patch(
                 "src.routers.boards.boards.get_ydoc_state",
@@ -575,6 +576,7 @@ class TestBoardsRouter:
                 )
             assert response.status_code == 200
             assert response.content == b""
+            assert response.headers["x-ydoc-state"] == "empty"
 
             with patch(
                 "src.routers.boards.boards.store_ydoc_state",

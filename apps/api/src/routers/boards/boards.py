@@ -315,7 +315,7 @@ async def api_check_board_membership(
     summary="Fetch the Yjs document state for a board",
     description="Return the persisted Yjs document binary state for a board. Internal endpoint used by the Hocuspocus collab server; requires the shared internal key header.",
     responses={
-        200: {"description": "Binary Yjs document state (empty body if no state is stored).", "content": {"application/octet-stream": {}}},
+        200: {"description": "Binary Yjs document state. X-YDoc-State is 'empty' only when the board has no stored state, and 'present' when a state is returned.", "content": {"application/octet-stream": {}}},
         403: {"description": "Invalid internal key"},
     },
 )
@@ -325,8 +325,16 @@ async def api_get_ydoc_state(
 ):
     state = await get_ydoc_state(board_uuid, db_session)
     if state is None:
-        return Response(content=b"", media_type="application/octet-stream")
-    return Response(content=state, media_type="application/octet-stream")
+        return Response(
+            content=b"",
+            media_type="application/octet-stream",
+            headers={"X-YDoc-State": "empty"},
+        )
+    return Response(
+        content=state,
+        media_type="application/octet-stream",
+        headers={"X-YDoc-State": "present"},
+    )
 
 
 @internal_router.put(
