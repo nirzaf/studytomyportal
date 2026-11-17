@@ -277,6 +277,33 @@ class TestVisibility:
         rows = await svc.get_paths_for_course(None, course.course_uuid, anonymous_user, db)
         assert [r.name for r in rows] == ["Open"]
 
+    async def test_managed_draft_is_excluded_from_native_paths(
+        self, db, org, admin_user, regular_user
+    ):
+        live = await _course(db, org, 1)
+        draft = await _course(db, org, 2, public=False, published=False)
+        path = await _path(db, org, admin_user, [(live, True), (draft, True)])
+        draft.studytomy_managed = True
+        await db.commit()
+
+        for viewer in (admin_user, regular_user):
+            view = await svc.get_path(None, path.path_uuid, viewer, db)
+            assert [item.course_uuid for item in view.courses] == [live.course_uuid]
+            assert view.progress.required_total == 1
+            with pytest.raises(HTTPException) as exc:
+                await svc.get_paths_for_course(None, draft.course_uuid, viewer, db)
+            assert exc.value.status_code == 404
+
+        with pytest.raises(HTTPException) as exc:
+            await svc.set_path_courses(
+                None, path.path_uuid,
+                PathCoursesUpdate(courses=[PathCourseInput(course_uuid=draft.course_uuid)]),
+                admin_user, db,
+            )
+        assert exc.value.status_code == 404
+        view = await svc.get_path(None, path.path_uuid, regular_user, db)
+        assert [item.course_uuid for item in view.courses] == [live.course_uuid]
+
 
 # ----------------------------------------------------------------------------
 # Progress + completion

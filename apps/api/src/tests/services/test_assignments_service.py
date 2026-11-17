@@ -43,6 +43,7 @@ from src.db.courses.assignments import (
     GradingTypeEnum,
 )
 from src.db.courses.certifications import CertificateUser, Certifications
+from src.db.studytomy.governance import StudyBusinessEvent
 from src.db.trail_runs import TrailRun
 from src.db.trail_steps import TrailStep
 from src.db.trails import Trail
@@ -547,6 +548,40 @@ class TestReadAssignmentTasks:
 
 
 class TestReadAssignmentTask:
+    @pytest.mark.parametrize("single", [False, True])
+    async def test_managed_task_read_reserves_one_grading_contract(
+        self, mock_request, db, assignment, assignment_task, course, regular_user, single
+    ):
+        course.studytomy_managed = True
+        course.public = False
+        course.published = False
+        assignment.due_date = None
+        db.add_all([course, assignment])
+        await db.commit()
+        module = "src.services.courses.activities.assignments"
+        with (
+            patch(_PATCH_RBAC, new_callable=AsyncMock),
+            patch(f"{module}.verify_activity_reader_access", new_callable=AsyncMock) as activity_access,
+            patch(f"{module}._is_assignment_instructor", new_callable=AsyncMock, return_value=False),
+        ):
+            for _ in range(2):
+                if single:
+                    await read_assignment_task(
+                        mock_request, assignment_task.assignment_task_uuid, regular_user, db
+                    )
+                else:
+                    await read_assignment_tasks(
+                        mock_request, assignment.assignment_uuid, regular_user, db
+                    )
+            assert activity_access.await_count == 2
+
+        attempt = (await db.execute(select(AssignmentUserSubmission))).scalar_one()
+        contract = (await db.execute(select(StudyBusinessEvent))).scalar_one()
+        assert attempt.user_id == contract.actor_user_id == regular_user.id
+        assert attempt.submission_status == AssignmentUserSubmissionStatus.PENDING
+        assert contract.action == "studytomy.assessment.contract_frozen"
+        assert contract.reason == "ASSESSMENT_ISSUED"
+
     async def test_raises_404_when_task_not_found(
         self, mock_request, db, admin_user
     ):
@@ -909,6 +944,76 @@ class TestUpdateAssignmentSubmission:
 
 
 class TestDeleteAssignmentSubmission:
+    async def test_definition_deletion_cannot_remove_managed_assessment_source(
+        self, mock_request, db, course, activity, assignment, assignment_task, user_submission, admin_user,
+    ):
+        from src.services.studytomy.assignment_adapter import ensure_native_source_deletable
+
+        course.studytomy_managed = True
+        course.public = False
+        course.published = False
+        db.add(course)
+        await db.commit()
+        with patch(_PATCH_RBAC, new_callable=AsyncMock):
+            for delete, target in (
+                (delete_assignment, assignment.assignment_uuid),
+                (delete_assignment_from_activity_uuid, activity.activity_uuid),
+                (delete_assignment_task, assignment_task.assignment_task_uuid),
+            ):
+                with pytest.raises(HTTPException) as blocked:
+                    await delete(mock_request, target, admin_user, db)
+                assert blocked.value.status_code == 409
+                assert blocked.value.detail["code"] == "MANAGED_ASSESSMENT_SOURCE_RETAINED"
+        for scope, target in (("activity", activity.activity_uuid), ("course", course.course_uuid)):
+            with pytest.raises(HTTPException) as blocked:
+                await ensure_native_source_deletable(db, course.org_id, scope, target)
+            assert blocked.value.detail["code"] == "MANAGED_ASSESSMENT_SOURCE_RETAINED"
+        await db.refresh(user_submission)
+
+    async def test_legacy_mutations_preserve_managed_attempt_and_response(
+        self, mock_request, db, course, assignment, user_submission, task_submission,
+        admin_user, regular_user,
+    ):
+        course.studytomy_managed = True
+        course.public = False
+        course.published = False
+        user_submission.submission_status = AssignmentUserSubmissionStatus.SUBMITTED
+        db.add_all([course, user_submission])
+        await db.commit()
+        original_grade = user_submission.grade
+        original_answer = dict(task_submission.task_submission)
+
+        with (
+            patch(_PATCH_RBAC, new_callable=AsyncMock),
+            patch(_PATCH_AUTH_ROLES, new_callable=AsyncMock, return_value=True),
+        ):
+            with pytest.raises(HTTPException) as rejected:
+                await update_assignment_submission(
+                    mock_request, regular_user.id, assignment.assignment_uuid,
+                    AssignmentUserSubmissionCreate(
+                        assignment_id=assignment.id, grade=100,
+                        submission_status=AssignmentUserSubmissionStatus.GRADED,
+                    ),
+                    admin_user, db,
+                )
+            assert rejected.value.status_code == 409
+            with pytest.raises(HTTPException) as rejected:
+                await delete_assignment_submission(
+                    mock_request, regular_user.id, assignment.assignment_uuid, admin_user, db
+                )
+            assert rejected.value.status_code == 409
+            with pytest.raises(HTTPException) as rejected:
+                await delete_assignment_task_submission(
+                    mock_request, task_submission.assignment_task_submission_uuid, admin_user, db
+                )
+            assert rejected.value.status_code == 409
+
+        await db.refresh(user_submission)
+        await db.refresh(task_submission)
+        assert user_submission.submission_status == AssignmentUserSubmissionStatus.SUBMITTED
+        assert user_submission.grade == original_grade
+        assert task_submission.task_submission == original_answer
+
     async def test_raises_404_when_assignment_not_found(
         self, mock_request, db, admin_user, regular_user
     ):
@@ -1767,10 +1872,17 @@ _PATCH_GRADE_FINALIZE = (
 
 
 class TestCreateAssignmentSubmission:
+    @pytest.mark.parametrize("managed", [False, True])
     async def test_creates_trailrun_and_trailstep_when_missing(
-        self, mock_request, db, admin_user, assignment, course, activity
+        self, mock_request, db, admin_user, assignment, course, activity,
+        assignment_task, managed,
     ):
         """Covers lines 1915-1916 (new TrailRun) and 1940-1941 (new TrailStep)."""
+        if managed:
+            course.studytomy_managed = True
+            course.public = False
+            course.published = False
+            db.add(course)
         trail = Trail(
             org_id=course.org_id,
             user_id=admin_user.id,
@@ -1795,6 +1907,36 @@ class TestCreateAssignmentSubmission:
                 db,
             )
         assert result.submission_status == AssignmentUserSubmissionStatus.SUBMITTED
+        frozen = (await db.execute(
+            select(StudyBusinessEvent).where(
+                StudyBusinessEvent.action == "studytomy.assessment.contract_frozen",
+            )
+        )).scalar_one_or_none()
+        if not managed:
+            assert frozen is None
+            return
+
+        from src.services.studytomy.assignment_adapter import native_round_uuid
+        from src.services.studytomy.grading import grading_contract_digest
+
+        stored = (await db.execute(
+            select(AssignmentUserSubmission).where(
+                AssignmentUserSubmission.assignment_id == assignment.id,
+                AssignmentUserSubmission.user_id == admin_user.id,
+            )
+        )).scalar_one()
+        assert frozen.actor_user_id == admin_user.id
+        assert frozen.resource_uuid == native_round_uuid(
+            course.org_id, stored.assignmentusersubmission_uuid, stored.attempt_number
+        )
+        assert frozen.after_state == {
+            "source_snapshot_digest": grading_contract_digest(assignment, [assignment_task]),
+            "evaluator_version": "native-assessment-v1",
+        }
+        assignment_task.contents = {"correct_answers": ["updated"]}
+        assert frozen.after_state["source_snapshot_digest"] != grading_contract_digest(
+            assignment, [assignment_task]
+        )
 
     async def test_auto_grading_path(
         self, mock_request, db, admin_user, assignment, course, activity, assignment_task
@@ -2202,6 +2344,45 @@ class TestAssignmentIntegrityGuards:
                 mock_request, assignment_task.assignment_task_uuid, obj, regular_user, db
             )
         assert isinstance(result, AssignmentTaskSubmissionRead)
+
+    async def test_managed_first_answer_reserves_round_and_hand_in_freezes_it(
+        self, mock_request, db, assignment, assignment_task, course, regular_user
+    ):
+        course.studytomy_managed = True
+        course.public = False
+        course.published = False
+        assignment.due_date = None
+        db.add_all([course, assignment])
+        await db.commit()
+        module = "src.services.courses.activities.assignments"
+
+        async def save(answer):
+            return await handle_assignment_task_submission(
+                mock_request, assignment_task.assignment_task_uuid,
+                AssignmentTaskSubmissionUpdate(task_submission={"answer": answer}),
+                regular_user, db,
+            )
+
+        with (
+            patch(f"{module}.verify_activity_reader_access", new_callable=AsyncMock),
+            patch(_PATCH_AUTH_ROLES, new_callable=AsyncMock, side_effect=[False, True] * 2),
+        ):
+            saved = await save("draft")
+            attempt = (await db.execute(select(AssignmentUserSubmission))).scalar_one()
+            assert attempt.submission_status == AssignmentUserSubmissionStatus.PENDING
+            assert attempt.user_id == regular_user.id
+            contract = (await db.execute(select(StudyBusinessEvent))).scalar_one()
+            assert contract.reason == "ASSESSMENT_ISSUED"
+
+            attempt.submission_status = AssignmentUserSubmissionStatus.SUBMITTED
+            db.add(attempt)
+            await db.commit()
+            with pytest.raises(HTTPException, match="already been handed in") as exc:
+                await save("late edit")
+            assert exc.value.status_code == 403
+
+        row = await db.get(AssignmentTaskSubmission, saved.id)
+        assert row.task_submission == {"answer": "draft"}
 
     async def test_instructor_grade_without_target_submission_is_rejected(
         self, mock_request, db, assignment_task, admin_user

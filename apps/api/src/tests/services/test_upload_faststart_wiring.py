@@ -51,7 +51,7 @@ async def test_filesystem_upload_invokes_faststart(monkeypatch, tmp_path):
     written = tmp_path / "content/orgs/org_x/courses/c/activities/a/video/clip.mp4"
     assert written.read_bytes() == b"videobytes"
     # faststart was applied to the freshly-written file.
-    assert seen["path"].endswith(
+    assert seen["path"].replace("\\", "/").endswith(
         "content/orgs/org_x/courses/c/activities/a/video/clip.mp4"
     )
 

@@ -9,7 +9,21 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import Column, Enum, Index, Integer, MetaData, String, Table, create_engine, inspect, text
+from sqlalchemy import (
+    Column,
+    Enum,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    delete,
+    inspect,
+    text,
+    update,
+)
+from sqlalchemy.exc import IntegrityError
 
 from src.core import migrations
 from src.core.migrations import (
@@ -65,6 +79,163 @@ class TestEnsureSchema:
         assert report.before == []
         assert report.after == head_revisions()
         assert {"widget", "gadget", "alembic_version"} <= set(_tables(db_url))
+
+    def test_empty_studytomy_schema_installs_non_model_database_guards(self, db_url):
+        metadata = MetaData()
+        event_table = Table(
+            "st_business_event",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("action", String),
+        )
+        decision_table = Table(
+            "st_eligibility_decision",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("outcome", String),
+        )
+        consent_table = Table(
+            "st_consent_event",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("choice", String),
+        )
+        offer_table = Table(
+            "st_offer",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("offer_uuid", String),
+            Column("org_id", Integer),
+            Column("offer_kind", String),
+            Column("status", String),
+            Column("created_by_user_id", Integer),
+            Column("created_at", String),
+            Column("current_version_no", Integer),
+        )
+        offer_version_table = Table(
+            "st_offer_version",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("offer_id", Integer),
+            Column("version_no", Integer),
+            Column("content_sha256", String),
+        )
+
+        report = ensure_schema(db_url, metadata=metadata)
+        assert report.state == "empty"
+        engine = create_engine(db_url)
+        try:
+            with engine.begin() as connection:
+                trigger_names = set(
+                    connection.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='trigger'")
+                    ).scalars()
+                )
+                assert {
+                    "st_business_event_immutable_update",
+                    "st_business_event_immutable_delete",
+                    "st_eligibility_decision_immutable_update",
+                    "st_eligibility_decision_immutable_delete",
+                    "st_consent_event_immutable_update",
+                    "st_consent_event_immutable_delete",
+                    "st_offer_draft_root_protected_update",
+                    "st_offer_draft_root_protected_delete",
+                    "st_offer_version_immutable_update",
+                    "st_offer_version_immutable_delete",
+                } <= trigger_names
+
+                connection.execute(event_table.insert().values(id=1, action="test.action"))
+                connection.execute(decision_table.insert().values(id=1, outcome="eligible"))
+                connection.execute(consent_table.insert().values(id=1, choice="accept"))
+                connection.execute(
+                    offer_table.insert().values(
+                        id=1,
+                        offer_uuid="test-offer",
+                        org_id=1,
+                        offer_kind="course",
+                        status="draft",
+                        created_by_user_id=1,
+                        created_at="2026-01-01T00:00:00",
+                        current_version_no=1,
+                    )
+                )
+                connection.execute(
+                    offer_version_table.insert().values(
+                        id=1,
+                        offer_id=1,
+                        version_no=1,
+                        content_sha256="a" * 64,
+                    )
+                )
+
+                immutable_rows = (
+                    (event_table, "action", "changed", "st_business_event rows are immutable"),
+                    (decision_table, "outcome", "ineligible", "st_eligibility_decision rows are immutable"),
+                    (consent_table, "choice", "decline", "st_consent_event rows are immutable"),
+                    (offer_version_table, "content_sha256", "b" * 64, "st_offer_version rows are immutable"),
+                )
+                for table, column, value, error_message in immutable_rows:
+                    for mutation in ("update", "delete"):
+                        statement = (
+                            update(table).where(table.c.id == 1).values({column: value})
+                            if mutation == "update"
+                            else delete(table).where(table.c.id == 1)
+                        )
+                        with pytest.raises(IntegrityError, match=error_message):
+                            connection.execute(statement)
+
+                with pytest.raises(IntegrityError, match="st_offer roots are draft-only"):
+                    connection.execute(
+                        update(offer_table)
+                        .where(offer_table.c.id == 1)
+                        .values(status="published")
+                    )
+                with pytest.raises(IntegrityError, match="st_offer draft roots are retained"):
+                    connection.execute(delete(offer_table).where(offer_table.c.id == 1))
+        finally:
+            engine.dispose()
+
+    def test_unstamped_legacy_studytomy_schema_gets_missing_guards(self, db_url):
+        metadata = MetaData()
+        event_table = Table(
+            "st_business_event",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("action", String),
+        )
+        engine = create_engine(db_url)
+        try:
+            metadata.create_all(engine)
+        finally:
+            engine.dispose()
+
+        report = ensure_schema(db_url, metadata=metadata)
+        assert report.state == "unstamped"
+
+        engine = create_engine(db_url)
+        try:
+            with engine.begin() as connection:
+                trigger_names = set(
+                    connection.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='trigger'")
+                    ).scalars()
+                )
+                assert {
+                    "st_business_event_immutable_update",
+                    "st_business_event_immutable_delete",
+                } <= trigger_names
+
+                connection.execute(event_table.insert().values(id=1, action="test.action"))
+                with pytest.raises(
+                    IntegrityError, match="st_business_event rows are immutable"
+                ):
+                    connection.execute(
+                        update(event_table)
+                        .where(event_table.c.id == 1)
+                        .values(action="changed")
+                    )
+        finally:
+            engine.dispose()
 
     def test_unstamped_database_is_reconciled_then_stamped(self, db_url, caplog):
         ensure_schema(db_url, metadata=_models())

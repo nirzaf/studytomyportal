@@ -60,8 +60,9 @@ async def test_editing_activity_content_moves_course_date(mock_request, db, cour
         "src.services.courses.activities.activities.check_resource_access",
         new_callable=AsyncMock,
     ), patch(
-        "src.services.courses.activities.activities.create_activity_version",
+        "src.services.courses.activities.activities.stage_activity_version",
         new_callable=AsyncMock,
+        return_value=None,
     ):
         await update_activity(
             mock_request,

@@ -398,3 +398,12 @@ class TestSmtpTls:
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail == "Email service TLS verification failed"
         smtp_client.login.assert_not_called()
+
+def test_single_attempt_email_does_not_repeat_ambiguous_provider_timeout():
+    with (
+        _patch_config(email_provider="resend"),
+        patch("src.services.email.utils.resend.Emails.send", side_effect=TimeoutError) as send,
+        pytest.raises(TimeoutError),
+    ):
+        send_email("recipient@example.com", "Report available", "<p>Sign in.</p>", single_attempt=True)
+    send.assert_called_once()

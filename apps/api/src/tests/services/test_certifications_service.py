@@ -16,9 +16,11 @@ from src.db.courses.certifications import (
     Certifications,
 )
 from src.db.courses.courses import Course
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.trail_runs import StatusEnum, TrailRun
 from src.db.trail_steps import TrailStep
 from src.db.trails import Trail
+from src.db.users import AnonymousUser
 from src.services.courses.certifications import (
     check_course_completion_and_create_certificate,
     create_certificate_user,
@@ -1150,8 +1152,9 @@ class TestCompletionHelpers:
         assert second_result is False
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("managed_course", [False, True])
     async def test_check_course_completion_promotes_trailrun_status(
-        self, db, course, org, regular_user, activity, mock_request
+        self, db, course, org, regular_user, activity, mock_request, managed_course,
     ):
         # H2: when the last activity is an assignment, nothing but this check
         # would flip the enrollment status. Start the run IN_PROGRESS with the
@@ -1197,12 +1200,18 @@ class TestCompletionHelpers:
         )
         await db.commit()
 
-        await check_course_completion_and_create_certificate(
+        if managed_course:
+            course.studytomy_managed = True
+            course.public = course.published = False
+            await _create_certification(db, course, cert_uuid="cert_managed_completion")
+        awarded = await check_course_completion_and_create_certificate(
             mock_request, regular_user.id, course.id, db
         )
 
         await db.refresh(trail_run)
         assert trail_run.status == StatusEnum.STATUS_COMPLETED
+        assert awarded is False
+        assert (await db.execute(select(CertificateUser.id).where(CertificateUser.user_id == regular_user.id))).first() is None
 
     @pytest.mark.asyncio
     async def test_check_course_completion_and_create_certificate_no_activities(
@@ -1332,6 +1341,45 @@ class TestCompletionHelpers:
 
 
 class TestCertificateLookup:
+    async def test_managed_template_and_automatic_revocation_preserve_award(self, db, course, regular_user, mock_request):
+        course.studytomy_managed = True
+        course.public = course.published = False
+        certification = await _create_certification(db, course, cert_uuid="cert_managed_retained")
+        certificate_user = await _create_certificate_user(db, certification, regular_user)
+        original_config = certification.config
+        assert not await revoke_user_certificate(regular_user.id, course.id, db)
+        with patch("src.services.courses.certifications._check_certification_access", new_callable=AsyncMock):
+            with pytest.raises(HTTPException) as blocked:
+                await update_certification(
+                    mock_request, certification.certification_uuid, CertificationUpdate(config={"title": "Other"}),
+                    regular_user, db,
+                )
+        assert blocked.value.status_code == 409 and blocked.value.detail["code"] == "MANAGED_AWARD_REVIEW_REQUIRED"
+        assert await db.get(CertificateUser, certificate_user.id) is not None
+        await db.refresh(certification)
+        assert certification.config == original_config
+
+    @pytest.mark.parametrize("managed_course", [False, True])
+    async def test_private_certificate_lookup_hides_protected_holder(
+        self, db, course, regular_user, mock_request, managed_course,
+    ):
+        course.studytomy_managed = managed_course
+        if managed_course:
+            course.public = course.published = False
+        if not managed_course:
+            db.add(StudyLearnerProfile(
+                org_id=course.org_id, user_id=regular_user.id, created_by_user_id=regular_user.id,
+                status="active", control_mode="independent",
+            ))
+        certification = await _create_certification(db, course, cert_uuid="cert_private")
+        certificate_user = await _create_certificate_user(db, certification, regular_user)
+        with pytest.raises(HTTPException) as denied:
+            await get_certificate_by_user_certification_uuid(
+                mock_request, certificate_user.user_certification_uuid, AnonymousUser(), db,
+            )
+        assert denied.value.status_code == 404 and denied.value.headers == {"Cache-Control": "private, no-store"}
+        assert await db.get(CertificateUser, certificate_user.id) is not None
+
     @pytest.mark.asyncio
     async def test_get_certificate_by_user_certification_uuid_success(
         self, db, course, regular_user, mock_request

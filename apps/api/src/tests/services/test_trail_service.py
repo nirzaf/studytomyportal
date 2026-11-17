@@ -155,6 +155,39 @@ class TestTrailService:
         assert populated.runs[0].steps[0].data["course"]["course_uuid"] == extra_course.course_uuid
 
     @pytest.mark.asyncio
+    async def test_managed_draft_is_hidden_from_native_trail(
+        self, db, org, course, admin_user, mock_request
+    ):
+        draft = await _make_course(
+            db, org, id=2, course_uuid="course_managed", name="Managed draft"
+        )
+        activity = await _make_bogus_activity(
+            db, org, course_id=draft.id, activity_uuid="activity_managed"
+        )
+        trail = await _make_trail(db, org, admin_user)
+        native_run = await _make_trail_run(db, trail, course, admin_user)
+        managed_run = await _make_trail_run(db, trail, draft, admin_user)
+        managed_step = await _make_trail_step(db, trail, native_run, activity, draft, admin_user)
+        step_id = managed_step.id
+        draft.public = False
+        draft.published = False
+        draft.studytomy_managed = True
+        await db.commit()
+
+        result = await _build_trail_read(trail, [native_run, managed_run], db)
+        assert [run.id for run in result.runs] == [native_run.id]
+        assert result.runs[0].steps == []
+        assert await db.get(TrailStep, step_id) is not None
+        assert await db.get(TrailRun, managed_run.id) is not None
+
+        with pytest.raises(HTTPException) as exc:
+            await add_course_to_trail(mock_request, admin_user, draft.course_uuid, db)
+        assert exc.value.status_code == 404
+        with pytest.raises(HTTPException) as exc:
+            await add_activity_to_trail(mock_request, admin_user, activity.activity_uuid, db)
+        assert exc.value.status_code == 404
+
+    @pytest.mark.asyncio
     async def test_check_trail_presence_creates_trail_and_gets_existing_trail(
         self, db, org, admin_user, mock_request
     ):
