@@ -790,8 +790,14 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                 "support_routes": {"public_safeguarding": {
                     "contact_instructions": "Synthetic public contact",
                     "emergency_guidance": "Synthetic guidance",
+
+                }, "public_support": {
+                    "categories": ["Account access", "Orders"],
+                    "contact_instructions": "Synthetic contact instructions",
+                    "service_limits": "Synthetic service limits",
+                    "internal_contact": "Private internal contact",
                 }},
-                "monitored_hours": {"public_safeguarding": "Synthetic hours"},
+                "monitored_hours": {"public_safeguarding": "Synthetic hours", "public_support": "Synthetic support hours"},
                 "staffing": {"safeguarding": {
                     "lead_owner_assignment_uuid": lead_owner.owner_uuid,
                     "backup_owner_assignment_uuid": backup_owner.owner_uuid,
@@ -834,6 +840,21 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                 for function in POLICY_REQUIRED_RESPONSIBILITIES[key]
             ])
         await db.commit()
+
+        app = FastAPI()
+        app.include_router(v1_router)
+        app.dependency_overrides[get_db_session] = lambda: db
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(f"/api/v1/studytomy/orgs/{org.org_uuid}/support/public-contact")
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "no-store"
+            assert response.json() == {
+                "categories": ["Account access", "Orders"],
+                "contact_instructions": "Synthetic contact instructions",
+                "service_limits": "Synthetic service limits",
+                "monitored_hours": "Synthetic support hours",
+            }
+            assert (await client.get("/api/v1/studytomy/orgs/org_other/support/public-contact")).status_code == 404
 
         reporter_actor, lead_actor, backup_actor, approver_actor = map(PublicUser.model_validate, users)
         assert await cases.safeguarding_reporting_available(db, org)
