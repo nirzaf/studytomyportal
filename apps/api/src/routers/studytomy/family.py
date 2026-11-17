@@ -1,6 +1,6 @@
 """Authenticated endpoints for individual learner identity and eligibility."""
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -22,6 +22,7 @@ from src.db.studytomy.family import (
     StudySharingGrantWithdrawal,
 )
 from src.db.users import PublicUser
+from src.routers.studytomy.private_route import PRIVATE_HEADERS, PrivateStudyTomyRoute
 from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.services.studytomy.authority import (
     create_relationship_request,
@@ -42,7 +43,11 @@ from src.services.studytomy.sharing import (
     withdraw_my_sharing_grant,
 )
 
-router = APIRouter()
+def _mark_private(response: Response) -> None:
+    response.headers.update(PRIVATE_HEADERS)
+
+
+router = APIRouter(route_class=PrivateStudyTomyRoute, dependencies=[Depends(_mark_private)])
 
 
 async def _organization(org_uuid: str, db_session: AsyncSession) -> Organization:
