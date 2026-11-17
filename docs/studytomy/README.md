@@ -11,7 +11,7 @@ Read only the documents needed for the task. Source, mounted routes and tests ar
 | Learning, mastery, assessments | Local `ALE-IMPLEMENTATION.md` and `ALE-LOCAL-PILOT.md`, when present | `apps/api/src/routers/studytomy/adaptive.py`, `services/studytomy/adaptive_*`, native assignment callers and focused tests |
 | Content review or release | Local `CONTENT-PUBLICATION-PATHS.md`, when present | `services/studytomy/publication.py`, `releases.py`, course/activity access paths |
 | Interactive lesson UI | Local `GENUI-IMPLEMENTATION.md`, when present | AI learning surface contracts and lesson components |
-| Migration or rollback | Local `MIGRATION-AND-ROLLBACK.md`, when present | Actual Alembic graph and schema/bootstrap code; no implied production authorization |
+| Migration or rollback | [Migration and rollback notes](MIGRATION-AND-ROLLBACK.md) | Actual Alembic graph and schema/bootstrap code; no implied production authorization |
 | Learner login design | [Credential ADR](ADR-LEARNER-CREDENTIALS.md) | Existing identity/auth contracts and explicit decisions |
 | SDK or embedded renderer | `packages/sdk/README.md`, `packages/react/README.md`, `packages/vue/README.md` | Local manifests/generated contracts; published upstream packages are not unpublished fork code |
 | Native CLI or E2E | [CLI guide](../../apps/cli/README.md), [E2E guide](../../apps/e2e/README.md) | Verify whether tests use the current local build or a published upstream image |

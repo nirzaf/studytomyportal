@@ -32,10 +32,23 @@ downgraded and re-upgraded the suffix against a model-created schema. These are
 local schema/startup results; they are not production backup/restore or full
 feature-level old-application compatibility acceptance.
 
+## Local upgrade rehearsal on 17 November 2026
+
+| Evidence | Observed result |
+| --- | --- |
+| Starting code and schema | `4f3346af99b516bab2d422217905d078096d55ac` bootstrapped a synthetic database to `f5a8b3d0c2e4` using `ensure_schema()`. |
+| Target code | `f29a31aed8e28697ab820141d0ec90c1c200bb8c` applied the published Alembic chain with `alembic upgrade head`. |
+| Isolation | Disposable Docker PostgreSQL 16 with pgvector, an empty synthetic database, and a loopback-only ephemeral port. |
+| Result | Direct inspection of `alembic_version` confirmed the target revision `61e73f9b4c20`. The test container was removed. |
+
+This rehearsal exercised the schema upgrade from the initialized parent without
+production records. Representative data backfill, backup restore, and older
+application behavior at this target revision still require separate evidence.
+
 ## Determine the current graph before changing a database
 
-The active local checkout now contains additional family, commerce, adaptive and
-publication revisions beyond the historical head above. Inspect staged, unstaged
+Published family, commerce, adaptive and publication revisions extend the
+foundation rehearsal's historical head. Inspect staged, unstaged
 and untracked migration files. From `apps/api`, run `uv run --no-sync alembic heads`
 and `uv run --no-sync alembic history`; compare with the target database revision
 using read-only inspection. Do not stamp or downgrade a database merely to match
