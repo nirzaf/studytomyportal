@@ -1,5 +1,7 @@
 # LearnHouse CLI
 
+**Studytomy fork note:** this is retained upstream CLI product documentation. Its self-hosting, install and update commands are not authorization to deploy Studytomy or overwrite a local fork with an upstream image. Follow [local-only policy](../../LOCAL-ONLY.md) and the [task index](../../docs/studytomy/README.md). Keep the `learnhouse` package/binary names where required by the actual tooling.
+
 The official [LearnHouse](https://learnhouse.app) CLI for deploying, managing, and operating your LearnHouse instance.
 
 [Website](https://learnhouse.app) | [Documentation](https://docs.learnhouse.app) | [GitHub](https://github.com/learnhouse/learnhouse)

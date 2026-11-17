@@ -1,5 +1,7 @@
 # Studytomy
 
+Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read the relevant source and scoped guidance rather than every historical document.
+
 **AI-assisted learning, trusted tutoring, and measurable progress.**
 
 Studytomy Portal is a LearnHouse-based Australian curriculum-focused learning platform under active development combining structured courses, educator-led tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The initial target market is Australia (a Victorian pilot, subject to client approval), with engineering delivery supported from Sri Lanka.
@@ -72,6 +74,8 @@ Use these terms consistently:
 
 ### Studytomy code currently present
 
+**Local evidence update, 17 November 2026:** the inspected development worktree at HEAD `4f3346af99b516bab2d422217905d078096d55ac` contains additional uncommitted implementation beyond the published architecture checkpoint `d34ebb50b7191730a37452fe3324679b2f5e7a47`. The [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) records source references, scope and limitations. A reader of GitHub alone may not yet have these application files.
+
 The working source contains additive Studytomy modules, rather than only a proposed fork. The following are **source-present / acceptance pending**; file presence and targeted tests are not production certification or completion of the 73-task specification.
 
 | Area | Source evidence | Remaining boundary |
@@ -80,6 +84,8 @@ The working source contains additive Studytomy modules, rather than only a propo
 | Learner profiles, family-authority requests/review, sharing grants and withdrawal | `apps/api/src/routers/studytomy/family.py`, `apps/api/src/services/studytomy/authority.py`, `sharing.py` | Browser, relationship-isolation and full workflow acceptance are separate checks. |
 | Evidence-file access, privacy, offers, idempotency and outbox processing | `apps/api/src/routers/studytomy/`, `apps/api/src/services/studytomy/` | Validate storage, worker configuration, concurrency and real PostgreSQL behavior before release. |
 | Family workspace, learner context, privacy settings and readiness UI | `apps/web/components/Studytomy/` | Connected UI does not establish educational correctness or production deployment. |
+| Adaptive learning and evidence | `apps/api/src/services/studytomy/adaptive_attempts.py`, `adaptive_evidence.py`, `adaptive_mastery.py` | Local, uncommitted paths; server-owned scoring and derived mastery do not establish approved curriculum validity. |
+| Guided teaching and reviewed reports | `apps/api/src/services/studytomy/adaptive_teaching.py`, `adaptive_reports.py`, `apps/web/components/Objects/Account/subpages/AccountReports.tsx` | Current authority, content/policy approvals and full browser verification remain required. |
 
 The remaining product ambitions below are a roadmap, not a claim that all custom functionality is absent or complete. See source, migrations and focused tests for each implementation slice; no live deployment or complete acceptance run is asserted by this README.
 
@@ -87,12 +93,12 @@ The remaining product ambitions below are a roadmap, not a claim that all custom
 
 | Feature | Proposed scope | Status |
 |---|---|---|
-| AI diagnostic assessments | Curriculum-objective mapping, evidence-backed gaps, optional adaptive questions. | Planned |
-| Personalized study plans | Tutor-editable learning plans informed by assessment and available study time. | Planned |
+| AI diagnostic assessments | Versioned curriculum, reviewed items, diagnostic attempts and server-owned objective scoring. | Partial: local API/model/service implementation; educational and end-to-end acceptance pending |
+| Personalized study plans | Mastery-driven lesson recommendations and guided teaching; richer tutor-editable schedules remain a target. | Partial: local mastery/recommendation/tutor paths; not a completed planning product |
 | Australian senior-secondary / ATAR preparation | Approved state-specific content, mock assessments, marking schemes, practice workflows. | Planned |
 | AI-generated examination papers | Syllabus-aligned blueprints, controlled question variation, validated answers, tutor approval, export. | Planned |
 | Advanced marking | Structured solution steps, rubric-based feedback, uncertainty escalation; handwriting/essays by explicit scope. | Planned |
-| Student, guardian and tutor progress views | Authorized progress, results, review tasks, and evidence-backed summaries. | Partial: family-authority/sharing UI and API source present; full progress acceptance pending |
+| Student, guardian and tutor progress views | Authorized progress, reviewed report snapshots, exact-recipient release and withdrawal. | Partial: local progress/report services and learner/staff UI; full browser and real-user acceptance pending |
 | Virtual science laboratories | Validated 2D/3D experiments, measurements, mistakes, experiment records, and scoring. | Planned |
 | AI marketing assistant | Draft creatives/copy, campaign recommendations, reviewed publishing workflow. | Planned / optional |
 | NSW and Victoria market intelligence | Evidence-labelled research into subject/year demand using approved public data and Studytomy enquiry trends. | Planned / optional |

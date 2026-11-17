@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Official documentation for <a href="https://learnhouse.app">LearnHouse</a>, the open-source learning management system.
+  LearnHouse-derived documentation site retained in the Studytomy fork. Studytomy-specific engineering evidence is under <code>docs/studytomy/</code>.
 </p>
 
 <p align="center">
@@ -20,18 +20,17 @@
 
 ## Local Development
 
-This site lives in the [`learnhouse/learnhouse`](https://github.com/learnhouse/learnhouse)
-monorepo under `docs/`. Run all commands from that directory.
+This site lives under `docs/` in the Studytomy monorepo. Run commands from that directory. For the LMS runtime rather than this documentation site, follow the [root README](../README.md) and [local-only guidance](../LOCAL-ONLY.md).
 
 **Prerequisites:** [Bun](https://bun.sh) installed.
 
 ```bash
 # Clone the monorepo and move into the docs app
-git clone https://github.com/learnhouse/learnhouse.git
-cd learnhouse/docs
+git clone https://github.com/nirzaf/studytomyportal.git
+cd studytomyportal/docs
 
 # Install dependencies
-bun install
+bun install --frozen-lockfile
 
 # Start the dev server
 bun dev
@@ -58,9 +57,9 @@ scripts/          # Build scripts
 ## Built With
 
 - [Next.js](https://nextjs.org)
-- [Nextra](https://nextra.site)
+- Fumadocs Core `16.18.1` and MDX `15.5.0` (declared in [package.json](package.json))
 - [Tailwind CSS](https://tailwindcss.com)
 
 ## License
 
-MIT - see [LICENSE](LICENSE) for details.
+See the repository [LICENSE](../LICENSE) (AGPL-3.0) and retain applicable third-party notices. This directory has no separate `LICENSE` file; do not infer a separate MIT grant from this README.

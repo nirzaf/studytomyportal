@@ -1,5 +1,7 @@
 # Studytomy Managed-Course Access Path Inventory
 
+**Historical inventory:** the table below preserves the 2026-11-16 inspection. As of 2026-11-17, local code includes `Course.studytomy_managed`, managed release/grant resolvers and related access checks. See [source-backed documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md). Do not interpret the old missing-feature statements as today's inventory, or infer that every route has since passed acceptance.
+
 **Review date:** 2026-11-16<br>
 **Checkout HEAD:** `2c1062a6872cb5c9bc041c6258e2c79085a1f897` (`main`, same as `origin/main`)<br>
 **Scope:** Static source inventory for TASK-025/TASK-026. The worktree is dirty, so findings describe the inspected files as they exist in this checkout, not the checked-in revision or deployed behavior.

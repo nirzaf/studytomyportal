@@ -10,6 +10,8 @@ Dockerfiles and CLI-generated Compose files remain available for local builds an
 
 ## External integrations
 
+Provider-settings observations below are historical, not rechecked at every commit. Repository configuration alone cannot establish external provider state.
+
 Removing repository files does not uninstall GitHub Apps, remove hosting projects, revoke credentials, or disconnect external integrations. GitHub repository settings showed no configured webhooks and listed a Vercel GitHub App installation. The app's repository scope could not be inspected because GitHub required step-up authentication. The settings also list other hosting/build-provider apps; their repository scope was not verified. No external settings or projects were changed.
 
 Treat external auto-build or deployment behavior as **unverified** until the account owner checks the provider settings. Do not push a commit if that push could trigger an unauthorized deployment. This repository's current local-only status does not prove external providers are disconnected.

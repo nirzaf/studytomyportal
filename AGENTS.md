@@ -1,5 +1,7 @@
 # Studytomy — AI Agent Engineering Instructions
 
+Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read the relevant source and scoped guidance rather than every historical document.
+
 - **Scope**: Place this file at the root of the new Studytomy modernization fork based on LearnHouse Community Edition. It is not an instruction to rewrite or modify the legacy `nirzaf/studytomy-react` repository.
 - **Project status**: Modernization is in local development only. This repository has no configured deployment or CI/CD workflow. Do not represent any proposed Studytomy feature, migration, integration, or deployment as implemented without verifying the actual target repository.
 - **Priority**: Apply this root file together with more specific repository instructions (including upstream `apps/web/AGENTS.md`); the more specific instructions govern their respective paths, except where they conflict with the project's approval, security, or licensing requirements.
@@ -53,7 +55,11 @@ Official self-hosted Community Edition does not provide the complete licensed En
 
 Never copy private Enterprise code, disable licensing safeguards to enable Enterprise features, or claim that a proprietary module is automatically compatible with AGPL. Independently implement or license an equivalent only after approval and license review.
 
-### Studytomy-specific work: PLANNED, not implemented
+### Studytomy-specific work: mixed local implementation and planned scope
+
+The 2026-11-17 working-tree review found local curriculum, diagnostic, learning-evidence, mastery, tutoring and reviewed-report paths. Do not treat the list below as proof these are absent, or treat local code as released. Consult [the documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) and inspect the current source before classifying a task. Existing policy, licensing and release gates remain unchanged.
+
+The following product ambitions still require per-feature implementation and acceptance checks:
 
 - Australian curriculum content and VCE/HSC-specific educational validation.
 - Adaptive diagnostic assessments, misconception evidence, versioned mastery and personalized study plans.

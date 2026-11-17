@@ -1,12 +1,14 @@
-# Contributing to LearnHouse
+# Contributing to Studytomy (LearnHouse-based)
+
+Follow [AGENTS.md](AGENTS.md) and [LOCAL-ONLY.md](LOCAL-ONLY.md) for this fork. The upstream contribution process below applies only when intentionally contributing to LearnHouse; Studytomy-specific work belongs in the Studytomy repository.
 
 ## Getting Started
 
 To set up your development environment, use the LearnHouse CLI:
 
 ```bash
-git clone https://github.com/learnhouse/learnhouse.git
-cd learnhouse
+git clone https://github.com/nirzaf/studytomyportal.git
+cd studytomyportal
 npx learnhouse dev
 ```
 

@@ -1,5 +1,7 @@
 # Studytomy Portal — Navigation & Initial Configuration Guide
 
+**Applicability (2026-11-17):** this is a navigation/configuration guide, not deployment or acceptance evidence. `lms.studytomy.com` is a target domain; this project remains local-only. Native administrator permissions do not bypass Studytomy managed-course, learner, guardian, content-review or policy gates. See [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md).
+
 Overview of the Studytomy learning platform (`lms.studytomy.com`) when signed in as an Administrator, covering the six primary learning sections, top-bar shortcut icons, AI Playgrounds usage, and recommended initial pilot configuration.
 
 These sections are designed for delivering courses, organizing learning programs, managing educational resources, encouraging collaboration, and creating AI-powered interactive activities.
