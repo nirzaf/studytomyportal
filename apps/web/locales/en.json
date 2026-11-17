@@ -2164,6 +2164,9 @@
     "task_breakdown": "Task breakdown",
     "no_grade_details": "No grade details available yet.",
     "integrity": {
+      "record_concern": "Record concern",
+      "intake_description": "Recording a concern starts a human review. The learner can respond, and their grade stays the same.",
+      "concern_recorded": "Concern recorded for independent review.",
       "dispute_concern": "The learner disputed the concern.",
       "request_staff_contact": "The learner requested staff contact.",
       "no_response": "No learner response has been recorded.",

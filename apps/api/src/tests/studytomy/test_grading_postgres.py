@@ -615,13 +615,34 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 integrity_path = (
                     path.removesuffix("/review-evidence") + "/integrity-cases"
                 )
-                intake = await client.post(
-                    integrity_path, headers=direct, json={"source": "automated_signal"}
+                eligibility_path = integrity_path.removesuffix("integrity-cases") + "integrity-intake"
+                attempt_query = {"attempt_number": stored.attempt_number}
+                learner_headers = headers("password", learner)
+                denied_availability = await client.get(
+                    eligibility_path, headers=learner_headers, params=attempt_query,
                 )
+                assert denied_availability.status_code == 404
+                available = await client.get(
+                    eligibility_path, headers=direct, params=attempt_query,
+                )
+                assert available.status_code == 200, available.text
+                assert available.json() == {"can_record": True}
+                assert "no-store" in available.headers["cache-control"]
+                stale = await client.post(
+                    integrity_path, headers=direct, json={"source": "automated_signal"},
+                    params={"attempt_number": stored.attempt_number + 1},
+                )
+                assert stale.status_code == 409
+                intake = await client.post(
+                    integrity_path, headers=direct, json={"source": "automated_signal"},
+                    params=attempt_query,
+                )
+                assert (
+                    await client.get(eligibility_path, headers=direct, params=attempt_query)
+                ).json() == {"can_record": False}
                 assert intake.status_code == 200, intake.text
                 assert intake.json()["status"] == "awaiting_review"
                 owned_cases = f"/orgs/{org.org_uuid}/me/assessment-integrity-cases"
-                learner_headers = headers("password", learner)
                 assert (
                     await client.get(owned_cases, headers=learner_headers)
                 ).json() == [intake.json()]

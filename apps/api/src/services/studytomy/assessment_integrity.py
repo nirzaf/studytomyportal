@@ -49,6 +49,10 @@ class IntegrityResponse(BaseModel):
     response: Literal["dispute_concern", "request_staff_contact"]
 
 
+class IntegrityIntakeAvailability(BaseModel):
+    can_record: bool
+
+
 class IntegrityReceipt(BaseModel):
     reference: str
     status: Literal["awaiting_review", "response_received", "dismissed"]
@@ -84,15 +88,15 @@ async def _integrity_policy_refs(
     return [policy.id for policy in policies]
 
 
-async def record_integrity_concern(
+async def _integrity_intake(
     db: AsyncSession,
     org: Organization,
     actor: PublicUser,
     course_uuid: str,
     assignment_uuid: str,
     submission_uuid: str,
-    body: IntegrityConcern,
-) -> IntegrityReceipt:
+    expected_attempt: int | None,
+) -> tuple[str, str, list[int], StudyBusinessEvent | None]:
     await lock_organization(db, org.id)
     course, _, submission, profile = await _review_subject(
         db,
@@ -124,6 +128,8 @@ async def record_integrity_concern(
         AssignmentUserSubmissionStatus.GRADED,
     ):
         raise HTTPException(409, "Integrity intake requires a handed-in attempt.")
+    if expected_attempt is not None and expected_attempt != submission.attempt_number:
+        raise HTTPException(409, "The current submission attempt has changed.")
     round_uuid = native_round_uuid(
         org.id, submission.assignmentusersubmission_uuid, submission.attempt_number
     )
@@ -133,6 +139,37 @@ async def record_integrity_concern(
             StudyBusinessEvent.org_id == org.id,
             StudyBusinessEvent.dedupe_key == dedupe,
         )
+    )
+    return round_uuid, profile.learner_uuid, policy_refs, case
+
+
+async def read_integrity_intake_availability(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    assignment_uuid: str,
+    submission_uuid: str,
+    expected_attempt: int,
+) -> IntegrityIntakeAvailability:
+    _, _, _, case = await _integrity_intake(
+        db, org, actor, course_uuid, assignment_uuid, submission_uuid, expected_attempt,
+    )
+    return IntegrityIntakeAvailability(can_record=case is None)
+
+
+async def record_integrity_concern(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    assignment_uuid: str,
+    submission_uuid: str,
+    body: IntegrityConcern,
+    expected_attempt: int | None = None,
+) -> IntegrityReceipt:
+    round_uuid, learner_uuid, policy_refs, case = await _integrity_intake(
+        db, org, actor, course_uuid, assignment_uuid, submission_uuid, expected_attempt,
     )
     reason = (
         "STAFF_OBSERVATION"
@@ -149,11 +186,11 @@ async def record_integrity_concern(
             actor_capacity="assessment_moderator",
             action=CONCERN_RECORDED,
             reason_code=reason,
-            subject_uuid=profile.learner_uuid,
+            subject_uuid=learner_uuid,
             resource_kind="assignment_round",
             resource_uuid=round_uuid,
             policy_refs=policy_refs,
-            dedupe_key=dedupe,
+            dedupe_key=f"assessment_integrity:{round_uuid}",
         )
         await db.commit()
     if await _case_dismissal(db, org.id, case.event_uuid):

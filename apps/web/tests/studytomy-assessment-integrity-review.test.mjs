@@ -22,6 +22,11 @@ test('moderator reviews the learner response and can dismiss only after choosing
   const fetch = spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
     requests.push({ url, ...options })
     if (url.includes('submission_denied')) return new Response(null, { status: 404 })
+    if (url.includes('submission_intake')) {
+      if (url.includes('integrity-intake')) return Response.json({ can_record: true })
+      if (options.method === 'POST') return Response.json({ reference: 'case_new', status: 'awaiting_review' })
+      return new Response(null, { status: 404 })
+    }
     if (options.method === 'PUT') return Response.json({ reference: 'case_fixture', status: 'dismissed' })
     return Response.json({
       reference: 'case_fixture', status: 'response_received', response: 'request_staff_contact',
@@ -37,7 +42,7 @@ test('moderator reviews the learner response and can dismiss only after choosing
     expect(container.querySelector('section')).toBeNull()
 
     await act(async () => render('submission_fixture'))
-    expect(requests[1].url).toEndWith('/submissions/submission_fixture/integrity-cases?attempt_number=2')
+    expect(requests[2].url).toEndWith('/submissions/submission_fixture/integrity-cases?attempt_number=2')
     expect(container.querySelector('[role=status]').textContent).toBe(copy.request_staff_contact)
     const button = container.querySelector('button')
     expect(button.disabled).toBe(true)
@@ -48,10 +53,21 @@ test('moderator reviews the learner response and can dismiss only after choosing
     })
     expect(button.disabled).toBe(false)
     await act(async () => button.click())
-    expect(requests[2].method).toBe('PUT')
-    expect(requests[2].url).toEndWith('/integrity-cases/case_fixture/dismissal?attempt_number=2')
-    expect(JSON.parse(requests[2].body)).toEqual({ reason: 'insufficient_evidence' })
+    expect(requests[3].method).toBe('PUT')
+    expect(requests[3].url).toEndWith('/integrity-cases/case_fixture/dismissal?attempt_number=2')
+    expect(JSON.parse(requests[3].body)).toEqual({ reason: 'insufficient_evidence' })
     expect(container.querySelector('[role=status]').textContent).toBe(copy.dismissed)
+    expect(container.querySelector('button')).toBeNull()
+
+    await act(async () => render('submission_intake'))
+    expect(requests[5].url).toEndWith('/submissions/submission_intake/integrity-intake?attempt_number=2')
+    const record = container.querySelector('button')
+    expect(record.textContent).toBe(copy.record_concern)
+    await act(async () => record.click())
+    expect(requests[6].method).toBe('POST')
+    expect(requests[6].url).toEndWith('/submissions/submission_intake/integrity-cases?attempt_number=2')
+    expect(JSON.parse(requests[6].body)).toEqual({ source: 'staff_observation' })
+    expect(container.querySelector('[role=status]').textContent).toBe(copy.concern_recorded)
     expect(container.querySelector('button')).toBeNull()
   } finally {
     await act(async () => root.unmount())

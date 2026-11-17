@@ -21,28 +21,61 @@ export default function AssessmentIntegrityReview({ orgUuid, token, courseUuid, 
   attempt: number
 }) {
   const { t } = useTranslation()
+  const [canRecord, setCanRecord] = useState(false)
+  const [recorded, setRecorded] = useState(false)
   const [review, setReview] = useState<Review | null>(null)
   const [reason, setReason] = useState<DismissalReason | ''>('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
-  const base = `courses/${encodeURIComponent(courseUuid)}/assignments/${encodeURIComponent(assignmentUuid)}/submissions/${encodeURIComponent(submissionUuid)}/integrity-cases`
+  const submissionPath = `courses/${encodeURIComponent(courseUuid)}/assignments/${encodeURIComponent(assignmentUuid)}/submissions/${encodeURIComponent(submissionUuid)}`
+  const base = `${submissionPath}/integrity-cases`
   const query = `?attempt_number=${attempt}`
 
   useEffect(() => {
     const controller = new AbortController()
-    adaptiveRequest(orgUuid, token)<Review>(base + query, 'GET', undefined, undefined, controller.signal)
+    const request = adaptiveRequest(orgUuid, token)
+    request<Review>(base + query, 'GET', undefined, undefined, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return
         setReview(result)
         setError(false)
       })
-      .catch((failure: unknown) => {
+      .catch(async (failure: unknown) => {
         if (controller.signal.aborted) return
-        setReview(null)
-        setError(!(failure instanceof AdaptiveRequestError && [401, 403, 404, 409].includes(failure.status)))
+        if (failure instanceof AdaptiveRequestError && failure.status === 404) {
+          try {
+            const availability = await request<{ can_record: boolean }>(
+              `${submissionPath}/integrity-intake${query}`, 'GET', undefined, undefined, controller.signal,
+            )
+            if (!controller.signal.aborted) setCanRecord(availability.can_record)
+            return
+          } catch (intakeFailure) {
+            failure = intakeFailure
+          }
+        }
+        if (!controller.signal.aborted) {
+          setError(!(failure instanceof AdaptiveRequestError && [401, 403, 404, 409].includes(failure.status)))
+        }
       })
     return () => controller.abort()
-  }, [orgUuid, token, base, query])
+  }, [orgUuid, token, base, query, submissionPath])
+
+  async function recordConcern() {
+    setBusy(true)
+    setError(false)
+    try {
+      await adaptiveRequest(orgUuid, token)(base + query, 'POST', { source: 'staff_observation' })
+      setCanRecord(false)
+      setRecorded(true)
+    } catch (failure) {
+      if (failure instanceof AdaptiveRequestError && [401, 403, 404, 409].includes(failure.status)) {
+        setCanRecord(false)
+      }
+      setError(true)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function dismiss() {
     if (!review || !reason) return
@@ -60,11 +93,20 @@ export default function AssessmentIntegrityReview({ orgUuid, token, courseUuid, 
     }
   }
 
-  if (!review && !error) return null
+  if (!review && !canRecord && !recorded && !error) return null
   return (
     <section aria-label={t('assignments.integrity.title')} className="space-y-3 rounded-xl border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold">{t('assignments.integrity.title')}</h3>
       {error && <p role="alert" className="text-sm text-rose-700">{t('assignments.integrity.staff_error')}</p>}
+      {recorded && <p role="status" className="text-sm">{t('assignments.integrity.concern_recorded')}</p>}
+      {canRecord && (
+        <>
+          <p className="text-sm">{t('assignments.integrity.intake_description')}</p>
+          <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={recordConcern}>
+            {t('assignments.integrity.record_concern')}
+          </Button>
+        </>
+      )}
       {review && (
         <>
           <p className="text-sm break-all">{t('assignments.integrity.reference', { reference: review.reference })}</p>

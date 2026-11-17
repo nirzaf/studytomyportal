@@ -48,7 +48,8 @@ from src.services.studytomy.assessment_reviews import (
 from src.services.studytomy.assessment_archive_retention import ArchiveRemovalReceipt, remove_assessment_archive
 from src.services.studytomy.assessment_integrity import (
     IntegrityConcern, IntegrityDismissal, IntegrityReceipt, IntegrityResponse, dismiss_integrity_concern, learner_integrity_case,
-    IntegrityReviewReceipt, list_learner_integrity_cases, read_integrity_review,
+    IntegrityIntakeAvailability, IntegrityReviewReceipt, list_learner_integrity_cases,
+    read_integrity_intake_availability, read_integrity_review,
     record_integrity_concern,
 )
 from src.services.studytomy.adaptive_access import (
@@ -232,8 +233,24 @@ async def api_record_assessment_integrity_concern(
     assignment_uuid: Annotated[str, Path(min_length=1, max_length=255)],
     submission_uuid: Annotated[str, Path(min_length=1, max_length=255)],
     body: IntegrityConcern,
+    attempt_number: Annotated[int | None, Query(ge=1)] = None,
 ) -> IntegrityReceipt:
-    return await record_integrity_concern(db, org, actor, course_uuid, assignment_uuid, submission_uuid, body)
+    return await record_integrity_concern(
+        db, org, actor, course_uuid, assignment_uuid, submission_uuid, body, attempt_number,
+    )
+
+
+@router.get("/orgs/{org_uuid}/courses/{course_uuid}/assignments/{assignment_uuid}/submissions/{submission_uuid}/integrity-intake")
+async def api_read_integrity_intake_availability(
+    org: AdaptiveOrg, actor: AdaptiveActor, db: AdaptiveDB,
+    course_uuid: Annotated[str, Path(min_length=1, max_length=255)],
+    assignment_uuid: Annotated[str, Path(min_length=1, max_length=255)],
+    submission_uuid: Annotated[str, Path(min_length=1, max_length=255)],
+    attempt_number: Annotated[int, Query(ge=1)],
+) -> IntegrityIntakeAvailability:
+    return await read_integrity_intake_availability(
+        db, org, actor, course_uuid, assignment_uuid, submission_uuid, attempt_number,
+    )
 
 
 @router.get("/orgs/{org_uuid}/me/assessment-integrity-cases")
