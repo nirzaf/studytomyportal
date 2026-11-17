@@ -16,7 +16,7 @@ import {
   parseActivityContentFromStream,
   ENABLE_ACTIVITY_CONTENT_GENERATION,
 } from '@services/ai/courseplanning'
-import { updateActivity } from '@services/courses/activities'
+import { getActivity, updateActivity } from '@services/courses/activities'
 
 interface AICoursePreviewProps {
   plan: CoursePlan | null
@@ -72,6 +72,23 @@ function AICoursePreview({
   ) => {
     if (!sessionUuid || !plan) return
 
+    let expectedCurrentVersion: number
+    try {
+      const activity = await getActivity(activityUuid, null, accessToken)
+      expectedCurrentVersion = activity.current_version || 1
+    } catch {
+      setActivityStates((prev) => ({
+        ...prev,
+        [activityUuid]: {
+          isGenerating: false,
+          isGenerated: false,
+          streamContent: '',
+          error: t('courses.create.ai.save_content_failed'),
+        },
+      }))
+      return
+    }
+
     setActivityStates((prev) => ({
       ...prev,
       [activityUuid]: { isGenerating: true, isGenerated: false, streamContent: '', error: null },
@@ -91,7 +108,14 @@ function AICoursePreview({
       const parsedContent = parseActivityContentFromStream(fullContent)
       if (parsedContent) {
         try {
-          const result = await updateActivity({ content: parsedContent }, activityUuid, accessToken)
+          const result = await updateActivity(
+            {
+              content: parsedContent,
+              expected_current_version: expectedCurrentVersion,
+            },
+            activityUuid,
+            accessToken
+          )
           if (result.success) {
             setActivityStates((prev) => ({
               ...prev,

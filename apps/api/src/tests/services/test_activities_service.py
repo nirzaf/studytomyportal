@@ -260,9 +260,6 @@ class TestUpdateActivity:
         with patch(
             "src.services.courses.activities.activities.check_resource_access",
             new_callable=AsyncMock,
-        ), patch(
-            "src.services.courses.activities.activities.create_activity_version",
-            new_callable=AsyncMock,
         ):
             result = await update_activity(
                 mock_request, update_obj, activity.activity_uuid, admin_user, db
@@ -280,8 +277,9 @@ class TestUpdateActivity:
             "src.services.courses.activities.activities.check_resource_access",
             new_callable=AsyncMock,
         ), patch(
-            "src.services.courses.activities.activities.create_activity_version",
+            "src.services.courses.activities.activities.stage_activity_version",
             new_callable=AsyncMock,
+            return_value=None,
         ) as mock_version, patch(
             "src.services.courses.activities.activities.index_activity",
         ) as mock_index:

@@ -163,7 +163,11 @@ function EditorWrapper(props: EditorWrapperProps): JSX.Element {
 
     try {
       const result = await toast.promise(
-        updateActivity({ content }, props.activity.activity_uuid, access_token).then(res => {
+        updateActivity(
+          { content, expected_current_version: localVersion },
+          props.activity.activity_uuid,
+          access_token
+        ).then(res => {
           if (!res.success) {
             throw res;
           }

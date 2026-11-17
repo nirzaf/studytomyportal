@@ -11,7 +11,7 @@ import {
   generateActivityContent,
   parseActivityContentFromStream,
 } from '@services/ai/courseplanning'
-import { updateActivity } from '@services/courses/activities'
+import { getActivity, updateActivity } from '@services/courses/activities'
 
 interface ContentGenerationPanelProps {
   chapters: CreatedChapter[]
@@ -69,6 +69,24 @@ function ContentGenerationPanel({
   ) => {
     if (!sessionUuid) return
 
+    let expectedCurrentVersion: number
+    try {
+      const activity = await getActivity(activityUuid, null, accessToken)
+      expectedCurrentVersion = activity.current_version || 1
+    } catch {
+      setActivityStates((prev) => ({
+        ...prev,
+        [activityUuid]: {
+          isGenerating: false,
+          isGenerated: false,
+          streamContent: '',
+          content: null,
+          error: t('courses.create.ai.save_content_failed'),
+        },
+      }))
+      return
+    }
+
     // Update state to show generating
     setActivityStates((prev) => ({
       ...prev,
@@ -105,7 +123,10 @@ function ContentGenerationPanel({
         try {
           // Use the standard activity update endpoint (same as editor uses)
           const result = await updateActivity(
-            { content: parsedContent },
+            {
+              content: parsedContent,
+              expected_current_version: expectedCurrentVersion,
+            },
             activityUuid,
             accessToken
           )

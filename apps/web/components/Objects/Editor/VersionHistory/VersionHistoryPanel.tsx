@@ -69,7 +69,8 @@ function VersionHistoryPanel({
       const result = await restoreActivityVersion(
         activityUuid,
         version.version_number,
-        access_token
+        access_token,
+        currentVersion
       )
 
       if (result.success) {
