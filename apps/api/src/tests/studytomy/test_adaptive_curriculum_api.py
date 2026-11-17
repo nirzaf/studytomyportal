@@ -27,6 +27,7 @@ from src.db.courses.courses import Course
 from src.db.organization_config import OrganizationConfig
 from src.db.organizations import Organization
 from src.db.roles import Role, RoleTypeEnum
+from src.db.studytomy.access import StudyCourseAccessGrant
 from src.db.studytomy.adaptive import (
     StudyConcept,
     StudyConceptActivity,
@@ -48,6 +49,7 @@ from src.db.studytomy.adaptive_reports import (
     StudyReportReviewRequest,
 )
 from src.db.studytomy.commerce import StudyOffer, StudyOfferVersion
+from src.db.studytomy.education import StudyCourseRelease
 from src.db.studytomy.family import (
     StudyEligibilityDecision,
     StudyLearnerProfile,
@@ -72,8 +74,13 @@ from src.db.user_organizations import UserOrganization
 from src.db.users import PublicUser, User
 from src.router import v1_router
 from src.security.studytomy_access import StudytomyCapabilityName
+from src.services.ai.tools.base import make_synthetic_request
 from src.services.auth.session import mint_session_tokens
 from src.services.courses.activities.assignments import retry_assignment_submission
+from src.services.studytomy.adaptive_attempt_access import (
+    require_diagnostic_access,
+    require_mapped_source,
+)
 from src.services.studytomy.adaptive_guidance import load_guidance_context
 from src.services.studytomy.adaptive_reports import _authorize_report_release
 from src.services.studytomy.adaptive_teaching import TeachingResult, apply_reviewed_hint
@@ -82,8 +89,15 @@ from src.services.studytomy.assignment_adapter import (
     native_round_uuid,
     resolve_native_assignment_snapshot,
 )
+from src.services.studytomy.entitlements import resolve_active_course_grants
+from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.outbox import enqueue_delivery
 from src.services.studytomy.policies import POLICY_REQUIRED_RESPONSIBILITIES
+from src.services.studytomy.releases import (
+    ReleasePolicyBinding,
+    ReleasePolicyVersion,
+    course_candidate_snapshot,
+)
 from src.services.studytomy.report_notifications import (
     revalidate_report_delivery,
     run_report_delivery_batch,
@@ -91,6 +105,7 @@ from src.services.studytomy.report_notifications import (
 )
 from src.services.studytomy.sharing import withdraw_my_sharing_grant
 from src.tests.conftest import ADMIN_RIGHTS, USER_RIGHTS
+from src.tests.studytomy.test_content_evidence import _seed_postgres_release_sources
 from src.tests.studytomy.test_studytomy_access import (
     _grant_role_capabilities,
     _seed_active_owner,
@@ -543,6 +558,218 @@ async def _exercise_authoring(
         await db.commit()
         assert (await client.post(path, json=body, headers=direct)).status_code == 404
         assert (await client.get(configuration, headers=direct)).status_code == 404
+        if session_factory is not None:
+            await _characterize_managed_course_diagnostic_conflict(
+                db, org, owned, lesson, draft["uuid"], admin_user, regular_user
+            )
+
+
+async def _characterize_managed_course_diagnostic_conflict(
+    db, org, course, lesson, curriculum_uuid, staff, learner
+):
+    """AUD-01: prove the reviewed-release/grant path still hits native publication.
+
+    Every policy, review, release and learner record below is synthetic test data,
+    not a real approval. The desired follow-up is exact release-aware source
+    resolution while the managed Course remains private and unpublished.
+    """
+    token = uuid4().hex
+    now = datetime.now(UTC)
+    payer, guardian = [
+        User(
+            username=f"aud01-{token}-{kind}",
+            user_uuid=f"user_{token}_{kind}",
+            email=f"aud01-{token}-{kind}@example.invalid",
+            first_name="Synthetic",
+            last_name=kind.title(),
+        )
+        for kind in ("payer", "guardian")
+    ]
+    db.add_all([payer, guardian])
+    await db.flush()
+    assert len({staff.id, learner.id, payer.id, guardian.id}) == 4
+
+    curriculum = (
+        await db.execute(
+            select(StudyCurriculumRevision).where(
+                StudyCurriculumRevision.org_id == org.id,
+                StudyCurriculumRevision.uuid == curriculum_uuid,
+            )
+        )
+    ).scalar_one()
+    diagnostic = (
+        await db.execute(
+            select(StudyDiagnosticRevision).where(
+                StudyDiagnosticRevision.org_id == org.id,
+                StudyDiagnosticRevision.curriculum_revision_id == curriculum.id,
+            )
+        )
+    ).scalar_one()
+    assert curriculum.status in {"published", "retired"}
+    assert diagnostic.status in {"published", "retired"}
+    profile = (
+        await db.execute(
+            select(StudyLearnerProfile).where(
+                StudyLearnerProfile.org_id == org.id,
+                StudyLearnerProfile.user_id == learner.id,
+            )
+        )
+    ).scalar_one()
+
+    concept_uuids = tuple(
+        (
+            await db.execute(
+                select(StudyConcept.uuid)
+                .join(
+                    StudyConceptActivity,
+                    StudyConceptActivity.concept_id == StudyConcept.id,
+                )
+                .where(
+                    StudyConcept.org_id == org.id,
+                    StudyConcept.curriculum_revision_id == curriculum.id,
+                    StudyConceptActivity.activity_uuid == lesson.activity_uuid,
+                    StudyConceptActivity.usage == "teach",
+                    StudyConceptActivity.archived.is_(False),
+                    StudyConcept.archived.is_(False),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert concept_uuids
+
+    # Verify the current native source path with normal authorization first.
+    request = make_synthetic_request()
+    native_source = await require_mapped_source(
+        request,
+        db,
+        org,
+        staff,
+        curriculum,
+        concept_uuids,
+        lesson.activity_uuid,
+    )
+    assert native_source.id == lesson.id
+
+    policies = []
+    for key in (
+        StudyPolicyKey.D_08,
+        StudyPolicyKey.D_09,
+        StudyPolicyKey.D_13,
+        StudyPolicyKey.D_16,
+    ):
+        policy = (
+            await db.execute(
+                select(StudyPolicyVersion)
+                .where(
+                    StudyPolicyVersion.org_id == org.id,
+                    StudyPolicyVersion.policy_key == key.value,
+                    StudyPolicyVersion.status == StudyPolicyStatus.APPROVED.value,
+                )
+                .order_by(StudyPolicyVersion.version.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        assert policy is not None, f"Synthetic {key.value} fixture policy is missing."
+        policies.append(policy)
+
+    course.public = False
+    course.published = False
+    course.studytomy_managed = True
+    await db.commit()
+    snapshot = await course_candidate_snapshot(db, course)
+    review, snapshot, policies = await _seed_postgres_release_sources(
+        db,
+        org,
+        staff.id,
+        token,
+        snapshot=snapshot,
+        course_uuid=course.course_uuid,
+        policy_versions=policies,
+        policy_version_ids=[int(policy.id) for policy in policies],
+        revision_sha256=canonical_request_hash(snapshot),
+    )
+    binding = ReleasePolicyBinding(
+        versions={
+            StudyPolicyKey(policy.policy_key): ReleasePolicyVersion(
+                policy_id=int(policy.id),
+                policy_uuid=policy.policy_uuid,
+                version=policy.version,
+                body_sha256=canonical_request_hash(policy.body),
+            )
+            for policy in policies
+        },
+        retention_category="synthetic",
+    )
+    release = StudyCourseRelease(
+        org_id=org.id,
+        course_uuid=course.course_uuid,
+        review_id=review.id,
+        snapshot_sha256=canonical_request_hash(snapshot),
+        snapshot=snapshot,
+        media_manifest={},
+        assessment_policy_id=int(policies[0].id),
+        progression_policy_id=int(policies[1].id),
+        retention_policy_id=int(policies[2].id),
+        rights_policy_id=int(policies[3].id),
+        retention_category="synthetic",
+        policy_binding=binding.model_dump(mode="json"),
+    )
+    db.add(release)
+    await db.flush()
+    grant = StudyCourseAccessGrant(
+        org_id=org.id,
+        learner_profile_id=profile.id,
+        course_uuid=course.course_uuid,
+        release_id=release.id,
+        source_kind="free",
+        source_uuid=f"aud01-{token}",
+        start_basis="fixed_period",
+        starts_at=now - timedelta(minutes=1),
+        ends_at=now + timedelta(days=1),
+        created_at=now - timedelta(minutes=2),
+    )
+    db.add(grant)
+    await db.commit()
+    assert review.decision == "approved"
+    assert review.revision_sha256 == release.snapshot_sha256
+    assert canonical_request_hash(await course_candidate_snapshot(db, course)) == release.snapshot_sha256
+    active_grants = await resolve_active_course_grants(
+        db,
+        org_id=org.id,
+        learner_profile_id=profile.id,
+        course_uuid=course.course_uuid,
+        release_id=release.id,
+        now=now,
+    )
+    assert [row.id for row in active_grants] == [grant.id]
+
+    assert course.public is False and course.published is False
+
+    for field in ("public", "published"):
+        with pytest.raises(IntegrityError, match="ck_course_studytomy_managed_private"):
+            async with db.begin_nested():
+                await db.execute(
+                    update(Course)
+                    .where(Course.id == course.id)
+                    .values(**{field: True})
+                )
+
+    with pytest.raises(HTTPException) as denied:
+        await require_diagnostic_access(
+            request,
+            db,
+            org,
+            learner,
+            profile,
+            diagnostic.uuid,
+            lesson.activity_uuid,
+            now,
+            validate_pool=False,
+        )
+    assert denied.value.status_code == 404
+    assert denied.value.detail == "Learning source not found."
 
 
 async def _exercise_native_items(

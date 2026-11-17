@@ -589,7 +589,19 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         assert protected.value.detail["code"] == "COURSE_REVIEW_RETENTION_REQUIRED"
 
 
-async def _seed_postgres_release_sources(db, org, reviewer_id, token, media_manifest=None, snapshot=None):
+async def _seed_postgres_release_sources(
+    db,
+    org,
+    reviewer_id,
+    token,
+    media_manifest=None,
+    snapshot=None,
+    *,
+    course_uuid="course_synthetic",
+    policy_versions=None,
+    policy_version_ids=None,
+    revision_sha256=None,
+):
     owner = User(
         username=f"review-owner-{token}",
         user_uuid=f"user_owner_{token}",
@@ -599,6 +611,8 @@ async def _seed_postgres_release_sources(db, org, reviewer_id, token, media_mani
     )
     db.add(owner)
     await db.flush()
+    evidence_policy_ids = policy_version_ids or [1]
+    evidence_revision_sha256 = revision_sha256 or ("a" * 64)
     assignment = StudyOwnerAssignment(
         org_id=org.id, user_id=reviewer_id, assigned_by_user_id=owner.id,
         responsibility=StudyOwnerFunction.EDUCATION.value, scope_uuid=org.org_uuid,
@@ -609,9 +623,10 @@ async def _seed_postgres_release_sources(db, org, reviewer_id, token, media_mani
     attachments = [
         StudyEvidenceFile(
             evidence_uuid=f"ev_{uuid4()}", org_id=org.id, purpose=purpose,
-            course_uuid="course_synthetic", revision_sha256="a" * 64,
+            course_uuid=course_uuid, revision_sha256=evidence_revision_sha256,
             storage_reference=f"synthetic/{purpose}", content_sha256="b" * 64,
-            media_type="application/pdf", size_bytes=1, policy_version_ids=[1],
+            media_type="application/pdf", size_bytes=1,
+            policy_version_ids=evidence_policy_ids,
             retention_category="synthetic", upload_status="ready", uploaded_by_user_id=owner.id,
         )
         for purpose in ("content_rights", "content_accessibility")
@@ -621,27 +636,29 @@ async def _seed_postgres_release_sources(db, org, reviewer_id, token, media_mani
     snapshot = snapshot if snapshot is not None else {"fixture": "original"}
     digest = canonical_request_hash(snapshot)
     decision = StudyCourseReview(
-        org_id=org.id, course_uuid="course_synthetic", revision_sha256=digest,
+        org_id=org.id, course_uuid=course_uuid, revision_sha256=digest,
         owner_user_id=owner.id, reviewer_user_id=reviewer_id,
         reviewer_assignment_id=assignment.id,
         rights_evidence_id=attachments[0].id, accessibility_evidence_id=attachments[1].id,
-        policy_version_ids=[1], decision="approved",
+        policy_version_ids=evidence_policy_ids, decision="approved",
         accessibility_confirmed=True, assessment_confirmed=True,
         media_manifest=media_manifest,
     )
     db.add(decision)
     await db.flush()
-    policies = [
-        StudyPolicyVersion(
-            org_id=org.id, policy_key=key, scope_uuid=org.org_uuid,
-            evidence_reference="SYNTHETIC", effective_from=datetime.now(UTC),
-            created_by_user_id=owner.id,
-            status=StudyPolicyStatus.APPROVED.value,
-        )
-        for key in ("D-08", "D-09", "D-13", "D-16")
-    ]
-    db.add_all(policies)
-    await db.flush()
+    policies = policy_versions
+    if policies is None:
+        policies = [
+            StudyPolicyVersion(
+                org_id=org.id, policy_key=key, scope_uuid=org.org_uuid,
+                evidence_reference="SYNTHETIC", effective_from=datetime.now(UTC),
+                created_by_user_id=owner.id,
+                status=StudyPolicyStatus.APPROVED.value,
+            )
+            for key in ("D-08", "D-09", "D-13", "D-16")
+        ]
+        db.add_all(policies)
+        await db.flush()
     return decision, snapshot, policies
 
 
