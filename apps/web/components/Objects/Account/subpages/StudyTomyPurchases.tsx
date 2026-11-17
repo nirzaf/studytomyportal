@@ -135,11 +135,11 @@ function PurchasesView({ orgUuid, orgSlug, orderRef, token }: Props & { token: s
   const date = (value: string) => formatDateTime(value, i18n.language)
 
   return (
-    <section aria-label={isDetail ? 'StudyTomy receipt' : 'StudyTomy purchases'} className="space-y-4">
+    <section aria-label={isDetail ? 'Studytomy receipt' : 'Studytomy purchases'} className="space-y-4">
       {isDetail && <Link href={purchasesUrl} prefetch={false} className="inline-flex min-h-11 items-center underline">Back to purchases</Link>}
-      <h2 className="text-xl font-semibold">{isDetail ? 'StudyTomy receipt' : 'StudyTomy purchases'}</h2>
+      <h2 className="text-xl font-semibold">{isDetail ? 'Studytomy receipt' : 'Studytomy purchases'}</h2>
       {view.kind === 'loading' && <p role="status">Loading {isDetail ? 'receipt' : 'purchases'}…</p>}
-      {view.kind === 'unavailable' && <p role="status">{isDetail ? 'This receipt is unavailable.' : 'StudyTomy purchase history is unavailable.'}</p>}
+      {view.kind === 'unavailable' && <p role="status">{isDetail ? 'This receipt is unavailable.' : 'Studytomy purchase history is unavailable.'}</p>}
       {view.kind === 'error' && (
         <div className="space-y-2">
           <p role="alert">Unable to load {isDetail ? 'this receipt' : 'purchases'}.</p>
@@ -148,7 +148,7 @@ function PurchasesView({ orgUuid, orgSlug, orderRef, token }: Props & { token: s
       )}
       {view.kind === 'list' && (
         <>
-          {view.page.orders.length === 0 && <p role="status">No StudyTomy purchases to show.</p>}
+          {view.page.orders.length === 0 && <p role="status">No Studytomy purchases to show.</p>}
           {view.page.orders.length > 0 && <ul className="divide-y rounded-lg border">
             {view.page.orders.map((order) => (
               <li key={order.customer_ref}>

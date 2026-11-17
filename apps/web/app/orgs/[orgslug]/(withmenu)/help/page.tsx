@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import SupportCase from '@components/Studytomy/SupportCase'
 import { getAPIUrl } from '@services/config/config'
 import { getOrganizationContextInfoWithoutCredentials } from '@services/organizations/orgs'
 import { secureFetch } from '@services/utils/ts/requests'
@@ -10,6 +11,8 @@ type SupportGuidance = {
   contact_instructions: string
   monitored_hours: string
   service_limits: string
+  response_expectations: string | null
+  intake_available: boolean
 }
 
 async function getGuidance(orgUuid: string): Promise<SupportGuidance | null> {
@@ -34,9 +37,14 @@ export default async function HelpPage({ params }: { params: Promise<{ orgslug: 
           </ul>
           <p className="whitespace-pre-line">{guidance.contact_instructions}</p>
           <p className="whitespace-pre-line"><strong>Monitored hours</strong> {guidance.monitored_hours}</p>
+          {guidance.response_expectations && (
+            <p className="whitespace-pre-line"><strong>Response expectations</strong> {guidance.response_expectations}</p>
+          )}
           <p className="whitespace-pre-line">{guidance.service_limits}</p>
         </section>
       ) : <p>Online support instructions are currently unavailable for this organization.</p>}
+      <SupportCase orgUuid={organization.org_uuid} topics={[...new Set(guidance?.categories ?? [])]}
+        intakeAvailable={guidance?.intake_available === true} />
       <Link className="font-semibold underline" href="/help/report">Report a safety concern</Link>
     </main>
   )

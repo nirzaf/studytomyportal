@@ -17,7 +17,7 @@ test('lesson practice preserves a draft, recovers saved feedback, and falls back
   const org = await getOrg()
   const token = await login(ADMIN_EMAIL, ADMIN_PASSWORD)
   const fd = new FormData()
-  fd.set('name', `StudyTomy fractions fixture ${uniqueSuffix()}`)
+  fd.set('name', `Studytomy fractions fixture ${uniqueSuffix()}`)
   fd.set('description', 'Synthetic fractions lesson')
   fd.set('public', 'true')
   fd.set('about', 'Synthetic lesson')

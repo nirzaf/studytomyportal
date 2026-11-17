@@ -1,0 +1,25 @@
+# Studytomy support configuration
+
+The organization help page reads approved D-04 and D-15 policies. In D-04, set `support_routes.public_support` with the public `categories`, `contact_instructions`, and `service_limits`. Set the public hours in `monitored_hours.public_support` and the approved acknowledgement and review expectations as text in `response_targets.public_support`. Online intake requires those expectations. Keep staff contact details and internal escalation thresholds outside the public fields.
+
+Set `LEARNHOUSE_STUDYTOMY_SUPPORT_INTAKE_ENABLED=true` only for synthetic local verification until the staff handling workflow and required acceptance are verified. Organization members can open a case for a listed topic and check their own receipt without paid lesson access. A support receipt carries no guardian authority. Keep online intake disabled for real users while staff handling and public intake are pending.
+
+Approved D-04 staffing must include a `staffing.support` entry with `lead_owner_assignment_uuid` and `backup_owner_assignment_uuid`. Both assignments must be active, scoped to the same organization, and held by distinct members with the support responsibility. If the reporter is the lead, the case goes to the backup. The public guidance and private receipts omit staff identifiers.
+
+The staff workspace is available at `/studytomy/support-cases`. The queue shows each current support owner their own open cases and the next statuses permitted by the API. Staff access depends on approved staffing and exact case ownership.
+
+For an employee complaint, intake can record known organization user references as exclusions before selecting an owner. If neither approved support owner can independently review the case, online intake directs the reporter to the approved contact. The form also directs reporters there when they lack a staff reference. Case receipts and queues omit the subject references.
+
+An assigned owner can hand off an open case to the other approved support owner. The case version must still match, and the alternate must be independent of the reporter and any recorded exclusions. The handoff updates ownership and appends an audit event in the same transaction.
+
+The staff workspace's **Cases needing an owner** view shows open cases the signed-in owner can recover when the current owner is inactive or excluded. The API checks the current case version and rechecks staffing and exclusions before restoring ownership. Recovery preserves the case status. New intake still requires two active owners.
+
+An independent assigned owner can return a resolved complaint to **Under review** before closing it. The transition requires the current case version and records an audit event.
+
+Migration `3f0bd4e972a1` adds storage for short-lived guest verification challenges. The table has tenant-scoped token digests, a private ciphertext field, and an expiry index. From `apps/api`, run `python cli.py purge-guest-support-challenges --org <slug>` against the intended test database to preview one expired batch. Add `--execute` to delete the batch. The command prints a count and defaults to 100 rows. No cleanup schedule or public guest endpoint is active.
+
+Migration `4e7bca98d201` lets an assigned support case represent a verified guest reporter without a LearnHouse user ID. Safeguarding cases continue to require an account reporter. Guest cases stay outside account case lookup and use the same named staff ownership and conflict checks. The internal redemption service requires `LEARNHOUSE_STUDYTOMY_GUEST_SUPPORT_ENABLED=true` and approval of `support_routes.public_support.guest_intake_enabled` under D-04. It saves the case, challenge link, and audit event together, and a valid retry returns the original receipt until expiry. Challenge issuance and delivery, and approved durable contact retention for staff follow-up, remain open.
+
+If the acknowledgement response is lost after the case is saved, the form can retry with the same request ID while it remains open. The retry returns the original receipt, including when staffing changes prevent new submissions. Checking the case reference returns the current status. Automated response deadlines and reminders still require approved operating targets.
+
+The synthetic mobile Chromium test at `apps/e2e/features/studytomy/tests/11-support-case.spec.ts` starts in My Learning, receives a simulated denial, and follows **Contact support** to the actual help page. It checks request ID reuse after a dropped response, receipt display, and the next step when staff need more information. The browser run uses fixture guidance and mocked lesson and case responses. The PostgreSQL API tests separately verify ownership, persisted receipts, and replay. The checkout regression proves that the same purchaser can open and read an assigned support case after lesson access expires, while the lesson still returns 404. Verified guest intake remains open.

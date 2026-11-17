@@ -69,7 +69,7 @@ test('open an accepted purchase by keyboard and revalidate its private receipt',
   })
 
   await page.goto(new URL('/account/purchases', BASE_URL).href, { waitUntil: 'domcontentloaded', timeout: 90_000 })
-  const purchases = page.getByRole('region', { name: 'StudyTomy purchases' })
+  const purchases = page.getByRole('region', { name: 'Studytomy purchases' })
   const link = purchases.getByRole('link', { name: /Receipt for/ })
   await expect(link).toBeVisible({ timeout: 60_000 })
   await expect(link).toHaveAttribute('href', new RegExp(`order=${order.customer_ref}$`))
@@ -77,7 +77,7 @@ test('open an accepted purchase by keyboard and revalidate its private receipt',
   await expect(link).toBeFocused()
   await page.keyboard.press('Enter')
 
-  const receipt = page.getByRole('region', { name: 'StudyTomy receipt' })
+  const receipt = page.getByRole('region', { name: 'Studytomy receipt' })
   await expect(receipt.getByRole('heading', { name: 'Synthetic course' })).toBeVisible()
   await expect(receipt.getByText('Payment confirmed')).toBeVisible()
   await expect(receipt.getByText('Finance review is pending.')).toBeVisible()
@@ -114,5 +114,5 @@ test('open an accepted purchase by keyboard and revalidate its private receipt',
   const back = receipt.getByRole('link', { name: 'Back to purchases' })
   await expect(back).toBeVisible()
   await back.click()
-  await expect(purchases.getByText('No StudyTomy purchases to show.')).toBeVisible()
+  await expect(purchases.getByText('No Studytomy purchases to show.')).toBeVisible()
 })

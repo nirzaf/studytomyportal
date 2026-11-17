@@ -194,7 +194,7 @@ function ResolutionForm({ review, base, token, onResolved }: {
           Outcome
           <select name="outcome" required defaultValue="" className="min-h-11 rounded-md border bg-background px-3">
             <option value="" disabled>Select an outcome</option>
-            <option value="returned_externally">Returned outside StudyTomy</option>
+            <option value="returned_externally">Returned outside Studytomy</option>
             <option value="settlement_not_received">Settlement was not received</option>
           </select>
         </label>

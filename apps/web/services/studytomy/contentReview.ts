@@ -13,6 +13,7 @@ export type CourseReviewCandidate = {
   evidence: CourseEvidence[]
   next_before_id: number | null
   current_review?: CourseReviewReceipt | null
+  grounding_review_required?: boolean
 }
 
 type CourseReviewReceipt = {

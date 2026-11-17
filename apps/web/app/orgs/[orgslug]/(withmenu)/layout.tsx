@@ -112,7 +112,7 @@ function LayoutContent({ children, orgslug }: { children: ReactNode; orgslug: st
         ...(customFont ? { fontFamily: `'${customFont}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` } : {}),
       }}
     >
-      {!pathname.endsWith('/help/report') && !pathname.endsWith('/studytomy/cases') && <PageViewTracker />}
+      {!pathname.endsWith('/help/report') && !pathname.endsWith('/studytomy/cases') && !pathname.endsWith('/studytomy/support-cases') && <PageViewTracker />}
       {!chromeless && <OrgJoinBanner />}
       {!chromeless && <OrgMenu orgslug={orgslug} />}
       {/* Org-wide 2FA policy: renders nothing unless this user is non-compliant. */}

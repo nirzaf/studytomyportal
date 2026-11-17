@@ -52,7 +52,8 @@ export default function ContentReviewPanel({ client, initial }: {
       await action(controller.signal)
     } catch (failure) {
       if (!controller.signal.aborted) {
-        setError(failure instanceof CourseReviewError && failure.code === 'STALE_VERSION'
+        const code = failure instanceof CourseReviewError ? failure.code : undefined
+        setError(code === 'STALE_VERSION' || code === 'GROUNDED_SOURCE_REVIEW_REQUIRED'
           ? t('contentReview.stale', 'The candidate changed. Reload it before making a decision.')
           : t('contentReview.error', 'The request failed. Check your review access and attachment selection, then retry.'))
       }
@@ -131,6 +132,7 @@ export default function ContentReviewPanel({ client, initial }: {
     const button = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
     const decision = button?.value
     if (decision !== 'approved' && decision !== 'changes_requested') return
+    if (decision === 'approved' && candidate.grounding_review_required) return
     const body = {
       revision_sha256: candidate.revision_sha256,
       rights_evidence_uuid: rights,
@@ -150,6 +152,7 @@ export default function ContentReviewPanel({ client, initial }: {
       setCandidate(current => ({
         ...current,
         current_review: latest.revision_sha256 === current.revision_sha256 ? latest.current_review : null,
+        grounding_review_required: latest.grounding_review_required,
       }))
       setStatus(t('contentReview.saved', 'Review decision recorded.'))
     })
@@ -159,6 +162,10 @@ export default function ContentReviewPanel({ client, initial }: {
     <section aria-labelledby="course-review-heading" className="mx-auto max-w-3xl space-y-5 p-4 sm:p-8">
       <h2 id="course-review-heading" className="text-xl font-semibold">{t('contentReview.title', 'Content review')}</h2>
       <p className="break-all font-mono text-sm">{candidate.revision_sha256}</p>
+      {candidate.grounding_review_required && <p role="status" className="text-sm text-gray-800">
+        {t('contentReview.groundingReviewRequired',
+          'A lesson or quiz changed, or a cited source is unavailable. Update its source evidence and reload this candidate before approving.')}
+      </p>}
       {candidate.current_review && <p className="text-sm font-medium text-gray-800">
         {candidate.current_review.decision === 'approved'
           ? t('contentReview.approvalRecorded', 'Approval recorded for this candidate.')
@@ -230,7 +237,8 @@ export default function ContentReviewPanel({ client, initial }: {
           <button className={control} type="submit" value="changes_requested" disabled={busy || !rights || !accessibility}>
             {t('contentReview.requestChanges', 'Request changes')}
           </button>
-          <button className={control} type="submit" value="approved" disabled={busy || !rights || !accessibility || !accessible || !assessment}>
+          <button className={control} type="submit" value="approved"
+            disabled={busy || !rights || !accessibility || !accessible || !assessment || candidate.grounding_review_required}>
             {t('contentReview.approve', 'Record approval')}
           </button>
         </div>

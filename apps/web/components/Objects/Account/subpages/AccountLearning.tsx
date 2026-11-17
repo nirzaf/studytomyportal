@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
@@ -184,6 +185,9 @@ function LearningView({ orgUuid, token }: { orgUuid: string; token: string }) {
           {access.duration_days !== null && <div><dt>Duration</dt><dd>{access.duration_days} {access.duration_days === 1 ? 'day' : 'days'}</dd></div>}
           {access.completion_before_window && <div><dt>Prior course completion</dt><dd>Recorded before this access period.</dd></div>}
         </dl>
+        {(access.status === 'expired' || access.status === 'revoked') && (
+          <Link href="/help" className="font-semibold underline">Contact support</Link>
+        )}
       </>
       break
     }
@@ -216,6 +220,7 @@ function LearningView({ orgUuid, token }: { orgUuid: string; token: string }) {
       content = <>
         <p role="status">Learning is unavailable for this account.</p>
         <Button variant="outline" className="min-h-11" onClick={() => act(() => showCatalog())}>Try again</Button>
+        <p><Link href="/help" className="font-semibold underline">Contact support</Link></p>
       </>
       break
     default:

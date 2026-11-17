@@ -32,6 +32,7 @@ import VideoBlock from './Extensions/Video/VideoBlock'
 import AudioBlock from './Extensions/Audio/AudioBlock'
 import { Eye, History, AlertTriangle, RefreshCw, Loader2, LayoutTemplate, UserRoundSearch } from 'lucide-react'
 import EditorActionMenu from './Toolbar/EditorActionMenu'
+import GroundedLessonSources from '@components/Studytomy/GroundedLessonSources'
 import MathEquationBlock from './Extensions/MathEquation/MathEquationBlock'
 import PDFBlock from './Extensions/PDF/PDFBlock'
 import H5PBlock from './Extensions/H5P/H5PBlock'
@@ -125,6 +126,7 @@ function Editor(props: EditorProps) {
   const [editorReady, setEditorReady] = React.useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false)
   const savedContentSnapshotRef = React.useRef(getEditorContentSnapshot(props.content))
+  const sourceToken = props.session?.status === 'authenticated' ? props.session.data?.tokens?.access_token : undefined
 
   // Conflict detection state
   const [conflictInfo, setConflictInfo] = React.useState<ConflictInfo | null>(null)
@@ -538,6 +540,15 @@ function Editor(props: EditorProps) {
               </div>
             </div>
             <div className="activity-editor-users-section space-x-2">
+              {props.course.grounded_sources_available && sourceToken && !hasUnsavedChanges && (
+                <GroundedLessonSources
+                  orgUuid={props.course.org_uuid}
+                  courseUuid={props.course.course_uuid}
+                  activityUuid={props.activity.activity_uuid}
+                  version={props.localVersion}
+                  token={sourceToken}
+                />
+              )}
               {/* Writing helpers */}
               <div className="flex items-center gap-2">
                 <div>

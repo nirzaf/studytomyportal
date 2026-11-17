@@ -32,12 +32,14 @@ test('staff attaches evidence and reviews the current course candidate', async (
   let rights = `ev_${randomUUID()}`
   let accessibility = `ev_${randomUUID()}`
   let attached = false
+  let groundingReviewRequired = false
   let decisions = 0
   const attachment = (id: string, purpose: string) => ({
     evidence_uuid: id, purpose, revision_sha256: revision, verified_at: '2026-11-01T00:00:00Z',
   })
   await page.route(`${api}/content-review-candidate`, route => route.fulfill({ json: {
     revision_sha256: revision,
+    grounding_review_required: groundingReviewRequired,
     evidence: [
       attachment(rights, 'content_rights'),
       ...(attached ? [attachment(accessibility, 'content_accessibility')] : []),
@@ -70,6 +72,7 @@ test('staff attaches evidence and reviews the current course candidate', async (
       revision = 'b'.repeat(64)
       rights = `ev_${randomUUID()}`
       accessibility = `ev_${randomUUID()}`
+      groundingReviewRequired = true
       return route.fulfill({ status: 409, json: { detail: { code: 'STALE_VERSION' } } })
     }
     return route.fulfill({ status: 201, json: {
@@ -96,7 +99,7 @@ test('staff attaches evidence and reviews the current course candidate', async (
   await expect(panel.getByRole('status')).toHaveText('Evidence attached to this candidate.')
   await expect(accessibilitySelect).toHaveValue(accessibility)
 
-  async function confirmAndApprove() {
+  async function confirmEvidence() {
     await expect(approve).toBeDisabled()
     await rightsSelect.selectOption(rights)
     await expect(rightsSelect).toHaveValue(rights)
@@ -108,6 +111,10 @@ test('staff attaches evidence and reviews the current course candidate', async (
     await expect(approve).toBeDisabled()
     const assessmentFinding = panel.getByRole('checkbox', { name: /confirm the assessment/ })
     await assessmentFinding.check()
+  }
+
+  async function confirmAndApprove() {
+    await confirmEvidence()
     await expect(approve).toBeEnabled()
     await approve.focus()
     await page.keyboard.press('Enter')
@@ -120,6 +127,13 @@ test('staff attaches evidence and reviews the current course candidate', async (
   await panel.getByRole('button', { name: 'Reload candidate' }).click()
   await expect(panel.getByText(revision)).toBeVisible()
   await expect(accessibilitySelect).toHaveValue('')
+  await expect(panel.getByText(/a lesson or quiz changed/i)).toBeVisible()
+  await confirmEvidence()
+  await expect(approve).toBeDisabled()
+  await expect(panel.getByRole('button', { name: 'Request changes' })).toBeEnabled()
+  groundingReviewRequired = false
+  await panel.getByRole('button', { name: 'Reload candidate' }).click()
+  await expect(panel.getByText(/a lesson or quiz changed/i)).toHaveCount(0)
   await confirmAndApprove()
   await expect(panel.getByRole('status')).toHaveText('Review decision recorded.')
   expect(decisions).toBe(2)
