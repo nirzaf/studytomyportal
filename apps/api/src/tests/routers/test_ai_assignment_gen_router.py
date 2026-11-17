@@ -171,6 +171,25 @@ async def test_generation_error_refunds_and_502():
     refund.assert_called_once()
 
 
+async def test_missing_grounding_refunds_and_returns_actionable_error():
+    failure = ag.AssignmentGroundingUnavailable("Add readable course material.")
+    with (
+        patch.object(ag, "is_org_member", new=AsyncMock(return_value=True)),
+        patch.object(ag, "enforce_ai_rate_limit"),
+        patch.object(ag, "reserve_ai_credit", new=AsyncMock()),
+        patch.object(ag, "resolve_model_for_org", new=AsyncMock(return_value="m")),
+        patch.object(ag, "generate_assignment_plan", new=AsyncMock(side_effect=failure)),
+        patch.object(ag, "refund_ai_credit") as refund,
+        patch.object(ag, "record_generation", new=AsyncMock()) as record,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await ag.api_generate_assignment(_req(), _http_req(), _user(), _db_returning(_org(), _course()))
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "Add readable course material."
+    refund.assert_called_once()
+    record.assert_not_awaited()
+
+
 async def test_history_and_delete():
     row = SimpleNamespace(ai_generation_uuid="aigen_1", session_uuid="s1", prompt="p",
                           result={"title": "A", "tasks": []}, creation_date="d")

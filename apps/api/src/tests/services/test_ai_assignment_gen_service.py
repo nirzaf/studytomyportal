@@ -113,10 +113,22 @@ async def test_course_context_joins_chunks():
     assert "content one" in ctx and "A1" in ctx
 
 
-async def test_course_context_extraction_failure_returns_empty():
+async def test_course_context_extraction_failure_requires_readable_material():
     with patch.object(ag, "extract_all_course_content", new=AsyncMock(side_effect=Exception("boom"))):
-        ctx = await ag._course_context(1, 1, AsyncMock())
-    assert ctx == ""
+        with pytest.raises(ag.AssignmentGroundingUnavailable, match="could not be read"):
+            await ag._course_context(1, 1, AsyncMock())
+
+
+async def test_assignment_generation_skips_provider_for_empty_extraction():
+    with (
+        patch.object(ag, "extract_all_course_content", new=AsyncMock(return_value=[{"text": " "}])) as extract,
+        patch.object(ag, "generate", new=AsyncMock()) as generate,
+    ):
+        db = AsyncMock()
+        with pytest.raises(ag.AssignmentGroundingUnavailable, match="Add readable course material"):
+            await ag.generate_assignment_plan(org_id=7, course_id=3, prompt="Draft a quiz", model_name="", db_session=db)
+    extract.assert_awaited_once_with(3, 7, db)
+    generate.assert_not_awaited()
 
 
 # --- generate_assignment_plan ---

@@ -21,7 +21,7 @@ from src.security.auth import get_authenticated_user, resolve_acting_user_id
 from src.security.features_utils.usage import refund_ai_credit, reserve_ai_credit
 from src.security.org_auth import is_org_member, enforce_org_mfa
 from src.security.rbac import check_resource_access, AccessAction
-from src.services.ai.assignment_gen import generate_assignment_plan
+from src.services.ai.assignment_gen import AssignmentGroundingUnavailable, generate_assignment_plan
 from src.services.ai.base import chat_session_belongs_to_user
 from src.services.ai.generations import (
     delete_generation,
@@ -117,6 +117,9 @@ async def api_generate_assignment(
             session_uuid=body.session_uuid,
             user_id=acting_user_id,
         )
+    except AssignmentGroundingUnavailable as e:
+        refund_ai_credit(org.id, ASSIGNMENT_CREDIT_COST)
+        raise HTTPException(status_code=422, detail=str(e)) from None
     except AINotConfiguredError as e:
         refund_ai_credit(org.id, ASSIGNMENT_CREDIT_COST)
         raise HTTPException(status_code=403, detail=str(e))
