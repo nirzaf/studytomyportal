@@ -29,6 +29,10 @@ import {
   recheckConnections,
 } from './accessRecheck.js'
 import { loadBoardState } from './boardState.js'
+import {
+  assertSuccessfulYdocWrite,
+  BoardPersistenceQueue,
+} from './persistenceQueue.js'
 
 const PORT = parseInt(process.env.COLLAB_PORT || '4000', 10)
 const API_URL = process.env.LEARNHOUSE_API_URL || 'http://localhost:8000'
@@ -45,10 +49,15 @@ const FETCH_TIMEOUT_MS = 10_000
 
 // Debounce interval before flushing ydoc state to the database (ms)
 const DB_FLUSH_DELAY = 5000
+const DB_FLUSH_RETRY_DELAYS_MS = [250, 1000, 5000]
+const DB_FLUSH_SHUTDOWN_DEADLINE_MS = 30_000
+const DB_FLUSH_SHUTDOWN_REQUEST_TIMEOUT_MS = 15_000
 // Redis TTL for cached ydoc state (seconds): 1 hour
 const REDIS_YDOC_TTL = 3600
 // Largest Yjs state we persist (bytes): 5 MB
 const MAX_YDOC_BYTES = 5 * 1024 * 1024
+const MAX_PENDING_FLUSH_DOCUMENTS = 128
+const MAX_PENDING_FLUSH_BYTES = 64 * 1024 * 1024
 // Largest single incoming WebSocket message (bytes): 2 MB
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024
 // How often open connections re-check their access to the board (ms)
@@ -132,6 +141,10 @@ const docSizes = createDocSizeGuard({
   remeasureEveryBytes: 256 * 1024,
 })
 const DOC_TOO_LARGE = { code: 4413, reason: 'Board is too large' }
+const PERSISTENCE_CAPACITY_REACHED = {
+  code: 1013,
+  reason: 'Board storage is temporarily unavailable; reconnect shortly',
+}
 
 // Clean up stale entries every 5 minutes
 const rateLimitCleanupInterval = setInterval(() => {
@@ -198,47 +211,53 @@ function redisYdocKey(boardUuid: string): string {
 
 // ── Debounced DB persistence ────────────────────────────────────────────────
 
-// Store both the timer and latest state so shutdown can flush without Redis
-const pendingFlushes = new Map<
-  string,
-  { timer: NodeJS.Timeout; state: Uint8Array }
->()
-
-function scheduleDbFlush(boardUuid: string, state: Uint8Array) {
-  // Cancel any existing pending flush for this board
-  const existing = pendingFlushes.get(boardUuid)
-  if (existing) clearTimeout(existing.timer)
-
-  // Copy the state so it survives even if the original buffer is reused
-  const stateCopy = new Uint8Array(state)
-
-  const timer = setTimeout(async () => {
-    pendingFlushes.delete(boardUuid)
-    try {
-      const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`
-      const response = await fetchWithTimeout(url, {
+const pendingFlushes = new BoardPersistenceQueue({
+  debounceMs: DB_FLUSH_DELAY,
+  retryDelaysMs: DB_FLUSH_RETRY_DELAYS_MS,
+  requestTimeoutMs: FETCH_TIMEOUT_MS,
+  maxPendingDocuments: MAX_PENDING_FLUSH_DOCUMENTS,
+  maxPendingBytes: MAX_PENDING_FLUSH_BYTES,
+  write: async (boardUuid, state, timeoutMs) => {
+    const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`
+    const response = await fetchWithTimeout(
+      url,
+      {
         method: 'PUT',
         headers: {
           'X-Internal-Key': INTERNAL_KEY,
           'Content-Type': 'application/octet-stream',
         },
-        body: stateCopy.buffer.slice(
-          stateCopy.byteOffset,
-          stateCopy.byteOffset + stateCopy.byteLength,
+        body: state.buffer.slice(
+          state.byteOffset,
+          state.byteOffset + state.byteLength,
         ) as ArrayBuffer,
-      })
-      if (!response.ok) {
-        console.error(
-          `[collab] DB flush failed for ${boardUuid}: ${response.status}`,
-        )
-      }
-    } catch (err) {
-      console.error(`[collab] DB flush error for ${boardUuid}:`, err)
+      },
+      timeoutMs,
+    )
+    assertSuccessfulYdocWrite(response)
+  },
+  onRetry: (boardUuid, retry, delayMs, error) => {
+    console.warn(
+      `[collab] DB flush retry ${retry} scheduled for ${boardUuid} in ${delayMs}ms:`,
+      error,
+    )
+  },
+  onExhausted: (boardUuid, error) => {
+    console.error(
+      `[collab] DB flush retries exhausted for ${boardUuid}; the latest state remains queued:`,
+      error,
+    )
+  },
+  onCapacityExceeded: (boardUuid, error) => {
+    console.error(
+      `[collab] ${error.message}; closing active board connections to stop unsaved edits`,
+    )
+    const document = server.hocuspocus.documents.get(`board:${boardUuid}`)
+    for (const connection of document?.getConnections() ?? []) {
+      dropConnection(connection, PERSISTENCE_CAPACITY_REACHED)
     }
-  }, DB_FLUSH_DELAY)
-
-  pendingFlushes.set(boardUuid, { timer, state: stateCopy })
-}
+  },
+})
 
 // ── Server ──────────────────────────────────────────────────────────────────
 
@@ -478,7 +497,7 @@ const server = new Server({
         }
 
         // 2. Debounced write to database (slow, batched)
-        scheduleDbFlush(boardUuid, state)
+        pendingFlushes.schedule(boardUuid, state)
       },
     }),
   ],
@@ -509,7 +528,11 @@ const accessRecheckInterval = setInterval(async () => {
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────
 
+let shuttingDown = false
+
 async function gracefulShutdown() {
+  if (shuttingDown) return
+  shuttingDown = true
   console.log('[collab] Shutting down, flushing pending writes...')
 
   // Stop accepting new connections
@@ -517,50 +540,28 @@ async function gracefulShutdown() {
   clearInterval(accessRecheckInterval)
   await server.destroy()
 
-  // Flush all pending writes directly from the captured state (no Redis dependency)
-  const flushPromises: Promise<void>[] = []
-
-  for (const [boardUuid, { timer, state }] of pendingFlushes) {
-    clearTimeout(timer)
-
-    const flush = async () => {
-      try {
-        const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`
-        await fetchWithTimeout(
-          url,
-          {
-            method: 'PUT',
-            headers: {
-              'X-Internal-Key': INTERNAL_KEY,
-              'Content-Type': 'application/octet-stream',
-            },
-            body: state.buffer.slice(
-              state.byteOffset,
-              state.byteOffset + state.byteLength,
-            ) as ArrayBuffer,
-          },
-          15_000, // longer timeout for shutdown flushes
-        )
-        console.log(`[collab] Flushed ${boardUuid} to DB on shutdown`)
-      } catch (err) {
-        console.error(
-          `[collab] Shutdown flush error for ${boardUuid}:`,
-          err,
-        )
-      }
-    }
-
-    flushPromises.push(flush())
+  const unresolved = await pendingFlushes.flushPending(
+    DB_FLUSH_SHUTDOWN_DEADLINE_MS,
+    DB_FLUSH_SHUTDOWN_REQUEST_TIMEOUT_MS,
+  )
+  let exitCode = 0
+  if (unresolved.length > 0) {
+    console.error(
+      `[collab] Shutdown deadline reached with ${unresolved.length} unacknowledged board write(s): ${unresolved.join(', ')}`,
+    )
+    exitCode = 1
   }
-
-  await Promise.allSettled(flushPromises)
-  pendingFlushes.clear()
 
   if (redis) {
-    await redis.quit()
+    try {
+      await redis.quit()
+    } catch (err) {
+      console.error('[collab] Redis shutdown failed:', err)
+      exitCode = 1
+    }
   }
 
-  process.exit(0)
+  process.exit(exitCode)
 }
 
 process.on('SIGINT', gracefulShutdown)
