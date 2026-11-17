@@ -135,6 +135,21 @@ class TestEnsureSchema:
             Column("content_sha256", String),
             Column("citations", JSON),
         )
+        draft_material_table = Table(
+            "st_draft_material",
+            metadata,
+            Column("id", Integer, primary_key=True),
+            Column("source_uuid", String),
+            Column("course_id", Integer),
+            Column("activity_id", Integer),
+            Column("uploaded_by_user_id", Integer),
+            Column("label", String),
+            Column("sha256", String),
+            Column("original_pdf", String),
+            Column("pages", JSON),
+            Column("revoked_at", String),
+            Column("created_at", String),
+        )
 
         report = ensure_schema(db_url, metadata=metadata)
         assert report.state == "empty"
@@ -161,6 +176,7 @@ class TestEnsureSchema:
                     "st_grounded_lesson_evidence_immutable_delete",
                     "st_grounded_quiz_evidence_immutable_update",
                     "st_grounded_quiz_evidence_immutable_delete",
+                    "st_draft_material_version_guard_update",
                 } <= trigger_names
 
                 connection.execute(event_table.insert().values(id=1, action="test.action"))
@@ -196,6 +212,54 @@ class TestEnsureSchema:
                         id=1, content_sha256="a" * 64, citations={}
                     )
                 )
+                connection.execute(
+                    draft_material_table.insert().values(
+                        id=1,
+                        source_uuid="synthetic-source",
+                        course_id=1,
+                        activity_id=1,
+                        uploaded_by_user_id=1,
+                        label="source.pdf",
+                        sha256="a" * 64,
+                        original_pdf="synthetic-pdf-bytes",
+                        pages=[{"page": 1, "text": "Synthetic source."}],
+                        revoked_at=None,
+                        created_at="2026-11-17T00:00:00+00:00",
+                    )
+                )
+
+                with pytest.raises(
+                    IntegrityError,
+                    match="Draft source version is immutable except for one-way revocation",
+                ):
+                    connection.execute(
+                        update(draft_material_table)
+                        .where(draft_material_table.c.id == 1)
+                        .values(sha256="b" * 64)
+                    )
+                with pytest.raises(
+                    IntegrityError,
+                    match="Draft source version is immutable except for one-way revocation",
+                ):
+                    connection.execute(
+                        update(draft_material_table)
+                        .where(draft_material_table.c.id == 1)
+                        .values(revoked_at="2026-11-16T00:00:00+00:00")
+                    )
+                connection.execute(
+                    update(draft_material_table)
+                    .where(draft_material_table.c.id == 1)
+                    .values(revoked_at="2026-11-18T00:00:00+00:00")
+                )
+                with pytest.raises(
+                    IntegrityError,
+                    match="Draft source version is immutable except for one-way revocation",
+                ):
+                    connection.execute(
+                        update(draft_material_table)
+                        .where(draft_material_table.c.id == 1)
+                        .values(revoked_at=None)
+                    )
 
                 immutable_rows = (
                     (event_table, "action", "changed", "st_business_event rows are immutable"),

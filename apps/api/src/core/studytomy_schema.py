@@ -116,6 +116,58 @@ _GROUNDED_EVIDENCE_SQLITE_GUARDS = tuple(
     for action in ("UPDATE", "DELETE")
 )
 
+_DRAFT_MATERIAL_POSTGRES_GUARD = (
+    "st_draft_material",
+    "st_draft_material_version_guard",
+    """
+    CREATE OR REPLACE FUNCTION protect_st_draft_material_version() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF (to_jsonb(NEW) - 'revoked_at') IS DISTINCT FROM (to_jsonb(OLD) - 'revoked_at') THEN
+            RAISE EXCEPTION 'Draft source version is immutable except for one-way revocation'
+              USING ERRCODE = '23514';
+        END IF;
+        IF NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
+           AND (OLD.revoked_at IS NOT NULL OR NEW.revoked_at IS NULL
+                OR NEW.revoked_at < OLD.created_at) THEN
+            RAISE EXCEPTION 'Draft source revocation cannot be reversed or backdated'
+              USING ERRCODE = '23514';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+    """
+    CREATE TRIGGER st_draft_material_version_guard
+    BEFORE UPDATE ON st_draft_material
+    FOR EACH ROW EXECUTE FUNCTION protect_st_draft_material_version()
+    """,
+)
+_DRAFT_MATERIAL_SQLITE_GUARD = (
+    "st_draft_material",
+    "st_draft_material_version_guard_update",
+    """
+    CREATE TRIGGER IF NOT EXISTS st_draft_material_version_guard_update
+    BEFORE UPDATE ON st_draft_material
+    WHEN NEW.id IS NOT OLD.id
+      OR NEW.source_uuid IS NOT OLD.source_uuid
+      OR NEW.course_id IS NOT OLD.course_id
+      OR NEW.activity_id IS NOT OLD.activity_id
+      OR NEW.uploaded_by_user_id IS NOT OLD.uploaded_by_user_id
+      OR NEW.label IS NOT OLD.label
+      OR NEW.sha256 IS NOT OLD.sha256
+      OR NEW.original_pdf IS NOT OLD.original_pdf
+      OR NEW.pages IS NOT OLD.pages
+      OR NEW.created_at IS NOT OLD.created_at
+      OR (OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL
+          AND NEW.revoked_at < OLD.created_at)
+      OR (OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NOT OLD.revoked_at)
+    BEGIN
+        SELECT RAISE(ABORT, 'Draft source version is immutable except for one-way revocation');
+    END
+    """,
+)
+
 _COURSE_RELEASE_REFERENCE_CHECK = """
     NOT EXISTS (
         SELECT 1 FROM st_course_review AS review
@@ -475,6 +527,7 @@ _POSTGRES_GUARDS = (
     *_PRACTICE_POSTGRES_GUARDS,
     *_REPORT_HISTORY_POSTGRES_GUARDS,
     *_GROUNDED_EVIDENCE_POSTGRES_GUARDS,
+    _DRAFT_MATERIAL_POSTGRES_GUARD,
     (
         "st_course_release",
         "st_course_release_reference_guard",
@@ -663,6 +716,7 @@ _SQLITE_GUARDS = (
     *_PRACTICE_SQLITE_GUARDS,
     *_REPORT_HISTORY_SQLITE_GUARDS,
     *_GROUNDED_EVIDENCE_SQLITE_GUARDS,
+    _DRAFT_MATERIAL_SQLITE_GUARD,
     (
         "st_course_release",
         "st_course_release_reference_guard",

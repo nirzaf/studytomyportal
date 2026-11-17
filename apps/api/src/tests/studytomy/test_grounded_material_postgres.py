@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import replace
+from datetime import timedelta
 from hashlib import sha256
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -489,6 +490,49 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
             with pytest.raises(IntegrityError, match="Grounded source evidence is immutable"):
                 async with db.begin_nested():
                     await db.execute(statement)
+        source_mutations = (
+            (
+                update(StudyDraftMaterial)
+                .where(StudyDraftMaterial.id == source.id)
+                .values(sha256="0" * 64)
+                .execution_options(synchronize_session=False),
+                "Draft source version is immutable except for one-way revocation",
+            ),
+            (
+                update(StudyDraftMaterial)
+                .where(StudyDraftMaterial.id == source.id)
+                .values(revoked_at=None)
+                .execution_options(synchronize_session=False),
+                "Draft source revocation cannot be reversed or backdated",
+            ),
+        )
+        for statement, message in source_mutations:
+            with pytest.raises(IntegrityError, match=message):
+                async with db.begin_nested():
+                    await db.execute(statement)
+        unrevoked_source = StudyDraftMaterial(
+            course_id=course.id,
+            activity_id=lesson.id,
+            uploaded_by_user_id=teacher.id,
+            label="backdate-check.pdf",
+            sha256="c" * 64,
+            original_pdf=b"synthetic-pdf-bytes",
+            pages=[{"page": 1, "text": "Synthetic source."}],
+            created_at=source.created_at,
+        )
+        db.add(unrevoked_source)
+        await db.flush()
+        with pytest.raises(
+            IntegrityError,
+            match="Draft source revocation cannot be reversed or backdated",
+        ):
+            async with db.begin_nested():
+                await db.execute(
+                    update(StudyDraftMaterial)
+                    .where(StudyDraftMaterial.id == unrevoked_source.id)
+                    .values(revoked_at=source.created_at - timedelta(seconds=1))
+                    .execution_options(synchronize_session=False)
+                )
         assert source.pages == [{"page": 1, "text": "first page"}, {"page": 3, "text": source_text}]
         events = (await db.exec(select(StudyBusinessEvent).where(
             StudyBusinessEvent.org_id == org.id, StudyBusinessEvent.resource_uuid == source.source_uuid,
