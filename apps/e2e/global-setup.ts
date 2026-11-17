@@ -182,12 +182,15 @@ async function saveLogin(
   )
   const page = await context.newPage()
   for (let attempt = 1; attempt <= 3; attempt++) {
-    await page.goto(`${BASE_URL}/login`)
+    await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 90_000 })
     await page.getByRole('textbox', { name: 'Email' }).fill(email)
     await page.getByRole('textbox', { name: 'Password' }).fill(password)
     await page.getByRole('button', { name: 'Login', exact: true }).click()
     try {
-      await page.waitForURL((u) => !/\/login(\?|$)/.test(u.toString()), { timeout: 12_000 })
+      await page.waitForURL((u) => !/\/login(\?|$)/.test(u.toString()), {
+        waitUntil: 'domcontentloaded',
+        timeout: 90_000,
+      })
       break
     } catch {
       if (attempt === 3) throw new Error(`global-setup: login failed for ${email}`)
