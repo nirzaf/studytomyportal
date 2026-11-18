@@ -2,6 +2,8 @@
 
 from asyncio import Barrier, Event, TaskGroup, sleep, timeout
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -157,19 +159,40 @@ async def test_issued_round_retains_exact_started_release(
         assignment = await db.get(Assignment, assignment.id)
         task = await db.get(AssignmentTask, task.id)
         assignment.published = True
+        target = "activity_pass_gated"
+        text_target = "activity_pass_gated_text"
+        pdf = b"%PDF-1.4\n%%EOF\n"
+        media_reference = f"courses/{course.course_uuid}/activities/{target}/documentpdf/practice.pdf"
+        media_manifest = {media_reference: {
+            "sha256": sha256(pdf).hexdigest(), "size_bytes": len(pdf),
+            "media_type": "application/pdf", "storage_reference": "studytomy/releases/synthetic/practice.bin",
+        }}
         snapshot = {
+            "schema": "course_content_evidence_v4",
             "course": course.model_dump(mode="json"),
             "assignments": [assignment.model_dump(mode="json")],
             "assignment_tasks": [task.model_dump(mode="json")],
-            "activities": [{"id": assignment.activity_id, "published": True,
-                            "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY"}],
+            "chapters": [{"id": assignment.chapter_id, "lock_type": "public"}],
+            "chapter_order": [[assignment.chapter_id, 1]],
+            "activity_order": [[assignment.chapter_id, 0, 2], [assignment.chapter_id, -1, 3]],
+            "activities": [
+                {"id": assignment.activity_id, "published": True, "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY"},
+                {"id": 0, "activity_uuid": target, "published": True, "lock_type": "public",
+                 "activity_type": "TYPE_DOCUMENT", "activity_sub_type": "SUBTYPE_DOCUMENT_PDF",
+                 "content": {"filename": "practice.pdf"}},
+                {"id": -1, "activity_uuid": text_target, "published": True, "lock_type": "public",
+                 "name": "Synthetic follow-up", "activity_type": "TYPE_DYNAMIC",
+                 "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE", "content": {"type": "doc", "content": [
+                     {"type": "paragraph", "content": [{"type": "text", "text": "Synthetic practice"}]},
+                 ]}},
+            ],
         }
         review, snapshot, policies = await _seed_postgres_release_sources(
             db, org, user.id, uuid4().hex, snapshot=snapshot, course_uuid=course.course_uuid,
         )
         release = StudyCourseRelease(
             org_id=org.id, course_uuid=course.course_uuid, review_id=review.id,
-            snapshot_sha256=review.revision_sha256, snapshot=snapshot, media_manifest={},
+            snapshot_sha256=review.revision_sha256, snapshot=snapshot, media_manifest=media_manifest,
             assessment_policy_id=policies[0].id, progression_policy_id=policies[1].id,
             retention_policy_id=policies[2].id, rights_policy_id=policies[3].id,
             retention_category="synthetic",
@@ -202,12 +225,11 @@ async def test_issued_round_retains_exact_started_release(
         assert bound.after_state["assessment_release_sha256"] == release.snapshot_sha256
         authority.assert_awaited_once()
 
-        target = "activity_pass_gated"
         decisions = {
             "completion_prerequisites": {"assessed_pass_by_course": {course.course_uuid: [{
-                "kind": "assessed_pass", "target_activity_uuid": target,
+                "kind": "assessed_pass", "target_activity_uuid": item,
                 "assessment_assignment_uuid": assignment.assignment_uuid,
-            }]}},
+            } for item in (target, text_target)]}},
         }
         policy_body = _synthetic_policy_body(StudyPolicyKey.D_09, decisions)
         progression = SimpleNamespace(id=release.progression_policy_id, body=policy_body.model_dump(mode="json"))
@@ -229,7 +251,11 @@ async def test_issued_round_retains_exact_started_release(
         assert await status_for() == "assessment_pass_delivery_pending"
         assert await delivery_for() == (False, "assessment_pass_delivery_pending")
         assert await status_for(user.id + 1_000_000) == "assessment_pass_required"
-        decisions["release_schedule"] = {"assessed_pass_delivery_activities": {course.course_uuid: [target]}}
+        decisions["release_schedule"] = {
+            "assessed_pass_delivery_activities": {course.course_uuid: [target, text_target]},
+            "ungated_media_activities": {course.course_uuid: [target]},
+            "ungated_text_activities": {course.course_uuid: [text_target]},
+        }
         progression.body = _synthetic_policy_body(StudyPolicyKey.D_09, decisions).model_dump(mode="json")
         assert await delivery_for() == (True, "assessment_pass_delivery_pending")
 
@@ -239,8 +265,50 @@ async def test_issued_round_retains_exact_started_release(
             operation_uuid=result.resource_uuid, resource_uuid=result.event_uuid,
             resource_kind="assignment_result",
         )
-        db.add(appeal)
-        await db.flush()
+        media_policy = SimpleNamespace(
+            id=90015,
+            body=_synthetic_policy_body(StudyPolicyKey.D_15, {
+                "supported_formats": {"max_bytes": 1024, "media_types": ["application/pdf"]},
+            }).model_dump(mode="json"),
+        )
+        monkeypatch.setattr(access_policy, "_authorized_release", AsyncMock(
+            return_value=(release, progression, profile.id),
+        ))
+        monkeypatch.setattr(access_policy, "_current_policies", AsyncMock(return_value=(media_policy,)))
+        lesson_args = (db, org, actor, course.course_uuid, release.uuid)
+        lesson = await access_policy.read_managed_text_lesson(*lesson_args, text_target)
+        assert lesson.paragraphs == ["Synthetic practice"]
+        index = await access_policy.list_managed_text_lessons(*lesson_args)
+        assert {lesson.activity_uuid for lesson in index.lessons if lesson.available} == {text_target, target}
+        first_stage = BytesIO(pdf)
+        monkeypatch.setattr(access_policy, "_stage_release_media", AsyncMock(return_value=first_stage))
+        args = (db, org, actor, course.course_uuid, release.uuid, target)
+        first = await access_policy.read_managed_activity_media(*args)
+        with first.file:
+            assert first.file.read() == pdf
+
+        staged = BytesIO(pdf)
+
+        async def open_appeal_while_staging(org_uuid, media):
+            assert org_uuid == org.org_uuid
+            assert media == media_manifest[media_reference]
+            async with postgres_session_factory() as appeal_db:
+                appeal_db.add(appeal)
+                await appeal_db.commit()
+            return staged
+
+        monkeypatch.setattr(access_policy, "_stage_release_media", open_appeal_while_staging)
+        with pytest.raises(HTTPException) as denied:
+            await access_policy.read_managed_activity_media(*args)
+        assert denied.value.status_code == 404
+        assert staged.closed
+        with pytest.raises(HTTPException) as locked_lesson:
+            await access_policy.read_managed_text_lesson(*lesson_args, text_target)
+        assert locked_lesson.value.status_code == 404
+        index = await access_policy.list_managed_text_lessons(*lesson_args)
+        assert len(index.lessons) == 2
+        assert all(not lesson.available and lesson.unavailable_reason == "assessment_pass_required"
+                   for lesson in index.lessons)
         assert await status_for() == "assessment_pass_required"
         assert await delivery_for() == (False, "assessment_pass_required")
         for status, action, expected in (
