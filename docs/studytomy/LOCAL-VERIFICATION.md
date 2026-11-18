@@ -100,6 +100,19 @@ The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 ap
 - **Current behavior and deviation:** Full extracted pages are examined through bounded overlapping windows and at most six excerpts are sent to the model. A different-vocabulary request without lexical support returns an actionable insufficient-evidence error and skips the provider; synonym recall is not established. Citation UUID/hash/page/quote checks and access revalidation remain in place. Hybrid RRF is evaluation-only, and the exact small-course runtime option remains off by default; no vector model or runtime retrieval mode was changed in this slice.
 - **Limits:** Prompt-like source text is passed as quoted data with a system instruction to ignore embedded instructions, but provider behavior is mocked. No OCR, real-provider factual support, representative educator judgments, browser acceptance, production recall/latency, learner activation, or launch approval was verified. See [the detailed synthetic evaluation](GROUNDED-RETRIEVAL-EVALUATION.md) for fixtures and measured limits.
 
+## AUD-06 managed-media lock and staging verification
+
+- **Recorded:** 2026-11-18
+- **Source revision inspected/tested:** `0dc4bdb24e6363d575d59900ef6dbca90a2c3163` (service/test source was unchanged by subsequent verification-only commits).
+- **Database isolation:** Dedicated Docker PostgreSQL 16.16 / pgvector 0.8.7 at loopback `127.0.0.1:60607`, database `studytomy_aud03_test`, selected solely through `STUDYTOMY_TEST_DATABASE_URL`.
+
+| Scope | Command | Result |
+|---|---|---|
+| Media staging timeout, cancellation, oversize and truncation cleanup | `python -m pytest -q src/tests/studytomy/test_managed_media_staging.py` from `apps/api` | **PASS:** 4 passed. Each failure path closes the temporary file; timeout and integrity errors fail with 503. |
+| PostgreSQL managed release media/range/lock checks | `python -m pytest -q src/tests/studytomy/test_checkout_router.py -m studytomy_postgres -k signed_checkout_accepts_only_retained_approved_terms` from `apps/api` | **PASS:** 11 passed, 1 deselected. Includes storage staging while another session acquires the organization lock, grant expiry/revocation during staging, policy-version change, first-use concurrency, range edges, repeated ranges and staged-file cleanup. |
+
+The implementation snapshots the reviewed release/media/policy, commits before opening and hashing storage, then reacquires current authority and rechecks the exact grant, release and policy before any bytes are returned. Repeated-range assertions record complete-object bytes read on each range request; no cache was introduced because the suite provides no representative production size/latency evidence to justify a cache. Storage and policy changes were synthetic, and no real S3, slow-network or production workload was exercised. No schema change or production migration was made.
+
 ## AUD-01 current-code managed-course characterization
 
 - **Recorded:** 2026-11-18
