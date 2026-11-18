@@ -74,12 +74,13 @@ async def assessment_evidence_breakdown(
 async def confirmed_cash_by_currency(
     db: AsyncSession, *, org_id: int, start: datetime, end: datetime,
 ) -> list[dict[str, int | str]]:
-    """Summarize recorded cash by effective time in the half-open period.
+    """Summarize amounts and ledger entry counts in the half-open period.
 
     The caller must authorize organization finance access. Collections are
     limited to movements with retained manual settlement evidence. An empty
-    result means no supported confirmed movements are in scope. Tax and
-    earned revenue are outside this projection.
+    result means no supported confirmed movements are in scope. Counts refer
+    to ledger entries, so multiple refunds may belong to one paid order.
+    Tax and earned revenue are outside this projection.
     """
     if org_id < 1 or start.utcoffset() is None or end.utcoffset() is None or start >= end:
         raise ValueError("An organization and an ordered, timezone-aware period are required.")
@@ -105,6 +106,10 @@ async def confirmed_cash_by_currency(
             WHERE r.org_id = :org_id
         )
         SELECT currency,
+               count(*) FILTER (WHERE kind = 'collection') AS collection_count,
+               count(*) FILTER (WHERE kind = 'refund') AS settled_refund_count,
+               count(*) FILTER (WHERE kind = 'chargeback') AS chargeback_count,
+               count(*) FILTER (WHERE kind = 'reversal') AS chargeback_reversal_count,
                sum(CASE WHEN kind = 'collection' THEN amount_minor ELSE 0 END) AS collected_minor,
                sum(CASE WHEN kind = 'refund' THEN amount_minor ELSE 0 END) AS refunded_minor,
                sum(CASE WHEN kind = 'chargeback' THEN amount_minor ELSE 0 END) AS chargeback_minor,
