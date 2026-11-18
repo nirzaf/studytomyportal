@@ -149,6 +149,12 @@ The audit’s older managed-diagnostic denial is no longer current: the existing
 
 The load tests distinguish an explicitly marked empty board from Redis failure, API timeout, HTTP 503, malformed empty response and empty-present state; failed loads do not create/store a replacement document, and a later recovery loads the original content. The queue tests cover retry after non-2xx, persistence of the last edit without a further edit, per-board write ordering, retained state after bounded shutdown timeout/retry exhaustion, and aggregate memory limits. The shutdown handler was inspected: it logs unresolved board IDs and exits nonzero after its bounded flush deadline. That handler itself was not executed by the unit suite. These tests use synthetic adapters and in-memory Hocuspocus documents: live Redis/API outage recovery, deployment connector compatibility, and end-to-end multi-client recovery remain unverified. Existing authorization rechecks and read-only downgrade were left intact. No schema change or service was added.
 
+### Loopback Redis recovery probe
+
+At `4892e0f708caa033090239033b7a2f504f5d3bce`, a local Bun probe exercised the existing `loadBoardState` with a real Docker Redis connection at `127.0.0.1:51238` and an ephemeral loopback HTTP fixture. All assertions passed. A disconnected Redis client and HTTP 503 denied the load without creating a cache key. A subsequent HTTP 200 restored the exact synthetic Yjs text and warmed Redis. When the fixture returned to HTTP 503, a cache hit served the same bytes without another HTTP request. The probe removed its unique, 60-second test key.
+
+The probe induced client disconnection without stopping Redis. The HTTP fixture served a synthetic snapshot. This verifies the Redis transport and loader recovery branch. Full FastAPI and Hocuspocus WebSocket recovery across multiple clients and a process restart remain open.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
