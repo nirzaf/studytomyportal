@@ -53,21 +53,24 @@ async def test_discovery_documents_are_never_cached(mcp_config):  # noqa: F811
         assert response.headers["cache-control"] == "no-store"
 
 
-async def test_token_cache_is_keyed_by_resource(session_factory):  # noqa: F811
+async def test_oauth_token_checks_resource_on_every_request(session_factory):  # noqa: F811
     from httpx import ASGITransport, AsyncClient
 
     app = MCPAuthMiddleware(_Inner())
     with patch("src.services.mcp.oauth.get_learnhouse_config") as get_config, patch(
-        "src.services.mcp.oauth.verify_access_token", new_callable=AsyncMock, return_value=_oauth_principal()
+        "src.services.mcp.oauth.verify_access_token",
+        new_callable=AsyncMock,
+        side_effect=lambda _token, resource, _session: _oauth_principal() if resource == "http://api.test/mcp" else None,
     ) as verify:
         get_config.return_value.mcp_config = SimpleNamespace(enabled=True, public_url=None)
         get_config.return_value.hosting_config.ssl = False
-        for host in ("api.test", "api.test", "other.test"):
+        for host, expected_status in (("api.test", 200), ("api.test", 200), ("other.test", 401)):
             async with AsyncClient(transport=ASGITransport(app=app), base_url=f"http://{host}") as c:
                 resp = await c.post("/mcp", headers={"Authorization": "Bearer lho_at_x"}, json={})
-            assert resp.status_code == 200
-    # Once per host: the cached answer for api.test does not let it in on other.test.
-    assert [call.args[1] for call in verify.await_args_list] == ["http://api.test/mcp", "http://other.test/mcp"]
+            assert resp.status_code == expected_status
+    assert [call.args[1] for call in verify.await_args_list] == [
+        "http://api.test/mcp", "http://api.test/mcp", "http://other.test/mcp",
+    ]
 
 
 # ─── connections that end stay ended ─────────────────────────────────────────

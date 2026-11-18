@@ -94,8 +94,12 @@ async def test_oauth_token_resolves_member(config, session_factory):
     app = MCPAuthMiddleware(inner)
     with patch("src.services.mcp.oauth.verify_access_token", new_callable=AsyncMock, return_value=_oauth_principal(("mcp:read",))) as verify:
         assert (await _post(app, "lho_at_x")).status_code == 200
-        assert (await _post(app, "lho_at_x")).status_code == 200  # cached
-    assert verify.await_count == 1
+        verify.return_value = None  # Revoked after the first request.
+        denied = await _post(app, "lho_at_x")
+        assert denied.status_code == 401
+        assert 'error="invalid_token"' in denied.headers["www-authenticate"]
+    assert verify.await_count == 2
+    assert len(inner.seen) == 1
     principal, from_var = inner.seen[0]
     assert principal == from_var
     assert principal.kind == "oauth" and principal.org_id == 3
@@ -112,8 +116,11 @@ async def test_oauth_token_invalid(config, session_factory):
 async def test_api_token_resolves(config, session_factory):
     inner = _Inner()
     token_user = APITokenUser(org_id=5, token_name="CI", rights={})
-    with patch.object(mcp_auth, "validate_api_token", new_callable=AsyncMock, return_value=token_user):
-        assert (await _post(MCPAuthMiddleware(inner), "lh_abc")).status_code == 200
+    with patch.object(mcp_auth, "validate_api_token", new_callable=AsyncMock, return_value=token_user) as validate:
+        app = MCPAuthMiddleware(inner)
+        assert (await _post(app, "lh_abc")).status_code == 200
+        assert (await _post(app, "lh_abc")).status_code == 200
+        validate.assert_awaited_once()
     principal = inner.seen[0][0]
     assert principal.kind == "api_token" and principal.org_id == 5 and principal.can_write
     with patch.object(mcp_auth, "validate_api_token", new_callable=AsyncMock, return_value=None):

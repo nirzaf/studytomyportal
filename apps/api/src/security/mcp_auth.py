@@ -14,8 +14,9 @@ protected resource metadata, which is how a client discovers where to sign in
 (RFC 9728). The resolved principal is put on the ASGI scope state (handlers
 read it from the request) and on a contextvar.
 
-A small TTL cache keyed by the token's SHA-256 avoids a database lookup on
-every request, so a revocation takes effect within CACHE_TTL_SECONDS.
+API tokens use a short-lived cache. OAuth connections are checked against
+the database on every request so a revoked connection cannot authorize
+a subsequent request on any worker.
 """
 
 from __future__ import annotations
@@ -166,16 +167,16 @@ class MCPAuthMiddleware:
             return
 
         request = Request(scope)
-        # Keyed with the resource too: a token bound to one public URL must
-        # not be let in on another host because it was cached.
-        cache_key = f"{oauth.mcp_resource_url(request)} {token}"
-        principal = self.cache.get(cache_key)
+        # OAuth validation checks the resource and revocation against PostgreSQL.
+        cache_key = f"{oauth.mcp_resource_url(request)} {token}" if token.startswith(API_TOKEN_PREFIX) else None
+        principal = self.cache.get(cache_key) if cache_key is not None else None
         if principal is None:
             principal = await self._resolve(token, request)
             if principal is None:
                 await _reject(scope, send, 401, "invalid_token", "The token is invalid, expired or revoked")
                 return
-            self.cache.put(cache_key, principal)
+            if cache_key is not None:
+                self.cache.put(cache_key, principal)
 
         scope.setdefault("state", {})["mcp_principal"] = principal
         ctx_token = current_mcp_principal.set(principal)
