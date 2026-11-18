@@ -48,7 +48,7 @@ from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.security.auth import get_current_user
 from src.security.studytomy_access import StudytomyCapabilityName
 from src.services.courses.transfer import storage_utils
-from src.services.studytomy import content_evidence, offers, publication
+from src.services.studytomy import content_evidence, offers, publication, releases
 from src.services.studytomy.adaptive_retention import (
     ensure_adaptive_course_deletable,
     ensure_adaptive_org_deletable,
@@ -156,6 +156,47 @@ async def test_release_media_manifest_binds_native_file_bytes(tmp_path, monkeypa
     with pytest.raises(HTTPException) as missing:
         await capture_native_release_media("org_fixture", snapshot)
     assert missing.value.status_code == 404
+
+
+async def test_cancelled_release_copy_waits_for_storage_then_deletes_uncommitted_media(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    config = SimpleNamespace(hosting_config=SimpleNamespace(
+        content_delivery=SimpleNamespace(type="filesystem"),
+    ))
+    monkeypatch.setattr(upload_content, "get_learnhouse_config", lambda: config)
+    monkeypatch.setattr(storage_utils, "get_content_delivery_type", lambda: "filesystem")
+    root = tmp_path / "content" / "orgs" / "org_fixture"
+    source = "courses/course_fixture/activities/activity_fixture/documentpdf/lesson.pdf"
+    original = root / source
+    original.parent.mkdir(parents=True)
+    original.write_bytes(PDF)
+    started = asyncio.Event()
+    finish = asyncio.Event()
+    upload = releases.upload_content
+
+    async def delayed_upload(**kwargs):
+        started.set()
+        await finish.wait()
+        await upload(**kwargs)
+
+    monkeypatch.setattr(releases, "upload_content", delayed_upload)
+    copy = asyncio.create_task(retain_reviewed_release_media("org_fixture", {
+        source: {
+            "sha256": hashlib.sha256(PDF).hexdigest(),
+            "size_bytes": len(PDF),
+            "media_type": "application/pdf",
+        },
+    }))
+    await asyncio.wait_for(started.wait(), timeout=5)
+    copy.cancel()
+    await asyncio.sleep(0)
+    finish.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(copy, timeout=5)
+    assert original.read_bytes() == PDF
+    assert not list((root / "studytomy" / "releases").rglob("*.bin"))
 
 
 async def test_release_policy_binding_requires_current_approved_retention(

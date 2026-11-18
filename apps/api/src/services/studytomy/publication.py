@@ -1,5 +1,6 @@
 """Record an independent decision about a course candidate."""
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -273,9 +274,11 @@ async def record_course_release(
             review_uuid=review.uuid,
             revision_sha256=row.snapshot_sha256,
         )
-    except Exception:
-        await db.rollback()
-        await discard_retained_release_media(org_uuid, retained)
+    except (Exception, asyncio.CancelledError):
+        try:
+            await db.rollback()
+        finally:
+            await discard_retained_release_media(org_uuid, retained)
         raise
     # Commit acknowledgment loss must preserve the retained files.
     await db.commit()

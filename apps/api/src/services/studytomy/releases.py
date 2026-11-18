@@ -185,13 +185,20 @@ async def retain_reviewed_release_media(
                 filename = f"{uuid4()}.bin"
                 reference = f"{directory}/{filename}"
                 attempted.append(reference)
-                await upload_content(
+                upload = asyncio.create_task(upload_content(
                     directory=directory,
                     type_of_dir="orgs",
                     uuid=org_uuid,
                     file_binary=buffer,
                     file_and_format=filename,
-                )
+                ))
+                try:
+                    await asyncio.shield(upload)
+                except asyncio.CancelledError:
+                    # A storage worker can still write after its caller is
+                    # cancelled. Settle it before closing the buffer or deleting the object.
+                    await asyncio.gather(upload, return_exceptions=True)
+                    raise
             retained_bytes = await _read_release_media(
                 org_uuid,
                 reference,
@@ -204,7 +211,7 @@ async def retain_reviewed_release_media(
                     "Private release storage verification failed.",
                 )
             retained[source] = {**expected, "storage_reference": reference}
-    except Exception:
+    except (Exception, asyncio.CancelledError):
         for reference in attempted:
             with suppress(Exception):
                 await asyncio.to_thread(
