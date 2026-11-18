@@ -42,9 +42,12 @@ test('pilot cash report shows the authorized offer and hides it from the purchas
     expect(await report.json()).toMatchObject({
       offer_version_uuid: offer.offer_version_uuid,
       confirmed_cash: [{ currency: 'AUD', collected_minor: 125, collection_count: 1 }],
+      settled_refunds_by_reason: [{ currency: 'AUD', reason_code: 'synthetic_refund', settlement_count: 2, refunded_minor: 125 }],
     })
     await expect(dashboard.getByText('Confirmed collections (1)', { exact: true })).toBeVisible()
     await expect(dashboard.getByText('Net cash', { exact: true })).toBeVisible()
+    await dashboard.getByText('Settled refunds by reason', { exact: true }).click()
+    await expect(dashboard.getByText('synthetic refund (2)', { exact: true })).toBeVisible()
     await page.setViewportSize({ width: 1440, height: 900 })
     await expect(dashboard.getByText('Net cash', { exact: true })).toBeVisible()
 

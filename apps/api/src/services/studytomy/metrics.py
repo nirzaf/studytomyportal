@@ -64,6 +64,13 @@ async def list_pilot_cash_offers(
     return options
 
 
+class SettledRefundReason(BaseModel):
+    currency: str
+    reason_code: str
+    settlement_count: int
+    refunded_minor: int
+
+
 class PilotCashReport(BaseModel):
     org_uuid: str
     offer_uuid: str
@@ -72,10 +79,11 @@ class PilotCashReport(BaseModel):
     period_end: datetime
     observed_at: datetime
     policy_version_ids: list[int]
-    query_version: str = "confirmed_cash_v1"
+    query_version: str = "confirmed_cash_v2"
     population: str = "Orders with all lines belonging to the selected offer version."
     exclusions: str = "Unconfirmed movements, mixed-offer and mixed-version orders, and tax and revenue calculations."
     confirmed_cash: list[dict[str, int | str]]
+    settled_refunds_by_reason: list[SettledRefundReason]
 
 
 async def read_pilot_cash_report(
@@ -94,14 +102,16 @@ async def read_pilot_cash_report(
     )
     pilot = next(policy for policy in policies if policy.policy_key == StudyPolicyKey.D_17.value)
     _require_pilot_offer(pilot, offer_uuid, offer_version_uuid)
+    totals, reasons = await _confirmed_cash_rollup(
+        db, org_id=org.id, offer_uuid=offer_uuid, offer_version_uuid=offer_version_uuid,
+        start=start, end=end,
+    )
     return PilotCashReport(
         org_uuid=org.org_uuid, offer_uuid=offer_uuid, offer_version_uuid=offer_version_uuid,
         period_start=start, period_end=end, observed_at=observed_at,
         policy_version_ids=[policy.id for policy in policies],
-        confirmed_cash=await confirmed_cash_by_currency(
-            db, org_id=org.id, offer_uuid=offer_uuid, offer_version_uuid=offer_version_uuid,
-            start=start, end=end,
-        ),
+        confirmed_cash=totals,
+        settled_refunds_by_reason=reasons,
     )
 
 
@@ -184,6 +194,17 @@ async def confirmed_cash_by_currency(
     An offer filter includes orders whose lines all belong to that offer.
     Mixed-offer orders require an allocation rule before offer attribution.
     """
+    totals, _ = await _confirmed_cash_rollup(
+        db, org_id=org_id, start=start, end=end, offer_uuid=offer_uuid,
+        offer_version_uuid=offer_version_uuid,
+    )
+    return totals
+
+
+async def _confirmed_cash_rollup(
+    db: AsyncSession, *, org_id: int, start: datetime, end: datetime,
+    offer_uuid: str | None, offer_version_uuid: str | None,
+) -> tuple[list[dict[str, int | str]], list[SettledRefundReason]]:
     if (
         org_id < 1 or start.utcoffset() is None or end.utcoffset() is None or start >= end
         or (offer_version_uuid is not None and offer_uuid is None)
@@ -202,26 +223,27 @@ async def confirmed_cash_by_currency(
                 AND (CAST(:offer_version_uuid AS text) IS NULL OR v.version_uuid = CAST(:offer_version_uuid AS text))
             )
         ), cash AS (
-            SELECT m.order_id, m.currency, m.amount_minor, 'collection' AS kind, e.settled_at AS effective_at
+            SELECT m.order_id, m.currency, m.amount_minor, 'collection' AS kind,
+                   e.settled_at AS effective_at, NULL::text AS reason_code
             FROM st_money_movement m
             JOIN st_manual_collection_evidence e
               ON e.org_id = m.org_id AND e.order_id = m.order_id AND e.attempt_id = m.attempt_id
             WHERE m.org_id = :org_id
             UNION ALL
-            SELECT r.order_id, r.currency, r.amount_minor, 'refund', s.settled_at
+            SELECT r.order_id, r.currency, r.amount_minor, 'refund', s.settled_at, r.reason_code
             FROM st_refund_settlement s
             JOIN st_refund_reservation r ON r.org_id = s.org_id AND r.id = s.reservation_id
             WHERE s.org_id = :org_id
             UNION ALL
-            SELECT order_id, currency, amount_minor, 'chargeback', effective_at
+            SELECT order_id, currency, amount_minor, 'chargeback', effective_at, NULL::text
             FROM st_chargeback_adjustment WHERE org_id = :org_id
             UNION ALL
-            SELECT a.order_id, a.currency, a.amount_minor, 'reversal', r.effective_at
+            SELECT a.order_id, a.currency, a.amount_minor, 'reversal', r.effective_at, NULL::text
             FROM st_chargeback_reversal r
             JOIN st_chargeback_adjustment a ON a.org_id = r.org_id AND a.id = r.adjustment_id
             WHERE r.org_id = :org_id
         )
-        SELECT currency,
+        SELECT currency, reason_code,
                count(*) FILTER (WHERE kind = 'collection') AS collection_count,
                count(*) FILTER (WHERE kind = 'refund') AS settled_refund_count,
                count(*) FILTER (WHERE kind = 'chargeback') AS chargeback_count,
@@ -234,12 +256,24 @@ async def confirmed_cash_by_currency(
         FROM cash
         WHERE effective_at >= :start AND effective_at < :end
           AND (CAST(:offer_uuid AS text) IS NULL OR order_id IN (SELECT order_id FROM offer_orders))
-        GROUP BY currency ORDER BY currency
+        GROUP BY GROUPING SETS ((currency), (currency, kind, reason_code))
+        HAVING GROUPING(reason_code) = 1 OR (kind = 'refund' AND reason_code IS NOT NULL)
+        ORDER BY currency, reason_code NULLS FIRST
     """), {
         "org_id": org_id, "start": start, "end": end, "offer_uuid": offer_uuid,
         "offer_version_uuid": offer_version_uuid,
     })
-    return [
-        {key: value if key == "currency" else int(value) for key, value in row.items()}
-        for row in result.mappings()
-    ]
+    totals = []
+    reasons = []
+    for row in result.mappings():
+        if row["reason_code"] is None:
+            totals.append({
+                key: value if key == "currency" else int(value)
+                for key, value in row.items() if key != "reason_code"
+            })
+        else:
+            reasons.append(SettledRefundReason(
+                currency=row["currency"], reason_code=row["reason_code"],
+                settlement_count=row["settled_refund_count"], refunded_minor=row["refunded_minor"],
+            ))
+    return totals, reasons

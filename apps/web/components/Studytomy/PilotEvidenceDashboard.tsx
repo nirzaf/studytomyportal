@@ -33,6 +33,12 @@ type Report = {
   population: string
   exclusions: string
   confirmed_cash: Cash[]
+  settled_refunds_by_reason?: {
+    currency: string
+    reason_code: string
+    settlement_count: number
+    refunded_minor: number
+  }[]
 }
 
 export default function PilotEvidenceDashboard({ orgUuid }: { orgUuid: string }) {
@@ -170,6 +176,7 @@ function CashReport({ orgUuid, token }: { orgUuid: string; token: string }) {
           ['Chargeback reversals', row.reversed_chargeback_minor, row.chargeback_reversal_count],
           ['Net cash', row.net_minor, null],
         ] as const
+        const refundReasons = report.settled_refunds_by_reason?.filter(reason => reason.currency === row.currency) ?? []
         return <div key={row.currency} className="rounded-md border p-3">
           <h3 className="font-semibold">{row.currency}</h3>
           <dl className="divide-y">
@@ -178,6 +185,15 @@ function CashReport({ orgUuid, token }: { orgUuid: string; token: string }) {
               <dd className="tabular-nums">{currency(amount)}</dd>
             </div>)}
           </dl>
+          {refundReasons.length > 0 && <details className="mt-3 border-t pt-3">
+            <summary className="cursor-pointer font-medium">Settled refunds by reason</summary>
+            <dl className="divide-y">
+              {refundReasons.map(reason => <div key={reason.reason_code} className="flex flex-wrap justify-between gap-x-4 py-2">
+                <dt>{reason.reason_code.replaceAll('_', ' ')} ({reason.settlement_count})</dt>
+                <dd className="tabular-nums">{currency(reason.refunded_minor)}</dd>
+              </div>)}
+            </dl>
+          </details>}
         </div>
       })}
     </div>}

@@ -236,6 +236,8 @@ The checkpoint based on `f1b23051e6f7e6057c62f8886527a9598926df00` passed the li
 
 To repeat the browser case, provide authenticated synthetic storage states with `E2E_PILOT_CASH_STAFF_STATE` and `E2E_PILOT_CASH_PURCHASER_STATE` on a ready loopback stack. Seed the paid checkout fixture within the report's prior-day window. From `apps/e2e`, run `bun run test 09-finance-review -g 'pilot cash report shows'` with the local stack configuration. This checkpoint covers confirmed ledger cash only. Broader pilot measures and their approval decisions remain open.
 
+The follow-up based on `6a3a43ebf245c7af29f372f2686fc19d09bc45b1` verified the settled refund reason breakdown against the same scoped ledger. Docker PostgreSQL checkout tests passed (**2 passed, 10 deselected**), and live Chrome passed (**1 passed** in 3.4 minutes). The synthetic paid fixture produced two settlements for one recorded reason. Both the API breakdown and the amount by currency reconciled to the existing totals. The purchaser remained excluded. Ruff, targeted web lint, and web and Playwright type checking passed.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18

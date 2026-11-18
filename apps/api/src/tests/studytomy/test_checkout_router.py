@@ -2209,6 +2209,10 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             assert report.status_code == 200, report.text
             assert report.headers["cache-control"] == "private, no-store"
             assert report.json()["confirmed_cash"] == expected_cash
+            assert report.json()["settled_refunds_by_reason"] == [{
+                "currency": "AUD", "reason_code": "synthetic_refund",
+                "settlement_count": 2, "refunded_minor": 125,
+            }]
             assert report.json()["offer_version_uuid"] == version_uuid
             assert (await client.get(report_path, params=report_period, headers=headers)).status_code == 403
             wrong_version = await client.get(
