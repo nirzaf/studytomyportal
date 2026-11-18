@@ -69,6 +69,10 @@ interface LearnHousePlayerProps {
   chapters?: VideoChapter[]
   /** Receives the current <video> element (it changes when falling back to MP4). */
   onVideoElement?: (el: HTMLVideoElement | null) => void
+  /** Set only when a protected cross-origin media endpoint requires cookies. */
+  crossOrigin?: 'anonymous' | 'use-credentials'
+  /** Reports a terminal media error so a scoped caller can offer session retry. */
+  onMediaError?: () => void
 }
 
 interface LoadedCaption {
@@ -242,6 +246,8 @@ const LearnHousePlayer: React.FC<LearnHousePlayerProps> = ({
   nextItem,
   chapters,
   onVideoElement,
+  crossOrigin,
+  onMediaError,
 }) => {
   const mediaRef = useRef<HTMLVideoElement>(null)
   const [fellBack, setFellBack] = useState(false)
@@ -397,12 +403,17 @@ const LearnHousePlayer: React.FC<LearnHousePlayerProps> = ({
   const mediaProps = {
     ref: mediaRef,
     playsInline: true,
+    crossOrigin,
     preload: 'metadata' as const,
     autoPlay: !!details?.autoplay,
     muted: !!details?.muted,
     onLoadedMetadata: handleLoadedMetadata,
     onTimeUpdate: handleTimeUpdate,
-    onError: canFallBack ? fallBack : undefined,
+    onError: canFallBack
+      ? fallBack
+      : onMediaError
+        ? () => onMediaError()
+        : undefined,
   }
 
   // Tracks go onto the <video> imperatively rather than as React children:

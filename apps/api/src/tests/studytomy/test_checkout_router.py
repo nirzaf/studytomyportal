@@ -161,19 +161,33 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         db.add(profile)
         activity_uuid = f"activity_{uuid4()}"
         assessment_uuid = f"activity_{uuid4()}"
+        private_draft_uuid = f"activity_{uuid4()}"
         media_activity_uuid = f"activity_{uuid4()}"
+        video_activity_uuid = f"activity_{uuid4()}"
+        unsupported_media_uuid = f"activity_{uuid4()}"
         release_media_bytes = b"%PDF-1.4\nSynthetic approved lesson resource.\n%%EOF"
+        release_video_bytes = b"synthetic approved video bytes"
         media_source_reference = (
             f"courses/course_synthetic/activities/{media_activity_uuid}/documentpdf/lesson.pdf"
         )
         media_storage_reference = f"studytomy/releases/{token}/lesson.bin"
+        video_source_reference = (
+            f"courses/course_synthetic/activities/{video_activity_uuid}/video/video.mp4"
+        )
+        video_storage_reference = f"studytomy/releases/{token}/video.bin"
         release_media_manifest = {
             media_source_reference: {
                 "sha256": hashlib.sha256(release_media_bytes).hexdigest(),
                 "size_bytes": len(release_media_bytes),
                 "media_type": "application/pdf",
                 "storage_reference": media_storage_reference,
-            }
+            },
+            video_source_reference: {
+                "sha256": hashlib.sha256(release_video_bytes).hexdigest(),
+                "size_bytes": len(release_video_bytes),
+                "media_type": "video/mp4",
+                "storage_reference": video_storage_reference,
+            },
         }
         retained_activities = [
             {
@@ -188,6 +202,11 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 "activity_type": "TYPE_ASSIGNMENT", "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY",
                 "name": "Private assessment", "lock_type": "public",
                 "content": {"answer": "synthetic answer key"},
+            }, {
+                "id": 6, "activity_uuid": private_draft_uuid, "published": False,
+                "activity_type": "TYPE_DYNAMIC", "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE",
+                "name": "Private managed draft", "lock_type": "public",
+                "content": {"answer": "synthetic private draft content"},
             },
         ]
         if correction_scenario == "media_delivery":
@@ -196,13 +215,29 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 "activity_type": "TYPE_DOCUMENT", "activity_sub_type": "SUBTYPE_DOCUMENT_PDF",
                 "name": "Reviewed PDF", "lock_type": "public", "content": {"filename": "lesson.pdf"},
             })
+            retained_activities.extend([
+                {
+                    "id": 4, "activity_uuid": video_activity_uuid, "published": True,
+                    "activity_type": "TYPE_VIDEO", "activity_sub_type": "SUBTYPE_VIDEO_HOSTED",
+                    "name": "Reviewed video", "lock_type": "public", "content": {"filename": "video.mp4"},
+                },
+                {
+                    "id": 5, "activity_uuid": unsupported_media_uuid, "published": True,
+                    "activity_type": "TYPE_AUDIO", "activity_sub_type": "SUBTYPE_AUDIO",
+                    "name": "Unsupported audio", "lock_type": "public", "content": {"filename": "audio.mp3"},
+                },
+            ])
         retained = {
             "schema": "course_content_evidence_v4",
             "course": {"name": "Synthetic course", "course_uuid": "course_synthetic"},
             "activities": retained_activities,
             "chapters": [{"id": 1, "lock_type": "public"}],
             "chapter_order": [[1, 1]],
-            "activity_order": [[1, 1, 1], [1, 2, 2], *([[1, 3, 3]] if correction_scenario == "media_delivery" else [])],
+            "activity_order": [
+                [1, 1, 1], [1, 2, 2],
+                *([[1, 3, 3], [1, 4, 4], [1, 5, 5]] if correction_scenario == "media_delivery" else []),
+                [1, 6, 6],
+            ],
         }
         review, snapshot, release_policies = await _seed_postgres_release_sources(
             db, org, owner.id, token, snapshot=retained,
@@ -277,10 +312,10 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             if row is not retention:
                 specified = {"release_schedule": {
                     "ungated_text_activities": {
-                        course.course_uuid: [activity_uuid, assessment_uuid],
+                        course.course_uuid: [activity_uuid, assessment_uuid, private_draft_uuid],
                     },
                     **({"ungated_media_activities": {
-                        course.course_uuid: [media_activity_uuid],
+                        course.course_uuid: [media_activity_uuid, video_activity_uuid, unsupported_media_uuid],
                     }} if correction_scenario == "media_delivery" else {}),
                 }} if row.policy_key == StudyPolicyKey.D_09.value else None
                 row.body = _synthetic_policy_body(StudyPolicyKey(row.policy_key), specified).model_dump(mode="json")
@@ -366,7 +401,12 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 offer_uuid: version_uuid,
             }
         if correction_scenario in ("reentry", "media_delivery"):
-            decisions[StudyPolicyKey.D_15] = {"supported_formats": {"max_bytes": 1024, "media_types": ["application/pdf"]}}
+            decisions[StudyPolicyKey.D_15] = {
+                "supported_formats": {
+                    "max_bytes": 1024,
+                    "media_types": ["application/pdf", "video/mp4"],
+                },
+            }
         if price_minor > 0:
             support_lead = await _seed_active_owner(db, org, owner.id, purchaser.id, StudyOwnerFunction.SUPPORT)
             support_backup = await _seed_active_owner(
@@ -1630,6 +1670,51 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         assert after.json() == {"releases": [], "next_cursor": None}
         assert (await client.get(catalog_path, headers=finance_headers)).status_code == 404
         if correction_scenario == "media_delivery":
+            index = await client.get(f"{overview_path}/lessons", headers=headers)
+            assert index.status_code == 200, index.text
+            assert index.headers["cache-control"] == "private, no-store"
+            assert index.json() == {
+                "requires_first_use": True,
+                "lessons": [
+                    {
+                        "activity_uuid": activity_uuid,
+                        "name": "Reviewed lesson",
+                        "position": 1,
+                        "format": "text",
+                        "media_type": None,
+                        "available": True,
+                        "unavailable_reason": None,
+                    },
+                    {
+                        "activity_uuid": media_activity_uuid,
+                        "name": "Reviewed PDF",
+                        "position": 2,
+                        "format": "pdf",
+                        "media_type": "application/pdf",
+                        "available": True,
+                        "unavailable_reason": None,
+                    },
+                    {
+                        "activity_uuid": video_activity_uuid,
+                        "name": "Reviewed video",
+                        "position": 3,
+                        "format": "video",
+                        "media_type": "video/mp4",
+                        "available": False,
+                        "unavailable_reason": "captions_or_text_alternative_not_retained",
+                    },
+                    {
+                        "activity_uuid": unsupported_media_uuid,
+                        "name": "Unsupported audio",
+                        "position": 4,
+                        "format": "unsupported",
+                        "media_type": None,
+                        "available": False,
+                        "unavailable_reason": "unsupported_release_format",
+                    },
+                ],
+            }
+            assert (await client.get(f"{overview_path}/lessons", headers=finance_headers)).status_code == 404
             media_path = (
                 f"{overview_path}/activities/{media_activity_uuid}/media"
             )

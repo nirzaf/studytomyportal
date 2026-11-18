@@ -6,13 +6,23 @@ import { useTranslation } from 'react-i18next'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { Button } from '@components/ui/button'
 import AssessmentIntegrityCases from '@components/Studytomy/AssessmentIntegrityCases'
+import DocumentPdfActivity from '@components/Objects/Activities/DocumentPdf/DocumentPdf'
+import LearnHousePlayer from '@components/Objects/Activities/Video/LearnHousePlayer'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
 import { formatDateTime } from '@/lib/format'
 import { getAPIUrl } from '@services/config/config'
 import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/requests'
 
 type Release = { course_uuid: string; release_uuid: string; name: string }
-type Lesson = { activity_uuid: string; name: string }
+type Lesson = {
+  activity_uuid: string
+  name: string
+  position: number
+  format: 'text' | 'pdf' | 'video' | 'unsupported'
+  media_type: string | null
+  available: boolean
+  unavailable_reason: string | null
+}
 type Catalog = { releases: Release[]; next_cursor: string | null }
 type Index = { lessons: Lesson[]; requires_first_use: boolean }
 type TextLesson = Lesson & { paragraphs: string[] }
@@ -39,6 +49,7 @@ type View =
   | { kind: 'access'; window: AccessWindow }
   | { kind: 'lessons'; release: Release; index: Index }
   | { kind: 'lesson'; release: Release; lesson: TextLesson }
+  | { kind: 'media'; release: Release; lesson: Lesson }
 
 export default function AccountLearning({ orgUuid }: { orgUuid: string }) {
   const session = useLHSession()
@@ -51,12 +62,20 @@ export default function AccountLearning({ orgUuid }: { orgUuid: string }) {
   return (
     <div key={JSON.stringify([orgUuid, identity])} className="space-y-8">
       <AssessmentIntegrityCases orgUuid={orgUuid} token={token} />
-      <LearningView orgUuid={orgUuid} token={token} />
+      <LearningView orgUuid={orgUuid} token={token} refreshSession={session.update} />
     </div>
   )
 }
 
-function LearningView({ orgUuid, token }: { orgUuid: string; token: string }) {
+function LearningView({
+  orgUuid,
+  token,
+  refreshSession,
+}: {
+  orgUuid: string
+  token: string
+  refreshSession?: (_force?: boolean) => Promise<void>
+}) {
   const { i18n } = useTranslation()
   const [view, setView] = useState<View>({ kind: 'loading' })
   const pending = useRef<AbortController | null>(null)
@@ -105,6 +124,32 @@ function LearningView({ orgUuid, token }: { orgUuid: string; token: string }) {
       data => ({ kind: 'lesson', release, lesson: data }),
       firstUse ? 'POST' : 'GET',
     )
+  }
+
+  async function showMedia(release: Release, lesson: Lesson, firstUse: boolean) {
+    pending.current?.abort()
+    const controller = new AbortController()
+    pending.current = controller
+    setView({ kind: 'loading' })
+    try {
+      if (firstUse) {
+        const path = `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learning/courses/${encodeURIComponent(release.course_uuid)}/releases/${encodeURIComponent(release.release_uuid)}/activities/${encodeURIComponent(lesson.activity_uuid)}/media/open`
+        const request = RequestBodyWithAuthHeader('POST', null, null, token)
+        const headers = new Headers(request.headers)
+        headers.set('Range', 'bytes=0-0')
+        const response = await secureFetch(path, {
+          ...request,
+          headers,
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        if (!response.ok) throw new Error('Media access is unavailable')
+        await response.body?.cancel()
+      }
+      if (!controller.signal.aborted) setView({ kind: 'media', release, lesson })
+    } catch {
+      if (!controller.signal.aborted) setView({ kind: 'unavailable' })
+    }
   }
 
   useEffect(() => {
@@ -199,10 +244,36 @@ function LearningView({ orgUuid, token }: { orgUuid: string; token: string }) {
         {view.index.lessons.length === 0 && <p>No lessons are available for this release.</p>}
         <ol className="space-y-2">
           {view.index.lessons.map(lesson => <li key={lesson.activity_uuid}>
-            <Button variant="outline" className="min-h-11 w-full justify-start whitespace-normal text-start"
-              onClick={() => act(() => showLesson(view.release, lesson, view.index.requires_first_use))}>
-              {view.index.requires_first_use ? `Open ${lesson.name}` : lesson.name}
-            </Button>
+            <div className="space-y-1">
+              <Button
+                variant="outline"
+                className="min-h-11 w-full justify-start whitespace-normal text-start"
+                disabled={!lesson.available}
+                onClick={() => act(() => lesson.format === 'text'
+                  ? showLesson(view.release, lesson, view.index.requires_first_use)
+                  : showMedia(view.release, lesson, view.index.requires_first_use))}
+              >
+                {lesson.available && view.index.requires_first_use ? `Open ${lesson.name}` : lesson.name}
+                <span className="ms-auto shrink-0 text-xs font-normal text-muted-foreground">
+                  {lesson.format === 'text' ? 'Text' : lesson.format === 'pdf' ? 'PDF' : lesson.format === 'video' ? 'Video' : 'Unsupported'}
+                </span>
+              </Button>
+              {!lesson.available && <p className="px-3 text-sm text-muted-foreground">
+                {lesson.unavailable_reason === 'accessibility_policy_required'
+                  ? 'This resource needs an approved accessibility policy before it can be opened.'
+                  : lesson.unavailable_reason === 'accessibility_policy_incomplete'
+                    ? 'The approved accessibility policy does not yet define this resource.'
+                    : lesson.unavailable_reason === 'media_format_not_approved'
+                      ? 'This resource format or size is not approved for delivery.'
+                      : lesson.unavailable_reason === 'captions_or_text_alternative_not_retained'
+                        ? 'Video is unavailable until captions or an approved accessible alternative are included in the release.'
+                        : lesson.unavailable_reason === 'unsupported_release_format'
+                          ? 'This activity format is not supported in the managed lesson player.'
+                          : lesson.unavailable_reason === 'release_format_conflict'
+                            ? 'This activity has conflicting release-format metadata.'
+                            : 'This released resource is not currently available.'}
+              </p>}
+            </div>
           </li>)}
         </ol>
       </>
@@ -216,6 +287,20 @@ function LearningView({ orgUuid, token }: { orgUuid: string; token: string }) {
         </article>
       </>
       break
+    case 'media': {
+      title = view.lesson.name
+      const mediaUrl = `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learning/courses/${encodeURIComponent(view.release.course_uuid)}/releases/${encodeURIComponent(view.release.release_uuid)}/activities/${encodeURIComponent(view.lesson.activity_uuid)}/media`
+      content = <>
+        <Button variant="outline" className="min-h-11" onClick={() => act(() => showLessons(view.release))}>Back to lessons</Button>
+        <ManagedReleaseMedia
+          release={view.release}
+          lesson={view.lesson}
+          mediaUrl={mediaUrl}
+          refreshSession={refreshSession}
+        />
+      </>
+      break
+    }
     case 'unavailable':
       content = <>
         <p role="status">Learning is unavailable for this account.</p>
@@ -230,4 +315,63 @@ function LearningView({ orgUuid, token }: { orgUuid: string; token: string }) {
     <h1 ref={heading} id="account-learning-title" tabIndex={-1} className="break-words text-xl font-semibold">{title}</h1>
     {content}
   </section>
+}
+
+function ManagedReleaseMedia({
+  release,
+  lesson,
+  mediaUrl,
+  refreshSession,
+}: {
+  release: Release
+  lesson: Lesson
+  mediaUrl: string
+  refreshSession?: (_force?: boolean) => Promise<void>
+}) {
+  const [retry, setRetry] = useState(0)
+  const [failed, setFailed] = useState(false)
+
+  async function retryMedia() {
+    setFailed(false)
+    await refreshSession?.(true).catch(() => {})
+    setRetry(value => value + 1)
+  }
+
+  const activity = {
+    activity_uuid: lesson.activity_uuid,
+    name: lesson.name,
+    content: { filename: lesson.format === 'pdf' ? 'lesson.pdf' : 'lesson.mp4' },
+  }
+
+  return <div className="space-y-3">
+    {lesson.format === 'pdf' && <>
+      <DocumentPdfActivity
+        key={`${mediaUrl}:${retry}`}
+        activity={activity}
+        course={{ course_uuid: release.course_uuid }}
+        mediaUrl={mediaUrl}
+        onRetry={retryMedia}
+      />
+      <Button type="button" variant="outline" className="min-h-11" onClick={() => void retryMedia()}>
+        Refresh document access
+      </Button>
+    </>}
+    {lesson.format === 'video' && <>
+      <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-black">
+        <LearnHousePlayer
+          key={`${mediaUrl}:${retry}`}
+          src={mediaUrl}
+          title={lesson.name}
+          crossOrigin="use-credentials"
+          onMediaError={() => setFailed(true)}
+        />
+      </div>
+      {failed && <div className="space-y-2" role="alert">
+        <p>Video could not be loaded. Your access may have expired or the connection may have changed.</p>
+        <Button type="button" variant="outline" className="min-h-11" onClick={() => void retryMedia()}>
+          Refresh access and retry
+        </Button>
+      </div>}
+    </>}
+  </div>
 }

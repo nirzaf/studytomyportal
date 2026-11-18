@@ -115,12 +115,14 @@ export default function PdfMobileReader({
   name,
   initialPage,
   onDownload,
+  onRetry,
   fillHeight,
 }: {
   url: string
   name: string
   initialPage?: number | null
   onDownload: () => void
+  onRetry?: () => void
   // Inside a fixed-height host (boards, embeds) the pages scroll in place.
   fillHeight?: boolean
 }) {
@@ -128,6 +130,7 @@ export default function PdfMobileReader({
   const [doc, setDoc] = React.useState<any>(null)
   const [aspect, setAspect] = React.useState(1 / Math.SQRT2)
   const [failed, setFailed] = React.useState(false)
+  const [loadAttempt, setLoadAttempt] = React.useState(0)
   const listRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
@@ -153,7 +156,7 @@ export default function PdfMobileReader({
       cancelled = true
       loaded?.destroy?.()
     }
-  }, [url])
+  }, [url, loadAttempt])
 
   // `?page=<n>`: bring that page into view once the placeholders exist.
   React.useEffect(() => {
@@ -229,6 +232,28 @@ export default function PdfMobileReader({
                 style={{ aspectRatio: String(aspect) }}
               />
             )}
+        </div>
+      )}
+      {failed && (
+        <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4" role="alert">
+          <p className="text-sm text-amber-950">Unable to load this PDF. Check your access or connection, then retry.</p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="min-h-11 rounded-lg bg-neutral-900 px-4 text-sm font-semibold text-white"
+              onClick={async () => {
+                await onRetry?.()
+                setFailed(false)
+                setDoc(null)
+                setLoadAttempt(value => value + 1)
+              }}
+            >
+              Try again
+            </button>
+            <a className="inline-flex min-h-11 items-center underline" href={url} target="_blank" rel="noopener noreferrer">
+              Open PDF
+            </a>
+          </div>
         </div>
       )}
     </div>

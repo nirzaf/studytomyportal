@@ -119,6 +119,20 @@ class ManagedReleaseCatalog(BaseModel):
 class ManagedLessonSummary(BaseModel):
     activity_uuid: str
     name: str
+    position: int
+    format: Literal["text", "pdf", "video", "unsupported"]
+    media_type: str | None
+    available: bool
+    unavailable_reason: Literal[
+        "release_content_unavailable",
+        "release_media_unavailable",
+        "unsupported_release_format",
+        "release_format_conflict",
+        "accessibility_policy_required",
+        "accessibility_policy_incomplete",
+        "media_format_not_approved",
+        "captions_or_text_alternative_not_retained",
+    ] | None
 
 
 class ManagedLessonIndex(BaseModel):
@@ -838,6 +852,37 @@ async def _retain_allocation_delivery(
             )
 
 
+def _managed_media_index_availability(
+    policy: StudyPolicyVersion | None,
+    media_type: str,
+    size_bytes: int,
+) -> tuple[bool, str | None]:
+    if policy is None:
+        return False, "accessibility_policy_required"
+
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_15, policy.body)
+    formats = body.specified_value("supported_formats") if body else None
+    max_bytes = formats.get("max_bytes") if isinstance(formats, dict) else None
+    media_types = formats.get("media_types") if isinstance(formats, dict) else None
+    if (
+        any(blockers.values())
+        or type(max_bytes) is not int
+        or not 1 <= max_bytes <= _MAX_RELEASE_MEDIA_BYTES
+        or not isinstance(media_types, list)
+        or any(not isinstance(value, str) for value in media_types)
+    ):
+        return False, "accessibility_policy_incomplete"
+    if media_type not in media_types or size_bytes > max_bytes:
+        return False, "media_format_not_approved"
+
+    # The current immutable release format validator does not retain video
+    # captions or an explicit accessible alternative. Keep the item visible in
+    # its approved position, but do not advertise playback as available.
+    if media_type.startswith("video/"):
+        return False, "captions_or_text_alternative_not_retained"
+    return True, None
+
+
 async def list_managed_text_lessons(
     db: AsyncSession, org: Organization, actor: PublicUser, course_uuid: str, release_uuid: str,
 ) -> ManagedLessonIndex:
@@ -866,15 +911,143 @@ async def list_managed_text_lessons(
         if isinstance(row, dict) and type(row.get("id")) is int and row["id"] in positions
         and isinstance(row.get("activity_uuid"), str)
     ]
-    lessons = []
+    schedule_body, _ = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
+    schedule = schedule_body.specified_value("release_schedule") if schedule_body else None
+    text_schedule = (
+        schedule.get("ungated_text_activities") if isinstance(schedule, dict) else None
+    )
+    media_schedule = (
+        schedule.get("ungated_media_activities") if isinstance(schedule, dict) else None
+    )
+    text_ids = text_schedule.get(course_uuid) if isinstance(text_schedule, dict) else None
+    media_ids = media_schedule.get(course_uuid) if isinstance(media_schedule, dict) else None
+    authorized_text = set(text_ids) if isinstance(text_ids, list) and all(
+        isinstance(value, str) for value in text_ids
+    ) else set()
+    authorized_media = set(media_ids) if isinstance(media_ids, list) and all(
+        isinstance(value, str) for value in media_ids
+    ) else set()
+
+    media_policy: StudyPolicyVersion | None = None
+    try:
+        media_policy = (
+            await _current_policies(
+                db, org, (StudyPolicyKey.D_15,), datetime.now(UTC)
+            )
+        )[0]
+    except HTTPException as error:
+        if error.status_code != 409:
+            raise
+
+    lessons: list[ManagedLessonSummary] = []
+    seen_activity_uuids: set[str] = set()
     for row in sorted(rows, key=lambda item: positions[item["id"]]):
+        activity_uuid = row["activity_uuid"]
+        if activity_uuid in seen_activity_uuids:
+            continue
+        seen_activity_uuids.add(activity_uuid)
+        if (
+            row.get("published") is not True
+            or row.get("lock_type") not in ("public", "authenticated")
+        ):
+            continue
+        # Assignment titles and answer-key activities are never part of the
+        # lesson/media catalog, even if a malformed schedule includes them.
+        if (
+            row.get("activity_type") == "TYPE_ASSIGNMENT"
+            or row.get("activity_sub_type") == "SUBTYPE_ASSIGNMENT_ANY"
+        ):
+            continue
+        is_text = activity_uuid in authorized_text
+        is_media = activity_uuid in authorized_media
+        if not is_text and not is_media:
+            continue
+
+        name = row.get("name")
+        name = name.strip() if isinstance(name, str) else ""
+        if not name:
+            name = "Unavailable activity"
+        position = len(lessons) + 1
+
+        if is_text and is_media:
+            lessons.append(ManagedLessonSummary(
+                activity_uuid=activity_uuid,
+                name=name,
+                position=position,
+                format="unsupported",
+                media_type=None,
+                available=False,
+                unavailable_reason="release_format_conflict",
+            ))
+            continue
+
+        if is_text:
+            try:
+                lesson = _project_text_lesson(release, policy, activity_uuid)
+            except HTTPException as error:
+                if error.status_code != 404:
+                    raise
+                lessons.append(ManagedLessonSummary(
+                    activity_uuid=activity_uuid,
+                    name=name,
+                    position=position,
+                    format="text",
+                    media_type=None,
+                    available=False,
+                    unavailable_reason="release_content_unavailable",
+                ))
+                continue
+            lessons.append(ManagedLessonSummary(
+                activity_uuid=lesson.activity_uuid,
+                name=lesson.name,
+                position=position,
+                format="text",
+                media_type=None,
+                available=True,
+                unavailable_reason=None,
+            ))
+            continue
+
         try:
-            lesson = _project_text_lesson(release, policy, row["activity_uuid"])
+            _source_reference, media, media_type = _project_media_activity(
+                release, policy, activity_uuid
+            )
         except HTTPException as error:
             if error.status_code != 404:
                 raise
+            subtype = row.get("activity_sub_type")
+            media_format: Literal["pdf", "video", "unsupported"] = (
+                "pdf" if subtype == "SUBTYPE_DOCUMENT_PDF"
+                else "video" if subtype == "SUBTYPE_VIDEO_HOSTED"
+                else "unsupported"
+            )
+            lessons.append(ManagedLessonSummary(
+                activity_uuid=activity_uuid,
+                name=name,
+                position=position,
+                format=media_format,
+                media_type=None,
+                available=False,
+                unavailable_reason=(
+                    "release_media_unavailable"
+                    if media_format != "unsupported"
+                    else "unsupported_release_format"
+                ),
+            ))
             continue
-        lessons.append(ManagedLessonSummary(activity_uuid=lesson.activity_uuid, name=lesson.name))
+        media_format = "pdf" if media_type == "application/pdf" else "video"
+        available, unavailable_reason = _managed_media_index_availability(
+            media_policy, media_type, media["size_bytes"]
+        )
+        lessons.append(ManagedLessonSummary(
+            activity_uuid=activity_uuid,
+            name=name,
+            position=position,
+            format=media_format,
+            media_type=media_type,
+            available=available,
+            unavailable_reason=unavailable_reason,
+        ))
     return ManagedLessonIndex(
         requires_first_use=all(grant.starts_at is None for grant in grants), lessons=lessons,
     )

@@ -31,11 +31,15 @@ function DocumentPdfActivity({
   course,
   orgUuid,
   className,
+  mediaUrl,
+  onRetry,
 }: {
   activity: any
   course: any
   orgUuid?: string
   className?: string
+  mediaUrl?: string
+  onRetry?: () => void
 }) {
   const { t } = useTranslation()
   const org = useOrg() as any
@@ -43,7 +47,7 @@ function DocumentPdfActivity({
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = React.useState(false)
 
-  const pdfUrl = getActivityMediaDirectory(
+  const pdfUrl = mediaUrl || getActivityMediaDirectory(
     resolvedOrgUuid,
     course?.course_uuid,
     activity.activity_uuid,
@@ -130,6 +134,7 @@ function DocumentPdfActivity({
           name={activity?.name || t('editor.blocks.pdf_block.document_title')}
           initialPage={linkedPage}
           onDownload={handleDownload}
+          onRetry={onRetry}
           fillHeight={!!className}
         />
       </div>
