@@ -1,5 +1,34 @@
 # AUD-18 local verification record
 
+## Mac managed enrollment and access verification (18 November 2026)
+
+The Mac ran `main` at `8308715b14f7f73bdb74a0c7a7e3819baf98047a`. The isolated PostgreSQL 16/pgvector and Redis 7 containers listened on `127.0.0.1:59158` and `127.0.0.1:59159`. The test database and demo database were separate. The fresh test schema was initialized with `ensure_schema()` at `b91d2f6a08c3`. The demo database used `python cli.py install --short` with generated local credentials. No AI provider was configured for this check.
+
+With the private local demo environment loaded, the API ran from `apps/api` using `.venv/bin/uvicorn app:app --host 127.0.0.1 --port 1318`. From `apps/web`, the working frontend command was:
+
+```sh
+NODE_OPTIONS=--dns-result-order=ipv4first \
+NEXT_PUBLIC_LEARNHOUSE_API_URL=http://localhost:1318/api/v1/ \
+NEXT_PUBLIC_LEARNHOUSE_BACKEND_URL=http://localhost:1318/ \
+NEXT_PUBLIC_LEARNHOUSE_DOMAIN=localhost:3018 \
+NEXT_PUBLIC_LEARNHOUSE_DEFAULT_ORG=default \
+NEXT_PUBLIC_LEARNHOUSE_HTTPS=False \
+bun run dev --hostname localhost --port 3018
+```
+
+The original web process served `/api/health` with HTTP 200 but logged `ECONNRESET` proxying the tenant rewrite for `/account/learning`. After restarting with the command above, the API root, web health, and learner route all returned HTTP 200. The learner route took 5.8 seconds including its first compilation. The built-in browser opened `/account/learning` and observed the signed-out redirect to `/login?redirect=/account/learning`. Signed-in managed enrollment and post-revocation browser acceptance remain pending. The browser demo database has the default synthetic administrator and still needs a synthetic learner with a reviewed release and an exact access grant.
+
+With the dedicated loopback `STUDYTOMY_TEST_DATABASE_URL` loaded, this focused command from `apps/api` reported **12 passed, 19 deselected in 21.22 seconds**:
+
+```sh
+.venv/bin/python -m pytest -q -rs --tb=short \
+  src/tests/studytomy/test_checkout_router.py \
+  src/tests/studytomy/test_content_evidence.py \
+  -k 'signed_checkout or grant_first_use'
+```
+
+The signed mounted-route tests exercised checkout allocation, the exact learner/release binding, private catalog and lesson delivery, first-use activation, and denial after access was lost. They also checked retained access history under the approved purpose and denials after consent withdrawal. The first-use concurrency test verified that revoking one source preserves an independently valid grant and that the database rejects rewriting a revocation. The route tests use synthetic policies and establish API and persistence behavior in the test database.
+
 - **Recorded:** 2026-11-18
 - **Source revision tested:** `029f1af19d26619a12ccbd162cba4ba1864505df`
 - **Git tree:** `7f3e2652fb5ff3942790822a9fc2ee4c1313eadc`
