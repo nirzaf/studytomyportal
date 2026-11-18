@@ -21,6 +21,7 @@ type Lesson = {
   format: 'text' | 'pdf' | 'video' | 'unsupported'
   media_type: string | null
   available: boolean
+  caption_codes?: string[]
   unavailable_reason: string | null
 }
 type Catalog = { releases: Release[]; next_cursor: string | null }
@@ -357,15 +358,19 @@ function ManagedReleaseMedia({
       </Button>
     </>}
     {lesson.format === 'video' && <>
-      <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-black">
+      {!failed && <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-black">
         <LearnHousePlayer
           key={`${mediaUrl}:${retry}`}
           src={mediaUrl}
           title={lesson.name}
           crossOrigin="use-credentials"
+          captions={lesson.caption_codes?.map(code => ({
+            code, label: code, url: `${mediaUrl}/captions/${encodeURIComponent(code)}`,
+          }))}
+          onCaptionsUnavailable={() => setFailed(true)}
           onMediaError={() => setFailed(true)}
         />
-      </div>
+      </div>}
       {failed && <div className="space-y-2" role="alert">
         <p>Video could not be loaded. Your access may have expired or the connection may have changed.</p>
         <Button type="button" variant="outline" className="min-h-11" onClick={() => void retryMedia()}>

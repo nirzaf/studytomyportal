@@ -46,6 +46,7 @@ _SUPPORTED_MEDIA = {
     "image/gif": ("image", ".gif"),
     "image/webp": ("image", ".webp"),
 }
+_RELEASE_ONLY_MEDIA = {"video/mp4", "video/webm", "text/vtt"}
 _SAFE_RETENTION_CATEGORY = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 
 
@@ -101,7 +102,12 @@ def _approved_file_rules(
         or not 1 <= max_bytes <= _MAX_EVIDENCE_FILE_BYTES
         or not isinstance(media_types, list)
         or not media_types
-        or any(not isinstance(value, str) or value not in _SUPPORTED_MEDIA for value in media_types)
+        or any(
+            not isinstance(value, str)
+            or (value not in _SUPPORTED_MEDIA and value not in _RELEASE_ONLY_MEDIA)
+            for value in media_types
+        )
+        or not any(value in _SUPPORTED_MEDIA for value in media_types)
     ):
         raise HTTPException(
             status_code=409,
@@ -110,7 +116,7 @@ def _approved_file_rules(
                 "message": "The approved D-15 policy must define a supported format list and bounded file size.",
             },
         )
-    return max_bytes, set(media_types), retention_category
+    return max_bytes, set(media_types).intersection(_SUPPORTED_MEDIA), retention_category
 
 
 def _stream_digest(file_binary) -> tuple[str, int]:

@@ -29,6 +29,7 @@ from src.security.studytomy_access import (
     _find_active_staff_scope,
     authorize_studytomy_staff_action,
 )
+from src.services.studytomy.access_policy import _validate_media_delivery_policy
 from src.services.studytomy.business_events import append_business_event
 from src.services.studytomy.content_evidence import (
     ContentReviewEvidenceSelection,
@@ -57,6 +58,16 @@ from src.services.studytomy.releases import (
 _OPERATION = "studytomy.course_review.record"
 _CAPABILITY = StudytomyCapabilityName.CONTENT_RELEASE_REVIEW
 _RESPONSIBILITY = StudyOwnerFunction.EDUCATION
+
+
+async def _capture_review_media(org: Organization, snapshot: dict, policies: list[StudyPolicyVersion]) -> dict:
+    manifest = await capture_native_release_media(org.org_uuid, snapshot)
+    policy = next(policy for policy in policies if policy.policy_key == StudyPolicyKey.D_15.value)
+    for item in manifest.values():
+        media_type = item.get("media_type", "")
+        if media_type == "text/vtt" or media_type.startswith("video/"):
+            _validate_media_delivery_policy(policy, media_type, item["size_bytes"], has_captions=True)
+    return manifest
 
 
 class CourseReviewCommand(ContentReviewEvidenceSelection):
@@ -190,7 +201,7 @@ async def _checked_course_release(
     )
     validate_release_media_coverage(snapshot)
     if (
-        await capture_native_release_media(org.org_uuid, snapshot)
+        await _capture_review_media(org, snapshot, policies)
         != review.media_manifest
     ):
         raise studytomy_http_error(
@@ -403,7 +414,7 @@ async def record_course_review(
         command,
     )
     media_manifest = (
-        await capture_native_release_media(org.org_uuid, snapshot)
+        await _capture_review_media(org, snapshot, policies)
         if command.decision == "approved"
         else None
     )

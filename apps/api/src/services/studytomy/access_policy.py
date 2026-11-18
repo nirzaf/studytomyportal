@@ -12,7 +12,7 @@ from tempfile import TemporaryFile
 from typing import BinaryIO, Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import Select, and_, case, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -44,8 +44,10 @@ from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
 from src.services.studytomy.releases import (
+    _MAX_RELEASE_CAPTION_BYTES,
     _NATIVE_ACTIVITY_MEDIA,
     _RELEASE_MEDIA_TYPES,
+    _ready_caption_codes,
 )
 from src.services.utils.upload_content import open_content_stream
 
@@ -55,6 +57,7 @@ _RELEASE_MEDIA_FILENAME = {
     "application/pdf": "lesson.pdf",
     "video/mp4": "lesson.mp4",
     "video/webm": "lesson.webm",
+    "text/vtt": "captions.vtt",
 }
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -124,6 +127,7 @@ class ManagedLessonSummary(BaseModel):
     format: Literal["text", "pdf", "video", "unsupported"]
     media_type: str | None
     available: bool
+    caption_codes: list[str] = Field(default_factory=list, exclude_if=lambda codes: not codes)
     unavailable_reason: Literal[
         "release_content_unavailable",
         "release_media_unavailable",
@@ -526,6 +530,8 @@ def _project_media_activity(
     release: StudyCourseRelease,
     policy: StudyPolicyVersion,
     activity_uuid: str,
+    *,
+    caption_code: str | None = None,
 ) -> tuple[str, dict, str]:
     snapshot = release.snapshot
     course = snapshot.get("course")
@@ -620,6 +626,13 @@ def _project_media_activity(
     source_reference = (
         f"courses/{release.course_uuid}/activities/{activity_uuid}/{directory}/{normalized}"
     )
+    if caption_code is not None:
+        if subtype != "SUBTYPE_VIDEO_HOSTED" or caption_code not in _ready_caption_codes(activity):
+            raise _unavailable()
+        source_reference = (
+            f"courses/{release.course_uuid}/activities/{activity_uuid}/video/captions/{caption_code}.vtt"
+        )
+        media_type = "text/vtt"
     media = release.media_manifest.get(source_reference)
     if (
         not isinstance(media, dict)
@@ -627,6 +640,7 @@ def _project_media_activity(
         or not _SHA256.fullmatch(str(media.get("sha256", "")))
         or type(media.get("size_bytes")) is not int
         or media["size_bytes"] < 1
+        or (caption_code is not None and media["size_bytes"] > _MAX_RELEASE_CAPTION_BYTES)
     ):
         raise _unavailable()
     storage_reference = media.get("storage_reference")
@@ -686,8 +700,12 @@ def _validate_media_delivery_policy(
     policy: StudyPolicyVersion,
     media_type: str,
     size_bytes: int,
+    *,
+    has_captions: bool = False,
 ) -> None:
-    available, reason = _managed_media_availability(policy, media_type, size_bytes)
+    available, reason = _managed_media_availability(
+        policy, media_type, size_bytes, has_captions=has_captions,
+    )
     if available:
         return
     if reason == "accessibility_policy_incomplete":
@@ -703,6 +721,52 @@ def _validate_media_delivery_policy(
         if reason == "captions_or_text_alternative_not_retained"
         else "The approved accessibility policy does not authorize this resource format or size.",
     )
+
+
+def _approved_caption_codes(
+    release: StudyCourseRelease,
+    progression: StudyPolicyVersion,
+    policy: StudyPolicyVersion | None,
+    activity_uuid: str,
+) -> list[str]:
+    activity = next(
+        row for row in release.snapshot["activities"]
+        if isinstance(row, dict) and row.get("activity_uuid") == activity_uuid
+    )
+    approved = []
+    for code in _ready_caption_codes(activity):
+        try:
+            _, track, track_type = _project_media_activity(
+                release, progression, activity_uuid, caption_code=code,
+            )
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
+            continue
+        available, _ = _managed_media_availability(policy, track_type, track["size_bytes"])
+        if available:
+            approved.append(code)
+    return approved
+
+
+def _project_authorized_media(
+    release: StudyCourseRelease,
+    progression: StudyPolicyVersion,
+    policy: StudyPolicyVersion,
+    activity_uuid: str,
+    caption_code: str | None,
+) -> tuple[str, dict, str]:
+    source, media, media_type = _project_media_activity(release, progression, activity_uuid)
+    codes = (
+        _approved_caption_codes(release, progression, policy, activity_uuid)
+        if media_type.startswith("video/") else []
+    )
+    _validate_media_delivery_policy(policy, media_type, media["size_bytes"], has_captions=bool(codes))
+    if caption_code is None:
+        return source, media, media_type
+    if caption_code not in codes:
+        raise _unavailable()
+    return _project_media_activity(release, progression, activity_uuid, caption_code=caption_code)
 
 
 async def _stage_release_media(org_uuid: str, media: dict) -> BinaryIO:
@@ -760,6 +824,7 @@ async def read_managed_activity_media(
     *,
     range_header: str | None = None,
     start_first_use: bool = False,
+    caption_code: str | None = None,
 ) -> ManagedActivityMedia:
     org_id = org.id
     org_uuid = org.org_uuid
@@ -779,17 +844,16 @@ async def read_managed_activity_media(
         course_uuid=course_uuid,
         release_id=release.id,
         now=datetime.now(UTC),
-        include_unstarted=True,
+        include_unstarted=caption_code is None,
     )
     if not candidates:
         raise _unavailable()
-    source_reference, media, media_type = _project_media_activity(
-        release, progression, activity_uuid
-    )
     policy = (await _current_policies(
         db, org, (StudyPolicyKey.D_15,), datetime.now(UTC)
     ))[0]
-    _validate_media_delivery_policy(policy, media_type, media["size_bytes"])
+    source_reference, media, media_type = _project_authorized_media(
+        release, progression, policy, activity_uuid, caption_code,
+    )
     start, end, status_code = _parse_media_range(range_header, media["size_bytes"])
     release_id = release.id
     release_digest = release.snapshot_sha256
@@ -818,15 +882,6 @@ async def read_managed_activity_media(
             or current_progression.id != progression_id
         ):
             raise _unavailable()
-        current_source_reference, current_media, current_media_type = _project_media_activity(
-            current_release, current_progression, activity_uuid
-        )
-        if (
-            current_source_reference != source_reference
-            or current_media_type != media_type
-            or current_media != media_snapshot
-        ):
-            raise _unavailable()
         current_policy = (await _current_policies(
             db, org, (StudyPolicyKey.D_15,), datetime.now(UTC)
         ))[0]
@@ -836,9 +891,15 @@ async def read_managed_activity_media(
                 "POLICY_CHANGED",
                 "The current media-access policy changed while the resource was being prepared. Retry the request.",
             )
-        _validate_media_delivery_policy(
-            current_policy, media_type, media_snapshot["size_bytes"]
+        current_source_reference, current_media, current_media_type = _project_authorized_media(
+            current_release, current_progression, current_policy, activity_uuid, caption_code,
         )
+        if (
+            current_source_reference != source_reference
+            or current_media_type != media_type
+            or current_media != media_snapshot
+        ):
+            raise _unavailable()
 
         now = datetime.now(UTC)
         grants = await resolve_active_course_grants(
@@ -848,7 +909,7 @@ async def read_managed_activity_media(
             course_uuid=course_uuid,
             release_id=release_id,
             now=now,
-            claim_first_use=start_first_use,
+            claim_first_use=start_first_use and caption_code is None,
         )
         if not grants:
             raise _unavailable()
@@ -919,6 +980,8 @@ def _managed_media_availability(
     policy: StudyPolicyVersion | None,
     media_type: str,
     size_bytes: int,
+    *,
+    has_captions: bool = False,
 ) -> tuple[bool, str | None]:
     if policy is None:
         return False, "accessibility_policy_required"
@@ -938,10 +1001,7 @@ def _managed_media_availability(
     if media_type not in media_types or size_bytes > max_bytes:
         return False, "media_format_not_approved"
 
-    # The current immutable release format validator does not retain video
-    # captions or an explicit accessible alternative. Keep the item visible in
-    # its approved position, but do not advertise playback as available.
-    if media_type.startswith("video/"):
+    if media_type.startswith("video/") and not has_captions:
         return False, "captions_or_text_alternative_not_retained"
     return True, None
 
@@ -1099,8 +1159,12 @@ async def list_managed_text_lessons(
             ))
             continue
         media_format = "pdf" if media_type == "application/pdf" else "video"
+        caption_codes = (
+            _approved_caption_codes(release, policy, media_policy, activity_uuid)
+            if media_format == "video" else []
+        )
         available, unavailable_reason = _managed_media_availability(
-            media_policy, media_type, media["size_bytes"]
+            media_policy, media_type, media["size_bytes"], has_captions=bool(caption_codes),
         )
         lessons.append(ManagedLessonSummary(
             activity_uuid=activity_uuid,
@@ -1109,6 +1173,7 @@ async def list_managed_text_lessons(
             format=media_format,
             media_type=media_type,
             available=available,
+            caption_codes=caption_codes if available else [],
             unavailable_reason=unavailable_reason,
         ))
     return ManagedLessonIndex(

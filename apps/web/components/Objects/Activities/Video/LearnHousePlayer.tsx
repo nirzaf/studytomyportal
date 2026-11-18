@@ -60,6 +60,8 @@ interface LearnHousePlayerProps {
   thumbnails?: ThumbnailsConfig | null
   /** Ready WebVTT caption tracks to attach (subtitles/CC menu). */
   captions?: CaptionTrack[]
+  /** Used by reviewed media that requires at least one available track. */
+  onCaptionsUnavailable?: () => void
   /** Paint a soft glow from the current frame under the player (theater pages). */
   ambient?: boolean
   /** Activities shown at either side of the player while paused. */
@@ -241,6 +243,7 @@ const LearnHousePlayer: React.FC<LearnHousePlayerProps> = ({
   title,
   thumbnails,
   captions,
+  onCaptionsUnavailable,
   ambient = false,
   prevItem,
   nextItem,
@@ -288,16 +291,19 @@ const LearnHousePlayer: React.FC<LearnHousePlayerProps> = ({
   useEffect(() => {
     if (!captions || !captions.length) {
       setLoadedCaptions([])
+      onCaptionsUnavailable?.()
       return
     }
     let cancelled = false
+    const controller = new AbortController()
     const created: string[] = []
     Promise.all(
       captions.map(async (track) => {
         try {
-          const res = await fetch(track.url, { credentials: 'include' })
+          const res = await fetch(track.url, { credentials: 'include', signal: controller.signal })
           if (!res.ok) return null
           const vtt = await res.text()
+          if (cancelled) return null
           const blobUrl = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }))
           created.push(blobUrl)
           return { code: track.code, label: track.label, blobUrl }
@@ -306,10 +312,15 @@ const LearnHousePlayer: React.FC<LearnHousePlayerProps> = ({
         }
       })
     ).then((loaded) => {
-      if (!cancelled) setLoadedCaptions(loaded.filter((c): c is LoadedCaption => !!c))
+      if (!cancelled) {
+        const tracks = loaded.filter((c): c is LoadedCaption => !!c)
+        setLoadedCaptions(tracks)
+        if (!tracks.length) onCaptionsUnavailable?.()
+      }
     })
     return () => {
       cancelled = true
+      controller.abort()
       created.forEach((u) => URL.revokeObjectURL(u))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -423,9 +434,10 @@ const LearnHousePlayer: React.FC<LearnHousePlayerProps> = ({
   useEffect(() => {
     const video = mediaRef.current
     if (!video || !loadedCaptions.length) return
-    const els = loadedCaptions.map((c) => {
+    const els = loadedCaptions.map((c, index) => {
       const el = document.createElement('track')
-      el.kind = 'subtitles'
+      el.kind = onCaptionsUnavailable ? 'captions' : 'subtitles'
+      el.default = Boolean(onCaptionsUnavailable && index === 0)
       el.src = c.blobUrl
       el.srclang = c.code
       el.label = c.label
@@ -433,7 +445,7 @@ const LearnHousePlayer: React.FC<LearnHousePlayerProps> = ({
       return el
     })
     return () => els.forEach((el) => el.remove())
-  }, [loadedCaptions, playingHls])
+  }, [loadedCaptions, onCaptionsUnavailable, playingHls])
 
   // Chapters: the skin splits the time slider at each cue of a default
   // chapters track and shows the chapter title while scrubbing.
@@ -471,6 +483,10 @@ const LearnHousePlayer: React.FC<LearnHousePlayerProps> = ({
     video.appendChild(el)
     return () => el.remove()
   }, [thumbnailsVttUrl, playingHls])
+
+  if (onCaptionsUnavailable && !loadedCaptions.length) {
+    return <p role="status" className="p-4 text-white">Loading captions…</p>
+  }
 
   return (
     // dir="ltr": transport controls read left-to-right everywhere; labels still

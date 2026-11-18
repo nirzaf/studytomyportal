@@ -5,6 +5,7 @@ import hashlib
 import re
 from contextlib import aclosing, suppress
 from datetime import datetime
+from io import BytesIO
 from pathlib import PurePosixPath
 from tempfile import TemporaryFile
 from typing import BinaryIO
@@ -22,6 +23,11 @@ from src.db.courses.course_chapters import CourseChapter
 from src.db.courses.courses import Course
 from src.db.organizations import Organization
 from src.db.studytomy.governance import StudyPolicyKey, inspect_study_policy_body
+from src.services.ai.chapters import parse_vtt_cues
+from src.services.courses.activities.video import (
+    _CAPTION_LANG_RE,
+    MAX_CAPTION_LANGUAGES,
+)
 from src.services.courses.transfer.storage_utils import delete_storage_file
 from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
@@ -44,6 +50,7 @@ _RELEASE_MEDIA_TYPES = {
     ".mp4": "video/mp4",
     ".webm": "video/webm",
 }
+_MAX_RELEASE_CAPTION_BYTES = 2 * 1024 * 1024
 _TEXT_RELEASE_NODES = {
     "doc",
     "paragraph",
@@ -82,18 +89,11 @@ def validate_release_media_coverage(snapshot: dict) -> None:
         raise _release_media_unsupported()
     for activity in snapshot["activities"]:
         subtype = activity["activity_sub_type"]
-        if subtype == "SUBTYPE_VIDEO_HOSTED":
-            metadata = activity.get("extra_metadata") or {}
-            if metadata.get("captions"):
-                raise studytomy_http_error(
-                    409,
-                    "RELEASE_MEDIA_UNSUPPORTED",
-                    "This release format cannot retain the video's captions. Keep this video in draft.",
-                )
+        if subtype == "SUBTYPE_VIDEO_HOSTED" and not _ready_caption_codes(activity):
             raise studytomy_http_error(
                 409,
                 "RELEASE_MEDIA_UNSUPPORTED",
-                "This release format cannot retain captions or an approved accessible alternative. Keep this video in draft.",
+                "A hosted video needs at least one ready caption track before it can be reviewed.",
             )
         if subtype in {*_NATIVE_ACTIVITY_MEDIA, "SUBTYPE_ASSIGNMENT_ANY"}:
             continue
@@ -330,6 +330,11 @@ async def capture_native_release_media(
             if media_type is None:
                 raise _release_media_unsupported()
             delivery_media_types[source_reference] = media_type
+            if activity["activity_sub_type"] == "SUBTYPE_VIDEO_HOSTED":
+                caption_directory = f"{root}/activities/{activity['activity_uuid']}/video/captions"
+                for code in _ready_caption_codes(activity):
+                    references.add((caption_directory, f"{code}.vtt"))
+                    delivery_media_types[f"{caption_directory}/{code}.vtt"] = "text/vtt"
     for assignment in assignments.values():
         if assignment.get("solution_file"):
             activity = activities.get(assignment["activity_id"])
@@ -361,12 +366,55 @@ async def capture_native_release_media(
     for reference in sorted(
         f"{directory}/{filename}" for directory, filename in references
     ):
-        item = await _read_release_media(org_uuid, reference)
         media_type = delivery_media_types.get(reference)
+        if media_type == "text/vtt":
+            with BytesIO() as buffer:
+                item = await _read_release_media(
+                    org_uuid, reference, destination=buffer, size_limit=_MAX_RELEASE_CAPTION_BYTES,
+                )
+                try:
+                    track = buffer.getvalue().decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    raise _release_media_unsupported() from None
+                if (
+                    item["size_bytes"] > _MAX_RELEASE_CAPTION_BYTES
+                    or not re.fullmatch(r"WEBVTT(?:[ \t].*)?", track.partition("\n")[0].rstrip("\r"))
+                    or not any(end > start for start, end, _ in parse_vtt_cues(track))
+                ):
+                    raise _release_media_unsupported()
+        else:
+            item = await _read_release_media(org_uuid, reference)
         if media_type is not None:
             item["media_type"] = media_type
         manifest[reference] = item
     return manifest
+
+
+def _ready_caption_codes(activity: dict) -> list[str]:
+    metadata = activity.get("extra_metadata")
+    captions = metadata.get("captions") if isinstance(metadata, dict) else None
+    if (
+        not isinstance(captions, dict)
+        or captions.get("enabled") is not True
+        or captions.get("status") not in ("ready", "partial")
+    ):
+        return []
+    languages = captions.get("languages")
+    if not isinstance(languages, list) or len(languages) > MAX_CAPTION_LANGUAGES:
+        raise _release_media_unsupported()
+    codes = []
+    seen = set()
+    for language in languages:
+        if not isinstance(language, dict):
+            raise _release_media_unsupported()
+        if language.get("status") != "ready":
+            continue
+        code = language.get("code")
+        if not isinstance(code, str) or not _CAPTION_LANG_RE.fullmatch(code) or code.lower() in seen:
+            raise _release_media_unsupported()
+        seen.add(code.lower())
+        codes.append(code)
+    return codes
 
 
 def grounded_source_review_required(snapshot: dict) -> bool:

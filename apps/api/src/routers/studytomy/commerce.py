@@ -356,6 +356,7 @@ async def _managed_activity_media_response(
     db: Session,
     *,
     start_first_use: bool,
+    caption_code: str | None = None,
 ) -> StreamingResponse:
     org = await _member_org(org_uuid, actor, db)
     media = await read_managed_activity_media(
@@ -367,6 +368,7 @@ async def _managed_activity_media_response(
         activity_uuid,
         range_header=request.headers.get("range"),
         start_first_use=start_first_use,
+        caption_code=caption_code,
     )
     try:
         await db.commit()
@@ -435,6 +437,26 @@ async def open_managed_activity_media(
         actor,
         db,
         start_first_use=True,
+    )
+
+
+@router.get(
+    "/learning/courses/{course_uuid}/releases/{release_uuid}/activities/{activity_uuid}/media/captions/{caption_code}",
+    response_class=StreamingResponse,
+)
+async def get_managed_activity_caption(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    caption_code: str,
+    request: Request,
+    actor: Purchaser,
+    db: Session,
+) -> StreamingResponse:
+    return await _managed_activity_media_response(
+        org_uuid, course_uuid, release_uuid, activity_uuid, request, actor, db,
+        start_first_use=False, caption_code=caption_code,
     )
 
 

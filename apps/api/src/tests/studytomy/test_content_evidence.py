@@ -12,6 +12,7 @@ from sqlalchemy import delete, insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from src.core.events.database import get_db_session
+from src.db.courses.activities import ActivitySubTypeEnum, ActivityTypeEnum
 from src.db.courses.assignments import (
     Assignment,
     AssignmentTask,
@@ -94,10 +95,8 @@ def test_release_media_coverage_refuses_unsupported_dependencies(activity):
     with pytest.raises(HTTPException) as refused:
         validate_release_media_coverage({"chapters": [], "activities": [activity]})
     assert refused.value.detail["code"] == "RELEASE_MEDIA_UNSUPPORTED"
-    if activity.get("extra_metadata", {}).get("captions"):
-        assert "cannot retain the video's captions" in refused.value.detail["message"]
-    elif activity["activity_sub_type"] == "SUBTYPE_VIDEO_HOSTED":
-        assert "approved accessible alternative" in refused.value.detail["message"]
+    if activity["activity_sub_type"] == "SUBTYPE_VIDEO_HOSTED":
+        assert "needs at least one ready caption" in refused.value.detail["message"]
 
 
 async def test_release_media_manifest_binds_native_file_bytes(tmp_path, monkeypatch):
@@ -156,6 +155,54 @@ async def test_release_media_manifest_binds_native_file_bytes(tmp_path, monkeypa
     with pytest.raises(HTTPException) as missing:
         await capture_native_release_media("org_fixture", snapshot)
     assert missing.value.status_code == 404
+
+
+@pytest.mark.parametrize("code, track, valid", [
+    ("en-AU", b"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello\n", True),
+    ("../en", b"WEBVTT\n", False),
+    ("en-AU", b"<html>wrong asset</html>", False),
+    ("en-AU", b"WEBVTT\n\n", False),
+])
+async def test_release_media_manifest_binds_ready_caption_bytes(
+    tmp_path, monkeypatch, code, track, valid,
+):
+    monkeypatch.chdir(tmp_path)
+    config = SimpleNamespace(hosting_config=SimpleNamespace(
+        content_delivery=SimpleNamespace(type="filesystem"),
+    ))
+    monkeypatch.setattr(upload_content, "get_learnhouse_config", lambda: config)
+    base = "courses/course_fixture/activities/activity_fixture/video"
+    directory = tmp_path / "content" / "orgs" / "org_fixture" / base
+    (directory / "captions").mkdir(parents=True)
+    (directory / "lesson.mp4").write_bytes(b"synthetic video")
+    (directory / "captions" / "en-AU.vtt").write_bytes(track)
+    snapshot = {
+        "course": {"course_uuid": "course_fixture"},
+        "activities": [{
+            "id": 1,
+            "activity_uuid": "activity_fixture",
+            "activity_sub_type": "SUBTYPE_VIDEO_HOSTED",
+            "content": {"filename": "lesson.mp4"},
+            "extra_metadata": {"captions": {"enabled": True, "status": "partial", "languages": [
+                {"code": code, "label": "English", "status": "ready"},
+                {"code": "fr", "status": "failed"},
+            ]}},
+        }],
+        "assignments": [],
+        "assignment_tasks": [],
+    }
+    if not valid:
+        with pytest.raises(HTTPException) as blocked:
+            await capture_native_release_media("org_fixture", snapshot)
+        assert blocked.value.detail["code"] == "RELEASE_MEDIA_UNSUPPORTED"
+        return
+    manifest = await capture_native_release_media("org_fixture", snapshot)
+    assert set(manifest) == {f"{base}/lesson.mp4", f"{base}/captions/en-AU.vtt"}
+    assert manifest[f"{base}/captions/en-AU.vtt"] == {
+        "sha256": hashlib.sha256(track).hexdigest(),
+        "size_bytes": len(track),
+        "media_type": "text/vtt",
+    }
 
 
 async def test_cancelled_release_copy_waits_for_storage_then_deletes_uncommitted_media(
@@ -309,7 +356,9 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
                     "content_evidence_retention_category": "synthetic_content",
                     "course_release_retention_category": "synthetic_release",
                 }},
-                StudyPolicyKey.D_15: {"supported_formats": {"max_bytes": 4096, "media_types": ["application/pdf"]}},
+                StudyPolicyKey.D_15: {"supported_formats": {
+                    "max_bytes": 4096, "media_types": ["application/pdf", "video/mp4", "text/vtt"],
+                }},
             }.get(key)
             policy = await _seed_approved_policy(db, org, assigner_id, key, specified=synthetic)
             policy_ids[key] = policy.id
@@ -339,6 +388,7 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         assert refused.status_code == 409
         assert refused.json()["detail"]["code"] == "MANAGED_COURSE_PRIVATE_DRAFT_REQUIRED"
         await db.refresh(course)
+        await db.refresh(activity)
         assert course.studytomy_managed is False
         course.published = False
         course.public = False
@@ -347,6 +397,21 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         thumbnail = content_root / "orgs" / org_uuid / thumbnail_ref
         thumbnail.parent.mkdir(parents=True, exist_ok=True)
         thumbnail.write_bytes(PDF)
+        activity.activity_type = ActivityTypeEnum.TYPE_VIDEO
+        activity.activity_sub_type = ActivitySubTypeEnum.SUBTYPE_VIDEO_HOSTED
+        activity.content = {"filename": "lesson.mp4"}
+        activity.extra_metadata = {"captions": {"enabled": True, "status": "ready", "languages": [
+            {"code": "en", "label": "English", "status": "ready"},
+        ]}}
+        video_ref = f"courses/{course_uuid}/activities/{activity.activity_uuid}/video/lesson.mp4"
+        caption_ref = video_ref.rsplit("/", 1)[0] + "/captions/en.vtt"
+        video = content_root / "orgs" / org_uuid / video_ref
+        captions = content_root / "orgs" / org_uuid / caption_ref
+        video_bytes = b"synthetic video"
+        caption_bytes = b"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nCaption\n"
+        captions.parent.mkdir(parents=True)
+        video.write_bytes(video_bytes)
+        captions.write_bytes(caption_bytes)
         await db.commit()
         for _ in range(2):
             designated = await client.put(managed_draft)
@@ -362,6 +427,11 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         payload = {"purpose": "content_rights", "revision_sha256": revision}
         headers = {"Idempotency-Key": "content-fixture-request"}
         evidence = {"file": ("rights.pdf", PDF, "application/pdf")}
+        unsupported_evidence = await client.post(
+            files, data=payload, files={"file": ("track.vtt", caption_bytes, "text/vtt")},
+            headers={"Idempotency-Key": "caption-is-not-evidence"},
+        )
+        assert unsupported_evidence.status_code == 415
         corrupted = await client.post(files, data=payload, files=evidence, headers=headers)
         assert corrupted.status_code == 503, corrupted.text
         assert list(evidence_directory.iterdir()) == []
@@ -463,6 +533,11 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         assert approved.status_code == 201, approved.text
         assert approved.json()["revision_sha256"] == revision
         preflight_path = f"{review_url}/{approved.json()['uuid']}/release-preflight"
+        captions.write_bytes(caption_bytes.replace(b"Caption", b"Changed"))
+        changed_captions = await client.post(preflight_path)
+        assert changed_captions.status_code == 409
+        assert changed_captions.json()["detail"]["code"] == "REVIEW_MEDIA_CHANGED"
+        captions.write_bytes(caption_bytes)
         preflight = await client.post(preflight_path)
         assert preflight.status_code == 200, preflight.text
         assert preflight.json() == {"review_uuid": approved.json()["uuid"], "revision_sha256": revision}
@@ -588,7 +663,11 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
     assert decision.owner_user_id == assigner_id
     assert decision.reviewer_user_id == actor_id
     assert decision.media_manifest == {
-        thumbnail_ref: {"sha256": hashlib.sha256(PDF).hexdigest(), "size_bytes": len(PDF)}
+        thumbnail_ref: {"sha256": hashlib.sha256(PDF).hexdigest(), "size_bytes": len(PDF)},
+        video_ref: {"sha256": hashlib.sha256(video_bytes).hexdigest(), "size_bytes": len(video_bytes),
+                    "media_type": "video/mp4"},
+        caption_ref: {"sha256": hashlib.sha256(caption_bytes).hexdigest(), "size_bytes": len(caption_bytes),
+                      "media_type": "text/vtt"},
     }
     release = (await db.execute(select(StudyCourseRelease))).scalar_one()
     assert release.uuid == released.json()["uuid"] and release.review_id == decision.id
@@ -607,7 +686,12 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         }
     retained = content_root / "orgs" / org_uuid / release.media_manifest[thumbnail_ref]["storage_reference"]
     assert retained.read_bytes() == PDF
-    assert list((content_root / "orgs" / org_uuid / "studytomy" / "releases").rglob("*.bin")) == [retained]
+    retained_paths = {
+        content_root / "orgs" / org_uuid / item["storage_reference"]
+        for item in release.media_manifest.values()
+    }
+    assert {file.read_bytes() for file in retained_paths} == {PDF, video_bytes, caption_bytes}
+    assert set((content_root / "orgs" / org_uuid / "studytomy" / "releases").rglob("*.bin")) == retained_paths
     await db.refresh(course)
     assert course.published is False and course.public is False
     await db.refresh(org)

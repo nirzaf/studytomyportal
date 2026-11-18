@@ -183,6 +183,9 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             f"courses/course_synthetic/activities/{video_activity_uuid}/video/video.mp4"
         )
         video_storage_reference = f"studytomy/releases/{token}/video.bin"
+        caption_source_reference = video_source_reference.rsplit("/", 1)[0] + "/captions/en.vtt"
+        caption_storage_reference = f"studytomy/releases/{token}/caption.bin"
+        caption_bytes = b"WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nCaption\n"
         release_media_manifest = {
             media_source_reference: {
                 "sha256": hashlib.sha256(release_media_bytes).hexdigest(),
@@ -195,6 +198,12 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 "size_bytes": len(release_video_bytes),
                 "media_type": "video/mp4",
                 "storage_reference": video_storage_reference,
+            },
+            caption_source_reference: {
+                "sha256": hashlib.sha256(caption_bytes).hexdigest(),
+                "size_bytes": len(caption_bytes),
+                "media_type": "text/vtt",
+                "storage_reference": caption_storage_reference,
             },
         }
         retained_activities = [
@@ -228,6 +237,9 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                     "id": 4, "activity_uuid": video_activity_uuid, "published": True,
                     "activity_type": "TYPE_VIDEO", "activity_sub_type": "SUBTYPE_VIDEO_HOSTED",
                     "name": "Reviewed video", "lock_type": "public", "content": {"filename": "video.mp4"},
+                    "extra_metadata": {"captions": {"enabled": True, "status": "ready", "languages": [
+                        {"code": "en", "label": "English", "status": "ready"},
+                    ]}},
                 },
                 {
                     "id": 5, "activity_uuid": unsupported_media_uuid, "published": True,
@@ -416,7 +428,7 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             decisions[StudyPolicyKey.D_15] = {
                 "supported_formats": {
                     "max_bytes": 1024,
-                    "media_types": ["application/pdf", "video/mp4"],
+                    "media_types": ["application/pdf", "video/mp4", "text/vtt"],
                 },
             }
         if price_minor > 0:
@@ -1003,8 +1015,9 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                             "position": 3,
                             "format": "video",
                             "media_type": "video/mp4",
-                            "available": False,
-                            "unavailable_reason": "captions_or_text_alternative_not_retained",
+                            "available": True,
+                            "caption_codes": ["en"],
+                            "unavailable_reason": None,
                         },
                         {
                             "activity_uuid": unsupported_media_uuid,
@@ -1028,6 +1041,8 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 retained_pdf = content_root / "orgs" / org.org_uuid / media_storage_reference
                 retained_pdf.parent.mkdir(parents=True)
                 retained_pdf.write_bytes(release_media_bytes)
+                (content_root / "orgs" / org.org_uuid / caption_storage_reference).write_bytes(caption_bytes)
+                (content_root / "orgs" / org.org_uuid / video_storage_reference).write_bytes(release_video_bytes)
                 config = SimpleNamespace(hosting_config=SimpleNamespace(
                     content_delivery=SimpleNamespace(type="filesystem"),
                 ))
@@ -1063,12 +1078,8 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                     media_path.replace(org.org_uuid, f"org_{uuid4()}"),
                 )).status_code == 404
                 video_path = media_path.replace(media_activity_uuid, video_activity_uuid)
-                for blocked_video in (
-                    await client.get(video_path, headers=headers),
-                    await client.post(f"{video_path}/open", headers=headers),
-                ):
-                    assert blocked_video.status_code == 409
-                    assert blocked_video.json()["detail"]["code"] == "RELEASE_MEDIA_UNSUPPORTED"
+                caption_path = f"{video_path}/captions/en"
+                assert (await client.get(caption_path, headers=headers)).status_code == 404
                 assert storage_reads == []
 
                 invalid_range = await client.post(
@@ -1115,6 +1126,20 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                         StudyBusinessEvent.action == "studytomy.course_grant.content_delivered",
                     ))).scalars().all()
                     assert len(delivered) == 1
+
+                caption = await client.get(caption_path, headers=headers)
+                video = await client.get(video_path, headers={**headers, "Range": "bytes=1-4"})
+                assert video.status_code == 206
+                assert video.content == release_video_bytes[1:5]
+                assert caption.status_code == 200
+                assert caption.content == caption_bytes
+                assert caption.headers["content-type"].startswith("text/vtt")
+                assert caption.headers["cache-control"] == "private, no-store"
+                assert (await client.get(caption_path, headers=finance_headers)).status_code == 404
+                assert (await client.get(f"{video_path}/captions/fr", headers=headers)).status_code == 404
+                assert (await client.get(
+                    caption_path.replace(course.course_uuid, f"{course.course_uuid}-other"), headers=headers,
+                )).status_code == 404
 
                 ranged = await client.get(media_path, headers={**headers, "Range": "bytes=1-4"})
                 assert ranged.status_code == 206
@@ -1261,6 +1286,7 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 await change_grant_during_staging("revoked")
                 reads_before_revoked = len(storage_reads)
                 assert (await client.get(media_path, headers=headers)).status_code == 404
+                assert (await client.get(caption_path, headers=headers)).status_code == 404
                 assert len(storage_reads) == reads_before_revoked
                 return
             if correct_before_first_use:
