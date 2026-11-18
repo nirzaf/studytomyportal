@@ -323,11 +323,11 @@ class StudyOfferTerms(BaseModel):
             blockers.append("OFFER_ASSESSMENT_DESCRIPTION_REQUIRED")
         if self.award is None or self.award.kind is None:
             blockers.append("OFFER_AWARD_TERMS_REQUIRED")
-        elif (
-            self.award.kind != StudyOfferAwardKind.NONE
-            and not self.award.description
-        ):
-            blockers.append("OFFER_AWARD_DESCRIPTION_REQUIRED")
+        elif self.award.kind != StudyOfferAwardKind.NONE:
+            if not self.award.description:
+                blockers.append("OFFER_AWARD_DESCRIPTION_REQUIRED")
+            # Managed award issuance cannot yet bind reviewed conditions to retained evidence.
+            blockers.append("OFFER_MANAGED_AWARD_UNAVAILABLE")
         if self.price is None or (
             self.price.currency is None
             and not self.price.lines
