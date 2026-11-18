@@ -2123,6 +2123,21 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             assert saved_debit.amount_minor == 20 and saved_debit.case_reference == debit["case_reference"]
             saved_reversal = await db.get(StudyChargebackReversal, saved_debit.id)
             assert saved_reversal is not None and saved_reversal.external_reference == reversal["external_reference"]
+            from src.services.studytomy.metrics import confirmed_cash_by_currency
+
+            end = datetime.now(UTC) + timedelta(seconds=1)
+            assert await confirmed_cash_by_currency(
+                db, org_id=org.id, start=end - timedelta(days=30), end=end,
+            ) == [{
+                "currency": "AUD", "collected_minor": 125, "refunded_minor": 125,
+                "chargeback_minor": 20, "reversed_chargeback_minor": 20, "net_minor": 0,
+            }]
+            assert await confirmed_cash_by_currency(
+                db, org_id=org.id, start=saved_reversal.effective_at, end=end,
+            ) == [{
+                "currency": "AUD", "collected_minor": 0, "refunded_minor": 0,
+                "chargeback_minor": 0, "reversed_chargeback_minor": 20, "net_minor": 20,
+            }]
             assert (await db.get(StudyCourseAccessGrant, grant.id)).revoked_at is not None
             retained = await db.get(StudyCourseAccessGrant, other_grant.id)
             assert retained.revoked_at is None
