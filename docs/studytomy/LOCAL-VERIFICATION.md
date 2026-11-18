@@ -314,3 +314,16 @@ This browser check covers learner navigation and status display. Exact award own
 The live follow-up at `bdf83fa240f659e299114b32c78ac5878087781e` first reproduced a navigation gap. With the synthetic award holder signed in, the course catalogue returned HTTP 404 and My certificates was unreachable. The follow-up fix exposes certificate navigation from the unavailable course view without changing any authorization gate.
 
 The fixed Next.js source then ran on `http://localhost:3007` against FastAPI at `http://127.0.0.1:1347`. Headless Chromium at 390 × 844 used two independent synthetic sessions and no intercepted requests. Both learner logins and both award-list GETs returned HTTP 200. The holder saw the one stored certificate with no grades, learner name, or result references in the response. The second learner saw an empty list. The stored award was seeded in the disposable PostgreSQL database `studytomy_award_live_test` at `127.0.0.1:51237`, copied from the isolated browser fixture database at Alembic revision `b91d2f6a08c3`. This exercised browser-to-API discovery and ownership. It did not exercise reviewer issuance in Chromium or activate real learner awards.
+
+### Managed learning integration checkpoint
+
+The primary main worktree at `f7e70034a19a2a749f738d4cb5e06ff55d9114b5` was clean during these local checks.
+
+| Scope | Result |
+| --- | --- |
+| Studytomy API and MCP draft authoring | `python -m pytest -q -rs --tb=short src/tests/studytomy src/tests/services/test_mcp_draft_authoring.py` from `apps/api` passed all **407 tests** with zero skips in 349.21 seconds. PostgreSQL-backed cases used the disposable Docker database `studytomy_aud19_full_restore_test` on `127.0.0.1:60607`, at Alembic revision `b91d2f6a08c3` with pgvector 0.8.7. |
+| Web | `bun run test` from `apps/web` passed **735 tests** with zero failures and 2,042 expectations across 75 files in 17.60 seconds on rerun. The first run passed 732 and timed out on three dynamic-content editor tests at the original 5-second limit. All 31 tests in that file passed in isolation in 2.38 seconds. No code or timeout changed between runs. |
+| TypeScript | `node node_modules/typescript/bin/tsc --noEmit --incremental false` from `apps/web` exited 0. |
+| Collaboration | `bun run test` from `apps/collab` passed all **47 tests** across nine suites with zero failures or skips. |
+
+This checkpoint covers local automated integration. Browser verification for staff award issuance and guardian report rendering, live provider acceptance, educator acceptance, and recorded business and safeguarding approvals remain open.
