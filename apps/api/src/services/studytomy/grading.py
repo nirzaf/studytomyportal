@@ -169,30 +169,34 @@ async def lock_managed_assessment_source(
         raise HTTPException(status_code=404, detail="Assignment not found")
 
 
-async def has_matching_grading_contract(
+async def matching_grading_contract(
     db: AsyncSession,
     assignment: Assignment,
     submission: AssignmentUserSubmission,
     tasks: Sequence[AssignmentTask],
-) -> bool:
+) -> StudyBusinessEvent | None:
     round_uuid = native_round_uuid(
         assignment.org_id,
         submission.assignmentusersubmission_uuid,
         submission.attempt_number,
     )
-    state = (
+    contract = (
         await db.execute(
-            select(StudyBusinessEvent.after_state).where(
+            select(StudyBusinessEvent).where(
                 StudyBusinessEvent.org_id == assignment.org_id,
                 StudyBusinessEvent.action == CONTRACT_FROZEN_ACTION,
+                StudyBusinessEvent.resource_kind == "assignment_round",
+                StudyBusinessEvent.resource_uuid == round_uuid,
                 StudyBusinessEvent.dedupe_key == f"assessment_contract:{round_uuid}",
             )
         )
     ).scalar_one_or_none()
-    return state == {
+    if contract is not None and contract.after_state == {
         "source_snapshot_digest": grading_contract_digest(assignment, tasks),
         "evaluator_version": NATIVE_GRADING_CONTRACT_VERSION,
-    }
+    }:
+        return contract
+    return None
 
 
 def task_marks_digest(tasks: list[dict]) -> str:
@@ -392,7 +396,7 @@ async def record_assessment_result(
     db: AsyncSession,
     assignment: Assignment,
     submission: AssignmentUserSubmission,
-    tasks: Sequence[AssignmentTask],
+    contract: StudyBusinessEvent,
     computed: dict,
     reviewer: PublicUser | APITokenUser | None,
 ) -> None:
@@ -408,8 +412,8 @@ async def record_assessment_result(
         "maximum_points": computed["max_grade"],
         "passing_threshold": computed["passing_threshold"],
         "passed": computed["passed"],
-        "source_snapshot_digest": grading_contract_digest(assignment, tasks),
-        "evaluator_version": NATIVE_GRADING_CONTRACT_VERSION,
+        "source_snapshot_digest": contract.after_state["source_snapshot_digest"],
+        "evaluator_version": contract.after_state["evaluator_version"],
         "result_digest": task_marks_digest(computed["tasks"]),
         "grading_type": assignment.grading_type.value,
     }
@@ -440,6 +444,7 @@ async def record_assessment_result(
         dedupe_key=f"assessment_result:{round_uuid}:{version}",
         after_state={
             **result,
+            "grading_contract_event_uuid": contract.event_uuid,
             "version": version,
             "previous_event_uuid": previous.event_uuid if previous else None,
         },

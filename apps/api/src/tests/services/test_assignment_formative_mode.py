@@ -710,6 +710,7 @@ async def test_managed_assessment_waits_for_a_valid_manual_mark(
         )
     )).scalar_one()
     assert contract.reason == "ASSESSMENT_ISSUED"
+    assert all(event.after_state["grading_contract_event_uuid"] == contract.event_uuid for event in events)
 
     from src.services.studytomy import assessment_reviews
 

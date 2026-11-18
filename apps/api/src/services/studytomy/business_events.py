@@ -60,6 +60,7 @@ _SAFE_STATE_KEYS = frozenset(
         "valid_from",
         "source_mapping_id",
         "source_snapshot_digest",
+        "grading_contract_event_uuid",
         "assistance_rule",
         "mastery_policy_uuid",
         "mastery_policy_digest",

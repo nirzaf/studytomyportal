@@ -4190,7 +4190,7 @@ async def _apply_grade_and_finalize(
     if managed_course:
         from src.services.studytomy.grading import (
             APPEAL_CORRECTION_REASON, assessment_responses_match_hand_in,
-            has_matching_grading_contract, latest_assessment_result,
+            latest_assessment_result, matching_grading_contract,
         )
 
         locked_attempt = (await db_session.execute(
@@ -4213,9 +4213,10 @@ async def _apply_grade_and_finalize(
         if recorded_result and recorded_result.reason == APPEAL_CORRECTION_REASON:
             return {"finalized": False, "reason": "managed_assessment_moderated"}
 
-        if not await has_matching_grading_contract(
+        grading_contract = await matching_grading_contract(
             db_session, assignment, assignment_user_submission, assignment_tasks
-        ):
+        )
+        if grading_contract is None:
             return {"finalized": False, "reason": "managed_assessment_contract_unverified"}
         if not await assessment_responses_match_hand_in(db_session, assignment, locked_attempt):
             return {"finalized": False, "reason": "managed_assessment_responses_unverified"}
@@ -4347,7 +4348,7 @@ async def _apply_grade_and_finalize(
         from src.services.studytomy.grading import record_assessment_result
 
         await record_assessment_result(
-            db_session, assignment, assignment_user_submission, assignment_tasks, computed, reviewer
+            db_session, assignment, assignment_user_submission, grading_contract, computed, reviewer
         )
     assignment_user_submission.grade = computed["grade"]
     assignment_user_submission.submission_status = AssignmentUserSubmissionStatus.GRADED

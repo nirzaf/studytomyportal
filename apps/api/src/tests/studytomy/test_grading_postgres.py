@@ -215,6 +215,13 @@ async def test_concurrent_finalizers_record_one_result_revision(
         ).scalar_one()
         stored = await db.get(AssignmentUserSubmission, attempt.id)
         assert result.after_state["version"] == 1
+        contract_uuid = await db.scalar(select(StudyBusinessEvent.event_uuid).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.resource_uuid == result.resource_uuid,
+            StudyBusinessEvent.action == grading.CONTRACT_FROZEN_ACTION,
+        ))
+        assert contract_uuid is not None
+        assert result.after_state["grading_contract_event_uuid"] == contract_uuid
         assert result.after_state["score_points"] == stored.grade == 100
         assert result.actor_user_id == reviewer.id
         assert stored.submission_status == AssignmentUserSubmissionStatus.GRADED
@@ -1048,6 +1055,13 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 )
                 assert revision.after_state["passed"] is False
                 assert revision.after_state["version"] == 2
+                original = await db.scalar(select(StudyBusinessEvent).where(
+                    StudyBusinessEvent.org_id == org.id,
+                    StudyBusinessEvent.event_uuid == result["result_uuid"],
+                ))
+                assert revision.after_state["grading_contract_event_uuid"] == (
+                    original.after_state["grading_contract_event_uuid"]
+                )
                 assert (
                     await assignments._apply_grade_and_finalize(
                         assignment,
