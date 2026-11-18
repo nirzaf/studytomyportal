@@ -29,6 +29,7 @@ from src.services.ai.rag.access import can_read_activity
 from src.services.courses.activities.assignments import authorize_assignment_access
 from src.services.studytomy.access_policy import (
     ManagedReleaseAuthorization,
+    _assessed_pass_delivery,
     _project_media_activity,
     _project_text_lesson,
     _unavailable,
@@ -274,17 +275,23 @@ async def require_mapped_release_source(
     # actually open. Unsupported/native-only formats stay unavailable here.
     try:
         subtype = activity.get("activity_sub_type")
+        assessed_pass_verified, _ = await _assessed_pass_delivery(
+            db, authorization.release, authorization.progression_policy, actor.id,
+            activity_uuid, lock_result=True,
+        )
         if subtype == "SUBTYPE_DYNAMIC_PAGE":
             _project_text_lesson(
                 authorization.release,
                 authorization.progression_policy,
                 activity_uuid,
+                assessed_pass_verified=assessed_pass_verified,
             )
         elif subtype in {"SUBTYPE_DOCUMENT_PDF", "SUBTYPE_VIDEO_HOSTED"}:
             _project_media_activity(
                 authorization.release,
                 authorization.progression_policy,
                 activity_uuid,
+                assessed_pass_verified=assessed_pass_verified,
             )
         else:
             raise _unavailable()

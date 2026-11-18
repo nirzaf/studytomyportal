@@ -1,4 +1,5 @@
 from asyncio import Event, gather, wait_for
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -112,6 +113,7 @@ from src.tests.studytomy.test_studytomy_access import (
     _seed_active_owner,
     _seed_approved_policy,
     _seed_staff_scope,
+    _synthetic_policy_body,
 )
 
 
@@ -1155,7 +1157,42 @@ async def _characterize_managed_course_diagnostic_conflict(
         in source.authorization.current_policy_version_ids
     )
     assert len(source.source_binding_digest) == 64
+    from src.services.studytomy import access_policy, adaptive_attempt_access
     from src.services.studytomy.adaptive_progress import _managed_release_mappings
+
+    gated_body = _synthetic_policy_body(StudyPolicyKey.D_09, {
+        "release_schedule": {
+            "ungated_text_activities": {course.course_uuid: [lesson.activity_uuid]},
+            "assessed_pass_delivery_activities": {course.course_uuid: [lesson.activity_uuid]},
+        },
+        "completion_prerequisites": {"assessed_pass_by_course": {course.course_uuid: [{
+            "kind": "assessed_pass", "target_activity_uuid": lesson.activity_uuid,
+            "assessment_assignment_uuid": "assignment_missing_synthetic",
+        }]}},
+    })
+    gated_authority = replace(
+        source.authorization,
+        progression_policy=source.authorization.progression_policy.model_copy(
+            update={"body": gated_body.model_dump(mode="json")},
+        ),
+    )
+    source_args = (
+        db, org, learner, profile, curriculum, concept_uuids,
+        course.course_uuid, release.uuid, lesson.activity_uuid, now,
+    )
+    with patch.object(adaptive_attempt_access, "resolve_managed_release_authority",
+                      AsyncMock(return_value=gated_authority)):
+        with pytest.raises(HTTPException) as blocked:
+            await require_mapped_release_source(*source_args)
+        assert blocked.value.status_code == 404
+        with patch.object(access_policy, "managed_assessed_pass_status", AsyncMock(
+            return_value="assessment_pass_delivery_pending",
+        )) as verified:
+            reopened = await require_mapped_release_source(*source_args)
+        assert reopened.activity_snapshot == frozen_activity
+        verified.assert_awaited_once_with(
+            db, gated_body, release, learner.id, lesson.activity_uuid, lock_result=True,
+        )
 
     managed_candidates = await _managed_release_mappings(
         db, org, learner, source, now
