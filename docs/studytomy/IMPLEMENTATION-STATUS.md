@@ -1,6 +1,28 @@
 # Studytomy Family Learning Implementation Status
 
-**Updated:** 2026-11-17
+## Independent architecture audit checkpoint (2026-11-18; interim)
+
+**Reviewed repository HEAD:** `8dcf7fa4838a53053b32de81f0cdb49b6ad5ff7e` on the sole primary `main` worktree. The audit attachment's `210cb561` baseline is historical; current source, migrations and tests control this assessment. Detailed commands and results are in [local verification evidence](LOCAL-VERIFICATION.md).
+
+This checkpoint records existing current-code equivalents and focused verification. It is **not** integrated pilot acceptance: AUD-21 has not passed and AUD-22 remains open until that gate can be completed.
+
+| Audit task | Current evidence/status |
+|---|---|
+| AUD-01, AUD-03, AUD-04 | Current PostgreSQL characterization uses synthetic staff, learner, payer, guardian, private managed course, reviewed frozen release and grant. Exact-release diagnostic/access/attempt behavior passes; partial scope and an out-of-release lesson deny. The old audit denial is no longer current. |
+| AUD-05 | Managed release index and authenticated PDF/video/range API behavior are present and covered by PostgreSQL tests. Learner browser navigation, captions/alternatives and end-to-end accessibility acceptance remain unverified. |
+| AUD-06 | Media staging occurs outside the organization lock and rechecks release, policy and grant before delivery. Focused PostgreSQL lock/revocation and storage failure tests pass. Repeated ranges reread the full staged object; representative workload evidence does not justify a cache yet. |
+| AUD-07, AUD-08 | Collaboration loading fails closed on ambiguous/error responses; persistence retains the latest unacknowledged state, bounds retries/queue size and reports unresolved shutdown writes. Focused unit tests and TypeScript build pass; live Redis/API and multi-client recovery remain unverified. |
+| AUD-13, AUD-15 | Existing report runner, grading, evidence, mastery, retry and award mechanisms have focused synthetic/local evidence. Report delivery remains opt-in and no end-to-end approved offer/report notification was accepted. Integrated learner/browser acceptance remains open. |
+| AUD-16 | Case ownership, exact grants, private narrative and access after course expiry have PostgreSQL evidence. Persisted next action/correspondence/outcome handling and confidential guardian/staff conflict routing lack approved operational arrangements. |
+| AUD-17 | Bounded source retrieval, citations, revocation and synthetic exact-vs-hybrid comparisons are verified. Hybrid remains evaluation-only; educator judgments, real-provider factual support and browser acceptance are absent. |
+| AUD-18 | Current full web/API results and limitations are recorded below. The full API run exposed 12 Windows symlink-privilege failures and two stale test expectations; the expectations were corrected and their focused rerun passed. The full API suite was not rerun after those test-only changes. Strict web lint still fails on six untouched-file errors. |
+| AUD-19 | Current single migration head and 53 local migration tests are verified, with an existing schema-scoped synthetic dump/restore record. Production-shaped snapshot, object-store retention and older-app restore acceptance remain unverified. |
+| AUD-02, AUD-09–AUD-12, AUD-14, AUD-20 | Approval-dependent. No named cohort, credential/recovery choice, guardian authority, customer offer/terms/payment choice, safeguarding routing, or educator content/rubric acceptance was verified. Related learner, guardian, checkout, notification and content activation gates remain closed. |
+| AUD-21, AUD-22 | Not complete. The integrated gate depends on the unresolved approvals above plus unverified browser/provider/operational evidence. This interim note is not the final post-acceptance status publication. |
+
+The audit findings group into managed release/adaptive learning (F-01), media index/locking (F-02/F-03), dependent identity and guardian authority/reporting (F-04–F-06), report runner (F-07), collaboration persistence/load safety (F-08/F-09), current-revision acceptance and truthful verification (F-10), retrieval coverage (F-11), lint-result propagation (F-12), and dated status drift (F-13). No deployment, CI/CD, production migration, real payment, or real-learner activation was run.
+
+**Updated:** 2026-11-18
 
 **Starting commit:** `0d3b439436c69553bf32b69067b06dad13011df5` on `main`
 
