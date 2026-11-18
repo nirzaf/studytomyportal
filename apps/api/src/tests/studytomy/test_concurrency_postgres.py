@@ -6,7 +6,9 @@ races remain pending their dependent workflows and approvals.
 """
 
 import asyncio
+import sys
 from datetime import UTC, datetime, timedelta
+from textwrap import dedent
 
 import pytest
 from fastapi import HTTPException
@@ -482,12 +484,44 @@ async def test_outbox_stale_session_cannot_finalize_a_reconciled_lease(postgres_
             sender, worker_id=worker_id, now=started, lease_seconds=1
         ) == [record]
         await sender.commit()
-        async with rows.session_factory() as recovery, recovery.begin():
-            assert await claim_due_deliveries(
-                recovery,
-                worker_id=f"recovery-{rows.token[:12]}",
-                now=started + timedelta(seconds=2),
-            ) == []
+        # A fresh interpreter has no state from the original sender session.
+        recovery = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", dedent("""
+                import asyncio
+                import os
+                import sys
+                from datetime import datetime
+
+                from src.core.migrations import load_models
+                from src.services.studytomy.outbox import claim_due_deliveries
+                from src.tests.studytomy.conftest import _configured_test_url
+                from sqlalchemy.ext.asyncio import create_async_engine
+                from sqlmodel.ext.asyncio.session import AsyncSession
+
+                async def recover():
+                    load_models()
+                    engine = create_async_engine(_configured_test_url(os.environ))
+                    try:
+                        async with AsyncSession(engine) as db, db.begin():
+                            claimed = await claim_due_deliveries(
+                                db, worker_id=sys.argv[1], now=datetime.fromisoformat(sys.argv[2]),
+                            )
+                            assert not claimed
+                    finally:
+                        await engine.dispose()
+
+                asyncio.run(recover())
+            """),
+            f"recovery-{rows.token[:12]}", (started + timedelta(seconds=2)).isoformat(),
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            _, stderr = await asyncio.wait_for(recovery.communicate(), timeout=30)
+        finally:
+            if recovery.returncode is None:
+                recovery.kill()
+                await recovery.wait()
+        assert recovery.returncode == 0, stderr.decode(errors="replace")
         assert record.status == "leased"
         with pytest.raises(HTTPException) as denied:
             await release_delivery_lease(
