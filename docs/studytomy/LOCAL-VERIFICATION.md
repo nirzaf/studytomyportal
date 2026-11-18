@@ -16,7 +16,7 @@ NEXT_PUBLIC_LEARNHOUSE_HTTPS=False \
 bun run dev --hostname localhost --port 3018
 ```
 
-The original web process served `/api/health` with HTTP 200 but logged `ECONNRESET` proxying the tenant rewrite for `/account/learning`. After restarting with the command above, the API root, web health, and learner route all returned HTTP 200. The learner route took 5.8 seconds including its first compilation. The built-in browser opened `/account/learning` and observed the signed-out redirect to `/login?redirect=/account/learning`. Signed-in managed enrollment and post-revocation browser acceptance remain pending. The browser demo database has the default synthetic administrator and still needs a synthetic learner with a reviewed release and an exact access grant.
+The original web process served `/api/health` with HTTP 200 but logged `ECONNRESET` proxying the tenant rewrite for `/account/learning`. After restarting with the command above, the API root, web health, and learner route all returned HTTP 200. The learner route took 5.8 seconds including its first compilation. The built-in browser opened `/account/learning` and observed the signed-out redirect to `/login?redirect=/account/learning`.
 
 With the dedicated loopback `STUDYTOMY_TEST_DATABASE_URL` loaded, this focused command from `apps/api` reported **12 passed, 19 deselected in 21.22 seconds**:
 
@@ -28,6 +28,17 @@ With the dedicated loopback `STUDYTOMY_TEST_DATABASE_URL` loaded, this focused c
 ```
 
 The signed mounted-route tests exercised checkout allocation, the exact learner/release binding, private catalog and lesson delivery, first-use activation, and denial after access was lost. They also checked retained access history under the approved purpose and denials after consent withdrawal. The first-use concurrency test verified that revoking one source preserves an independently valid grant and that the database rejects rewriting a revocation. The route tests use synthetic policies and establish API and persistence behavior in the test database.
+
+### Signed-in browser follow-up
+
+At `9039a92455939cd77b4626efdd616691b05cbd3a`, the same loopback API and web app served the isolated demo database. Two independent learners were created through the native user service. The existing test fixture helpers supplied a private managed course, a reviewed text release, eligibility decisions and explicitly synthetic policy approvals. The entitlement service persisted one exact first-use grant for the first learner. The other learner had eligibility and consent but had no course grant. The first consent attempt correctly returned `409 POLICY_NOT_APPROVED`. Adding the missing synthetic D-05, D-11 and D-18 fixtures let the full run proceed with the authorization checks intact.
+
+- At 390 × 844, Playwright Chromium signed in through the live login page. The learner accepted the synthetic notice through the signed API and opened the course and lesson from **My learning**. The first-use POST returned 200 with `Cache-Control: private, no-store`, and the browser rendered the reviewed fractions text.
+- The second learner signed in separately. The live catalog returned an empty list, and the saved lesson URL returned 404. The granted learner also received 404 when requesting the same release and lesson under a different course.
+- Signed consent withdrawal returned 201. The saved lesson URL returned 404, and the lesson text disappeared after the browser reloaded. After a fresh consent acceptance, the learner could open the lesson again.
+- A fixture update set the exact grant's `revoked_at` in PostgreSQL. The saved lesson URL then returned 404 and the catalog was empty. After reload, **My learning** showed “No reviewed courses are available.” The browser recorded no uncaught page errors or failed Studytomy transport requests. PostgreSQL confirmed first-use activation, revocation before expiry and retained `accept`, `withdraw`, `accept` consent events.
+
+The browser run used the seeded grant and real endpoints without response interception. Checkout allocation is covered by the mounted tests above. Revocation used a fixture update, and consent changes used the signed API. The screenshots capture the reviewed lesson and empty catalog after revocation. The demonstration used synthetic policy records and required no AI provider.
 
 - **Recorded:** 2026-11-18
 - **Source revision tested:** `029f1af19d26619a12ccbd162cba4ba1864505df`
