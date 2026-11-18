@@ -1002,17 +1002,27 @@ class TestDeliveryWorker:
         # Reconciliation is not a queue state: no automatic resend.
         assert await claim_due_deliveries(db, worker_id="worker-b", limit=5) == []
 
-    async def test_an_unaccepted_receipt_is_uncertain_not_sent(self, db, org, regular_user):
+    @pytest.mark.parametrize(("accepted", "reference"), [
+        (False, None),
+        (True, 42),
+        (True, "unsafe reference"),
+        ("true", None),
+    ])
+    async def test_an_unverifiable_receipt_is_uncertain_not_sent(
+        self, db, org, regular_user, accepted, reference,
+    ):
         record, _ = await _enqueue(db, org, regular_user)
         outcomes = await run_delivery_batch(
             db,
             worker_id="worker-a",
             revalidate=_revalidation(),
-            send=_sending(accepted=False, message_reference=None),
+            send=_sending(accepted=accepted, message_reference=reference),
             limit=5,
         )
         assert outcomes["reconciliation_required"] == 1
         assert record.status == StudyOutboxStatus.RECONCILIATION_REQUIRED
+        assert record.last_error_code == "PROVIDER_OUTCOME_UNKNOWN"
+        assert await claim_due_deliveries(db, worker_id="worker-b", limit=5) == []
 
     async def test_a_revalidation_bug_cannot_crash_the_batch(self, db, org, regular_user):
         record, _ = await _enqueue(db, org, regular_user)

@@ -235,9 +235,17 @@ async def run_delivery_batch(
             )
             outcomes["reconciliation_required"] += 1
         else:
+            reference = receipt.message_reference if isinstance(receipt, ProviderReceipt) else None
             if (
-                not receipt.accepted
-                or (receipt.message_reference is not None and not _SAFE_PROVIDER_REFERENCE.fullmatch(receipt.message_reference))
+                not isinstance(receipt, ProviderReceipt)
+                or receipt.accepted is not True
+                or (
+                    reference is not None
+                    and (
+                        not isinstance(reference, str)
+                        or not _SAFE_PROVIDER_REFERENCE.fullmatch(reference)
+                    )
+                )
             ):
                 await release_delivery_lease(
                     db_session,
@@ -255,7 +263,7 @@ async def run_delivery_batch(
                     worker_id=worker_id,
                     status_value="sent",
                     now=current_time,
-                    provider_message_reference=receipt.message_reference,
+                    provider_message_reference=reference,
                 )
                 outcomes["sent"] += 1
         await db_session.commit()
