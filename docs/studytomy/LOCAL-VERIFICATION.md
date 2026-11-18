@@ -161,6 +161,16 @@ PostgreSQL confirmed one release for the new review, an exact snapshot digest, d
 
 The focused content-evidence suite passed **19 tests in 4.71 seconds** with the local PostgreSQL cases enabled. The web review unit test, TypeScript, scoped ESLint and Git whitespace checks passed. The intercepted content-review Chromium regression separately passed in **4.7 seconds**, including the preflight-before-record sequence. Real approval decisions and live provider generation remain outside the demo.
 
+### Staff-recorded release to learner handoff
+
+On the working tree based on `a34b7acd78d247e9dc5e2321cd1775791f90c61f`, the same isolated staff-review database served API `localhost:1320` and web `localhost:3020`. Use the release UUID and review digest returned by **Record reviewed release** in the preceding staff browser run. Resolve that retained review and course, then use `persist_authorized_course_grant` to grant the exact release to a fresh synthetic independent learner with the existing eligibility and consent fixture. Use a stable synthetic source reference so repeating the grant request returns the same row. The grant and learner approvals were fixture setup. The first rehearsal account already had a completed diagnostic for the same blueprint and received the expected retake denial, so a fresh learner was used without changing the rule. The fresh learner also received a grant to the prior release as a revocation control.
+
+When releases on the same catalog page share a course name, **My learning** now displays each release reference. In 390 × 844 Chromium, the learner selected the staff receipt reference, opened its PDF-authored text lesson, completed the diagnostic and supported practice, and opened **Concept progress**. The live requests used the staff-recorded release throughout. The two starts returned 201 and the two answers returned 200. Replaying each start and answer with its original idempotency key succeeded. The diagnostic showed zero of one correct and practice showed completion with assisted evidence separated from independent mastery. No responses were intercepted and no uncaught page errors were observed.
+
+PostgreSQL verified the exact staff review, distinct author and reviewer, the release digest and retained PDF source UUID, digest and page, one exact grant, two completed attempts and one retained evidence row per attempt. The mastery watermark matched the last observation. A targeted PostgreSQL fixture update revoked only the staff-release grant. Its saved lesson, both summaries and its progress endpoint returned private no-store 404. Reloading preserved the separately granted earlier release and cleared the revoked release's progress view.
+
+TypeScript, scoped ESLint and Git whitespace checks passed. The focused mixed-format Chromium spec passed in 3.8 seconds and separately verifies selection by release reference using intercepted catalog responses. Provider-backed generation, full managed native assignments, dependent guardian disclosure and real business approvals remain outside this local rehearsal.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.

@@ -20,9 +20,10 @@ test('my learning lists mixed release formats and activates first use before ope
   const unsupportedUuid = `activity_${randomUUID()}`
   const base = `**/studytomy/orgs/${orgUuid}/learning`
   const release = { course_uuid: courseUuid, release_uuid: releaseUuid, name: 'Synthetic mixed release' }
+  const olderRelease = { ...release, release_uuid: randomUUID() }
   let activated = false
 
-  await page.route(`${base}/releases`, route => route.fulfill({ json: { releases: [release], next_cursor: null } }))
+  await page.route(`${base}/releases`, route => route.fulfill({ json: { releases: [olderRelease, release], next_cursor: null } }))
   await page.route(`${base}/courses/${courseUuid}/releases/${releaseUuid}/lessons`, route => route.fulfill({
     json: {
       requires_first_use: !activated,
@@ -47,7 +48,8 @@ test('my learning lists mixed release formats and activates first use before ope
   })
 
   await page.goto(new URL('/account/learning', BASE_URL).href, { waitUntil: 'domcontentloaded', timeout: 90_000 })
-  const course = page.getByRole('button', { name: release.name })
+  const course = page.getByRole('button', { name: `${release.name} Release ${releaseUuid}`, exact: true })
+  await expect(page.getByRole('button', { name: `${release.name} Release ${olderRelease.release_uuid}`, exact: true })).toBeVisible()
   await expect(course).toBeVisible({ timeout: 60_000 })
   await course.click()
 

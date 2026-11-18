@@ -257,8 +257,12 @@ function LearningView({
         {view.page.releases.length === 0 && <p>{view.history ? 'No access history is available.' : 'No reviewed courses are available.'}</p>}
         <ul className="space-y-2">
           {view.page.releases.map(release => <li key={release.release_uuid}>
-            <Button variant="outline" className="min-h-11 w-full justify-start whitespace-normal text-start"
-              onClick={() => act(() => view.history ? showAccess(release) : showLessons(release))}>{release.name}</Button>
+            <Button variant="outline" className="min-h-11 h-auto w-full flex-col items-start whitespace-normal text-start"
+              onClick={() => act(() => view.history ? showAccess(release) : showLessons(release))}>
+              <span>{release.name}</span>
+              {view.page.releases.some(other => other.release_uuid !== release.release_uuid && other.name === release.name) &&
+                <span className="max-w-full break-all text-xs text-muted-foreground">Release {release.release_uuid}</span>}
+            </Button>
           </li>)}
         </ul>
         {(view.after || view.page.next_cursor) && <div className="flex flex-wrap gap-2">
