@@ -29,6 +29,10 @@ from src.db.studytomy.governance import StudyBusinessEvent
 from src.db.trails import Trail
 from src.db.users import PublicUser, User
 from src.services.courses.activities import assignments
+from src.services.courses.certifications import (
+    get_all_user_certificates,
+    get_certificate_by_user_certification_uuid,
+)
 from src.services.studytomy import assignment_adapter, grading
 
 
@@ -1000,6 +1004,22 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                     assert retained_award.user_certification_uuid == award.user_certification_uuid
                     retained_template = await verify_db.get(Certifications, certificate.id)
                     assert retained_template.config == {"title": "Synthetic retained award"}
+                    own_awards = await get_all_user_certificates(
+                        mock_request, PublicUser.model_validate(learner), verify_db, org_id=org.id
+                    )
+                    assert [
+                        entry["certificate_user"].user_certification_uuid for entry in own_awards
+                    ] == [award.user_certification_uuid]
+                    outsider = PublicUser.model_validate(reviewer)
+                    assert await get_all_user_certificates(
+                        mock_request, outsider, verify_db, org_id=org.id
+                    ) == []
+                    with pytest.raises(HTTPException) as hidden:
+                        await get_certificate_by_user_certification_uuid(
+                            mock_request, award.user_certification_uuid, outsider, verify_db
+                        )
+                    assert hidden.value.status_code == 404
+                    assert hidden.value.headers == {"Cache-Control": "private, no-store"}
                 return
             assert (
                 await client.get(status_path, headers=learner_headers)
