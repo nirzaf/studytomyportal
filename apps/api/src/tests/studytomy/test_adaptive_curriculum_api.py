@@ -1387,6 +1387,9 @@ async def _characterize_managed_course_diagnostic_conflict(
     summary = await client.get(receipt["summary_ref"], headers=learner_headers)
     assert summary.status_code == 200, summary.text
     assert summary.json()["coverage_complete"] is True
+    other_summary = await client.get(receipt["summary_ref"], headers=author_headers)
+    assert other_summary.status_code == 404, other_summary.text
+    assert other_summary.headers["Cache-Control"] == "private, no-store"
     evidence = (
         await db.execute(
             select(StudyLearningEvidence).where(
@@ -2475,21 +2478,20 @@ async def _exercise_practice(
     assert native.submission_status.value == "PENDING" and native.attempt_number == 1
     assert (await client.get(tasks_path, headers=learner)).json() == exposed.json()
     assert (await db.execute(rounds)).scalar_one().id == round_row.id
-    saved_native = AssignmentTaskSubmission(
-        assignment_task_submission_uuid=f"tasksubmission_{uuid4()}",
-        task_submission={"answer": "19.25"},
-        task_submission_grade_feedback="",
-        assignment_type=native_task.assignment_type,
-        assignment_task_id=native_task.id,
-        user_id=native.user_id,
-        activity_id=native_task.activity_id,
-        course_id=native_task.course_id,
-        chapter_id=native_task.chapter_id,
-        creation_date="",
-        update_date="",
+    answer_path = f"{tasks_path}/{native_task.assignment_task_uuid}/submissions"
+    answer = {"task_submission": {"answer": "19.25"}}
+    forged = await client.put(answer_path, json=answer | {"grade": 99}, headers=learner)
+    assert forged.status_code == 403, forged.text
+    answer_query = select(AssignmentTaskSubmission).where(
+        AssignmentTaskSubmission.assignment_task_id == native_task.id,
+        AssignmentTaskSubmission.user_id == native.user_id,
     )
-    db.add(saved_native)
-    await db.commit()
+    assert (await db.execute(answer_query)).scalar_one_or_none() is None
+    saved = await client.put(answer_path, json=answer, headers=learner)
+    assert saved.status_code == 200, saved.text
+    saved_native = (await db.execute(answer_query)).scalar_one()
+    assert saved_native.task_submission == answer["task_submission"]
+    assert saved_native.grade == 0 and not saved_native.manually_graded
     source = f"/api/v1/assignments/{native_assignment.assignment_uuid}"
     protected_paths = (
         f"{source}/tasks/{native_task.assignment_task_uuid}",

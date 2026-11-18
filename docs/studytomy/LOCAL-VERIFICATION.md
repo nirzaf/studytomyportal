@@ -82,6 +82,23 @@ From `apps/api`, with the dedicated loopback test database configured, `.venv/bi
 
 **Live provider acceptance remains open.** For OpenAI or an OpenAI-compatible gateway, configure the API process with `LEARNHOUSE_IS_AI_ENABLED=true`, `LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED=true`, `LEARNHOUSE_AI_PROVIDER=openai` (or `openai-compatible`), and `LEARNHOUSE_AI_API_KEY` from the approved secret channel. Use `LEARNHOUSE_AI_BASE_URL` for a compatible gateway. Set `LEARNHOUSE_AI_MODEL_STANDARD` to the provider's chat model ID, and `LEARNHOUSE_AI_MODEL_PRO` if the organization resolves to the Pro planning tier. The chosen model must support the structured lesson and quiz output used by the Pydantic AI adapter. The preview path also enforces rate and credit limits. Without a tier override, model resolution falls back to the code's Gemini defaults. The Mac rehearsal made no generation call.
 
+## Mac learner assessment and mastery checkpoint (18 November 2026)
+
+At `51e42912cbccf54d362c546cc8bf455879511f91`, the isolated Mac demo stack ran web on `localhost:3018` and API on `localhost:1318`. The existing native quiz spec created a synthetic ordinary LearnHouse course and used a seeded answer key. With `E2E_BASE_URL=http://localhost:3018` and `E2E_API_URL=http://localhost:1318/api/v1`, run `bun run test features/assignments/tests/02-quiz.spec.ts --reporter=list` from `apps/e2e` with the local demo administrator credential supplied privately. **1 Chromium test passed in 11.1 seconds.** The student selected the answer, saved progress, handed it in and saw 100 in the UI. The live API and a direct PostgreSQL read agreed on 100 and `GRADED`. PostgreSQL confirmed automatic grading with no manual override. No AI generated the question or graded the answer.
+
+The signed adaptive regression now saves the learner answer through the native task-submission PUT in place of a seeded answer row. A forged grade returns 403 and writes no task submission. The valid answer returns 200 with an ungraded stored row. Hand-in and staff finalization exercise the server scoring and evidence journal. The native item with unknown independence increments only the unknown-evidence count. The managed diagnostic uses an exact reviewed release and stores a server-scored, mastery-eligible observation. A different signed actor cannot read its attempt summary and receives a private no-store 404. The PostgreSQL evidence suite exercises append-only integrity, correction lineage and projection watermarks.
+
+With the separate loopback test database configured, this command from `apps/api` returned **15 passed in 39.05 seconds**:
+
+```sh
+.venv/bin/python -m pytest -q -rs --tb=short \
+  src/tests/studytomy/test_adaptive_curriculum_api.py \
+  src/tests/studytomy/test_adaptive_evidence_postgres.py \
+  src/tests/studytomy/test_grading_postgres.py
+```
+
+Managed assessment and practice browser acceptance remains pending. The exact-release **My learning** viewer renders reviewed lesson content and offers completion where authorized. Its catalog excludes assignments and the lesson view does not mount the native adaptive panel. Learner access through the native draft course route is denied by design. A managed browser journey still needs a release-scoped practice/assessment entry point that preserves exact grant and review checks. The browser result above applies to the ordinary native quiz. The managed release, evidence and mastery results come from signed mounted API and PostgreSQL checks.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.
