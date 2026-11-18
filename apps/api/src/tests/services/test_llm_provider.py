@@ -6,6 +6,7 @@ attachment converter. No network calls: provider clients are constructed but nev
 
 import base64
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -18,6 +19,9 @@ from src.services.ai.llm import (
 )
 from src.services.ai.llm import provider as provider_mod
 from src.services.ai.llm import embeddings as embeddings_mod
+from src.services.ai.llm import tiers as tiers_mod
+from src.core import deployment_mode
+from src.services.orgs import org_config_lookup
 
 
 def _patch_ai_config(monkeypatch, **overrides):
@@ -149,6 +153,29 @@ def test_model_for_tier_defaults():
     assert model_for_tier("fast") == "gemini-3.1-flash-lite"
     assert model_for_tier("standard") == "gemini-3.5-flash"
     assert model_for_tier("pro") == "gemini-3.1-pro-preview"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "org_config", "planning_model"),
+    [
+        ("saas", {"config_version": "1.0", "cloud": {"plan": "free"}}, "synthetic-standard"),
+        ("saas", {"config_version": "2.0", "plan": "pro"}, "synthetic-pro"),
+        ("oss", {"config_version": "2.0", "plan": "free"}, "synthetic-pro"),
+    ],
+)
+async def test_planning_uses_configured_plan_tier(monkeypatch, mode, org_config, planning_model):
+    config = SimpleNamespace(model_standard="synthetic-standard", model_pro="synthetic-pro")
+    monkeypatch.setattr(tiers_mod, "get_learnhouse_config", lambda: SimpleNamespace(ai_config=config))
+    monkeypatch.setattr(deployment_mode, "get_deployment_mode", lambda: mode)
+    lookup = AsyncMock(return_value=SimpleNamespace(config=org_config))
+    monkeypatch.setattr(org_config_lookup, "get_session_org_config", lookup)
+    session = AsyncMock()
+
+    assert await tiers_mod.resolve_model_for_org(42, session, purpose="planning") == planning_model
+    assert await tiers_mod.resolve_model_for_org(42, session, purpose="chat") == "synthetic-standard"
+    assert lookup.await_count == 2
+    lookup.assert_awaited_with(session, 42)
 
 
 # --- Provider-agnostic embeddings ---------------------------------------------------------
