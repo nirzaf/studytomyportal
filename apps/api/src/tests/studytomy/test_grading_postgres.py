@@ -428,6 +428,14 @@ async def test_issued_round_retains_exact_started_release(
             assert await status_for() == expected
             assert (await delivery_for())[0] == (status == "result_confirmed")
         review_args = (*issue_args, UUID(award.award_uuid))
+        current_rights = SimpleNamespace(id=policies[3].id + 1_000_000, body=policies[3].body)
+        monkeypatch.setattr(awards, "_current_policies", AsyncMock(return_value=(policies[2], current_rights)))
+        monkeypatch.setattr(releases, "load_release_policy_binding", AsyncMock(return_value=SimpleNamespace(
+            model_dump=lambda **_: {"versions": {"D-16": {"policy_id": current_rights.id}}},
+        )))
+        with pytest.raises(HTTPException) as superseded_issue:
+            await awards.issue_managed_certificate(*issue_args, command)
+        assert superseded_issue.value.status_code == 404
         with pytest.raises(HTTPException) as unverified:
             await awards.review_managed_certificate_change(
                 *review_args, awards.ManagedCertificateChange(corrected_result_uuid=UUID(result.event_uuid)),
@@ -458,6 +466,10 @@ async def test_issued_round_retains_exact_started_release(
             change = await awards.review_managed_certificate_change(*review_args, change_command)
             assert (change.award_uuid, change.status, change.version) == (award.award_uuid, status, version)
             assert await awards.review_managed_certificate_change(*review_args, change_command) == change
+            review_event = await db.scalar(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.event_uuid == change.review_uuid,
+            ))
+            assert review_event.policy_refs == sorted({policies[2].id, policies[3].id, current_rights.id})
             previous_result = revision
         assert await status_for() == "assessment_pass_required"
 

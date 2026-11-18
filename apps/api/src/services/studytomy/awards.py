@@ -18,6 +18,7 @@ from src.services.studytomy.business_events import append_business_event
 from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.grading_contract import retained_grading_contract_digest
 from src.services.studytomy.idempotency import canonical_request_hash
+from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
 from src.services.studytomy.prerequisites import ResourceUUID, course_completion_text_activities, retained_release_pass
 from src.services.studytomy.record_requests import _self_profile
@@ -44,6 +45,28 @@ def _certificate_conditions(body: StudyPolicyBody, course_uuid: str) -> ManagedC
     if not isinstance(presentation, dict) or "managed_certificates_by_course" not in presentation:
         return None
     return _COURSE_CERTIFICATES.validate_python(presentation["managed_certificates_by_course"]).get(course_uuid)
+
+
+def _retained_certificate_conditions(
+    release: StudyCourseRelease, rights: StudyPolicyVersion | None,
+) -> ManagedCertificateConditions | None:
+    if rights is None or rights.org_id != release.org_id or rights.policy_key != StudyPolicyKey.D_16.value:
+        return None
+    versions = (release.policy_binding or {}).get("versions")
+    pinned = versions.get(StudyPolicyKey.D_16.value) if isinstance(versions, dict) else None
+    if (
+        not isinstance(pinned, dict)
+        or pinned.get("policy_id") != rights.id
+        or pinned.get("body_sha256") != canonical_request_hash(rights.body)
+    ):
+        return None
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_16, rights.body)
+    if body is None or any(blockers.values()):
+        return None
+    try:
+        return _certificate_conditions(body, release.course_uuid)
+    except ValueError:
+        return None
 
 
 def validate_release_certificate_conditions(
@@ -111,6 +134,8 @@ async def preview_managed_certificate_eligibility(
 async def _authorized_certificate_evidence(
     db: AsyncSession, org: Organization, reviewer: PublicUser,
     course_uuid: str, release_uuid: str, learner_uuid: str,
+    *,
+    reviewing_existing_award: bool = False,
 ) -> tuple[ManagedCertificateEligibility, list[int], ManagedCertificateConditions]:
     from src.services.studytomy.releases import load_release_policy_binding
 
@@ -141,16 +166,30 @@ async def _authorized_certificate_evidence(
     )
     if release is None or canonical_request_hash(release.snapshot) != release.snapshot_sha256:
         raise unavailable
-    binding = await load_release_policy_binding(db, org, now, candidate_snapshot=release.snapshot)
-    if release.policy_binding != binding.model_dump(mode="json"):
-        raise unavailable
     rights = await db.get(StudyPolicyVersion, release.rights_policy_id)
-    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_16, rights.body if rights else None)
-    if body is None or any(blockers.values()) or binding.versions[StudyPolicyKey.D_16].policy_id != rights.id:
-        raise unavailable
-    conditions = _certificate_conditions(body, course_uuid)
+    conditions = _retained_certificate_conditions(release, rights)
     if conditions is None:
         raise unavailable
+    if reviewing_existing_award:
+        retention, current_rights = await _current_policies(
+            db, org, (StudyPolicyKey.D_13, StudyPolicyKey.D_16), now,
+        )
+        current_body, blockers = inspect_study_policy_body(StudyPolicyKey.D_16, current_rights.body)
+        try:
+            current_conditions = _certificate_conditions(current_body, course_uuid) if current_body else None
+        except ValueError:
+            raise unavailable from None
+        if (
+            any(blockers.values()) or current_conditions is None
+            or current_conditions.changes != "reviewed_assessment_corrections"
+        ):
+            raise unavailable
+        policy_refs = sorted({retention.id, current_rights.id, rights.id})
+    else:
+        binding = await load_release_policy_binding(db, org, now, candidate_snapshot=release.snapshot)
+        if release.policy_binding != binding.model_dump(mode="json"):
+            raise unavailable
+        policy_refs = sorted(version.policy_id for version in binding.versions.values())
 
     completion = await db.scalar(select(StudyBusinessEvent).where(
         StudyBusinessEvent.org_id == org.id,
@@ -184,7 +223,7 @@ async def _authorized_certificate_evidence(
         completion_event_uuid=completion_uuid, assessment_result_uuids=results, missing_assessment_uuids=missing,
         issuance_enabled=conditions.issuance == "reviewed", evidence_sha256=evidence_sha256,
     )
-    return preview, sorted(version.policy_id for version in binding.versions.values()), conditions
+    return preview, policy_refs, conditions
 
 
 class ManagedCertificateIssue(BaseModel):
@@ -273,7 +312,7 @@ async def review_managed_certificate_change(
     from src.services.studytomy.grading import APPEAL_CORRECTION_REASON, RESULT_RECORDED_ACTION
 
     evidence, policy_refs, conditions = await _authorized_certificate_evidence(
-        db, org, reviewer, course_uuid, release_uuid, learner_uuid,
+        db, org, reviewer, course_uuid, release_uuid, learner_uuid, reviewing_existing_award=True,
     )
     unavailable = studytomy_http_error(404, "MANAGED_CERTIFICATE_UNAVAILABLE", "Certificate review unavailable.")
     if conditions.changes != "reviewed_assessment_corrections":
@@ -407,22 +446,9 @@ async def verify_my_managed_certificate(
     award, release, rights = row
     if canonical_request_hash(release.snapshot) != release.snapshot_sha256:
         raise unavailable
-    versions = (release.policy_binding or {}).get("versions")
-    pinned_rights = versions.get(StudyPolicyKey.D_16.value) if isinstance(versions, dict) else None
-    if (
-        not isinstance(pinned_rights, dict)
-        or pinned_rights.get("policy_id") != rights.id
-        or pinned_rights.get("body_sha256") != canonical_request_hash(rights.body)
-        or rights.id not in (award.policy_refs or [])
-    ):
+    if rights.id not in (award.policy_refs or []):
         raise unavailable
-    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_16, rights.body)
-    if body is None or any(blockers.values()):
-        raise unavailable
-    try:
-        conditions = _certificate_conditions(body, release.course_uuid)
-    except ValueError:
-        raise unavailable from None
+    conditions = _retained_certificate_conditions(release, rights)
     course = release.snapshot.get("course")
     course_name = course.get("name") if isinstance(course, dict) else None
     if conditions is None or conditions.issuance != "reviewed" or not isinstance(course_name, str) or not course_name.strip():
