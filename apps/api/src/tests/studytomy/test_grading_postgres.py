@@ -31,7 +31,7 @@ from src.db.organizations import Organization
 from src.db.studytomy.access import StudyCourseAccessGrant
 from src.db.studytomy.education import StudyCourseRelease
 from src.db.studytomy.family import StudyLearnerProfile
-from src.db.studytomy.governance import StudyBusinessEvent, StudyPolicyKey
+from src.db.studytomy.governance import StudyBusinessEvent, StudyPolicyKey, StudyPolicyVersion
 from src.db.trails import Trail
 from src.db.users import PublicUser, User
 from src.security.session_context import SessionProvenance, set_session_provenance
@@ -836,6 +836,14 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             direct = headers("password")
+            workspace_path = f"/orgs/{org.org_uuid}/courses/{course.course_uuid}/award-workspace"
+            workspace = await client.get(workspace_path, headers=direct)
+            assert workspace.status_code == 200 and workspace.json() == {"available": True}
+            assert "no-store" in workspace.headers["cache-control"]
+            assert (await client.get(workspace_path, headers=headers("api_token"))).status_code == 403
+            unassigned_workspace = await client.get(workspace_path, headers=headers("password", learner))
+            assert unassigned_workspace.status_code == 403
+            assert unassigned_workspace.json()["detail"]["code"] == "OWNER_ASSIGNMENT_REQUIRED"
             assert (
                 await client.get(path, headers=headers("api_token"))
             ).status_code == 403
@@ -887,6 +895,93 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                     )
                 await db.commit()
             assert (await client.get(path, headers=direct)).status_code == 404
+
+            if not correct_score:
+                text_uuid = f"activity_{uuid4()}"
+                award_decisions = {
+                    StudyPolicyKey.D_09: {
+                        "release_schedule": {"ungated_text_activities": {course.course_uuid: [text_uuid]}},
+                        "completion_prerequisites": {
+                            "course_completion_text_activities": {course.course_uuid: [text_uuid]},
+                        },
+                    },
+                    StudyPolicyKey.D_13: {"retention": {"course_release_retention_category": "synthetic"}},
+                    StudyPolicyKey.D_16: {
+                        "certificate_presentation": {"managed_certificates_by_course": {course.course_uuid: {
+                            "award_name": "Synthetic reviewed award", "issuer_name": "Synthetic issuer",
+                            "verification": "private", "issuance": "reviewed",
+                        }}},
+                    },
+                }
+                for key, specified in award_decisions.items():
+                    policy = await _seed_approved_policy(db, org, reviewer.id, key, specified=specified)
+                    for responsibility in POLICY_REQUIRED_RESPONSIBILITIES[key]:
+                        if responsibility not in owners:
+                            owners[responsibility] = await _seed_active_owner(
+                                db, org, reviewer.id, reviewer.id, responsibility,
+                            )
+                        db.add(StudyPolicyApproval(
+                            org_id=org.id, policy_version_id=policy.id, responsibility=responsibility.value,
+                            owner_assignment_id=owners[responsibility].id, approver_user_id=reviewer.id,
+                            evidence_reference="synthetic-certificate-policy",
+                            rationale="Synthetic certificate fixture", approved_at=datetime.now(UTC),
+                        ))
+                    await db.commit()
+                retained = {
+                    "course": {"id": course.id, "org_id": org.id, "course_uuid": course.course_uuid, "name": course.name},
+                    "activities": [{"activity_uuid": text_uuid, "published": True,
+                                    "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE"}],
+                }
+                binding = await releases.load_release_policy_binding(
+                    db, org, datetime.now(UTC), candidate_snapshot=retained,
+                )
+                policy_keys = (StudyPolicyKey.D_08, StudyPolicyKey.D_09, StudyPolicyKey.D_13, StudyPolicyKey.D_16)
+                bound_policies = [await db.get(StudyPolicyVersion, binding.versions[key].policy_id) for key in policy_keys]
+                review, snapshot, _ = await _seed_postgres_release_sources(
+                    db, org, reviewer.id, uuid4().hex, snapshot=retained, course_uuid=course.course_uuid,
+                    policy_versions=bound_policies,
+                )
+                certificate_release = StudyCourseRelease(
+                    org_id=org.id, course_uuid=course.course_uuid, review_id=review.id,
+                    snapshot_sha256=review.revision_sha256, snapshot=snapshot, media_manifest={},
+                    assessment_policy_id=bound_policies[0].id, progression_policy_id=bound_policies[1].id,
+                    retention_policy_id=bound_policies[2].id, rights_policy_id=bound_policies[3].id,
+                    retention_category="synthetic", policy_binding=binding.model_dump(mode="json"),
+                )
+                db.add(certificate_release)
+                unassigned_profile = StudyLearnerProfile(
+                    org_id=org.id, user_id=review.owner_user_id, created_by_user_id=reviewer.id,
+                )
+                db.add(unassigned_profile)
+                await db.flush()
+                award_path = (
+                    f"/orgs/{org.org_uuid}/courses/{course.course_uuid}/releases/{certificate_release.uuid}"
+                    f"/learners/{profile.learner_uuid}"
+                )
+                preview = await client.get(f"{award_path}/award-eligibility", headers=direct)
+                assert preview.status_code == 200, preview.text
+                assert preview.json()["eligible"] is False
+                unassigned_path = award_path.replace(profile.learner_uuid, unassigned_profile.learner_uuid)
+                denied = await client.get(f"{unassigned_path}/award-eligibility", headers=direct)
+                assert denied.status_code == 404
+                assert denied.json()["detail"]["code"] == "RESOURCE_NOT_FOUND"
+                await append_business_event(
+                    db, org_id=org.id, actor_user_id=learner.id, actor_capacity="learner",
+                    action="studytomy.course.completion_recorded", reason_code="RELEASE_REQUIREMENTS_COMPLETED",
+                    resource_kind="course_release", resource_uuid=certificate_release.uuid,
+                    policy_refs=[certificate_release.progression_policy_id],
+                    after_state={"source_snapshot_digest": certificate_release.snapshot_sha256},
+                    dedupe_key=f"studytomy:completion:{org.id}:{profile.id}:{certificate_release.uuid}",
+                )
+                await db.commit()
+                preview = await client.get(f"{award_path}/award-eligibility", headers=direct)
+                assert preview.status_code == 200 and preview.json()["eligible"] is True
+                assert preview.json()["award_name"] == "Synthetic reviewed award"
+                command = {"evidence_sha256": preview.json()["evidence_sha256"]}
+                issuance = await client.post(f"{award_path}/awards", headers=direct, json=command)
+                assert issuance.status_code == 200, issuance.text
+                replay = await client.post(f"{award_path}/awards", headers=direct, json=command)
+                assert replay.status_code == 200 and replay.json() == issuance.json()
 
             assignment = await db.get(Assignment, assignment.id)
             assignment.due_date = "2000-01-01"
