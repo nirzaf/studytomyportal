@@ -687,34 +687,22 @@ def _validate_media_delivery_policy(
     media_type: str,
     size_bytes: int,
 ) -> None:
-    body, blockers = inspect_study_policy_body(policy.policy_key, policy.body)
-    formats = body.specified_value("supported_formats") if body else None
-    max_bytes = formats.get("max_bytes") if isinstance(formats, dict) else None
-    media_types = formats.get("media_types") if isinstance(formats, dict) else None
-    if (
-        any(blockers.values())
-        or type(max_bytes) is not int
-        or not 1 <= max_bytes <= _MAX_RELEASE_MEDIA_BYTES
-        or not isinstance(media_types, list)
-        or any(not isinstance(value, str) for value in media_types)
-    ):
+    available, reason = _managed_media_availability(policy, media_type, size_bytes)
+    if available:
+        return
+    if reason == "accessibility_policy_incomplete":
         raise studytomy_http_error(
             409,
             "POLICY_NOT_APPROVED",
             "The approved accessibility policy must define supported media formats and a size limit.",
         )
-    if media_type not in media_types or size_bytes > max_bytes:
-        raise studytomy_http_error(
-            409,
-            "RELEASE_MEDIA_UNSUPPORTED",
-            "The approved accessibility policy does not authorize this resource format or size.",
-        )
-    if media_type.startswith("video/"):
-        raise studytomy_http_error(
-            409,
-            "RELEASE_MEDIA_UNSUPPORTED",
-            "The release does not retain captions or an approved accessible alternative.",
-        )
+    raise studytomy_http_error(
+        409,
+        "RELEASE_MEDIA_UNSUPPORTED",
+        "The release does not retain captions or an approved accessible alternative."
+        if reason == "captions_or_text_alternative_not_retained"
+        else "The approved accessibility policy does not authorize this resource format or size.",
+    )
 
 
 async def _stage_release_media(org_uuid: str, media: dict) -> BinaryIO:
@@ -927,7 +915,7 @@ async def _retain_allocation_delivery(
             )
 
 
-def _managed_media_index_availability(
+def _managed_media_availability(
     policy: StudyPolicyVersion | None,
     media_type: str,
     size_bytes: int,
@@ -1111,7 +1099,7 @@ async def list_managed_text_lessons(
             ))
             continue
         media_format = "pdf" if media_type == "application/pdf" else "video"
-        available, unavailable_reason = _managed_media_index_availability(
+        available, unavailable_reason = _managed_media_availability(
             media_policy, media_type, media["size_bytes"]
         )
         lessons.append(ManagedLessonSummary(
