@@ -183,6 +183,10 @@ This establishes cache-backed recovery for a collaboration-process failure with 
 
 The subsequent pending-snapshot change passed the same abrupt restart rehearsal on disposable Redis, FastAPI and PostgreSQL. After the original process was killed before acknowledgement, an authorized reconnect requeued the pending snapshot without another edit. PostgreSQL returned the exact restored Yjs text through the board API, and acknowledgement cleared the pending key. The marker has the existing one-hour cache lifetime. Replay requires a board load before expiration and surviving Redis state.
 
+### Board load with both storage paths unavailable
+
+At `0acae70484055d1a7df0feaa8425280b92e43305`, the loopback process rehearsal passed an AUD-07 dual outage. An authorized client first used an empty synthetic board, edited it and obtained PostgreSQL acknowledgement. With the test cache key removed, the next collaboration process targeted a closed local Redis port, and the fault proxy returned HTTP 503 for the board storage GET. The client remained unsynchronized and the process sent no board write. The final process used normal Docker Redis connectivity and the mounted FastAPI storage route. It reloaded the exact saved Yjs text from disposable PostgreSQL. All three processes used the real collaboration entry point and FastAPI membership route. The fault injection left the Docker services running and affected only the synthetic board.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
