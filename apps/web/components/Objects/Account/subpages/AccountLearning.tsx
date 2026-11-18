@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { Button } from '@components/ui/button'
 import AssessmentIntegrityCases from '@components/Studytomy/AssessmentIntegrityCases'
+import AdaptiveAttemptPanel from '@components/Objects/Activities/AdaptiveAttemptPanel'
 import DocumentPdfActivity from '@components/Objects/Activities/DocumentPdf/DocumentPdf'
 import LearnHousePlayer from '@components/Objects/Activities/Video/LearnHousePlayer'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
@@ -93,6 +94,11 @@ function LearningView({
 }) {
   const { i18n } = useTranslation()
   const [view, setView] = useState<View>({ kind: 'loading' })
+  const lessonCourse = view.kind === 'lesson' ? view.release.course_uuid : undefined
+  const lessonRelease = view.kind === 'lesson' ? view.release.release_uuid : undefined
+  const adaptiveRelease = useMemo(() => lessonCourse && lessonRelease
+    ? { course_uuid: lessonCourse, course_release_uuid: lessonRelease }
+    : undefined, [lessonCourse, lessonRelease])
   const pending = useRef<AbortController | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const moveFocus = useRef(false)
@@ -366,6 +372,7 @@ function LearningView({
         <article className="max-w-prose space-y-4 whitespace-pre-wrap break-words leading-relaxed">
           {view.lesson.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
         </article>
+        {adaptiveRelease && <AdaptiveAttemptPanel orgUuid={orgUuid} activityUuid={view.lesson.activity_uuid} release={adaptiveRelease} />}
         {view.lesson.completion && (
           view.lesson.completion.activity_completed
             ? <p role="status">{view.lesson.completion.course_completed ? 'Course completed.' : 'Lesson completed.'}</p>

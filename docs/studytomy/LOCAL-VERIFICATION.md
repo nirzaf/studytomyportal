@@ -99,6 +99,18 @@ With the separate loopback test database configured, this command from `apps/api
 
 Managed assessment and practice browser acceptance remains pending. The exact-release **My learning** viewer renders reviewed lesson content and offers completion where authorized. Its catalog excludes assignments and the lesson view does not mount the native adaptive panel. Learner access through the native draft course route is denied by design. A managed browser journey still needs a release-scoped practice/assessment entry point that preserves exact grant and review checks. The browser result above applies to the ordinary native quiz. The managed release, evidence and mastery results come from signed mounted API and PostgreSQL checks.
 
+### Managed release diagnostic browser follow-up
+
+The managed text lesson now mounts the existing adaptive attempt panel. Options use the exact course and release, recovery uses the release, and starts send the fields accepted by the diagnostic or supported-practice contract. Diagnostic options return an empty list when the supplied course and release do not match. The managed view does not link to native draft pages or render native assignments.
+
+At the working tree based on `1ad9825067ec46cdab3486ad763e0ae6f1f2de9f`, a separate loopback API on `localhost:1320` and Next.js on `localhost:3020` used a disposable PostgreSQL snapshot of the existing signed synthetic diagnostic fixture. Fixture preparation added an ordered chapter before retaining the release so the lesson could appear in the release index. The first fixture omitted that ordering, and the index correctly returned no lessons. The web server was restarted after switching the API to the corrected fixture database to clear the prior tenant state. No provider was configured.
+
+At 390 × 844, Chromium signed in, opened **My learning**, entered the released text lesson and started the mapped diagnostic. The real start returned 201. Reloading and reopening the lesson recovered the same question, and a browser answer submission returned 200. The summary showed zero of one scored responses correct. The question payload exposed no answer key. PostgreSQL confirmed the exact course, release and activity binding, a completed attempt, a mastery-eligible incorrect observation and the matching mastery watermark.
+
+Signed requests returned no options for a wrong course, wrong release or different account. A start against a wrong release returned 404. The other account could not read the learner's summary or open the released course. Revocation was a targeted fixture update in PostgreSQL. After it, the learner's summary returned 404 and options were empty. Reload showed no reviewed courses, while PostgreSQL retained the attempt and evidence. Screenshots captured the completed diagnostic and the empty catalog after revocation. Native managed assignment rendering and a live managed supported-practice browser attempt remain pending. The browser fixture used reviewed synthetic diagnostic items and did not supply a text lesson mapped for supported practice.
+
+The focused signed adaptive curriculum and PostgreSQL evidence suite passed **7 tests in 27.88 seconds**, including the wrong-course option regression. Web TypeScript and three existing adaptive UI tests passed. Scoped ESLint reported no errors and eight existing warnings. Ruff and Git whitespace checks passed.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.

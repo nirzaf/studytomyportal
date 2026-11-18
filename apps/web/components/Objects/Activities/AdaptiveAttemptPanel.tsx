@@ -10,7 +10,7 @@ import { Input } from '@components/ui/input'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
 import {
   AdaptiveRequestError, adaptiveRequest, getCurrentAdaptiveAttempt,
-  type AdaptiveAttempt, type AttemptPurpose,
+  type AdaptiveAttempt, type AdaptiveReleaseScope, type AttemptPurpose,
 } from '@services/studytomy/adaptive'
 
 const purposes = ['diagnostic', 'practice'] as const
@@ -20,33 +20,39 @@ type Submission = { key: string } & ({ answer: Answer } | { end: true })
 type Receipt = { version: number; status: AdaptiveAttempt['status']; next_item: AdaptiveAttempt['current_item'] }
 type Summary = { coverage_complete: boolean; correct_count: number | null; scored_count: number | null }
 
-export default function AdaptiveAttemptPanel({ orgUuid, orgSlug, activityUuid }: { orgUuid?: string; orgSlug: string; activityUuid: string }) {
+export default function AdaptiveAttemptPanel({ orgUuid, orgSlug, activityUuid, release }: {
+  orgUuid?: string; orgSlug?: string; activityUuid: string; release?: AdaptiveReleaseScope
+}) {
   const session = useLHSession()
   const token = session?.data?.tokens?.access_token
   if (session?.status !== 'authenticated' || !token || !orgUuid || !activityUuid) return null
   const user = session.data?.user
   const identity = getAuthenticatedSessionIdentity(user?.id ?? user?.user_uuid, session.data)
   const tutorScope = JSON.stringify([identity, orgUuid, activityUuid])
-  return <RecoveredAttempts key={JSON.stringify([tutorScope, orgSlug])} {...{ orgUuid, orgSlug, activityUuid, token, tutorScope }} />
+  return <RecoveredAttempts key={JSON.stringify([tutorScope, orgSlug, release?.course_uuid, release?.course_release_uuid])}
+    {...{ orgUuid, orgSlug, activityUuid, token, tutorScope, release }} />
 }
 
-function RecoveredAttempts({ orgUuid, orgSlug, activityUuid, token, tutorScope }: { orgUuid: string; orgSlug: string; activityUuid: string; token: string; tutorScope: string }) {
+function RecoveredAttempts({ orgUuid, orgSlug, activityUuid, token, tutorScope, release }: {
+  orgUuid: string; orgSlug?: string; activityUuid: string; token: string; tutorScope: string; release?: AdaptiveReleaseScope
+}) {
   const client = useMemo(() => adaptiveRequest(orgUuid, token), [orgUuid, token])
   const [options, setOptions] = useState<StartOption[]>([])
   useEffect(() => {
     const controller = new AbortController()
-    const params = new URLSearchParams({ source_activity_uuid: activityUuid })
+    const params = new URLSearchParams({ source_activity_uuid: activityUuid, ...release })
     client<StartOption[]>(`me/attempts/options?${params}`, 'GET', undefined, undefined, controller.signal)
       .then(value => { if (!controller.signal.aborted) setOptions(value) })
       .catch(() => { if (!controller.signal.aborted) setOptions([]) })
     return () => controller.abort()
-  }, [client, activityUuid])
-  return <><AdaptiveLessonProgress {...{ client, activityUuid, orgSlug }} />{purposes.map(purpose => <RecoveredAttempt key={purpose}
-    options={options.filter(option => option.purpose === purpose)} {...{ client, activityUuid, purpose, tutorScope }} />)}</>
+  }, [client, activityUuid, release])
+  return <>{!release && orgSlug && <AdaptiveLessonProgress {...{ client, activityUuid, orgSlug }} />}{purposes.map(purpose => <RecoveredAttempt key={purpose}
+    options={options.filter(option => option.purpose === purpose)} {...{ client, activityUuid, purpose, tutorScope, release }} />)}</>
 }
 
-function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope }: {
+function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope, release }: {
   client: ReturnType<typeof adaptiveRequest>; activityUuid: string; purpose: AttemptPurpose; options: StartOption[]; tutorScope: string
+  release?: AdaptiveReleaseScope
 }) {
   const { t } = useTranslation()
   const { mutate } = useSWRConfig()
@@ -84,13 +90,13 @@ function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope }
     setSummary(undefined)
     setError('')
     setNotice('')
-    getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal).then(current => {
+    getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal, release?.course_release_uuid).then(current => {
       if (!lifetime.signal.aborted) { setAttempt(current); setRecovered(true) }
     }).catch(() => {
       if (!lifetime.signal.aborted) setAttempt(null)
     })
     return () => { lifetime.abort(); requests.current = null; sending.current = false }
-  }, [client, activityUuid, purpose])
+  }, [client, activityUuid, purpose, release])
   useEffect(() => { if (error) alert.current?.focus() }, [error])
 
   async function start(uuid: string) {
@@ -102,7 +108,8 @@ function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope }
     setError('')
     try {
       const fields = purpose === 'diagnostic'
-        ? { diagnostic_revision_uuid: uuid } : { concept_uuid: uuid, mode: 'supported' }
+        ? { diagnostic_revision_uuid: uuid, course_release_uuid: release?.course_release_uuid }
+        : { concept_uuid: uuid, mode: 'supported', ...release }
       const current = await client<AdaptiveAttempt>(`me/${purpose}-attempts`, 'POST', {
         source_activity_uuid: activityUuid, ...fields,
       }, key, lifetime.signal)
@@ -114,7 +121,7 @@ function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope }
       if (lifetime.signal.aborted) return
       if (reason instanceof AdaptiveRequestError && [401, 403, 404, 409, 422].includes(reason.status)) {
         setUnconfirmedStart(null)
-        const current = await getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal).catch(() => null)
+        const current = await getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal, release?.course_release_uuid).catch(() => null)
         if (lifetime.signal.aborted) return
         setAttempt(current)
         if (!current) setError(reason.message)
@@ -156,7 +163,7 @@ function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope }
       }, operation.key, lifetime.signal)
       if (lifetime.signal.aborted) return
       if (receipt.status === 'active' && !receipt.next_item) {
-        const current = await getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal).catch(() => null)
+        const current = await getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal, release?.course_release_uuid).catch(() => null)
         if (lifetime.signal.aborted) return
         setAttempt(current)
       } else {
@@ -178,7 +185,7 @@ function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope }
         setAnswer('')
         setRetry(null)
         setConfirmEnd(false)
-        const current = await getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal).catch(() => null)
+        const current = await getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal, release?.course_release_uuid).catch(() => null)
         if (!lifetime.signal.aborted) setAttempt(current)
       } else if (!(reason instanceof AdaptiveRequestError) || reason.status >= 500 || reason.status === 429) {
         setRetry(operation)

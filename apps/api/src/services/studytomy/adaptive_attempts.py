@@ -781,7 +781,7 @@ async def lesson_attempt_options(
         for uuid, name in candidates:
             try:
                 if purpose == "diagnostic":
-                    await require_diagnostic_access(
+                    access = await require_diagnostic_access(
                         request,
                         db,
                         org,
@@ -793,6 +793,8 @@ async def lesson_attempt_options(
                         validate_pool=True,
                         course_release_uuid=course_release_uuid,
                     )
+                    if course_uuid is not None and access.curriculum.owner_course_uuid != course_uuid:
+                        continue
                 else:
                     await require_practice_access(
                         request,

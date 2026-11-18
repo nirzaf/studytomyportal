@@ -51,6 +51,7 @@ export type Question = {
 }
 
 export type AttemptPurpose = 'diagnostic' | 'practice'
+export type AdaptiveReleaseScope = { course_uuid: string; course_release_uuid: string }
 export type IssuedQuestion = {
   uuid: string
   ordinal: number
@@ -68,9 +69,10 @@ export type AdaptiveAttempt = {
 }
 
 export function getCurrentAdaptiveAttempt(
-  request: AdaptiveRequest, activityUuid: string, purpose: AttemptPurpose, signal?: AbortSignal,
+  request: AdaptiveRequest, activityUuid: string, purpose: AttemptPurpose, signal?: AbortSignal, releaseUuid?: string,
 ): Promise<AdaptiveAttempt | null> {
   const params = new URLSearchParams({ source_activity_uuid: activityUuid, purpose })
+  if (releaseUuid) params.set('course_release_uuid', releaseUuid)
   return request<AdaptiveAttempt | null>(`me/attempts/current?${params}`, 'GET', undefined, undefined, signal)
 }
 

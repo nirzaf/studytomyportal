@@ -1294,6 +1294,13 @@ async def _characterize_managed_course_diagnostic_conflict(
         row["purpose"] == "diagnostic" and row["uuid"] == managed_diagnostic.uuid
         for row in attempt_options.json()
     ), attempt_options.json()
+    wrong_course_options = await client.get(
+        f"{base}/me/attempts/options",
+        params={"source_activity_uuid": lesson.activity_uuid, **managed_scope, "course_uuid": f"course_{uuid4()}"},
+        headers=learner_headers,
+    )
+    assert wrong_course_options.status_code == 200, wrong_course_options.text
+    assert wrong_course_options.json() == []
     for partial_scope in (
         {"course_uuid": course.course_uuid},
         {"course_release_uuid": release.uuid},
