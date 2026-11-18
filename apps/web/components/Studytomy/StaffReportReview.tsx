@@ -22,6 +22,7 @@ type ReportReview = {
     evidence_watermark: number
     summary: {
       native_completions: number
+      reviewed_release_completions?: number
       concepts: {
         concept_uuid: string; title: string; independent_correct: number; independent_incorrect: number
         supported_practice: number; unknown: number; pending: number; missing_independent_evidence: boolean
@@ -233,6 +234,9 @@ function ReportEvidence({ summary }: { summary: ReportSummary }) {
   const { t } = useTranslation()
   return <>
       <p>{t('adaptive.staffReport.completion', 'Completed activities updated in this period: {{count}}', { count: summary.native_completions })}</p>
+      {summary.reviewed_release_completions != null && (
+        <p>Reviewed course releases completed in this period: {summary.reviewed_release_completions}</p>
+      )}
       <ul className="grid gap-2">
         {summary.concepts.map(concept => <li key={concept.concept_uuid} className="rounded-md bg-muted p-3">
           <bdi className="font-medium">{concept.title}</bdi>

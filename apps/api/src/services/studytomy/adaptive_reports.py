@@ -47,6 +47,7 @@ from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import _as_utc, lock_organization
+from src.services.studytomy.record_delivery import reviewed_completion_evidence_in_period
 from src.services.studytomy.sharing import current_independent_sharing_grant
 
 
@@ -74,6 +75,7 @@ class ConceptObservation(BaseModel):
 
 class ReportSummary(BaseModel):
     native_completions: int
+    reviewed_release_completions: int | None = Field(default=None, exclude_if=lambda value: value is None)
     completion_basis: Literal["current_completion_last_updated_in_period"] = (
         "current_completion_last_updated_in_period"
     )
@@ -251,13 +253,18 @@ async def _snapshot(
             completion.append(
                 {"id": step_id, "activity_id": activity_id, "updated": updated}
             )
+    release_completions = await reviewed_completion_evidence_in_period(
+        db, org_id, profile.user_id, course_uuid, start, end,
+    )
     return ReportSummary(
         native_completions=len({row["activity_id"] for row in completion}),
+        reviewed_release_completions=len({row["release_uuid"] for row in release_completions}) or None,
         concepts=list(counts.values()),
     ), {
         "evidence": refs,
         "pending_items": [uuid for uuid, _ in pending],
         "native_completion": completion,
+        **({"reviewed_release_completion": release_completions} if release_completions else {}),
     }
 
 

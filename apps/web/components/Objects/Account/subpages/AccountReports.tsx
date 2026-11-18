@@ -34,7 +34,7 @@ type Report = ReportMetadata & {
   can_request_review: boolean
   evidence_cutoff: string
   commentary: string | null
-  summary: { native_completions: number; concepts: Observation[] }
+  summary: { native_completions: number; reviewed_release_completions?: number; concepts: Observation[] }
 }
 
 type Page = { items: ReportMetadata[]; next_cursor: string | null }
@@ -173,6 +173,9 @@ function ReportsView({ orgUuid, orgSlug, selected, token }: {
       <p>{t('account.report_completion', 'Completed activities updated in this period: {{count}}', {
         count: load.report.summary.native_completions,
       })}</p>
+      {load.report.summary.reviewed_release_completions != null && (
+        <p>Reviewed course releases completed in this period: {load.report.summary.reviewed_release_completions}</p>
+      )}
       <section className="space-y-3" aria-label={t('account.report_evidence', 'Learning evidence')}>
         <h3 className="font-semibold">{t('account.report_evidence', 'Learning evidence')}</h3>
         {load.report.summary.concepts.map(concept => <div key={concept.concept_uuid} className="space-y-1 border-t pt-3">

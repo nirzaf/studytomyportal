@@ -155,6 +155,23 @@ async def has_reviewed_completion_before_window(
     )
 
 
+async def reviewed_completion_evidence_in_period(
+    db: AsyncSession, org_id: int, learner_user_id: int, course_uuid: str, start: datetime, end: datetime,
+) -> list[dict[str, str]]:
+    rows = (await db.execute(_reviewed_completion_rows(org_id, learner_user_id).where(
+        StudyCourseRelease.course_uuid == course_uuid,
+        StudyBusinessEvent.created_at >= start,
+        StudyBusinessEvent.created_at < end,
+    ).order_by(StudyBusinessEvent.id).limit(_MAX_RECORDS + 1))).all()
+    if len(rows) > _MAX_RECORDS:
+        raise studytomy_http_error(409, "REPORT_COMPLETION_REVIEW_REQUIRED", "The completion records require a separate review.")
+    return [
+        {"event_uuid": event.event_uuid, "release_uuid": event.resource_uuid, "release_sha256": digest}
+        for event, _, digest, policy_id in rows
+        if _matches_release_completion(event, digest, policy_id)
+    ]
+
+
 async def _prepared_request(db, org, actor, reference):
     request, policies, authority_refs = await _staff_request_context(db, org, actor, reference)
     authorized_profile = (await db.execute(select(StudyLearnerProfile.id).where(

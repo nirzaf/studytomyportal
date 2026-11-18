@@ -41,6 +41,7 @@ from src.services.courses.certifications import (
     get_certificate_by_user_certification_uuid,
 )
 from src.services.studytomy import access_policy, assignment_adapter, awards, grading, releases
+from src.services.studytomy.adaptive_reports import _snapshot as progress_report_snapshot
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.metrics import release_completion_observations
 from src.services.studytomy.prerequisites import managed_assessed_pass_status
@@ -359,6 +360,17 @@ async def test_issued_round_retains_exact_started_release(
         }
         completion_time = next(event.created_at for event in completion_events
                                if event.action == "studytomy.course.completion_recorded")
+        summary, report_sources = await progress_report_snapshot(
+            db, org.id, profile, 0, course.id, course.course_uuid,
+            completion_time - timedelta(seconds=1), completion_time + timedelta(seconds=1),
+            0, completion_time + timedelta(seconds=1),
+        )
+        assert summary.native_completions == 0 and summary.reviewed_release_completions == 1
+        assert report_sources["reviewed_release_completion"] == [{
+            "event_uuid": eligible.completion_event_uuid,
+            "release_uuid": release.uuid, "release_sha256": release.snapshot_sha256,
+        }]
+        assert "event_uuid" not in summary.model_dump_json()
         completion_scope = {"org_id": org.id, "course_uuid": course.course_uuid, "release_uuid": release.uuid}
         assert await release_completion_observations(
             db, **completion_scope, start=now, end=completion_time,
