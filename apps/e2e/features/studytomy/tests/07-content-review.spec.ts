@@ -75,6 +75,9 @@ test('staff attaches evidence and reviews the current course candidate', async (
       groundingReviewRequired = true
       return route.fulfill({ status: 409, json: { detail: { code: 'STALE_VERSION' } } })
     }
+    if (decisions === 2) {
+      return route.fulfill({ status: 409, json: { detail: { code: 'RELEASE_MEDIA_UNSUPPORTED' } } })
+    }
     return route.fulfill({ status: 201, json: {
       uuid: `course_review_${randomUUID()}`, revision_sha256: revision, decision: 'approved',
     } })
@@ -135,6 +138,11 @@ test('staff attaches evidence and reviews the current course candidate', async (
   await panel.getByRole('button', { name: 'Reload candidate' }).click()
   await expect(panel.getByText(/a lesson or quiz changed/i)).toHaveCount(0)
   await confirmAndApprove()
+  await expect(error).toContainText('This release cannot retain one or more lesson formats or media dependencies.')
+  await expect(error).toBeFocused()
+  await expect(panel.getByText('Approval recorded for this candidate.')).toHaveCount(0)
+  await expect(approve).toBeEnabled()
+  await approve.click()
   await expect(panel.getByRole('status')).toHaveText('Review decision recorded.')
-  expect(decisions).toBe(2)
+  expect(decisions).toBe(3)
 })
