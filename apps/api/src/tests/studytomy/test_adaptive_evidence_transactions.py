@@ -329,6 +329,20 @@ async def _exercise_staff_repair(db):
     )
     assert checked.status == "missing" and checked.evidence_watermark == 1
     assert await _projection(db, rows.learner_id) is None
+    with pytest.raises(HTTPException) as stale_preview:
+        await service.reconcile_mastery(
+            db,
+            org,
+            actor,
+            profile.learner_uuid,
+            concept.uuid,
+            POLICY.policy_uuid,
+            repair=True,
+            expected_evidence_watermark=0,
+            expected_projection_version=0,
+        )
+    assert stale_preview.value.status_code == 409
+    assert await _projection(db, rows.learner_id) is None
     repaired = await service.reconcile_mastery(
         db,
         org,
@@ -337,6 +351,8 @@ async def _exercise_staff_repair(db):
         concept.uuid,
         POLICY.policy_uuid,
         repair=True,
+        expected_evidence_watermark=checked.evidence_watermark,
+        expected_projection_version=0,
     )
     assert repaired.status == "repaired" and repaired.projection == checked.projection
     assert repaired.projection_version == 1
@@ -348,6 +364,8 @@ async def _exercise_staff_repair(db):
         concept.uuid,
         POLICY.policy_uuid,
         repair=True,
+        expected_evidence_watermark=checked.evidence_watermark,
+        expected_projection_version=repaired.projection_version,
     )
     assert again.status == "current" and again.projection_version == 1
     assert (

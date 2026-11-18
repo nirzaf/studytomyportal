@@ -691,7 +691,13 @@ async def test_case_scope_and_accountable_owner_constraints(postgres_session_fac
             submitted = await client.post(reports_path, json=command)
             assert submitted.status_code == 201
             assert set(submitted.json()) == {"case_uuid", "status", "version"}
+            assert submitted.json()["status"] == "acknowledged"
             assert (await client.post(reports_path, json=command)).json() == submitted.json()
+            declared_subject_grants = (await db.exec(select(StudyStaffScope).where(
+                StudyStaffScope.org_id == first.id,
+                StudyStaffScope.scope_uuid == submitted.json()["case_uuid"],
+            ))).all()
+            assert declared_subject_grants == []
             unidentified = await client.post(reports_path, json={
                 "request_id": str(uuid4()),
                 "narrative": "Synthetic report requiring independent triage",
@@ -744,6 +750,7 @@ async def test_case_scope_and_accountable_owner_constraints(postgres_session_fac
             assert visible_triage.status_code == 200
             assert visible_triage.headers["cache-control"] == "private, no-store"
             assert {"case_uuid": queued_uuid, "version": 1} in visible_triage.json()
+            assert {"case_uuid": submitted.json()["case_uuid"], "version": 1} in visible_triage.json()
             assert all(set(item) == {"case_uuid", "version"} for item in visible_triage.json())
 
             # A queue entry is no case-specific authorization.

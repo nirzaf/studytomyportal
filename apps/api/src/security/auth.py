@@ -20,6 +20,7 @@ from src.security.session_context import (
     AUTH_METHOD_API_TOKEN,
     CUSTOM_DOMAIN_CLAIM,
     LEGACY_GRACE_CLAIM,
+    SESSION_GENERATION_CLAIM,
     SORG_CLAIM,
     SessionProvenance,
     set_session_provenance,
@@ -194,6 +195,11 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     spent in the other; see the token-type gate in :func:`get_current_user`.
     """
     to_encode = data.copy()
+    # Direct session-token callers use generation 1. Production login flows
+    # replace it with the user's authoritative value through mint_session_tokens.
+    # One-time tokens have a distinct purpose and do not receive this claim.
+    if to_encode.get("purpose") in (None, "session"):
+        to_encode.setdefault(SESSION_GENERATION_CLAIM, 1)
     now = datetime.now(timezone.utc)
     if expires_delta:
         expire = now + expires_delta
@@ -251,6 +257,7 @@ def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
     """
     import secrets as _secrets
     to_encode = data.copy()
+    to_encode.setdefault(SESSION_GENERATION_CLAIM, 1)
     now = datetime.now(timezone.utc)
     if expires_delta:
         expire = now + expires_delta
@@ -340,7 +347,11 @@ def decode_refresh_token(token: str) -> Optional[dict]:
     """
     try:
         # SECURITY: Always verify expiration for refresh tokens
-        decode_options = {"require": ["exp", "sub"]}
+        # Legacy refresh cookies without generation/JTI claims are deliberately
+        # invalidated so they cannot bypass durable revocation or replay checks.
+        decode_options = {
+            "require": ["exp", "sub", "jti", SESSION_GENERATION_CLAIM]
+        }
 
         payload = jwt.decode(
             token,
@@ -355,7 +366,7 @@ def decode_refresh_token(token: str) -> Optional[dict]:
         return None
 
 
-def _mark_refresh_jti_used(user_id: int, jti: str) -> bool:
+def _mark_refresh_jti_used(user_id: int, jti: str) -> Optional[bool]:
     """
     Atomically record a refresh token jti as consumed. Returns True on the
     first call for a given jti and False for every subsequent replay.
@@ -365,10 +376,7 @@ def _mark_refresh_jti_used(user_id: int, jti: str) -> bool:
     """
     r = _get_revocation_redis_client()
     if r is None:
-        # Redis unavailable: fail open for usability (tokens still honour exp
-        # and password_changed_at). This is the same defense-in-depth posture
-        # as the logout blocklist.
-        return True
+        return None
     try:
         # NX + TTL = set-if-not-exists, auto-cleanup after the full refresh
         # window so keys don't accumulate forever.
@@ -380,7 +388,7 @@ def _mark_refresh_jti_used(user_id: int, jti: str) -> bool:
         )
         return bool(ok)
     except Exception:
-        return True
+        return None
 
 
 # Grace window for benign refresh-token replays. A concurrent or retried
@@ -408,33 +416,34 @@ REFRESH_GRACE_WINDOW_SECONDS = 5 * 60
 
 def _store_refresh_grace(
     user_id: int, jti: str, access_token: str, refresh_token: str
-) -> None:
+) -> bool:
     """Cache the rotated token pair issued when ``jti`` was first consumed, so
     a concurrent/retried refresh re-presenting the same ``jti`` within
     :data:`REFRESH_GRACE_WINDOW_SECONDS` can be served the same pair instead of
     being treated as theft."""
     r = _get_revocation_redis_client()
     if r is None:
-        return
+        return False
     try:
         import json as _json
-        r.setex(
+        result = r.setex(
             f"refresh_grace:{user_id}:{jti}",
             REFRESH_GRACE_WINDOW_SECONDS,
             _json.dumps(
                 {"access_token": access_token, "refresh_token": refresh_token}
             ),
         )
+        return result is not False
     except Exception:
-        return
+        return False
 
 
-def _get_refresh_grace(user_id: int, jti: str) -> Optional[dict]:
+def _get_refresh_grace(user_id: int, jti: str) -> Optional[dict] | bool:
     """Return the cached rotated pair for a recently-consumed ``jti`` (issued
     within the grace window), or ``None`` if there is no live grace entry."""
     r = _get_revocation_redis_client()
     if r is None:
-        return None
+        return False
     try:
         import json as _json
         raw = r.get(f"refresh_grace:{user_id}:{jti}")
@@ -451,7 +460,7 @@ def _get_refresh_grace(user_id: int, jti: str) -> Optional[dict]:
             return data
         return None
     except Exception:
-        return None
+        return False
 
 
 async def _verify_api_token_org_boundary(
@@ -677,6 +686,17 @@ async def _resolve_current_user(
     if username:
         user = await security_get_user(request, db_session, email=token_data.username)  # type: ignore # treated as an email
         if user is None:
+            raise credentials_exception
+
+        token_generation = payload.get(SESSION_GENERATION_CLAIM) if token else None
+        user_generation = getattr(user, "session_generation", None)
+        if (
+            type(token_generation) is not int
+            or token_generation < 1
+            or type(user_generation) is not int
+            or user_generation < 1
+            or token_generation != user_generation
+        ):
             raise credentials_exception
 
         token_iat_raw = payload.get("iat") if token else None

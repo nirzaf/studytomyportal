@@ -16,12 +16,12 @@ from fastapi import HTTPException, Request
 # src/security/auth.py::_mark_refresh_jti_used
 # ---------------------------------------------------------------------------
 
-def test_mark_refresh_jti_used_fails_open_when_redis_none():
-    """Redis unavailable → return True so users aren't locked out."""
+def test_mark_refresh_jti_used_fails_closed_when_redis_none():
+    """Redis unavailable means refresh cannot prove first use."""
     from src.security import auth
 
     with patch.object(auth, "_get_revocation_redis_client", return_value=None):
-        assert auth._mark_refresh_jti_used(user_id=1, jti="abc") is True
+        assert auth._mark_refresh_jti_used(user_id=1, jti="abc") is None
 
 
 def test_mark_refresh_jti_used_returns_set_result_from_redis():
@@ -39,14 +39,14 @@ def test_mark_refresh_jti_used_returns_set_result_from_redis():
         assert auth._mark_refresh_jti_used(user_id=1, jti="jti_first") is False
 
 
-def test_mark_refresh_jti_used_fails_open_on_redis_exception():
-    """If Redis itself raises, fail open rather than break auth."""
+def test_mark_refresh_jti_used_fails_closed_on_redis_exception():
+    """A failed Redis write is distinct from a successful first use."""
     from src.security import auth
 
     exploding = MagicMock()
     exploding.set.side_effect = RuntimeError("redis died")
     with patch.object(auth, "_get_revocation_redis_client", return_value=exploding):
-        assert auth._mark_refresh_jti_used(user_id=1, jti="jti") is True
+        assert auth._mark_refresh_jti_used(user_id=1, jti="jti") is None
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +91,7 @@ async def test_get_current_user_tolerates_bad_iat_claim(db):
         id=7,
         email="user@test.com",
         password_changed_at=None,
+        session_generation=1,
         model_dump=lambda: {
             "id": 7,
             "user_uuid": "user_7",
@@ -109,7 +110,12 @@ async def test_get_current_user_tolerates_bad_iat_claim(db):
     )
 
     # 10**20 overflows datetime.fromtimestamp on Linux/macOS → OSError.
-    bad_iat_payload = {"sub": "user@test.com", "iat": 10**20, "exp": now + 60}
+    bad_iat_payload = {
+        "sub": "user@test.com",
+        "iat": 10**20,
+        "exp": now + 60,
+        "sg": 1,
+    }
 
     with (
         patch("src.security.auth.decode_jwt", return_value=bad_iat_payload),

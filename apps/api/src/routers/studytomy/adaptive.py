@@ -13,6 +13,7 @@ from fastapi import (
     Request,
     Response,
 )
+from fastapi.encoders import jsonable_encoder
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -121,6 +122,10 @@ from src.services.studytomy.adaptive_diagnostics import (
     read_diagnostic,
     review_diagnostic,
 )
+from src.services.studytomy.adaptive_evidence import (
+    MasteryReconciliationRepair,
+    reconcile_mastery,
+)
 from src.services.studytomy.adaptive_guidance import (
     TutorClose,
     TutorOptions,
@@ -131,8 +136,10 @@ from src.services.studytomy.adaptive_guidance import (
     start_tutor_session,
 )
 from src.services.studytomy.adaptive_item_review import (
+    ItemGradingReviewSnapshot,
     ItemReviewedRead,
     ItemReviewSnapshot,
+    item_grading_review_snapshot,
     item_review_snapshot,
     review_item,
 )
@@ -196,9 +203,16 @@ from src.services.studytomy.adaptive_turns import (
 )
 from src.services.studytomy.privacy import is_protected_studytomy_learner
 from src.services.studytomy.report_notifications import (
+    OutboxReconciliationDecision,
+    OutboxReconciliationPage,
+    OutboxReconciliationResult,
     ReportNotificationRead,
+    list_outbox_reconciliation,
+    reconcile_outbox_delivery,
     request_report_notification,
 )
+from src.services.studytomy.idempotency import claim_idempotency, complete_idempotency
+from src.services.studytomy.policies import lock_organization
 
 router = APIRouter(route_class=PrivateStudyTomyRoute)
 
@@ -810,6 +824,120 @@ async def api_notify_report(
     )
 
 
+@router.get(
+    "/orgs/{org_uuid}/staff/report-deliveries/reconciliation",
+    response_model=OutboxReconciliationPage,
+)
+async def api_list_report_delivery_reconciliation(
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    limit: Annotated[int, Query(ge=1, le=50)] = 25,
+) -> OutboxReconciliationPage:
+    return await list_outbox_reconciliation(db, org, actor, limit=limit)
+
+
+@router.post(
+    "/orgs/{org_uuid}/staff/report-deliveries/{record_uuid}/reconciliation",
+    response_model=OutboxReconciliationResult,
+)
+async def api_reconcile_report_delivery(
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    record_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    body: OutboxReconciliationDecision,
+    idempotency_key: Annotated[
+        str, Header(alias="Idempotency-Key", min_length=1, max_length=255)
+    ],
+) -> OutboxReconciliationResult:
+    return await reconcile_outbox_delivery(
+        db, org, actor, record_uuid, body, idempotency_key
+    )
+
+
+@router.get(
+    "/orgs/{org_uuid}/staff/learners/{learner_uuid}/concepts/{concept_uuid}/mastery-reconciliation"
+)
+async def api_preview_mastery_reconciliation(
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    learner_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    concept_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    policy_uuid: Annotated[str, Query(min_length=1, max_length=100)],
+) -> dict:
+    """Read-only integrity preview for staff assigned to the course and learner."""
+    result = await reconcile_mastery(
+        db, org, actor, learner_uuid, concept_uuid, policy_uuid
+    )
+    return jsonable_encoder(result)
+
+
+@router.post(
+    "/orgs/{org_uuid}/staff/learners/{learner_uuid}/concepts/{concept_uuid}/mastery-reconciliation/repair"
+)
+async def api_repair_mastery_projection(
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    learner_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    concept_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    policy_uuid: Annotated[str, Query(min_length=1, max_length=100)],
+    body: MasteryReconciliationRepair,
+    idempotency_key: Annotated[
+        str, Header(alias="Idempotency-Key", min_length=1, max_length=255)
+    ],
+) -> dict:
+    """Repair only the projection shown by the caller's exact dry-run version."""
+    operation = "studytomy.adaptive.mastery.repaired"
+    await lock_organization(db, org.id)
+    request_payload = {
+        "learner_uuid": learner_uuid,
+        "concept_uuid": concept_uuid,
+        "policy_uuid": policy_uuid,
+        **body.model_dump(mode="json"),
+    }
+    replay = await claim_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        request_payload=request_payload,
+    )
+    if replay is not None:
+        if replay.response_projection is None:
+            raise HTTPException(409, "The original repair response is unavailable.")
+        return replay.response_projection
+
+    result = await reconcile_mastery(
+        db,
+        org,
+        actor,
+        learner_uuid,
+        concept_uuid,
+        policy_uuid,
+        repair=True,
+        expected_evidence_watermark=body.expected_evidence_watermark,
+        expected_projection_version=body.expected_projection_version,
+    )
+    projection = jsonable_encoder(result)
+    await complete_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        resource_kind="concept_mastery",
+        resource_uuid=concept_uuid,
+        response_status=200,
+        response_projection=projection,
+    )
+    await db.commit()
+    return projection
+
+
 @router.post(
     "/orgs/{org_uuid}/staff/reports/{report_uuid}/withdraw",
     response_model=ReportWithdrawalReceipt,
@@ -1283,6 +1411,19 @@ async def api_item_review_snapshot(
     db: AdaptiveDB,
 ) -> ItemReviewSnapshot:
     return await item_review_snapshot(request, db, org, actor, item_uuid)
+
+
+@router.get(
+    "/orgs/{org_uuid}/item-revisions/{item_uuid}/grading-review",
+    response_model=ItemGradingReviewSnapshot,
+)
+async def api_item_grading_review_snapshot(
+    item_uuid: Annotated[str, Path(pattern=r"^item_[0-9a-f-]{36}$")],
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+) -> ItemGradingReviewSnapshot:
+    return await item_grading_review_snapshot(db, org, actor, item_uuid)
 
 
 @router.post(

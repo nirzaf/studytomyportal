@@ -3,6 +3,7 @@ import logging
 from datetime import timedelta, datetime, timezone
 from typing import Literal, Optional
 from fastapi import Depends, APIRouter, HTTPException, Response, status, Request, Form
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func
 from sqlmodel import select
@@ -19,7 +20,6 @@ from src.security.auth import (
     decode_jwt,
     decode_refresh_token,
     extract_jwt_from_request,
-    revoke_user_sessions_before,
     _is_token_revoked_for_user,
     _mark_refresh_jti_used,
     _store_refresh_grace,
@@ -51,10 +51,11 @@ from src.services.users.email_verification import (
     verify_email_token,
     resend_verification_email,
 )
-from src.services.auth.session import issue_session_or_challenge
+from src.services.auth.session import advance_session_generation, issue_session_or_challenge
 from src.security.session_context import (
     AUTH_METHOD_GOOGLE,
     AUTH_METHOD_PASSWORD,
+    SESSION_GENERATION_CLAIM,
     carry_session_claims,
 )
 from src.db.organizations import Organization
@@ -449,6 +450,22 @@ async def refresh(
         _log_refresh_outcome("user_not_found", token_age_seconds=_token_age_seconds(payload))
         raise credentials_exception
 
+    session_generation = payload.get(SESSION_GENERATION_CLAIM)
+    user_generation = getattr(user, "session_generation", None)
+    if (
+        type(session_generation) is not int
+        or session_generation < 1
+        or type(user_generation) is not int
+        or user_generation < 1
+        or session_generation != user_generation
+    ):
+        _log_refresh_outcome(
+            "session_generation_mismatch",
+            user_id=user.id,
+            token_age_seconds=_token_age_seconds(payload),
+        )
+        raise credentials_exception
+
     # Enforce password-change cutover: tokens minted before the user's last
     # password change are stale.
     iat_raw = payload.get("iat")
@@ -487,32 +504,48 @@ async def refresh(
     #   - a replay AFTER the window (a stolen token being reused), treated as
     #     theft: every session for the user is revoked.
     jti = payload.get("jti")
+    if not isinstance(jti, str) or not jti:
+        _log_refresh_outcome("jti_missing", user_id=user.id)
+        raise credentials_exception
     reused_pair = None
-    if jti:
-        first_use = _mark_refresh_jti_used(user.id, jti)
-        if not first_use:
-            # Poll briefly for the grace entry: a truly simultaneous request may
-            # lose the NX race before the winner has written its cached pair.
-            import asyncio as _asyncio
-            for _attempt in range(15):
-                reused_pair = _get_refresh_grace(user.id, jti)
-                if reused_pair is not None:
-                    break
-                await _asyncio.sleep(0.1)
-            if reused_pair is None:
-                # No live grace entry → replay outside the window → theft.
-                # This is the single most destructive outcome (it revokes every
-                # session on every device), so it is logged at WARNING with the
-                # token's age: a benign desync shows up as a young token, real
-                # theft as an old one.
-                _log_refresh_outcome(
-                    "replay_detected",
-                    user_id=user.id,
-                    token_age_seconds=_token_age_seconds(payload),
-                    level=logging.WARNING,
+    first_use = _mark_refresh_jti_used(user.id, jti)
+    if first_use is None:
+        _log_refresh_outcome("replay_store_unavailable", user_id=user.id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Session refresh is temporarily unavailable. Please retry.",
+        )
+    if not first_use:
+        # Poll briefly for the grace entry: a truly simultaneous request may
+        # lose the NX race before the winner has written its cached pair.
+        import asyncio as _asyncio
+        for _attempt in range(15):
+            reused_pair = _get_refresh_grace(user.id, jti)
+            if reused_pair is False:
+                _log_refresh_outcome("replay_store_unavailable", user_id=user.id)
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Session refresh is temporarily unavailable. Please retry.",
                 )
-                revoke_user_sessions_before(user.id)
-                raise credentials_exception
+            if reused_pair is not None:
+                break
+            await _asyncio.sleep(0.1)
+        if reused_pair is None:
+            _log_refresh_outcome(
+                "replay_detected",
+                user_id=user.id,
+                token_age_seconds=_token_age_seconds(payload),
+                level=logging.WARNING,
+            )
+            try:
+                await advance_session_generation(db_session, user.id)
+            except Exception:
+                await db_session.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Session revocation is temporarily unavailable. Please retry.",
+                )
+            raise credentials_exception
 
     if reused_pair is not None:
         new_access_token = reused_pair["access_token"]
@@ -523,14 +556,23 @@ async def refresh(
         # claim-less one that bypasses the org auth-method / sharing policy.
         # A session that records no method also picks up its grace deadline here.
         carried = carry_session_claims(payload)
+        carried[SESSION_GENERATION_CLAIM] = session_generation
         new_access_token = create_access_token(
             data={"sub": email, **carried},
             expires_delta=JWT_ACCESS_TOKEN_EXPIRES,
         )
         new_refresh_token = create_refresh_token(data={"sub": email, **carried})
-        if jti:
-            _store_refresh_grace(
-                user.id, jti, new_access_token, new_refresh_token
+        if not _store_refresh_grace(
+            user.id, jti, new_access_token, new_refresh_token
+        ):
+            try:
+                await advance_session_generation(db_session, user.id)
+            except Exception:
+                await db_session.rollback()
+            _log_refresh_outcome("grace_store_unavailable", user_id=user.id)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Session refresh is temporarily unavailable. Please sign in again.",
             )
 
     cookie_domain = get_cookie_domain_for_request(request)
@@ -1262,6 +1304,7 @@ async def magic_link_verify(
     responses={
         200: {"description": "Logout successful; auth cookies cleared."},
         401: {"description": "No authenticated session was found"},
+        503: {"description": "Durable session revocation could not be recorded."},
     },
 )
 async def logout(
@@ -1270,10 +1313,9 @@ async def logout(
     db_session: AsyncSession = Depends(get_db_session),
 ):
     """
-    Clear the auth cookies and revoke every JWT (access and refresh) that was
-    issued for this user up to this moment. The revocation is enforced by
-    ``get_current_user`` via a Redis blocklist, so stolen tokens cannot
-    outlive logout simply by being replayed outside the browser.
+    Clear the auth cookies and durably advance the user's session generation.
+    A database failure returns an unavailable response rather than claiming
+    server-side revocation succeeded.
     """
     # Identify the session from either credential. A caller that presents only
     # the refresh cookie is still logging out a real session, and refusing it
@@ -1294,19 +1336,23 @@ async def logout(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Best-effort resolve the user to revoke every session they have across
-    # devices (not just the one tied to this cookie).
+    # Revoke every session across devices before reporting logout success.
     if payload and payload.get("sub"):
         try:
             user_record = await security_get_user(
                 request, db_session, email=payload["sub"]
             )
             if user_record is not None and user_record.id is not None:
-                revoke_user_sessions_before(user_record.id)
+                await advance_session_generation(db_session, user_record.id)
         except Exception:
-            # Never block logout on a revocation-store hiccup; cookies are
-            # still cleared below so the browser session ends.
-            pass
+            await db_session.rollback()
+            failed = JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"detail": "Logout could not be completed. Please retry."},
+                headers={"Cache-Control": "no-store"},
+            )
+            unset_auth_cookies(failed, request)
+            return failed
 
     unset_auth_cookies(response, request)
     return {"msg": "Successfully logout"}

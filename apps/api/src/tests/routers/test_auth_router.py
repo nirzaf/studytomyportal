@@ -233,6 +233,7 @@ class TestAuthRouter:
                 "iat": 1,
                 "exp": 9_999_999_999,
                 "jti": "legit-jti",
+                "sg": 1,
             },
         ), patch(
             "src.routers.auth.security_get_user",
@@ -259,6 +260,9 @@ class TestAuthRouter:
         ), patch(
             "src.routers.auth.is_request_secure",
             return_value=False,
+        ), patch(
+            "src.routers.auth._store_refresh_grace",
+            return_value=True,
         ):
             response = await client.get(
                 "/api/v1/auth/refresh",
@@ -282,6 +286,7 @@ class TestAuthRouter:
                 "iat": 1,
                 "exp": 9_999_999_999,
                 "jti": "replayed-jti",
+                "sg": 1,
             },
         ), patch(
             "src.routers.auth.security_get_user",
@@ -294,7 +299,13 @@ class TestAuthRouter:
             "src.routers.auth._mark_refresh_jti_used",
             return_value=False,
         ), patch(
-            "src.routers.auth.revoke_user_sessions_before",
+            "src.routers.auth._get_refresh_grace", return_value=None
+        ), patch(
+            "asyncio.sleep", new_callable=AsyncMock
+        ), patch(
+            "src.routers.auth.advance_session_generation",
+            new_callable=AsyncMock,
+            return_value=2,
         ) as revoke_mock:
             response = await client.get(
                 "/api/v1/auth/refresh",
@@ -302,7 +313,8 @@ class TestAuthRouter:
             )
 
         assert response.status_code == 401
-        revoke_mock.assert_called_once_with(auth_user.id)
+        revoke_mock.assert_awaited_once()
+        assert revoke_mock.await_args.args[1] == auth_user.id
 
     async def test_refresh_invalid_token(self, client):
         with patch(
@@ -800,6 +812,7 @@ class TestRefreshOutcomeTelemetry:
                 "iat": issued_at,
                 "exp": 9_999_999_999,
                 "jti": "replayed-jti",
+                "sg": 1,
             },
         ), patch(
             "src.routers.auth.security_get_user",
@@ -812,7 +825,11 @@ class TestRefreshOutcomeTelemetry:
         ), patch(
             "src.routers.auth._get_refresh_grace", return_value=None
         ), patch(
-            "src.routers.auth.revoke_user_sessions_before"
+            "asyncio.sleep", new_callable=AsyncMock
+        ), patch(
+            "src.routers.auth.advance_session_generation",
+            new_callable=AsyncMock,
+            return_value=2,
         ):
             with caplog.at_level(logging.INFO, logger="learnhouse.auth.refresh"):
                 response = await client.get(
@@ -840,6 +857,7 @@ class TestRefreshOutcomeTelemetry:
                 "iat": int(datetime.now(timezone.utc).timestamp()),
                 "exp": 9_999_999_999,
                 "jti": "legit-jti",
+                "sg": 1,
             },
         ), patch(
             "src.routers.auth.security_get_user",
@@ -853,6 +871,8 @@ class TestRefreshOutcomeTelemetry:
             "src.routers.auth.get_cookie_domain_for_request", return_value=None
         ), patch(
             "src.routers.auth.is_request_secure", return_value=False
+        ), patch(
+            "src.routers.auth._store_refresh_grace", return_value=True
         ):
             with caplog.at_level(logging.INFO, logger="learnhouse.auth.refresh"):
                 response = await client.get(

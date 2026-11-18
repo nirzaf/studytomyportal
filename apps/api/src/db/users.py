@@ -254,6 +254,9 @@ class User(UserBase, table=True):
     signup_method: Optional[str] = None
     is_superadmin: bool = Field(default=False)
     password_changed_at: Optional[datetime] = Field(default=None)
+    # Database-backed session invalidation. Redis only accelerates replay
+    # detection and is never authoritative for whether a session is current.
+    session_generation: int = Field(default=1, nullable=False)
     creation_date: str = ""
     update_date: str = ""
 

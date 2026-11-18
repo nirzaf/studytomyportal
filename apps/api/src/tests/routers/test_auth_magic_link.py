@@ -488,6 +488,7 @@ class TestRefreshPreservesProvenance:
                 "iat": 1,
                 "exp": 9_999_999_999,
                 "jti": "legit-jti",
+                "sg": 1,
                 AMR_CLAIM: "magic_login",
                 SORG_CLAIM: 1,
             },
@@ -503,6 +504,8 @@ class TestRefreshPreservesProvenance:
             "src.routers.auth.get_cookie_domain_for_request", return_value=None
         ), patch(
             "src.routers.auth.is_request_secure", return_value=False
+        ), patch(
+            "src.routers.auth._store_refresh_grace", return_value=True
         ):
             response = await client.get(
                 "/api/v1/auth/refresh",

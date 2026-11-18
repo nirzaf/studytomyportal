@@ -28,6 +28,7 @@ from src.db.studytomy.governance import (
     inspect_study_policy_body,
 )
 from src.db.studytomy.orders import StudyOrder, StudyOrderAcceptance, StudyOrderLine
+from src.db.users import User
 from src.db.user_organizations import UserOrganization
 from src.services.studytomy.authority import has_active_guardian_scope
 from src.services.studytomy.business_events import append_business_event
@@ -64,6 +65,96 @@ class NamedOrderQuote(OrderQuote):
     learners_with_overlap: list[str]
     customer_terms: str
     confirmation_sha256: str
+
+
+class CheckoutOfferChoice(BaseModel):
+    offer_uuid: str
+    offer_version_uuid: str
+    title: str
+
+
+class CheckoutLearnerChoice(BaseModel):
+    learner_uuid: str
+    label: str
+
+
+async def list_checkout_offers(db: AsyncSession, org: Organization) -> list[CheckoutOfferChoice]:
+    """List only the immutable offer versions explicitly opened by the pilot policy."""
+    pilot = await _active_policy(db, org, StudyPolicyKey.D_17, datetime.now(UTC))
+    versions = _pilot_offer_versions(pilot)
+    if not versions:
+        return []
+    rows = (
+        await db.execute(
+            select(StudyOffer, StudyOfferVersion)
+            .join(StudyOfferVersion, StudyOfferVersion.offer_id == StudyOffer.id)
+            .where(
+                StudyOffer.org_id == org.id,
+                StudyOffer.offer_kind == "course",
+                StudyOffer.offer_uuid.in_(versions.keys()),
+                StudyOfferVersion.version_uuid.in_(
+                    [value for value in versions.values() if isinstance(value, str)]
+                ),
+                StudyOfferVersion.version_no == StudyOffer.current_version_no,
+            )
+            .order_by(StudyOffer.offer_uuid)
+        )
+    ).all()
+    choices = []
+    for offer, version in rows:
+        if versions.get(offer.offer_uuid) != version.version_uuid:
+            continue
+        try:
+            terms = StudyOfferTerms.model_validate(version.terms)
+        except ValidationError:
+            continue
+        if terms.completion_blockers():
+            continue
+        title = version.terms.get("title") if isinstance(version.terms, dict) else None
+        choices.append(
+            CheckoutOfferChoice(
+                offer_uuid=offer.offer_uuid,
+                offer_version_uuid=version.version_uuid,
+                title=title.strip() if isinstance(title, str) and title.strip() else "Course offer",
+            )
+        )
+    return choices
+
+
+async def list_purchasable_learners(
+    db: AsyncSession, org: Organization, *, purchaser_id: int, limit: int = 100,
+) -> list[CheckoutLearnerChoice]:
+    """Return only active learner profiles the purchaser may currently allocate."""
+    if not 1 <= limit <= 100:
+        raise studytomy_http_error(422, "ORDER_LEARNER_COUNT_INVALID", "The learner limit is invalid.")
+    profiles = (
+        await db.execute(
+            select(StudyLearnerProfile, User.first_name, User.last_name)
+            .join(User, User.id == StudyLearnerProfile.user_id)
+            .where(
+                StudyLearnerProfile.org_id == org.id,
+                StudyLearnerProfile.status == StudyLearnerProfileStatus.ACTIVE.value,
+                StudyLearnerProfile.control_mode == StudyLearnerControlMode.INDEPENDENT.value,
+            )
+            .order_by(StudyLearnerProfile.learner_uuid)
+            .limit(limit)
+        )
+    ).all()
+    now = datetime.now(UTC)
+    choices = []
+    for profile, first_name, last_name in profiles:
+        if not await can_purchase_for_learner(
+            db, org, purchaser_id=purchaser_id, learner_profile_id=profile.id, now=now,
+        ):
+            continue
+        label = " ".join(part.strip() for part in (first_name, last_name) if part and part.strip())
+        choices.append(
+            CheckoutLearnerChoice(
+                learner_uuid=profile.learner_uuid,
+                label=label or "Learner",
+            )
+        )
+    return choices
 
 
 def _pilot_offer_versions(pilot) -> dict:
@@ -335,6 +426,11 @@ async def can_purchase_for_learner(
         StudyLearnerProfile.status == StudyLearnerProfileStatus.ACTIVE.value,
     ).execution_options(populate_existing=True))).scalar_one_or_none()
     if profile is None:
+        return False
+    # The checkout pilot can only promise delivery to learner profiles that the
+    # current managed lesson path supports. Guardian purchase authority does
+    # not make dependent-profile delivery available.
+    if profile.control_mode != StudyLearnerControlMode.INDEPENDENT.value:
         return False
     members = set((await db.execute(select(UserOrganization.user_id).where(
         UserOrganization.org_id == org.id,

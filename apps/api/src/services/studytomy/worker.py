@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -24,6 +25,7 @@ from src.services.studytomy.policies import lock_organization
 _SAFE_CODE = re.compile(r"^[A-Z][A-Z0-9_]{1,63}$")
 _SAFE_PROVIDER_REFERENCE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$")
 _MAX_ATTEMPTS = 8
+_PROVIDER_LEASE_SECONDS = 120
 
 
 @dataclass(frozen=True)
@@ -100,18 +102,8 @@ async def run_delivery_batch(
     current authorized source data; it must never trust a saved message body.
     Provider errors are persisted as stable codes only, without response text.
     """
-    started_at = _as_utc(now or datetime.now(timezone.utc))
-    claimed = await claim_due_deliveries(
-        db_session,
-        worker_id=worker_id,
-        limit=limit,
-        now=started_at,
-        purpose=purpose,
-    )
-    claimed_ids = [(record.id, record.org_id) for record in claimed]
-    await db_session.commit()
     outcomes = {
-        "claimed": len(claimed_ids),
+        "claimed": 0,
         "sent": 0,
         "suppressed": 0,
         "retry": 0,
@@ -119,7 +111,27 @@ async def run_delivery_batch(
         "dead_letter": 0,
     }
 
-    for record_id, org_id in claimed_ids:
+    for _ in range(limit):
+        # Claim immediately before processing this row. A slow earlier send
+        # must not consume the next row's lease or increment its attempt.
+        claimed_at = _as_utc(now or datetime.now(timezone.utc))
+        claimed = await claim_due_deliveries(
+            db_session,
+            worker_id=worker_id,
+            limit=1,
+            now=claimed_at,
+            lease_seconds=_PROVIDER_LEASE_SECONDS,
+            purpose=purpose,
+        )
+        if not claimed:
+            # claim_due_deliveries also terminalizes expired leases; persist
+            # that bounded recovery work even when no send is due.
+            await db_session.commit()
+            break
+        record_id, org_id = claimed[0].id, claimed[0].org_id
+        outcomes["claimed"] += 1
+        await db_session.commit()
+
         await lock_organization(db_session, org_id)
         locked_result = await db_session.execute(
             select(StudyOutboxRecord)
@@ -146,7 +158,7 @@ async def run_delivery_batch(
                 db_session,
                 record,
                 worker_id,
-                current_time,
+                _as_utc(datetime.now(timezone.utc)),
                 "RECIPIENT_REVALIDATION_UNAVAILABLE",
                 outcomes,
             )
@@ -159,7 +171,7 @@ async def run_delivery_batch(
                 db_session,
                 record,
                 worker_id,
-                current_time,
+                _as_utc(datetime.now(timezone.utc)),
                 "RECIPIENT_REVALIDATION_FAILURE",
                 outcomes,
             )
@@ -170,15 +182,17 @@ async def run_delivery_batch(
             denial_code = authorization.denial_code or "RECIPIENT_AUTHORIZATION_DENIED"
             if not _SAFE_CODE.fullmatch(denial_code):
                 denial_code = "RECIPIENT_AUTHORIZATION_DENIED"
-            await release_delivery_lease(
+            released = await _release_or_mark_unknown(
                 db_session,
                 record,
                 worker_id=worker_id,
                 status_value="suppressed",
-                now=current_time,
+                now=_as_utc(datetime.now(timezone.utc)),
                 error_code=denial_code,
+                outcomes=outcomes,
             )
-            outcomes["suppressed"] += 1
+            if released:
+                outcomes["suppressed"] += 1
             await db_session.commit()
             continue
 
@@ -186,15 +200,17 @@ async def run_delivery_batch(
             record.resource_version is not None
             and authorization.resource_version != record.resource_version
         ):
-            await release_delivery_lease(
+            released = await _release_or_mark_unknown(
                 db_session,
                 record,
                 worker_id=worker_id,
                 status_value="suppressed",
-                now=current_time,
+                now=_as_utc(datetime.now(timezone.utc)),
                 error_code="RESOURCE_VERSION_CHANGED",
+                outcomes=outcomes,
             )
-            outcomes["suppressed"] += 1
+            if released:
+                outcomes["suppressed"] += 1
             await db_session.commit()
             continue
 
@@ -210,30 +226,34 @@ async def run_delivery_batch(
                 db_session,
                 record,
                 worker_id,
-                current_time,
+                _as_utc(datetime.now(timezone.utc)),
                 "PROVIDER_TEMPORARILY_UNAVAILABLE",
                 outcomes,
             )
         except ProviderOutcomeUnknown:
-            await release_delivery_lease(
+            released = await _release_or_mark_unknown(
                 db_session,
                 record,
                 worker_id=worker_id,
                 status_value="reconciliation_required",
-                now=current_time,
+                now=_as_utc(datetime.now(timezone.utc)),
                 error_code="PROVIDER_OUTCOME_UNKNOWN",
+                outcomes=outcomes,
             )
-            outcomes["reconciliation_required"] += 1
+            if released:
+                outcomes["reconciliation_required"] += 1
         except Exception:
-            await release_delivery_lease(
+            released = await _release_or_mark_unknown(
                 db_session,
                 record,
                 worker_id=worker_id,
                 status_value="reconciliation_required",
-                now=current_time,
+                now=_as_utc(datetime.now(timezone.utc)),
                 error_code="PROVIDER_OUTCOME_UNKNOWN",
+                outcomes=outcomes,
             )
-            outcomes["reconciliation_required"] += 1
+            if released:
+                outcomes["reconciliation_required"] += 1
         else:
             reference = receipt.message_reference if isinstance(receipt, ProviderReceipt) else None
             if (
@@ -247,25 +267,29 @@ async def run_delivery_batch(
                     )
                 )
             ):
-                await release_delivery_lease(
+                released = await _release_or_mark_unknown(
                     db_session,
                     record,
                     worker_id=worker_id,
                     status_value="reconciliation_required",
-                    now=current_time,
+                    now=_as_utc(datetime.now(timezone.utc)),
                     error_code="PROVIDER_OUTCOME_UNKNOWN",
+                    outcomes=outcomes,
                 )
-                outcomes["reconciliation_required"] += 1
+                if released:
+                    outcomes["reconciliation_required"] += 1
             else:
-                await release_delivery_lease(
+                released = await _release_or_mark_unknown(
                     db_session,
                     record,
                     worker_id=worker_id,
                     status_value="sent",
-                    now=current_time,
+                    now=_as_utc(datetime.now(timezone.utc)),
                     provider_message_reference=reference,
+                    outcomes=outcomes,
                 )
-                outcomes["sent"] += 1
+                if released:
+                    outcomes["sent"] += 1
         await db_session.commit()
 
     return outcomes
@@ -279,25 +303,55 @@ async def _retry_or_dead_letter(
     error_code: str,
     outcomes: dict[str, int],
 ) -> None:
-    if record.attempt_count >= _MAX_ATTEMPTS:
+    status_value = "dead_letter" if record.attempt_count >= _MAX_ATTEMPTS else "retry"
+    retry_at = None
+    if status_value == "retry":
+        delay_seconds = min(15 * (2 ** max(record.attempt_count - 1, 0)), 3600)
+        retry_at = now + timedelta(seconds=delay_seconds)
+    released = await _release_or_mark_unknown(
+        db_session,
+        record,
+        worker_id=worker_id,
+        status_value=status_value,
+        now=now,
+        error_code=error_code,
+        retry_at=retry_at,
+        outcomes=outcomes,
+    )
+    if not released:
+        return
+    outcomes["dead_letter" if status_value == "dead_letter" else "retry"] += 1
+
+
+async def _release_or_mark_unknown(
+    db_session: AsyncSession,
+    record: StudyOutboxRecord,
+    *,
+    worker_id: str,
+    status_value: str,
+    now: datetime,
+    outcomes: dict[str, int],
+    error_code: str | None = None,
+    provider_message_reference: str | None = None,
+    retry_at: datetime | None = None,
+) -> bool:
+    try:
         await release_delivery_lease(
             db_session,
             record,
             worker_id=worker_id,
-            status_value="dead_letter",
+            status_value=status_value,
             now=now,
             error_code=error_code,
+            provider_message_reference=provider_message_reference,
+            retry_at=retry_at,
         )
-        outcomes["dead_letter"] += 1
-        return
-    delay_seconds = min(15 * (2 ** max(record.attempt_count - 1, 0)), 3600)
-    await release_delivery_lease(
-        db_session,
-        record,
-        worker_id=worker_id,
-        status_value="retry",
-        now=now,
-        error_code=error_code,
-        retry_at=now + timedelta(seconds=delay_seconds),
-    )
-    outcomes["retry"] += 1
+    except HTTPException as error:
+        if error.status_code != 409:
+            raise
+        # A late callback cannot override an expired/reassigned lease. Leave
+        # its durable state to the expiry path, which records uncertainty.
+        await db_session.rollback()
+        outcomes["reconciliation_required"] += 1
+        return False
+    return True

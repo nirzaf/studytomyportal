@@ -561,6 +561,9 @@ def _assert_safe_input(args, src):
     whitelist = args.index("-protocol_whitelist")
     assert args[whitelist + 1] == "file,pipe"
     assert whitelist < i
+    formats = args.index("-format_whitelist")
+    assert args[formats + 1] == vp.FFMPEG_INPUT_FORMATS
+    assert formats < i
 
 
 def test_hls_args_whitelist_input():

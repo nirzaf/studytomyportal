@@ -167,6 +167,7 @@ async def _snapshot(
     mappings: list[StudyConceptActivity],
     *,
     draft_projection: CurriculumDraftRead | None = None,
+    allow_empty_draft: bool = False,
 ) -> CurriculumReviewSnapshot:
     concepts = list(
         (
@@ -180,7 +181,7 @@ async def _snapshot(
             )
         ).scalars()
     )
-    if not concepts:
+    if not concepts and not allow_empty_draft:
         raise studytomy_http_error(
             422, "CURRICULUM_GRAPH_EMPTY", "Add concepts before review."
         )
@@ -206,13 +207,14 @@ async def _snapshot(
     projections = [
         CurriculumConceptSnapshot.model_validate(concept) for concept in concepts
     ]
-    _validate_graph(
-        CurriculumGraphUpdate(
-            expected_version=row.version,
-            concepts=projections,
-            prerequisites=prerequisites,
+    if projections:
+        _validate_graph(
+            CurriculumGraphUpdate(
+                expected_version=row.version,
+                concepts=projections,
+                prerequisites=prerequisites,
+            )
         )
-    )
     projection = draft_projection or CurriculumDraftRead.model_validate(row)
     manifest = {
         "curriculum": projection.model_dump(mode="json"),
@@ -268,7 +270,7 @@ async def curriculum_review_snapshot(
         {mapping.course_uuid for mapping in mappings} - {row.owner_course_uuid}
     ):
         await _authorize_preview(request, db, org, actor, course_uuid)
-    return await _snapshot(db, row, mappings)
+    return await _snapshot(db, row, mappings, allow_empty_draft=True)
 
 
 async def read_reviewed_curriculum_objectives(

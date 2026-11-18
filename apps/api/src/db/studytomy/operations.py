@@ -202,6 +202,7 @@ class StudyOutboxRecord(SQLModel, table=True):
         default=StudyOutboxStatus.QUEUED,
         sa_column=Column(String(32), nullable=False, server_default=StudyOutboxStatus.QUEUED),
     )
+    version: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default="1"))
     attempt_count: int = Field(
         default=0, sa_column=Column(Integer, nullable=False, server_default="0")
     )

@@ -90,6 +90,7 @@ def test_ffmpeg_and_pillow_inputs_are_restricted(tmp_path, monkeypatch):
     import subprocess
 
     from src.services.courses.lms_import import package as pkg
+    from src.services.utils.video_processing import FFMPEG_INPUT_FORMATS, SAFE_FILE_INPUT_ARGS
 
     calls = []
 
@@ -108,6 +109,9 @@ def test_ffmpeg_and_pillow_inputs_are_restricted(tmp_path, monkeypatch):
     i = args.index("-i")
     assert args[args.index("-protocol_whitelist") + 1] == "file" and args.index("-protocol_whitelist") < i
     formats = args[args.index("-format_whitelist") + 1].split(",")
+    assert args[args.index("-format_whitelist") + 1] == FFMPEG_INPUT_FORMATS
+    start = args.index("-protocol_whitelist")
+    assert tuple(args[start:start + len(SAFE_FILE_INPUT_ARGS)]) == SAFE_FILE_INPUT_ARGS
     assert args.index("-format_whitelist") < i
     assert "hls" not in formats and "concat" not in formats and "image2" not in formats
 

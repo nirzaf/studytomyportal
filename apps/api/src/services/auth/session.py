@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
+from sqlalchemy import update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.users import User
@@ -26,6 +27,7 @@ from src.security.session_context import (
     AMR_CLAIM,
     AUTH_METHOD_API_TOKEN,
     CUSTOM_DOMAIN_CLAIM,
+    SESSION_GENERATION_CLAIM,
     SORG_CLAIM,
     session_claims,
 )
@@ -55,6 +57,7 @@ def create_mfa_pending_token(
     amr: Optional[str] = None,
     org_id: Optional[int] = None,
     custom_domain: bool = False,
+    session_generation: int = 1,
 ) -> str:
     """Mint the interim token. It carries the session's provenance (``amr`` /
     ``sorg``) so that when the second factor is completed at ``/auth/login/mfa``
@@ -63,6 +66,7 @@ def create_mfa_pending_token(
         data={
             "sub": email,
             "purpose": MFA_PENDING_PURPOSE,
+            SESSION_GENERATION_CLAIM: session_generation,
             # Single use: completing the second factor spends it, so a pending
             # token seen once cannot start another session.
             "jti": secrets.token_urlsafe(16),
@@ -135,6 +139,7 @@ def mint_session_tokens(
     amr: Optional[str] = None,
     org_id: Optional[int] = None,
     custom_domain: bool = False,
+    session_generation: int = 1,
 ) -> SessionIssueResult:
     """Mint a real session unconditionally. Only for callers that have already
     satisfied (or deliberately bypassed) the second factor.
@@ -145,12 +150,31 @@ def mint_session_tokens(
     ``custom_domain`` marks a session signed in on the org's own domain, which
     that policy then holds to ``org_id`` alone.
     """
-    claims = session_claims(amr, org_id, custom_domain=custom_domain)
+    claims = {
+        **session_claims(amr, org_id, custom_domain=custom_domain),
+        SESSION_GENERATION_CLAIM: session_generation,
+    }
     return SessionIssueResult(
         mfa_required=False,
         access_token=create_access_token(data={"sub": email, "purpose": "session", **claims}),
         refresh_token=create_refresh_token(data={"sub": email, "purpose": "session", **claims}),
     )
+
+
+async def advance_session_generation(db_session: AsyncSession, user_id: int) -> int:
+    """Durably invalidate all existing sessions with one atomic row update."""
+    result = await db_session.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(session_generation=User.session_generation + 1)
+        .returning(User.session_generation)
+    )
+    generation = result.scalar_one_or_none()
+    if generation is None:
+        await db_session.rollback()
+        raise RuntimeError("Session owner no longer exists")
+    await db_session.commit()
+    return int(generation)
 
 
 # ``amr`` values that read differently on the analytics side. Sessions minted
@@ -191,8 +215,20 @@ async def issue_session_or_challenge(
     if await is_mfa_active(db_session, user.id):
         return SessionIssueResult(
             mfa_required=True,
-            mfa_token=create_mfa_pending_token(user.email, amr, org_id, custom_domain),
+            mfa_token=create_mfa_pending_token(
+                user.email,
+                amr,
+                org_id,
+                custom_domain,
+                int(getattr(user, "session_generation", 1) or 1),
+            ),
         )
-    result = mint_session_tokens(user.email, amr, org_id, custom_domain)
+    result = mint_session_tokens(
+        user.email,
+        amr,
+        org_id,
+        custom_domain,
+        int(getattr(user, "session_generation", 1) or 1),
+    )
     await track_login(user.id, amr, org_id)
     return result

@@ -35,9 +35,9 @@ def test_get_missing_key_returns_none():
 
 def test_helpers_noop_without_redis():
     with patch("src.security.auth._get_revocation_redis_client", return_value=None):
-        # Neither should raise, and get returns None.
-        _store_refresh_grace(1, "jti", "a", "b")
-        assert _get_refresh_grace(1, "jti") is None
+        # Missing Redis is reported distinctly so refresh cannot fail open.
+        assert _store_refresh_grace(1, "jti", "a", "b") is False
+        assert _get_refresh_grace(1, "jti") is False
 
 
 def test_get_decodes_bytes_payload():
@@ -68,10 +68,9 @@ class _BrokenRedis:
 
 def test_store_swallows_redis_errors():
     with patch("src.security.auth._get_revocation_redis_client", return_value=_BrokenRedis()):
-        # Must not raise: a failed cache write is best-effort.
-        _store_refresh_grace(1, "jti", "a", "b")
+        assert _store_refresh_grace(1, "jti", "a", "b") is False
 
 
 def test_get_swallows_redis_errors():
     with patch("src.security.auth._get_revocation_redis_client", return_value=_BrokenRedis()):
-        assert _get_refresh_grace(1, "jti") is None
+        assert _get_refresh_grace(1, "jti") is False

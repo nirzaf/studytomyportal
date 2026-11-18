@@ -73,8 +73,12 @@ from src.services.studytomy.metrics import (
     read_pilot_cash_report,
 )
 from src.services.studytomy.orders import (
+    CheckoutLearnerChoice,
+    CheckoutOfferChoice,
     NamedOrderQuote,
     accept_named_order,
+    list_checkout_offers,
+    list_purchasable_learners,
     preview_named_order,
     record_named_order_draft,
     require_pilot_checkout,
@@ -176,6 +180,29 @@ async def get_pilot_cash_report(
     )
     response.headers["Cache-Control"] = "private, no-store"
     return report
+
+
+@router.get("/checkout/offers", response_model=list[CheckoutOfferChoice])
+async def get_checkout_offers(
+    org_uuid: str, response: Response, actor: Purchaser, db: Session,
+) -> list[CheckoutOfferChoice]:
+    org = await _member_org(org_uuid, actor, db)
+    offers = await list_checkout_offers(db, org)
+    response.headers["Cache-Control"] = "private, no-store"
+    return offers
+
+
+@router.get("/checkout/learners", response_model=list[CheckoutLearnerChoice])
+async def get_checkout_learners(
+    org_uuid: str, response: Response, actor: Purchaser, db: Session,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+) -> list[CheckoutLearnerChoice]:
+    org = await _member_org(org_uuid, actor, db)
+    learners = await list_purchasable_learners(
+        db, org, purchaser_id=actor.id, limit=limit,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return learners
 
 
 @router.post("/checkout/quote")

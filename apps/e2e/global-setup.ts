@@ -33,6 +33,13 @@ import {
   sharedStudent,
   writeSharedStudent,
 } from './core/sharedAuth'
+import {
+  currentForkIdentity,
+  includesStudyTomySpecs,
+  isLoopbackUrl,
+  runtimeIdentityProblems,
+  type RuntimeIdentity,
+} from './core/studytomyIdentity'
 
 const BOOT_TIMEOUT_MS = 8 * 60 * 1000 // image pull + first-run install can be slow
 const POLL_INTERVAL_MS = 3000
@@ -92,6 +99,18 @@ function bootSelfHost(): void {
 }
 
 export default async function globalSetup(): Promise<void> {
+  const verifyStudyTomy = includesStudyTomySpecs(process.argv.slice(2))
+  if (verifyStudyTomy) {
+    if (!SKIP_BOOT && !process.env.E2E_CLI) {
+      throw new Error(
+        'Studytomy E2E requires E2E_BASE_URL for an existing local fork or an explicit E2E_CLI for a verified local build. The default learnhouse@latest CLI cannot identify this fork.',
+      )
+    }
+    if (!isLoopbackUrl(BASE_URL) || !isLoopbackUrl(API_URL)) {
+      throw new Error('Studytomy E2E only runs against a loopback web and API instance.')
+    }
+  }
+
   if (SKIP_BOOT) {
     console.log(`Reusing existing instance at ${BASE_URL} (boot skipped).`)
   } else {
@@ -102,7 +121,68 @@ export default async function globalSetup(): Promise<void> {
   await waitForOk(`${API_URL}/orgs/slug/${ORG_SLUG}`, 60_000, `org "${ORG_SLUG}"`)
   console.log(`LearnHouse is ready at ${BASE_URL}. Admin: ${ADMIN_EMAIL}`)
 
+  if (verifyStudyTomy) await verifyStudyTomyRuntime()
+
   await generateSharedAuth()
+}
+
+async function verifyStudyTomyRuntime(): Promise<void> {
+  const expected = currentForkIdentity()
+  const token = await api.login(ADMIN_EMAIL, ADMIN_PASSWORD)
+
+  let apiIdentity: RuntimeIdentity
+  try {
+    apiIdentity = await api.apiGet<RuntimeIdentity>('/instance/runtime-identity', token)
+  } catch (error) {
+    throw new Error(
+      `Studytomy API identity is unavailable or unconfigured. Set the local build identity and STUDYTOMY_TEST_RUNTIME_IDENTITY=1. ${String(error)}`,
+    )
+  }
+  const apiProblems = runtimeIdentityProblems(apiIdentity, expected)
+
+  let webIdentity: { build_sha?: string; source_tree_sha256?: string } | null = null
+  let webFailure = ''
+  try {
+    const response = await fetch(`${BASE_URL}/api/studytomy/runtime-identity`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!response.ok) {
+      webFailure = `web identity endpoint returned ${response.status}`
+    } else {
+      webIdentity = await response.json()
+    }
+  } catch (error) {
+    webFailure = String(error)
+  }
+  const webProblems = runtimeIdentityProblems(
+    webIdentity
+      ? {
+          build_sha: webIdentity.build_sha ?? '',
+          source_tree_sha256: webIdentity.source_tree_sha256 ?? '',
+          source_migration_heads: apiIdentity.source_migration_heads,
+          database_migration_heads: apiIdentity.source_migration_heads,
+        }
+      : null,
+    expected,
+  )
+
+  if (apiProblems.length > 0 || webProblems.length > 0 || webFailure) {
+    const reasons = [
+      ...apiProblems.map(problem => `API: ${problem}`),
+      ...webProblems.map(problem => `web: ${problem}`),
+      ...(webFailure ? [`web: ${webFailure}`] : []),
+    ]
+    throw new Error(`Studytomy runtime identity check failed: ${reasons.join('; ')}`)
+  }
+
+  console.log(`Studytomy runtime verified: ${JSON.stringify({
+    commit_sha: expected.commitSha,
+    source_tree_sha256: expected.sourceTreeSha256,
+    dirty_worktree: expected.dirty,
+    database_migration_heads: apiIdentity.database_migration_heads,
+    web_and_api_source_match: true,
+  })}`)
 }
 
 /**

@@ -17,6 +17,7 @@ from src.db.studytomy.family import (
     StudyRelationshipRequestCreate,
     StudyRelationshipRestrictionCreate,
     StudyRelationshipReviewRead,
+    StudyRelationshipWithdrawalCreate,
     StudySharingGrantCreate,
     StudySharingGrantRead,
     StudySharingGrantWithdrawal,
@@ -31,6 +32,7 @@ from src.services.studytomy.authority import (
     list_family_review_queue,
     list_my_relationship_requests,
     restrict_relationship_authority,
+    withdraw_my_relationship_request,
 )
 from src.services.studytomy.learners import (
     create_learner_profile,
@@ -165,6 +167,32 @@ async def api_list_my_relationship_requests(
 ) -> list[StudyRelationshipRead]:
     organization = await _organization(org_uuid, db_session)
     return await list_my_relationship_requests(db_session, organization, current_user)
+
+
+@router.post(
+    "/orgs/{org_uuid}/learners/{learner_uuid}/relationships/{relationship_uuid}/withdrawals",
+    response_model=StudyRelationshipRead,
+    summary="Withdraw the authenticated adult's own pending guardian-authority request",
+)
+async def api_withdraw_my_relationship_request(
+    org_uuid: str,
+    learner_uuid: str,
+    relationship_uuid: str,
+    request: StudyRelationshipWithdrawalCreate,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=255),
+    current_user: PublicUser = Depends(get_authenticated_non_api_token_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> StudyRelationshipRead:
+    organization = await _organization(org_uuid, db_session)
+    return await withdraw_my_relationship_request(
+        db_session,
+        organization,
+        current_user,
+        learner_uuid,
+        relationship_uuid,
+        request,
+        idempotency_key,
+    )
 
 
 @router.get(

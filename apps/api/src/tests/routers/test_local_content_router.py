@@ -126,6 +126,9 @@ class TestLocalContentRouter:
             ok_response = await client.get(
                 f"/content/orgs/{org.org_uuid}/courses/{course.course_uuid}/activities/activity_x/video.mp4"
             )
+            head_response = await client.head(
+                f"/content/orgs/{org.org_uuid}/courses/{course.course_uuid}/activities/activity_x/video.mp4"
+            )
         finally:
             local_content.CONTENT_DIR = original_dir
 
@@ -133,6 +136,9 @@ class TestLocalContentRouter:
         assert forbidden_response.status_code == 403
         assert ok_response.status_code == 200
         assert ok_response.headers["content-type"] == "video/mp4"
+        assert ok_response.headers["cache-control"] == "private, no-store"
+        assert head_response.status_code == 200
+        assert head_response.headers["cache-control"] == "private, no-store"
 
     async def test_dot_segment_cannot_bypass_the_access_check(
         self, client, db, org, regular_user, app, tmp_path

@@ -40,11 +40,17 @@ async def client(app):
 
 
 def _fake_user(email="user@test.com", user_id=42, password_changed_at=None):
-    return SimpleNamespace(id=user_id, email=email, password_changed_at=password_changed_at)
+    return SimpleNamespace(
+        id=user_id,
+        email=email,
+        password_changed_at=password_changed_at,
+        session_generation=1,
+    )
 
 
 def _patch_happy_path(payload):
     """Shared mock stack for 'everything ok' refresh flow."""
+    payload = {"sg": 1, **payload}
     return [
         patch("src.routers.auth.check_refresh_rate_limit", return_value=(True, None)),
         patch("src.routers.auth.decode_refresh_token", return_value=payload),
@@ -53,6 +59,7 @@ def _patch_happy_path(payload):
         patch("src.routers.auth.get_token_expiry_ms", return_value=123),
         patch("src.routers.auth.get_cookie_domain_for_request", return_value=None),
         patch("src.routers.auth.is_request_secure", return_value=False),
+        patch("src.routers.auth._store_refresh_grace", return_value=True),
     ]
 
 
@@ -126,7 +133,7 @@ async def test_refresh_happy_path_rotates_refresh_cookie(client):
         # isn't flagged as a replay across runs; first use returns True.
         patch("src.routers.auth._mark_refresh_jti_used", return_value=True),
     ]
-    with stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], \
+    with stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], stack[7], \
          ctxs[0], ctxs[1], ctxs[2]:
         response = await client.get(
             "/api/v1/auth/refresh",
@@ -151,7 +158,7 @@ async def test_refresh_replay_within_grace_window_reuses_pair(client):
     stack = _patch_happy_path(
         {"sub": user.email, "iat": 1, "exp": 9_999_999_999, "jti": "concurrent-jti"}
     )
-    with stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], \
+    with stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], stack[7], \
          patch("src.routers.auth.security_get_user", new_callable=AsyncMock, return_value=user), \
          patch("src.routers.auth._is_token_revoked_for_user", return_value=False), \
          patch("src.routers.auth._mark_refresh_jti_used", return_value=False), \
@@ -159,7 +166,7 @@ async def test_refresh_replay_within_grace_window_reuses_pair(client):
              "src.routers.auth._get_refresh_grace",
              return_value={"access_token": "grace-access", "refresh_token": "grace-refresh"},
          ), \
-         patch("src.routers.auth.revoke_user_sessions_before") as revoke_mock:
+         patch("src.routers.auth.advance_session_generation", new_callable=AsyncMock, return_value=2) as revoke_mock:
         response = await client.get(
             "/api/v1/auth/refresh",
             cookies={JWT_REFRESH_COOKIE_NAME: "concurrent-token"},
@@ -170,7 +177,7 @@ async def test_refresh_replay_within_grace_window_reuses_pair(client):
     set_cookies = response.headers.get_list("set-cookie")
     assert any("LH_refresh=grace-refresh" in c for c in set_cookies), set_cookies
     # Crucially: no mass session revocation for a benign concurrent refresh.
-    revoke_mock.assert_not_called()
+    revoke_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -183,16 +190,17 @@ async def test_refresh_replay_outside_grace_window_revokes(client):
     stack = _patch_happy_path(
         {"sub": user.email, "iat": 1, "exp": 9_999_999_999, "jti": "stolen-jti"}
     )
-    with stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], \
+    with stack[0], stack[1], stack[2], stack[3], stack[4], stack[5], stack[6], stack[7], \
          patch("src.routers.auth.security_get_user", new_callable=AsyncMock, return_value=user), \
          patch("src.routers.auth._is_token_revoked_for_user", return_value=False), \
          patch("src.routers.auth._mark_refresh_jti_used", return_value=False), \
          patch("src.routers.auth._get_refresh_grace", return_value=None), \
          patch("asyncio.sleep", new_callable=AsyncMock), \
-         patch("src.routers.auth.revoke_user_sessions_before") as revoke_mock:
+         patch("src.routers.auth.advance_session_generation", new_callable=AsyncMock, return_value=2) as revoke_mock:
         response = await client.get(
             "/api/v1/auth/refresh",
             cookies={JWT_REFRESH_COOKIE_NAME: "replayed-token"},
         )
     assert response.status_code == 401
-    revoke_mock.assert_called_once_with(user.id)
+    revoke_mock.assert_awaited_once()
+    assert revoke_mock.await_args.args[1] == user.id

@@ -20,6 +20,7 @@ from src.db.studytomy.family import (
     StudyRelationshipRestrictionAction,
     StudyRelationshipRestrictionCreate,
     StudyRelationshipStatus,
+    StudyRelationshipWithdrawalCreate,
     StudySharingGrant,
 )
 from src.db.studytomy.governance import (
@@ -256,6 +257,97 @@ class TestRelationshipAuthority:
         assert not await authority.has_active_guardian_scope(
             db, org, profile, regular_user.id, "progress_summary"
         )
+
+    async def test_requester_can_withdraw_a_stale_pending_request_and_resubmit(
+        self, db, org, admin_user, regular_user, monkeypatch
+    ):
+        monkeypatch.setattr(authority, "_current_relationship_policies", _policy_snapshot)
+        profile = await _make_profile(db, org, admin_user, regular_user)
+        pending = await _create_request(db, org, regular_user, profile)
+        policy_b_ids = [41, 42, 43]
+
+        async def policy_b(_db, _org, _now):
+            return [SimpleNamespace(id=value) for value in policy_b_ids], set(APPROVED_SCOPES)
+
+        monkeypatch.setattr(authority, "_current_relationship_policies", policy_b)
+        monkeypatch.setattr(
+            authority,
+            "authorize_studytomy_staff_action",
+            AsyncMock(return_value=SimpleNamespace(policy_version_ids=policy_b_ids)),
+        )
+        accepted_decision = StudyRelationshipDecisionCreate(
+            outcome=StudyRelationshipDecisionOutcome.ACCEPT,
+            expected_version=1,
+            approved_scopes=["progress_summary"],
+            valid_from=datetime.now(timezone.utc) + timedelta(minutes=5),
+            valid_to=datetime.now(timezone.utc) + timedelta(days=30),
+            evidence_reference="case_abcdef0123456789",
+            reason_code="AUTHORITY_VERIFIED",
+        )
+        with pytest.raises(HTTPException) as stale_accept:
+            await authority.decide_relationship_request(
+                db, org, admin_user, profile.learner_uuid, pending.relationship_uuid,
+                accepted_decision, "stale-accept-key",
+            )
+        assert stale_accept.value.status_code == 409
+        assert stale_accept.value.detail["code"] == "RELATIONSHIP_POLICY_STALE"
+
+        withdrawal = StudyRelationshipWithdrawalCreate(
+            expected_version=1,
+            evidence_reference="ev_0123456789abcdef00",
+            reason_code="STALE_POLICY_SUPERSEDED",
+        )
+        with pytest.raises(HTTPException) as unrelated_actor:
+            await authority.withdraw_my_relationship_request(
+                db, org, admin_user, profile.learner_uuid, pending.relationship_uuid,
+                withdrawal, "unrelated-withdrawal-key",
+            )
+        assert unrelated_actor.value.status_code == 404
+
+        with pytest.raises(HTTPException) as stale_version:
+            await authority.withdraw_my_relationship_request(
+                db, org, regular_user, profile.learner_uuid, pending.relationship_uuid,
+                withdrawal.model_copy(update={"expected_version": 2}), "stale-withdrawal-key",
+            )
+        assert stale_version.value.status_code == 409
+        assert stale_version.value.detail["code"] == "STALE_AUTHORITY_VERSION"
+
+        withdrawn = await authority.withdraw_my_relationship_request(
+            db, org, regular_user, profile.learner_uuid, pending.relationship_uuid,
+            withdrawal, "withdrawal-key",
+        )
+        repeated = await authority.withdraw_my_relationship_request(
+            db, org, regular_user, profile.learner_uuid, pending.relationship_uuid,
+            withdrawal, "withdrawal-key",
+        )
+        assert withdrawn.status == StudyRelationshipStatus.WITHDRAWN
+        assert withdrawn.authority_version == 2
+        assert repeated == withdrawn
+        stored = await db.scalar(
+            select(StudyRelationship).where(
+                StudyRelationship.relationship_uuid == pending.relationship_uuid
+            )
+        )
+        assert stored is not None
+        assert stored.withdrawn_by_user_id == regular_user.id
+        assert stored.withdrawal_evidence_reference == withdrawal.evidence_reference
+        assert stored.decision_evidence_reference is None
+        assert not await authority.has_active_guardian_scope(
+            db, org, profile, regular_user.id, "progress_summary"
+        )
+
+        resubmitted = await authority.create_relationship_request(
+            db, org, regular_user, profile.learner_uuid, _request(), "request-under-policy-b"
+        )
+        assert resubmitted.relationship_uuid != pending.relationship_uuid
+        assert resubmitted.status == StudyRelationshipStatus.PENDING
+        resubmitted_record = await db.scalar(
+            select(StudyRelationship).where(
+                StudyRelationship.relationship_uuid == resubmitted.relationship_uuid
+            )
+        )
+        assert resubmitted_record is not None
+        assert resubmitted_record.request_policy_version_ids == policy_b_ids
 
     async def test_assigned_review_accepts_only_a_requested_scope_and_checks_version(
         self, db, org, admin_user, regular_user, monkeypatch

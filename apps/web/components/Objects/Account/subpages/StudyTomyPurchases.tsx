@@ -10,6 +10,7 @@ import { formatCurrency, formatDateTime } from '@/lib/format'
 import { getAPIUrl, getUriWithOrg } from '@services/config/config'
 import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/requests'
 import PurchaserRefundRequest from '@components/Studytomy/PurchaserRefundRequest'
+import StudytomyCheckout from '@components/Studytomy/StudytomyCheckout'
 
 type Order = {
   customer_ref: string
@@ -64,10 +65,10 @@ export default function StudyTomyPurchases(props: Props) {
   }
   const user = session.data?.user
   const identity = getAuthenticatedSessionIdentity(user?.id ?? user?.user_uuid, session.data)
-  return <PurchasesView key={JSON.stringify([identity, props.orgUuid, props.orderRef])} {...props} token={token} />
+  return <PurchasesView key={JSON.stringify([identity, props.orgUuid, props.orderRef])} {...props} token={token} sessionIdentity={identity} />
 }
 
-function PurchasesView({ orgUuid, orgSlug, orderRef, token }: Props & { token: string }) {
+function PurchasesView({ orgUuid, orgSlug, orderRef, token, sessionIdentity }: Props & { token: string; sessionIdentity: string }) {
   const { i18n } = useTranslation()
   const [view, setView] = useState<View>({ kind: 'loading' })
   const [after, setAfter] = useState<string>()
@@ -148,6 +149,7 @@ function PurchasesView({ orgUuid, orgSlug, orderRef, token }: Props & { token: s
       )}
       {view.kind === 'list' && (
         <>
+          <StudytomyCheckout orgUuid={orgUuid} orgSlug={orgSlug} sessionIdentity={sessionIdentity} token={token} />
           {view.page.orders.length === 0 && <p role="status">No Studytomy purchases to show.</p>}
           {view.page.orders.length > 0 && <ul className="divide-y rounded-lg border">
             {view.page.orders.map((order) => (

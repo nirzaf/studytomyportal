@@ -221,6 +221,7 @@ async def claim_due_deliveries(
     )
     for expired in expired_result.scalars().all():
         expired.status = "reconciliation_required"
+        expired.version += 1
         expired.lease_owner = None
         expired.lease_expires_at = None
         expired.last_error_code = "LEASE_EXPIRED_OUTCOME_UNKNOWN"
@@ -243,6 +244,7 @@ async def claim_due_deliveries(
     expiry = claimed_at + timedelta(seconds=lease_seconds)
     for record in records:
         record.status = "leased"
+        record.version += 1
         record.attempt_count += 1
         record.lease_owner = worker_id
         record.lease_expires_at = expiry
@@ -294,6 +296,7 @@ async def release_delivery_lease(
         retry_at = _as_utc(retry_at)
 
     locked.status = status_value
+    locked.version += 1
     locked.lease_owner = None
     locked.lease_expires_at = None
     locked.last_error_code = error_code

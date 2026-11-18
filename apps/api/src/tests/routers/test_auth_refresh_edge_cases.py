@@ -125,10 +125,16 @@ class TestUnparseableIat:
             id=42,
             email="user@test.com",
             password_changed_at=datetime.now(timezone.utc),
+            session_generation=1,
         )
         with patch(
             "src.routers.auth.decode_refresh_token",
-            return_value={"sub": user.email, "iat": "not-a-timestamp"},
+            return_value={
+                "sub": user.email,
+                "iat": "not-a-timestamp",
+                "sg": 1,
+                "jti": "edge-jti",
+            },
         ), patch(
             "src.routers.auth.security_get_user",
             new_callable=AsyncMock,
@@ -136,15 +142,18 @@ class TestUnparseableIat:
         ), patch(
             "src.routers.auth._is_token_revoked_for_user", return_value=False
         ) as revoked, patch(
+            "src.routers.auth._mark_refresh_jti_used", return_value=True
+        ), patch(
             "src.routers.auth.create_access_token", return_value="new-access"
         ), patch(
             "src.routers.auth.create_refresh_token", return_value="new-refresh"
-        ), patch("src.routers.auth._store_refresh_grace") as store_grace:
+        ), patch(
+            "src.routers.auth._store_refresh_grace", return_value=True
+        ) as store_grace:
             response = await _refresh(client)
 
         assert response.status_code == 200
         assert response.json()["access_token"] == "new-access"
         assert response.json()["refresh_token"] == "new-refresh"
         revoked.assert_called_once_with(42, None)
-        # No jti on the token, so there is no grace entry to cache.
-        store_grace.assert_not_called()
+        store_grace.assert_called_once()

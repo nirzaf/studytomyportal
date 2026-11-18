@@ -41,6 +41,7 @@ class TestAuth:
         user = Mock(spec=User)
         user.email = "test@example.com"
         user.password = "hashed_password"
+        user.session_generation = 1
         user.model_dump.return_value = {
             "id": 1,
             "email": "test@example.com",

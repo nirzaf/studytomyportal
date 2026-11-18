@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -69,6 +70,15 @@ class MasteryIntegrity:
     evidence_watermark: int
     projection: MasteryResult
     projection_version: int | None
+
+
+class MasteryReconciliationRepair(BaseModel):
+    """The exact dry-run state a staff repair is allowed to rebuild."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_evidence_watermark: int = Field(strict=True, ge=0)
+    expected_projection_version: int = Field(strict=True, ge=0)
 
 
 async def _watermark(db: AsyncSession, org_id: int, learner_id: int) -> int:
@@ -494,6 +504,8 @@ async def reconcile_mastery(
     policy_uuid: str,
     *,
     repair: bool = False,
+    expected_evidence_watermark: int | None = None,
+    expected_projection_version: int | None = None,
 ) -> MasteryIntegrity:
     """Explicit staff-scoped integrity check or repair. Never edits source evidence."""
     await lock_organization(db, org.id)
@@ -573,6 +585,23 @@ async def reconcile_mastery(
         StudyPolicyBody.model_validate(d09.body), policy_uuid
     )
     row, watermark, result = await _mastery_snapshot(db, profile, concept, policy, now)
+    if repair:
+        if expected_evidence_watermark is None or expected_projection_version is None:
+            raise studytomy_http_error(
+                422,
+                STALE_VERSION,
+                "An expected evidence watermark and projection version are required for repair.",
+            )
+        actual_version = row.version if row is not None else 0
+        if (
+            expected_evidence_watermark != watermark
+            or expected_projection_version != actual_version
+        ):
+            raise studytomy_http_error(
+                409,
+                STALE_VERSION,
+                "Evidence or mastery changed after the reconciliation preview.",
+            )
     if row is not None and _matches(row, watermark, result):
         return MasteryIntegrity("current", watermark, result, row.version)
     if not repair:

@@ -24,6 +24,7 @@ from src.db.paths import (
     PathEnrollment,
     PathUpdate,
 )
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.trail_steps import TrailStep
 from src.services.paths import paths as svc
 
@@ -358,6 +359,36 @@ class TestCompletion:
         assert verified["user"]["first_name"] == "Regular"
         assert "email" not in verified["user"]
 
+    async def test_public_certificate_closes_when_holder_becomes_protected(
+        self, db, org, admin_user, regular_user,
+    ):
+        a = await _course(db, org, 1)
+        await _complete(db, org, a, regular_user.id)
+        read = await _path(db, org, admin_user, [(a, True)], certificate_enabled=True)
+        certificate_uuid = (
+            await svc.enroll_in_path(None, read.path_uuid, regular_user, db)
+        ).progress.certificate_uuid
+
+        # Privacy takes effect for an already issued public certificate.
+        db.add(StudyLearnerProfile(
+            org_id=org.id,
+            user_id=regular_user.id,
+            created_by_user_id=admin_user.id,
+            status="active",
+            control_mode="independent",
+        ))
+        await db.commit()
+
+        with pytest.raises(HTTPException) as anonymous:
+            await svc.get_path_certificate(None, certificate_uuid, db)
+        assert anonymous.value.status_code == 404
+        assert anonymous.value.headers["Cache-Control"] == "private, no-store"
+        with pytest.raises(HTTPException) as unrelated:
+            await svc.get_path_certificate(None, certificate_uuid, db, admin_user)
+        assert unrelated.value.status_code == 404
+        owner_view = await svc.get_path_certificate(None, certificate_uuid, db, regular_user)
+        assert owner_view["user"]["username"] == regular_user.username
+
     async def test_enrolling_after_the_work_certifies_at_once(self, db, org, admin_user, regular_user):
         a = await _course(db, org, 1)
         await _complete(db, org, a, regular_user.id)
@@ -586,7 +617,9 @@ class TestEdgeCases:
             view = await svc.enroll_in_path(None, read.path_uuid, regular_user, db)
         assert view.path_uuid == read.path_uuid
 
-    async def test_certificate_issue_race_is_harmless(self, db, org, admin_user, regular_user):
+    async def test_completion_and_certificate_roll_back_together_on_commit_failure(
+        self, db, org, admin_user, regular_user
+    ):
         from sqlalchemy.exc import IntegrityError
 
         a = await _course(db, org, 1)
@@ -594,17 +627,27 @@ class TestEdgeCases:
         await svc.enroll_in_path(None, read.path_uuid, regular_user, db)
         await _complete(db, org, a, regular_user.id)
         path = (await db.execute(select(Path))).scalars().one()
-        real_commit = db.commit
-        calls = {"n": 0}
+        path_id = path.id
+        async def fail_commit():
+            raise IntegrityError("commit", {}, Exception("synthetic certificate persistence failure"))
 
-        async def commit():
-            calls["n"] += 1
-            if calls["n"] == 2:  # the certificate insert, after the enrollment is marked done
-                raise IntegrityError("insert", {}, Exception("duplicate"))
-            await real_commit()
+        with patch.object(db, "commit", side_effect=fail_commit):
+            with pytest.raises(IntegrityError):
+                await svc.check_path_completion(None, path, regular_user.id, db)
 
-        with patch.object(db, "commit", side_effect=commit):
-            assert await svc.check_path_completion(None, path, regular_user.id, db) is True
+        enrollment = (await db.execute(
+            select(PathEnrollment).where(
+                PathEnrollment.path_id == path_id, PathEnrollment.user_id == regular_user.id
+            )
+        )).scalars().one()
+        assert enrollment.completed_at is None
+        assert not (await db.execute(select(PathCertificate))).scalars().all()
+
+        path = await db.get(Path, path_id)
+        assert path is not None
+        assert await svc.check_path_completion(None, path, regular_user.id, db) is True
+        assert (await db.execute(select(PathCertificate))).scalars().one().certificate_uuid
+        assert await svc.check_path_completion(None, path, regular_user.id, db) is False
 
     async def test_webhook_failures_never_break_learners(self, db, org, admin_user, regular_user, _no_webhooks):
         _no_webhooks.side_effect = RuntimeError("webhook down")

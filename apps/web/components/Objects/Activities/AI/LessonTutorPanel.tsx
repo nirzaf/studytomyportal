@@ -21,6 +21,7 @@ type Stored = { session: Session; operation?: Operation }
 const feedbackIssues = ['inaccurate', 'unclear', 'unsafe'] as const
 type FeedbackIssue = typeof feedbackIssues[number]
 type FeedbackReceipt = { turn_uuid: string; issue_code: FeedbackIssue; received_at: string }
+type ReleaseScope = { course_uuid: string; course_release_uuid: string }
 
 type Turn = {
   operation_uuid: string
@@ -35,13 +36,17 @@ type Turn = {
   } | null
 }
 
-export function useLessonTutor(orgUuid: string | undefined, activityUuid: string) {
+export function useLessonTutor(
+  orgUuid: string | undefined,
+  activityUuid: string,
+  release?: ReleaseScope,
+) {
   const session = useLHSession()
   const token = session?.data?.tokens?.access_token
   const user = session?.data?.user
   const identity = getAuthenticatedSessionIdentity(user?.id ?? user?.user_uuid, session?.data)
   const key = session?.status === 'authenticated' && token && orgUuid && activityUuid
-    ? JSON.stringify([identity, orgUuid, activityUuid]) : null
+    ? JSON.stringify([identity, orgUuid, activityUuid, release?.course_uuid, release?.course_release_uuid]) : null
   const client = useMemo(() => key && orgUuid && token ? adaptiveRequest(orgUuid, token) : null, [key, orgUuid, token])
   const optionRequests = useRef(new Map<AdaptiveRequest, Set<AbortController>>())
   useEffect(() => {
@@ -61,7 +66,13 @@ export function useLessonTutor(orgUuid: string | undefined, activityUuid: string
       pending.add(controller)
       try {
         return await client<Options>(
-          `me/tutor-options?${new URLSearchParams({ activity_uuid: activityUuid })}`,
+          `me/tutor-options?${new URLSearchParams({
+            activity_uuid: activityUuid,
+            ...(release && {
+              course_uuid: release.course_uuid,
+              course_release_uuid: release.course_release_uuid,
+            }),
+          })}`,
           'GET', undefined, undefined, controller.signal,
         )
       } finally {
@@ -70,7 +81,7 @@ export function useLessonTutor(orgUuid: string | undefined, activityUuid: string
     },
     { shouldRetryOnError: false },
   )
-  return { client, key, options: error ? undefined : data, error: Boolean(error) }
+  return { client, key, options: error ? undefined : data, error: Boolean(error), release }
 }
 
 function loadStored(key: string, activityUuid: string): Stored | undefined {
@@ -87,7 +98,7 @@ export function LessonTutorContent({ tutor, activityUuid }: {
   activityUuid: string
 }) {
   const { t } = useTranslation()
-  const { options, client, key, error } = tutor
+  const { options, client, key, error, release } = tutor
   if (!client || !key || !options || options.mode !== 'guided') {
     const assessment = options?.reason === 'assessment_in_progress'
     return <p role="status" className="text-sm">
@@ -97,11 +108,12 @@ export function LessonTutorContent({ tutor, activityUuid }: {
     </p>
   }
   const sessionKey = `lesson-tutor:${key}:${options.practice_attempt_uuid ?? ''}`
-  return <GuidedLesson key={sessionKey} {...{ client, activityUuid, options, sessionKey }} />
+  return <GuidedLesson key={sessionKey} {...{ client, activityUuid, options, sessionKey, release }} />
 }
 
-function GuidedLesson({ client, activityUuid, options, sessionKey }: {
+function GuidedLesson({ client, activityUuid, options, sessionKey, release }: {
   client: AdaptiveRequest; activityUuid: string; options: Options; sessionKey: string
+  release?: ReleaseScope
 }) {
   const { t } = useTranslation()
   const heading = useId()
@@ -167,6 +179,10 @@ function GuidedLesson({ client, activityUuid, options, sessionKey }: {
     await execute(async signal => {
       const session = await client<Session>('me/tutor-sessions', 'POST', {
         activity_uuid: activityUuid,
+        ...(release && {
+          course_uuid: release.course_uuid,
+          course_release_uuid: release.course_release_uuid,
+        }),
         ...(options.practice_attempt_uuid && { practice_attempt_uuid: options.practice_attempt_uuid }),
       }, undefined, signal)
       if (!signal.aborted) {

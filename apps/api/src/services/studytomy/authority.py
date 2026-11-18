@@ -29,6 +29,7 @@ from src.db.studytomy.family import (
     StudyRelationshipReviewRead,
     StudyRelationshipStatus,
     StudyRelationshipType,
+    StudyRelationshipWithdrawalCreate,
 )
 from src.db.studytomy.governance import (
     StudyOwnerAssignment,
@@ -469,6 +470,118 @@ async def list_my_relationship_requests(
     return reads
 
 
+async def withdraw_my_relationship_request(
+    db_session: AsyncSession,
+    organization: Organization,
+    adult: PublicUser,
+    learner_uuid: str,
+    relationship_uuid: str,
+    request: StudyRelationshipWithdrawalCreate,
+    idempotency_key: str,
+) -> StudyRelationshipRead:
+    """Close only the requester's own still-pending relationship request."""
+    await lock_organization(db_session, int(organization.id))
+    profile = await _locked_profile(db_session, organization, learner_uuid)
+    if not await _require_current_membership(db_session, organization, int(adult.id)):
+        raise HTTPException(status_code=404, detail="Relationship request not found")
+    if not await _require_current_membership(db_session, organization, int(profile.user_id)):
+        raise HTTPException(status_code=404, detail="Relationship request not found")
+
+    relationship_result = await db_session.execute(
+        select(StudyRelationship)
+        .where(
+            StudyRelationship.org_id == organization.id,
+            StudyRelationship.learner_profile_id == profile.id,
+            StudyRelationship.relationship_uuid == relationship_uuid,
+            StudyRelationship.adult_user_id == adult.id,
+            StudyRelationship.requested_by_user_id == adult.id,
+        )
+        .with_for_update()
+    )
+    relationship = relationship_result.scalars().first()
+    if relationship is None:
+        raise HTTPException(status_code=404, detail="Relationship request not found")
+
+    await lock_users(db_session, [int(adult.id), int(profile.user_id)])
+    replay = await claim_idempotency(
+        db_session,
+        org_id=int(organization.id),
+        actor_user_id=int(adult.id),
+        operation="studytomy.relationship.withdraw",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "learner_uuid": learner_uuid,
+            "relationship_uuid": relationship_uuid,
+            "withdrawal": request.model_dump(mode="json"),
+        },
+    )
+    if replay is not None:
+        if replay.resource_uuid != relationship.relationship_uuid:
+            raise HTTPException(status_code=409, detail="The idempotent relationship withdrawal is unavailable")
+        return _relationship_read(relationship, profile)
+
+    if request.expected_version != relationship.authority_version:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "STALE_AUTHORITY_VERSION",
+                "message": "The relationship request changed. Reload it before withdrawing it.",
+                "current_version": relationship.authority_version,
+            },
+        )
+    if relationship.status != StudyRelationshipStatus.PENDING.value:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RELATIONSHIP_NOT_PENDING",
+                "message": "Only a pending relationship request can be withdrawn.",
+            },
+        )
+
+    now = datetime.now(timezone.utc)
+    relationship.status = StudyRelationshipStatus.WITHDRAWN.value
+    relationship.withdrawn_by_user_id = int(adult.id)
+    relationship.withdrawal_evidence_reference = request.evidence_reference
+    relationship.withdrawal_reason_code = request.reason_code
+    relationship.withdrawn_at = now
+    relationship.authority_version += 1
+    relationship.updated_at = now
+    db_session.add(relationship)
+    await db_session.flush()
+    await append_business_event(
+        db_session,
+        org_id=int(organization.id),
+        actor_user_id=int(adult.id),
+        actor_capacity="relationship_requester",
+        subject_uuid=profile.learner_uuid,
+        resource_kind="relationship",
+        resource_uuid=relationship.relationship_uuid,
+        action="studytomy.relationship.withdrawn",
+        reason_code=request.reason_code,
+        before_state={"status": StudyRelationshipStatus.PENDING.value, "authority_version": request.expected_version},
+        after_state={
+            "status": relationship.status,
+            "authority_version": relationship.authority_version,
+        },
+        policy_refs=relationship.request_policy_version_ids,
+        dedupe_key=f"studytomy:relationship:{relationship.relationship_uuid}:v{relationship.authority_version}",
+    )
+    await complete_idempotency(
+        db_session,
+        org_id=int(organization.id),
+        actor_user_id=int(adult.id),
+        operation="studytomy.relationship.withdraw",
+        idempotency_key=idempotency_key,
+        resource_kind="relationship",
+        resource_uuid=relationship.relationship_uuid,
+        response_status=200,
+        response_projection={"relationship_uuid": relationship.relationship_uuid},
+    )
+    await db_session.commit()
+    await db_session.refresh(relationship)
+    return _relationship_read(relationship, profile)
+
+
 async def list_family_review_queue(
     db_session: AsyncSession,
     organization: Organization,
@@ -680,6 +793,9 @@ async def get_relationship_for_review(
         decision_policy_version_ids=relationship.decision_policy_version_ids,
         decision_evidence_reference=relationship.decision_evidence_reference,
         decision_reason_code=relationship.decision_reason_code,
+        withdrawal_evidence_reference=relationship.withdrawal_evidence_reference,
+        withdrawal_reason_code=relationship.withdrawal_reason_code,
+        withdrawn_at=relationship.withdrawn_at,
     )
 
 

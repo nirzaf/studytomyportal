@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
+from fastapi import HTTPException
 from sqlmodel import select
 
 from src.db.users import User
@@ -18,7 +19,7 @@ from src.security.session_context import (
     get_session_provenance,
     set_session_provenance,
 )
-from src.services.auth.session import mint_session_tokens
+from src.services.auth.session import advance_session_generation, mint_session_tokens
 
 
 @pytest.fixture(autouse=True)
@@ -53,6 +54,33 @@ class TestProvenancePublished:
         assert prov is not None
         assert prov.amr == "password"
         assert prov.org_id == 55
+
+    async def test_session_generation_is_durable_when_redis_is_unavailable(
+        self, db, regular_user
+    ):
+        user = (
+            await db.execute(select(User).where(User.id == regular_user.id))
+        ).scalars().one()
+        old_tokens = mint_session_tokens(
+            user.email, session_generation=user.session_generation
+        )
+        new_generation = await advance_session_generation(db, user.id)
+
+        stale_request = _request(cookies={JWT_COOKIE_NAME: old_tokens.access_token})
+        with patch("src.security.auth._get_revocation_redis_client", return_value=None), \
+             patch("src.security.auth._record_activity_from_request"):
+            with pytest.raises(HTTPException) as rejected:
+                await get_current_user(stale_request, db)
+        assert rejected.value.status_code == 401
+
+        current_tokens = mint_session_tokens(
+            user.email, session_generation=new_generation
+        )
+        current_request = _request(cookies={JWT_COOKIE_NAME: current_tokens.access_token})
+        with patch("src.security.auth._get_revocation_redis_client", return_value=None), \
+             patch("src.security.auth._record_activity_from_request"):
+            accepted = await get_current_user(current_request, db)
+        assert accepted.email == user.email
 
     async def test_org_api_token_publishes_api_token_and_org(self, db):
         token_user = SimpleNamespace(id=0, org_id=77, created_by_user_id=3)

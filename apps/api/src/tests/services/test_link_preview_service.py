@@ -52,7 +52,8 @@ def _patch_client(handler):
     """Patch ``httpx.AsyncClient`` so the service talks to ``handler`` instead."""
 
     def _factory(**kwargs):
-        return _REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler), **kwargs)
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return _REAL_ASYNC_CLIENT(**kwargs)
 
     return patch("src.services.utils.link_preview.httpx.AsyncClient", _factory)
 

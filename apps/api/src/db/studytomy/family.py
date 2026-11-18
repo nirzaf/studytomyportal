@@ -73,6 +73,7 @@ class StudyRelationshipStatus(str, Enum):
     PENDING = "pending"
     ACCEPTED = "accepted"
     DENIED = "denied"
+    WITHDRAWN = "withdrawn"
     RESTRICTED = "restricted"
     DISPUTED = "disputed"
     REVOKED = "revoked"
@@ -119,7 +120,7 @@ class StudyRelationship(SQLModel, table=True):
             name="ck_st_relationship_type",
         ),
         CheckConstraint(
-            "status IN ('pending', 'accepted', 'denied', 'restricted', 'disputed', 'revoked', 'expired')",
+            "status IN ('pending', 'accepted', 'denied', 'withdrawn', 'restricted', 'disputed', 'revoked', 'expired')",
             name="ck_st_relationship_status",
         ),
         CheckConstraint(
@@ -138,12 +139,20 @@ class StudyRelationship(SQLModel, table=True):
             name="ck_st_relationship_nonaccepted_has_no_scope",
         ),
         CheckConstraint(
-            "status = 'pending' OR (decided_by_user_id IS NOT NULL AND decision_owner_assignment_id IS NOT NULL AND decided_at IS NOT NULL AND decision_evidence_reference IS NOT NULL AND decision_reason_code IS NOT NULL AND decision_policy_version_ids IS NOT NULL)",
+            "status IN ('pending', 'withdrawn') OR (decided_by_user_id IS NOT NULL AND decision_owner_assignment_id IS NOT NULL AND decided_at IS NOT NULL AND decision_evidence_reference IS NOT NULL AND decision_reason_code IS NOT NULL AND decision_policy_version_ids IS NOT NULL)",
             name="ck_st_relationship_decision_complete",
         ),
         CheckConstraint(
-            "status <> 'pending' OR (decided_by_user_id IS NULL AND decision_owner_assignment_id IS NULL AND decided_at IS NULL AND decision_evidence_reference IS NULL AND decision_reason_code IS NULL AND decision_policy_version_ids IS NULL)",
+            "status NOT IN ('pending', 'withdrawn') OR (decided_by_user_id IS NULL AND decision_owner_assignment_id IS NULL AND decided_at IS NULL AND decision_evidence_reference IS NULL AND decision_reason_code IS NULL AND decision_policy_version_ids IS NULL)",
             name="ck_st_relationship_pending_has_no_decision",
+        ),
+        CheckConstraint(
+            "status <> 'withdrawn' OR (withdrawn_by_user_id IS NOT NULL AND withdrawal_evidence_reference IS NOT NULL AND withdrawal_reason_code IS NOT NULL AND withdrawn_at IS NOT NULL)",
+            name="ck_st_relationship_withdrawal_complete",
+        ),
+        CheckConstraint(
+            "status = 'withdrawn' OR (withdrawn_by_user_id IS NULL AND withdrawal_evidence_reference IS NULL AND withdrawal_reason_code IS NULL AND withdrawn_at IS NULL)",
+            name="ck_st_relationship_nonwithdrawn_has_no_withdrawal",
         ),
     )
 
@@ -198,6 +207,12 @@ class StudyRelationship(SQLModel, table=True):
     decision_evidence_reference: Optional[str] = Field(default=None, sa_column=Column(String(500)))
     decision_reason_code: Optional[str] = Field(default=None, sa_column=Column(String(64)))
     decided_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    withdrawn_by_user_id: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, ForeignKey("user.id", ondelete="RESTRICT"))
+    )
+    withdrawal_evidence_reference: Optional[str] = Field(default=None, sa_column=Column(String(500)))
+    withdrawal_reason_code: Optional[str] = Field(default=None, sa_column=Column(String(64)))
+    withdrawn_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     authority_version: int = Field(default=1, sa_column=Column(Integer, nullable=False, default=1))
     created_at: datetime = Field(
         default_factory=_utcnow,
@@ -604,6 +619,32 @@ class StudyRelationshipDecisionCreate(BaseModel):
         return self
 
 
+class StudyRelationshipWithdrawalCreate(BaseModel):
+    """Requester-controlled, versioned closure of a pending authority request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = PydanticField(ge=1)
+    evidence_reference: str = PydanticField(min_length=20, max_length=100)
+    reason_code: str = PydanticField(min_length=3, max_length=64)
+
+    @field_validator("evidence_reference")
+    @classmethod
+    def withdrawal_evidence_reference_is_opaque(cls, value: str) -> str:
+        normalized = value.strip()
+        if re.fullmatch(r"(?:ev|case)_[A-Za-z0-9_-]{16,80}", normalized) is None:
+            raise ValueError("evidence_reference must be an opaque evidence or case reference")
+        return normalized
+
+    @field_validator("reason_code")
+    @classmethod
+    def withdrawal_reason_is_code(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}", normalized) is None:
+            raise ValueError("reason_code must be a stable non-PII code")
+        return normalized
+
+
 class StudyRelationshipRestrictionCreate(BaseModel):
     """Independent, versioned narrowing/revocation of an existing authority."""
 
@@ -716,6 +757,9 @@ class StudyRelationshipReviewRead(StudyRelationshipRead):
     decision_policy_version_ids: Optional[list[int]]
     decision_evidence_reference: Optional[str]
     decision_reason_code: Optional[str]
+    withdrawal_evidence_reference: Optional[str]
+    withdrawal_reason_code: Optional[str]
+    withdrawn_at: Optional[datetime]
 
 
 class StudyFamilyReviewQueueItem(BaseModel):

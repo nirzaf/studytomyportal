@@ -1,13 +1,59 @@
-from fastapi import APIRouter, Depends
+import os
+import re
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.organizations import Organization
 from src.core.events.database import get_db_session
+from src.core.migrations import current_revisions, head_revisions
 from src.core.deployment_mode import get_deployment_mode
 from src.services.orgs.cache import get_cached_instance_info, set_cached_instance_info
 from config.config import get_learnhouse_config
+from src.security.api_token_utils import get_authenticated_non_api_token_user
+from src.db.users import PublicUser
 
 router = APIRouter()
+
+
+@router.get("/runtime-identity", include_in_schema=False)
+async def get_runtime_identity(
+    response: Response,
+    current_user: PublicUser = Depends(get_authenticated_non_api_token_user),
+    db_session: AsyncSession = Depends(get_db_session),
+):
+    """Expose exact local test identity only when the operator opts in."""
+    del current_user  # Authentication is required; identity contains no user data.
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "Authorization"
+    if os.getenv("STUDYTOMY_TEST_RUNTIME_IDENTITY") != "1":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    build_sha = os.getenv("STUDYTOMY_BUILD_SHA", "")
+    source_tree_sha256 = os.getenv("STUDYTOMY_BUILD_TREE_SHA256", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", build_sha) or not re.fullmatch(
+        r"[0-9a-f]{64}", source_tree_sha256
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Runtime source identity is not configured.",
+        )
+
+    try:
+        connection = await db_session.connection()
+        database_migration_heads = await connection.run_sync(current_revisions)
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Runtime database revision is unavailable.",
+        ) from error
+
+    return {
+        "build_sha": build_sha,
+        "source_tree_sha256": source_tree_sha256,
+        "source_migration_heads": head_revisions(),
+        "database_migration_heads": database_migration_heads,
+    }
 
 
 def _strip_port(domain: str) -> str:

@@ -24,9 +24,12 @@ from src.security.auth import (
     decode_jwt,
     extract_jwt_from_request,
     get_authenticated_user,
-    revoke_user_sessions_before,
 )
-from src.security.session_context import carry_session_claims, refuse_lms_session
+from src.security.session_context import (
+    SESSION_GENERATION_CLAIM,
+    carry_session_claims,
+    refuse_lms_session,
+)
 from src.security.security import security_verify_password
 from src.services.auth.mfa import (
     build_provisioning_uri,
@@ -48,6 +51,7 @@ from src.services.auth.session import (
     mint_session_tokens,
     track_login,
     spend_mfa_pending_token,
+    advance_session_generation,
 )
 from src.services.orgs.auth_policy import auth_policy_exception, evaluate_org_auth
 from src.services.orgs.mfa_policy import evaluate_mfa_compliance, get_org_mfa_policy
@@ -129,7 +133,12 @@ def _verify_password_if_set(user: User, password: Optional[str]) -> None:
         )
 
 
-def _rotate_sessions(request: Request, response: Response, user: User) -> dict:
+async def _rotate_sessions(
+    request: Request,
+    response: Response,
+    user: User,
+    db_session: AsyncSession,
+) -> dict:
     """Sign out every session of ``user`` and hand the caller a fresh one.
 
     Cutting at the caller's own issue time left alive any session minted after
@@ -139,13 +148,16 @@ def _rotate_sessions(request: Request, response: Response, user: User) -> dict:
     """
     token = extract_jwt_from_request(request)
     payload = (decode_jwt(token) if token else None) or {}
-    try:
-        revoke_user_sessions_before(user.id)
-    except Exception:  # pragma: no cover - never fail the 2FA change on the revocation store
-        pass
+    generation = await advance_session_generation(db_session, user.id)
+    user.session_generation = generation
     # Same claims a refresh would carry, so the reissue can't launder the
     # session's method, org binding or legacy grace deadline.
-    data = {"sub": user.email, "purpose": "session", **carry_session_claims(payload)}
+    data = {
+        "sub": user.email,
+        "purpose": "session",
+        SESSION_GENERATION_CLAIM: generation,
+        **carry_session_claims(payload),
+    }
     access_token = create_access_token(data=data)
     refresh_token = create_refresh_token(data=data)
     set_auth_cookies(response, access_token, refresh_token, request)
@@ -334,7 +346,7 @@ async def api_mfa_confirm(
     await db_session.commit()
 
     codes = await replace_backup_codes(db_session, user.id)
-    tokens = _rotate_sessions(request, response, user)
+    tokens = await _rotate_sessions(request, response, user, db_session)
     await _disconnect_ai_apps(db_session, user.id)
     return {"enabled": True, "backup_codes": codes, "tokens": tokens}
 
@@ -383,7 +395,7 @@ async def api_mfa_disable(
         )
 
     await disable_mfa(db_session, user.id)
-    tokens = _rotate_sessions(request, response, user)
+    tokens = await _rotate_sessions(request, response, user, db_session)
     await _disconnect_ai_apps(db_session, user.id)
     return {"enabled": False, "tokens": tokens}
 
@@ -484,13 +496,33 @@ async def api_login_mfa(
             detail={"code": "MFA_SESSION_EXPIRED", "message": "Please sign in again."},
         )
 
+    pending_generation = (decode_jwt(form.mfa_token) or {}).get(
+        SESSION_GENERATION_CLAIM
+    )
+    user_generation = getattr(user, "session_generation", None)
+    if (
+        type(pending_generation) is not int
+        or pending_generation < 1
+        or type(user_generation) is not int
+        or user_generation < 1
+        or pending_generation != user_generation
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "MFA_SESSION_EXPIRED", "message": "Please sign in again."},
+        )
+
     mfa = await get_user_mfa(db_session, user.id)
     if mfa is None or mfa.confirmed_at is None:
         # The factor was removed between password step and code step. Nothing
         # left to verify, so fall through to a normal session rather than
         # stranding the user at a challenge they can never satisfy.
         result = mint_session_tokens(
-            user.email, pending_amr, pending_org_id, pending_custom_domain
+            user.email,
+            pending_amr,
+            pending_org_id,
+            pending_custom_domain,
+            int(user.session_generation),
         )
     else:
         accepted = False
@@ -517,7 +549,11 @@ async def api_login_mfa(
             )
 
         result = mint_session_tokens(
-            user.email, pending_amr, pending_org_id, pending_custom_domain
+            user.email,
+            pending_amr,
+            pending_org_id,
+            pending_custom_domain,
+            int(user.session_generation),
         )
 
     # One pending token, one session: replaying it with another valid code
@@ -938,6 +974,6 @@ async def api_org_reset_member_mfa(
     await disable_mfa(db_session, user_id)
     # Whoever lost (or stole) the device may still hold a session; the member
     # signs in again and re-enrolls.
-    revoke_user_sessions_before(user_id)
+    await advance_session_generation(db_session, user_id)
     await _disconnect_ai_apps(db_session, user_id)
     return {"reset": True, "user_id": user_id, "had_factor": had_factor}

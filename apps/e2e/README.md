@@ -65,11 +65,41 @@ bun run test:headed                       # watch it drive the UI
 bun run report                            # open the HTML report after a run
 ```
 
+### Studytomy tests against this fork
+
+Studytomy specs never boot the default published `learnhouse@latest` install.
+Run them against loopback web and API processes built from this checkout. In
+each server shell, from the repository root, export the current commit and full
+tracked/untracked source digest before starting the process:
+
+```bash
+eval "$(bun apps/e2e/scripts/studytomy-build-identity.ts)"
+# Start the local API or web process from this shell using its existing command.
+```
+
+Then run the scoped browser suite from `apps/e2e` with `E2E_BASE_URL` and, when
+the API is on a separate origin, `E2E_API_URL` set to those loopback services:
+
+```bash
+cd apps/e2e
+E2E_BASE_URL=http://localhost:3000 E2E_API_URL=http://localhost:8000/api/v1 bun run test:studytomy
+```
+
+Global setup compares both served source identities to the current checkout,
+checks that the API database migration heads match the API source, and logs the
+commit, source digest, dirty-worktree flag and database heads. Missing or
+mismatched identity stops the run before test setup. Explicit upstream-only
+feature paths keep the published self-host harness. Run `bun run test:identity`
+to verify the guard itself. The opt-in PostgreSQL fixtures remain separate:
+they read only `STUDYTOMY_TEST_DATABASE_URL`, reject non-PostgreSQL/non-loopback
+or non-`_test` databases, and report an explicit skip when the variable is
+absent.
+
 Run a single module or spec:
 
 ```bash
 bunx playwright test features/assignments         # one feature
-bunx playwright test 06-manual-grading            # one spec by name
+bunx playwright test features/assignments/tests/06-manual-grading.spec.ts
 ```
 
 ### Configuration (env)
@@ -83,6 +113,9 @@ bunx playwright test 06-manual-grading            # one spec by name
 | `E2E_CLI` | `npx --yes learnhouse@latest` | CLI used to boot (override for a local build). |
 | `E2E_SKIP_BOOT` | unset | `1` to skip booting (assumes instance already up). |
 | `E2E_KEEP` | unset | `1` to keep the instance running after the suite. |
+| `STUDYTOMY_TEST_RUNTIME_IDENTITY` | unset | Local-only opt-in for exact API/web build identity endpoints. |
+| `STUDYTOMY_BUILD_SHA` | unset | Full Git commit SHA embedded in the local API and web processes. |
+| `STUDYTOMY_BUILD_TREE_SHA256` | unset | Digest of tracked and non-ignored untracked checkout files. |
 
 ### Reliability notes
 

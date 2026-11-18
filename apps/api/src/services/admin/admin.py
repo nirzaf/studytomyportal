@@ -61,7 +61,11 @@ from src.services.studytomy.privacy import (
 )
 from src.security.auth import create_access_token
 from src.security.org_auth import org_owns_account
-from src.security.session_context import AUTH_METHOD_API_TOKEN, session_claims
+from src.security.session_context import (
+    AUTH_METHOD_API_TOKEN,
+    SESSION_GENERATION_CLAIM,
+    session_claims,
+)
 from src.security.features_utils.plan_check import get_org_plan
 from src.security.features_utils.plans import plan_meets_requirement
 from src.security.features_utils.usage import (
@@ -400,6 +404,7 @@ async def issue_user_token(
         data={
             "sub": user.email,
             "purpose": "session",
+            SESSION_GENERATION_CLAIM: user.session_generation,
             **session_claims(AUTH_METHOD_API_TOKEN, token_user.org_id),
         },
         expires_delta=timedelta(hours=1),

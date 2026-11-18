@@ -53,7 +53,7 @@ function Preview({ question }: { question: Question }) {
 
 function CurriculumEditor({ snapshot, catalog, courseUuid, busy, save }: {
   snapshot: CurriculumReview; catalog: Catalog; courseUuid: string; busy: boolean
-  save: (path: string, method: 'PUT', body: object) => void
+  save: (_path: string, _method: 'PUT', _body: object) => void
 }) {
   const { t } = useTranslation()
   const concepts = snapshot.concepts.filter(concept => !concept.archived)
@@ -135,11 +135,14 @@ type ReviewSelection = {
   kind: DefinitionKind; row: Definition; digest: string
   item?: ItemReview; curriculum?: CurriculumReview; diagnostic?: DiagnosticReview
 }
-type Save = (path: string, method: 'POST' | 'PUT', body: object, message: string, after?: () => void) => void
+type Save = (
+  _path: string, _method: 'POST' | 'PUT', _body: object, _message: string,
+  _after?: (_result: unknown) => void,
+) => void
 
 function ItemEditor({ choices, busy, client, save, reportError }: {
   choices: { value: string; label: string }[]; busy: boolean; client: ReturnType<typeof adaptiveRequest>
-  save: Save; reportError: (error: unknown) => void
+  save: Save; reportError: (_error: unknown) => void
 }) {
   const { t } = useTranslation()
   const [native, setNative] = useState<{ preview: NativePreview; concept: string; task: string; question: string }>()
@@ -312,12 +315,12 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
     try {
       const signature = JSON.stringify([path, body])
       if (method === 'POST' && retry.current?.signature !== signature) retry.current = { signature, key: crypto.randomUUID() }
-      await client(path, method, body, method === 'POST' ? retry.current?.key : undefined)
+      const result = await client<unknown>(path, method, body, method === 'POST' ? retry.current?.key : undefined)
       retry.current = null
       setReview(undefined)
       setStatus(message)
-      after?.()
       setCatalog(await client<Catalog>(`courses/${encodeURIComponent(courseUuid)}/configuration`))
+      after?.(result)
     } catch (reason) {
       reportError(reason)
     } finally {
@@ -337,7 +340,7 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
         const diagnostic = await client<DiagnosticReview>(`diagnostic-revisions/${row.uuid}`)
         setReview({ kind, row, digest: diagnostic.content_digest, diagnostic })
       } else if (kind === 'item' && row.status === 'draft') {
-        const preview = await client<ItemReview>(`item-revisions/${row.uuid}/review`)
+        const preview = await client<ItemReview>(`item-revisions/${row.uuid}/${catalog.can_review ? 'grading-review' : 'review'}`)
         setReview({ kind, row, digest: preview.content_digest, item: preview })
       } else if (kind === 'curriculum' && row.status === 'draft') {
         const preview = await client<CurriculumReview>(`curriculum-revisions/${row.uuid}/review`)
@@ -359,7 +362,11 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
     const fields = Object.fromEntries(new FormData(form))
     save('curriculum-revisions', 'POST', {
       ...fields, revision: Number(fields.revision), owner_course_uuid: courseUuid, jurisdiction: fields.jurisdiction || null,
-    }, t('adaptive.curriculumSaved', 'Curriculum draft saved.'), () => { form.reset(); select('') })
+    }, t('adaptive.curriculumSaved', 'Curriculum draft saved.'), result => {
+      form.reset()
+      const createdUuid = (result as { uuid?: string } | null)?.uuid
+      if (createdUuid) select(createdUuid)
+    })
   }
 
   const rows: readonly (readonly [DefinitionKind, Definition])[] = [
@@ -436,6 +443,16 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
           <p className="break-words text-sm">{t('adaptive.fields.rights_reference', 'Rights reference')} · {review.item.rights_reference}</p>
           <p className="text-sm">{review.item.allowed_use === 'practice_only'
             ? t('adaptive.practiceOnly', 'Practice only') : t('adaptive.independent', 'Independent diagnostic')}</p>
+          {review.item.private_answer && <div className="space-y-1 rounded-md border border-amber-500/50 bg-amber-50 p-3 text-sm text-amber-950">
+            <h5 className="font-semibold">Private grading rule · version {review.item.item_version}</h5>
+            <p>Evaluator: <code>{review.item.evaluator_version}</code></p>
+            {review.item.private_answer.kind === 'number' ? (
+              <p>Expected value: <code>{review.item.private_answer.expected}</code> ± <code>{review.item.private_answer.tolerance}</code>{review.item.item.question.unit ? ` ${review.item.item.question.unit}` : ''}</p>
+            ) : review.item.private_answer.correct_option_uuid ? (
+              <p>Correct option: {review.item.item.question.options?.find(option => option.option_uuid === review.item?.private_answer?.correct_option_uuid)?.text ?? 'See option reference'} · <code>{review.item.private_answer.correct_option_uuid}</code></p>
+            ) : <pre className="whitespace-pre-wrap break-words">{JSON.stringify(review.item.private_answer, null, 2)}</pre>}
+            <p className="text-xs">This grading rule is visible only to an assigned reviewer for this draft.</p>
+          </div>}
         </>}
         {review.diagnostic && <ul className="list-disc ps-5 text-sm">
           {review.diagnostic.manifest.required_concepts.map(uuid => <li key={uuid}>

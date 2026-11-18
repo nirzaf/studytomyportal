@@ -33,8 +33,8 @@ async def client(app):
 
 
 @pytest.mark.asyncio
-async def test_logout_revokes_every_session_for_the_user(client, admin_user):
-    """Happy path: decode_jwt yields a sub, user lookup succeeds, revoke called."""
+async def test_logout_durably_advances_every_session_for_the_user(client, admin_user):
+    """A successful logout records durable revocation before clearing cookies."""
     with patch(
         "src.routers.auth.extract_jwt_from_request",
         return_value="opaque-but-nonempty",
@@ -44,25 +44,27 @@ async def test_logout_revokes_every_session_for_the_user(client, admin_user):
     ), patch(
         "src.routers.auth.security_get_user",
         new_callable=AsyncMock,
-        return_value=MagicMock(id=admin_user.id),
+        return_value=admin_user,
     ), patch(
-        "src.routers.auth.revoke_user_sessions_before"
+        "src.routers.auth.advance_session_generation",
+        new_callable=AsyncMock,
+        return_value=2,
     ) as revoke, patch(
         "src.routers.auth.unset_auth_cookies"
     ) as unset:
         response = await client.delete("/api/v1/auth/logout")
 
     assert response.status_code == 200
-    revoke.assert_called_once_with(admin_user.id)
+    revoke.assert_awaited_once()
+    assert revoke.await_args.args[1] == admin_user.id
     unset.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_logout_succeeds_when_revocation_store_raises(client, admin_user):
+async def test_logout_reports_unavailable_when_durable_revocation_fails(client, admin_user):
     """
-    A transient Redis / DB error inside the revocation branch must not prevent
-    the user from logging out; cookies still need to clear. The exception is
-    swallowed and logout returns 200.
+    A failed durable write must not be reported as successful server-side
+    logout. Browser cookies are still cleared so the local session ends.
     """
     with patch(
         "src.routers.auth.extract_jwt_from_request",
@@ -72,6 +74,10 @@ async def test_logout_succeeds_when_revocation_store_raises(client, admin_user):
         return_value={"sub": admin_user.email, "iat": 123, "exp": 999},
     ), patch(
         "src.routers.auth.security_get_user",
+        new_callable=AsyncMock,
+        return_value=admin_user,
+    ), patch(
+        "src.routers.auth.advance_session_generation",
         new_callable=AsyncMock,
         side_effect=RuntimeError("db boom"),
     ), patch(
@@ -79,7 +85,7 @@ async def test_logout_succeeds_when_revocation_store_raises(client, admin_user):
     ) as unset:
         response = await client.delete("/api/v1/auth/logout")
 
-    assert response.status_code == 200
+    assert response.status_code == 503
     unset.assert_called_once()
 
 
@@ -96,14 +102,11 @@ async def test_logout_skips_revocation_when_token_has_no_sub(client):
         "src.routers.auth.decode_jwt",
         return_value={"exp": 999},  # no sub
     ), patch(
-        "src.routers.auth.revoke_user_sessions_before"
-    ) as revoke, patch(
         "src.routers.auth.unset_auth_cookies"
     ) as unset:
         response = await client.delete("/api/v1/auth/logout")
 
     assert response.status_code == 200
-    revoke.assert_not_called()
     unset.assert_called_once()
 
 
@@ -124,12 +127,9 @@ async def test_logout_skips_revocation_when_user_no_longer_exists(client):
         new_callable=AsyncMock,
         return_value=None,
     ), patch(
-        "src.routers.auth.revoke_user_sessions_before"
-    ) as revoke, patch(
         "src.routers.auth.unset_auth_cookies"
     ) as unset:
         response = await client.delete("/api/v1/auth/logout")
 
     assert response.status_code == 200
-    revoke.assert_not_called()
     unset.assert_called_once()

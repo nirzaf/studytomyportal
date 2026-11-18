@@ -86,6 +86,9 @@ export type ItemReview = {
   content_digest: string
   rights_reference: string
   allowed_use: 'practice_only' | 'independent_diagnostic'
+  item_version?: number
+  evaluator_version?: string
+  private_answer?: Record<string, string>
 }
 export type DiagnosticReview = {
   content_digest: string

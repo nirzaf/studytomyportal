@@ -13,10 +13,12 @@ The guard has two steps:
    and the actual socket connect.
 """
 
+import asyncio
 import ipaddress
 import socket
 from urllib.parse import urlparse
 
+import httpcore
 import httpx
 
 
@@ -88,6 +90,32 @@ def _is_ip_blocked(ip: ipaddress._BaseAddress) -> bool:
     return False
 
 
+def _resolve_and_validate_host(hostname: str) -> list[str]:
+    """Resolve a host at connection time and return only approved addresses."""
+    if hostname.lower() in _BLOCKED_HOSTNAMES:
+        raise SSRFBlockedError(f"Blocked hostname: {hostname}")
+
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as exc:
+        raise SSRFBlockedError(f"Could not resolve hostname: {hostname}") from exc
+
+    validated: list[str] = []
+    for _, _, _, _, sockaddr in addr_infos:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if _is_ip_blocked(ip):
+            raise SSRFBlockedError(
+                f"Host {hostname} resolves to blocked address range ({ip})"
+            )
+        normalized = str(_normalize(ip))
+        if normalized not in validated:
+            validated.append(normalized)
+
+    if not validated:
+        raise SSRFBlockedError(f"No addresses resolved for hostname: {hostname}")
+    return validated
+
+
 def resolve_and_validate_url(url: str, *, allow_http: bool = True) -> set[str]:
     """
     Resolve the hostname in ``url`` and verify every returned IP is public.
@@ -106,27 +134,63 @@ def resolve_and_validate_url(url: str, *, allow_http: bool = True) -> set[str]:
     if not hostname:
         raise SSRFBlockedError("URL has no hostname")
 
-    if hostname.lower() in _BLOCKED_HOSTNAMES:
-        raise SSRFBlockedError(f"Blocked hostname: {hostname}")
+    return set(_resolve_and_validate_host(hostname))
 
-    try:
-        addr_infos = socket.getaddrinfo(hostname, None)
-    except socket.gaierror as exc:
-        raise SSRFBlockedError(f"Could not resolve hostname: {hostname}") from exc
 
-    validated: set[str] = set()
-    for _, _, _, _, sockaddr in addr_infos:
-        ip = ipaddress.ip_address(sockaddr[0])
-        if _is_ip_blocked(ip):
-            raise SSRFBlockedError(
-                f"URL {url} resolves to blocked address range ({ip})"
-            )
-        validated.add(str(_normalize(ip)))
+class _PinnedNetworkBackend(httpcore.AsyncNetworkBackend):
+    """Connect to an address validated immediately before the TCP connect.
 
-    if not validated:
-        raise SSRFBlockedError(f"No addresses resolved for hostname: {hostname}")
+    httpcore still receives the original URL hostname, so HTTP Host and TLS
+    SNI/certificate validation remain hostname based. Only the socket target is
+    replaced with a validated numeric address. This depends on httpx 0.28's
+    pinned httpcore layout and fails closed if that layout changes.
+    """
 
-    return validated
+    def __init__(self) -> None:
+        self._backend = httpcore.AnyIOBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options=None,
+    ):
+        addresses = await asyncio.to_thread(_resolve_and_validate_host, host)
+        last_error: Exception | None = None
+        for address in addresses:
+            try:
+                return await self._backend.connect_tcp(
+                    address,
+                    port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        raise SSRFBlockedError(f"No approved address available for host: {host}")
+
+    async def connect_unix_socket(
+        self, path: str, timeout: float | None = None, socket_options=None,
+    ):
+        raise SSRFBlockedError("Unix sockets are not allowed for URL requests")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._backend.sleep(seconds)
+
+
+def pinned_transport() -> httpx.AsyncHTTPTransport:
+    """Create an HTTP transport that pins direct connections at connect time."""
+    transport = httpx.AsyncHTTPTransport(trust_env=False)
+    pool = getattr(transport, "_pool", None)
+    if not isinstance(pool, httpcore.AsyncConnectionPool):
+        raise RuntimeError("Unexpected httpx transport layout; cannot pin connections")
+    pool._network_backend = _PinnedNetworkBackend()
+    return transport
 
 
 def assert_connected_peer_allowed(

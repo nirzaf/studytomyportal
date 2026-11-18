@@ -104,7 +104,7 @@ _SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
 # there would be served to the next caller without the access check. Browsers
 # may still keep them, which is what video seeking relies on.
 PUBLIC_CACHE_CONTROL = "public, max-age=86400"
-PRIVATE_CACHE_CONTROL = "private, max-age=86400"
+PRIVATE_CACHE_CONTROL = "private, no-store"
 
 
 def content_cache_control(is_public: bool) -> str:

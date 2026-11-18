@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useSWRConfig } from 'swr'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { Button } from '@components/ui/button'
-import AdaptiveLessonProgress from './AdaptiveLessonProgress'
+import AdaptiveLessonProgress, { type LessonRecommendation } from './AdaptiveLessonProgress'
 import { Input } from '@components/ui/input'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
 import {
@@ -20,8 +20,9 @@ type Submission = { key: string } & ({ answer: Answer } | { end: true })
 type Receipt = { version: number; status: AdaptiveAttempt['status']; next_item: AdaptiveAttempt['current_item'] }
 type Summary = { coverage_complete: boolean; correct_count: number | null; scored_count: number | null }
 
-export default function AdaptiveAttemptPanel({ orgUuid, orgSlug, activityUuid, release }: {
+export default function AdaptiveAttemptPanel({ orgUuid, orgSlug, activityUuid, release, onOpenRecommendation }: {
   orgUuid?: string; orgSlug?: string; activityUuid: string; release?: AdaptiveReleaseScope
+  onOpenRecommendation?: (_recommendation: LessonRecommendation) => Promise<boolean>
 }) {
   const session = useLHSession()
   const token = session?.data?.tokens?.access_token
@@ -30,11 +31,12 @@ export default function AdaptiveAttemptPanel({ orgUuid, orgSlug, activityUuid, r
   const identity = getAuthenticatedSessionIdentity(user?.id ?? user?.user_uuid, session.data)
   const tutorScope = JSON.stringify([identity, orgUuid, activityUuid])
   return <RecoveredAttempts key={JSON.stringify([tutorScope, orgSlug, release?.course_uuid, release?.course_release_uuid])}
-    {...{ orgUuid, orgSlug, activityUuid, token, tutorScope, release }} />
+    {...{ orgUuid, orgSlug, activityUuid, token, tutorScope, release, onOpenRecommendation }} />
 }
 
-function RecoveredAttempts({ orgUuid, orgSlug, activityUuid, token, tutorScope, release }: {
+function RecoveredAttempts({ orgUuid, orgSlug, activityUuid, token, tutorScope, release, onOpenRecommendation }: {
   orgUuid: string; orgSlug?: string; activityUuid: string; token: string; tutorScope: string; release?: AdaptiveReleaseScope
+  onOpenRecommendation?: (_recommendation: LessonRecommendation) => Promise<boolean>
 }) {
   const client = useMemo(() => adaptiveRequest(orgUuid, token), [orgUuid, token])
   const [options, setOptions] = useState<StartOption[]>([])
@@ -46,7 +48,7 @@ function RecoveredAttempts({ orgUuid, orgSlug, activityUuid, token, tutorScope, 
       .catch(() => { if (!controller.signal.aborted) setOptions([]) })
     return () => controller.abort()
   }, [client, activityUuid, release])
-  return <><AdaptiveLessonProgress {...{ client, activityUuid, orgSlug, release }} />{purposes.map(purpose => <RecoveredAttempt key={purpose}
+  return <><AdaptiveLessonProgress {...{ client, activityUuid, orgSlug, release, onOpenRecommendation }} />{purposes.map(purpose => <RecoveredAttempt key={purpose}
     options={options.filter(option => option.purpose === purpose)} {...{ client, activityUuid, purpose, tutorScope, release }} />)}</>
 }
 
@@ -80,16 +82,19 @@ function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope, 
   useEffect(() => {
     const lifetime = new AbortController()
     requests.current = lifetime
-    setBusy(false)
-    setRecovered(false)
-    setUnconfirmedStart(null)
-    setAnswer('')
-    setHelp(false)
-    setRetry(null)
-    setConfirmEnd(false)
-    setSummary(undefined)
-    setError('')
-    setNotice('')
+    queueMicrotask(() => {
+      if (lifetime.signal.aborted) return
+      setBusy(false)
+      setRecovered(false)
+      setUnconfirmedStart(null)
+      setAnswer('')
+      setHelp(false)
+      setRetry(null)
+      setConfirmEnd(false)
+      setSummary(undefined)
+      setError('')
+      setNotice('')
+    })
     getCurrentAdaptiveAttempt(client, activityUuid, purpose, lifetime.signal, release?.course_release_uuid).then(current => {
       if (!lifetime.signal.aborted) { setAttempt(current); setRecovered(true) }
     }).catch(() => {

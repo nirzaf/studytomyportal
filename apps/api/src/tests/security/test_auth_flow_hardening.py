@@ -591,7 +591,7 @@ class TestMagicLinkBranding:
 
 
 class TestMfaSessionRevocation:
-    def test_rotation_revokes_everything_and_reissues_the_caller(self):
+    async def test_rotation_revokes_everything_and_reissues_the_caller(self):
         """Every session up to now is revoked (no cutoff at the caller's own
         issue time, which let a later-minted session survive); the caller gets
         a fresh pair carrying the same provenance."""
@@ -610,12 +610,18 @@ class TestMfaSessionRevocation:
             "headers": [(b"authorization", f"Bearer {token}".encode())],
         })
         response = Response()
-        with patch("src.routers.mfa.revoke_user_sessions_before") as revoke_mock:
-            tokens = _rotate_sessions(
-                request, response, SimpleNamespace(id=7, email="a@test.com")
+        with patch(
+            "src.routers.mfa.advance_session_generation",
+            new_callable=AsyncMock,
+            return_value=2,
+        ) as revoke_mock:
+            tokens = await _rotate_sessions(
+                request,
+                response,
+                SimpleNamespace(id=7, email="a@test.com", session_generation=1),
+                None,
             )
-        # No cutoff argument: revoke up to now.
-        revoke_mock.assert_called_once_with(7)
+        revoke_mock.assert_awaited_once_with(None, 7)
 
         assert set(tokens) == {"access_token", "refresh_token", "expiry"}
         for issued in (tokens["access_token"], tokens["refresh_token"]):
@@ -623,6 +629,7 @@ class TestMfaSessionRevocation:
             assert claims["sub"] == "a@test.com"
             assert claims["amr"] == "password"
             assert claims["sorg"] == 3
+            assert claims["sg"] == 2
             # Issued at/after the revocation cutoff, so the new pair survives.
             assert abs(claims["iat"] - datetime.now(timezone.utc).timestamp()) < 5
         cookies = " ".join(response.headers.getlist("set-cookie"))
@@ -669,7 +676,7 @@ class TestMfaSessionRevocation:
                 )
         assert resp.status_code == 200
         consume_mock.assert_awaited_once()
-        revoke_mock.assert_called_once()
+        revoke_mock.assert_awaited_once()
         assert revoke_mock.call_args.args[2].id == regular_user.id
         assert resp.json() == {
             "enabled": False,
@@ -688,11 +695,16 @@ class TestMfaSessionRevocation:
         app.include_router(mfa_router, prefix="/api/v1/auth")
         app.dependency_overrides[get_db_session] = lambda: db
         app.dependency_overrides[get_authenticated_user] = lambda: admin_user
-        with patch("src.routers.mfa.revoke_user_sessions_before") as revoke_mock:
+        with patch(
+            "src.routers.mfa.advance_session_generation",
+            new_callable=AsyncMock,
+            return_value=2,
+        ) as revoke_mock:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
                 resp = await c.post(f"/api/v1/auth/mfa/org-reset/{org.id}/{regular_user.id}")
         assert resp.status_code == 200
-        revoke_mock.assert_called_once_with(regular_user.id)
+        revoke_mock.assert_awaited_once()
+        assert revoke_mock.await_args.args[1] == regular_user.id
 
 
 

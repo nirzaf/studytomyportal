@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.core.events.database import get_db_session
@@ -10,7 +10,7 @@ from src.db.paths import (
     PathRead,
     PathUpdate,
 )
-from src.db.users import PublicUser
+from src.db.users import APITokenUser, AnonymousUser, PublicUser
 from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.security.auth import get_current_user
 from src.services.paths.paths import (
@@ -238,6 +238,9 @@ async def api_get_my_path_certificates(
 async def api_get_path_certificate(
     request: Request,
     certificate_uuid: str,
+    response: Response,
+    current_user: PublicUser | AnonymousUser | APITokenUser = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    return await get_path_certificate(request, certificate_uuid, db_session)
+    response.headers["Cache-Control"] = "private, no-store"
+    return await get_path_certificate(request, certificate_uuid, db_session, current_user)

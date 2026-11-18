@@ -17,7 +17,9 @@ from starlette.requests import Request
 from src.core.events.database import get_db_session
 from src.db.organization_config import OrganizationConfig
 from src.db.paths import Path, PathCertificate
+from src.db.studytomy.family import StudyLearnerProfile
 from src.routers.paths.paths import certificates_router, router
+from src.db.users import AnonymousUser
 from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.security.auth import get_current_user
 from src.security.features_utils.plan_check import require_plan_for_paths
@@ -144,7 +146,9 @@ class TestRoutes:
         await db.commit()
         mine = await client.get("/api/v1/paths/certificates/me")
         assert mine.status_code == 200 and mine.json()[0]["certificate"]["certificate_uuid"] == "PATH-1"
-        assert (await client.get("/api/v1/paths/certificates/PATH-1")).json()["path"]["name"] == "Path"
+        verified = await client.get("/api/v1/paths/certificates/PATH-1")
+        assert verified.json()["path"]["name"] == "Path"
+        assert verified.headers["cache-control"] == "private, no-store"
         assert (await client.get("/api/v1/paths/certificates/nope")).status_code == 404
 
         res = await client.delete(f"/api/v1/paths/{path.path_uuid}/certificates/PATH-1")
@@ -153,6 +157,33 @@ class TestRoutes:
         res = await client.post(f"/api/v1/paths/{path.path_uuid}/certificates/PATH-1/reinstate")
         assert res.status_code == 200
         assert (await client.get("/api/v1/paths/certificates/PATH-1")).status_code == 200
+
+    async def test_protected_certificate_is_private_to_the_holder(
+        self, client, app, db, org, admin_user,
+    ):
+        path = await _saved_path(db, org)
+        db.add(PathCertificate(
+            path_id=path.id, user_id=admin_user.id,
+            certificate_uuid="PATH-PROTECTED", created_at="x",
+        ))
+        db.add(StudyLearnerProfile(
+            org_id=org.id,
+            user_id=admin_user.id,
+            created_by_user_id=admin_user.id,
+            status="active",
+            control_mode="independent",
+        ))
+        await db.commit()
+
+        owner = await client.get("/api/v1/paths/certificates/PATH-PROTECTED")
+        assert owner.status_code == 200
+        assert owner.headers["cache-control"] == "private, no-store"
+
+        app.dependency_overrides[get_current_user] = lambda: AnonymousUser()
+        denied = await client.get("/api/v1/paths/certificates/PATH-PROTECTED")
+        assert denied.status_code == 404
+        assert denied.headers["cache-control"] == "private, no-store"
+        assert "user" not in denied.json()
 
     async def test_verification_survives_a_downgrade(self, client, db, org, admin_user):
         await _plan(db, org, "free")

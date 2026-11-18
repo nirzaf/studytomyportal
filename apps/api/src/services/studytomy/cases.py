@@ -427,8 +427,9 @@ async def open_safeguarding_case(
         reason_code="SAFEGUARDING_CASE_ACKNOWLEDGED", after_state={"status": case.status},
         policy_refs=policy_ids,
     )
-    # Unidentified people mentioned in a narrative need independent triage before routing.
-    if narrative is None or subject_ids:
+    # Every narrative report requires independent triage. Caller-supplied subjects
+    # are minimum exclusions, not proof that the reporter identified every conflict.
+    if narrative is None:
         await _route_new_safeguarding_case(
             db_session, organization, case, policy_ids, subject_ids,
         )

@@ -67,6 +67,18 @@ class ItemReviewSnapshot(BaseModel):
     allowed_use: ItemAllowedUse
 
 
+class ItemGradingReviewSnapshot(BaseModel):
+    """Reviewer-only view of every grading input bound by the item digest."""
+
+    item: ItemRevisionStaffRead
+    item_version: int
+    content_digest: Digest
+    rights_reference: str
+    allowed_use: ItemAllowedUse
+    evaluator_version: str
+    private_answer: dict
+
+
 class ItemReviewedRead(ItemRevisionStaffRead):
     status: Literal["published", "retired"]
     content_digest: Digest
@@ -150,6 +162,42 @@ async def item_review_snapshot(
             409, STALE_VERSION, "Only draft item revisions can be reviewed."
         )
     return _snapshot(row, concept, curriculum)
+
+
+async def item_grading_review_snapshot(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    item_uuid: str,
+) -> ItemGradingReviewSnapshot:
+    """Expose grading inputs only to reviewers assigned to both bound courses."""
+    row, concept, curriculum = await _locked_item(db, org, item_uuid)
+    now = datetime.now(UTC)
+    for course_uuid in sorted({row.course_uuid, curriculum.owner_course_uuid}):
+        await authorize_studytomy_staff_action(
+            db,
+            actor,
+            org,
+            StudytomyCapabilityName.CONTENT_RELEASE_REVIEW,
+            target_scope_kind="course",
+            target_resource_uuid=course_uuid,
+            hide_existence_on_denial=True,
+            now=now,
+        )
+    if row.status != "draft":
+        raise studytomy_http_error(
+            409, STALE_VERSION, "Only a draft item can be opened for answer review."
+        )
+    snapshot = _snapshot(row, concept, curriculum)
+    return ItemGradingReviewSnapshot(
+        item=snapshot.item,
+        item_version=row.version,
+        content_digest=snapshot.content_digest,
+        rights_reference=snapshot.rights_reference,
+        allowed_use=snapshot.allowed_use,
+        evaluator_version=row.evaluator_version,
+        private_answer=row.private_answer,
+    )
 
 
 def _require_item_and_curriculum_approval(

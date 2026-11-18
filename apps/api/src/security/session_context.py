@@ -51,6 +51,7 @@ LEGACY_SESSION_GRACE = _legacy_session_grace()
 # JWT claim names carried on session tokens.
 AMR_CLAIM = "amr"       # authentication method: password | magic_login | google | sso | lti | api_token
 SORG_CLAIM = "sorg"     # id of the org the session was established for (int), or absent
+SESSION_GENERATION_CLAIM = "sg"
 LEGACY_GRACE_CLAIM = "lgc"  # unix seconds after which a method-less session stops being admitted
 # Present (true) on a session signed in on an org's own custom domain. The org
 # controls that host (its DNS, and scripts on its pages), so such a session is

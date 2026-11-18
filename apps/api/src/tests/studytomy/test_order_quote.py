@@ -34,12 +34,14 @@ async def test_purchase_authority_is_bound_to_actor_and_learner(db, org, admin_u
     assert not await orders.can_purchase_for_learner(db, org, purchaser_id=regular_user.id, **scope)
     guardian.assert_not_awaited()
     assert not await orders.can_purchase_for_learner(db, org, purchaser_id=admin_user.id, **scope)
-    assert guardian.await_args.args[4] == "purchase_allocation"
-    guardian.return_value = True
-    assert await orders.can_purchase_for_learner(db, org, purchaser_id=admin_user.id, **scope)
+    guardian.assert_not_awaited()
 
     profile.control_mode = "independent"
     await db.commit()
+    assert not await orders.can_purchase_for_learner(db, org, purchaser_id=admin_user.id, **scope)
+    assert guardian.await_args.args[4] == "purchase_allocation"
+    guardian.return_value = True
+    assert await orders.can_purchase_for_learner(db, org, purchaser_id=admin_user.id, **scope)
     assert not await orders.can_purchase_for_learner(db, org, purchaser_id=regular_user.id, **scope)
     latest.return_value.append(SimpleNamespace(eligibility_kind="purchase"))
     assert await orders.can_purchase_for_learner(db, org, purchaser_id=regular_user.id, **scope)

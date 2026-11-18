@@ -105,6 +105,7 @@ from src.services.studytomy.report_notifications import (
     run_report_delivery_batch,
     send_report_delivery,
 )
+from src.services.studytomy.worker import ProviderOutcomeUnknown
 from src.services.studytomy.sharing import withdraw_my_sharing_grant
 from src.tests.conftest import ADMIN_RIGHTS, USER_RIGHTS
 from src.tests.studytomy.test_content_evidence import _seed_postgres_release_sources
@@ -352,6 +353,11 @@ async def _exercise_authoring(
         assert author_catalog.json()["can_review"] is False
         assert author_catalog.json()["curricula"][0]["uuid"] == draft["uuid"]
         detail_path = f"{path}/{draft['uuid']}"
+        empty_preview = await client.get(f"{detail_path}/review", headers=direct)
+        assert empty_preview.status_code == 200, empty_preview.text
+        assert empty_preview.json()["concepts"] == []
+        assert empty_preview.json()["prerequisites"] == []
+        assert empty_preview.json()["mappings"] == []
         metadata = {
             field: body[field]
             for field in (
@@ -378,8 +384,22 @@ async def _exercise_authoring(
         graph_path = f"{detail_path}/concepts"
         a_to_b = {"concept_code": "a", "prerequisite_code": "b"}
         b_to_a = {"concept_code": "b", "prerequisite_code": "a"}
+        first_concept = await client.put(
+            graph_path,
+            json={
+                "expected_version": 2,
+                "prerequisites": [],
+                "concepts": [{
+                    "code": "a", "title": "a", "objective": "First objective", "sequence": 0,
+                }],
+            },
+            headers=direct,
+        )
+        assert first_concept.status_code == 200, first_concept.text
+        assert first_concept.json()["curriculum"]["version"] == 3
+        assert len(first_concept.json()["concepts"]) == 1
         graph = {
-            "expected_version": 2,
+            "expected_version": 3,
             "prerequisites": [a_to_b],
             "concepts": [
                 {
@@ -393,13 +413,13 @@ async def _exercise_authoring(
         }
         saved = await client.put(graph_path, json=graph, headers=direct)
         assert saved.status_code == 200, saved.text
-        assert saved.json()["curriculum"]["version"] == 3
+        assert saved.json()["curriculum"]["version"] == 4
         assert (
             await client.put(graph_path, json=graph, headers=direct)
         ).status_code == 409
         cycle = await client.put(
             graph_path,
-            json=graph | {"expected_version": 3, "prerequisites": [a_to_b, b_to_a]},
+            json=graph | {"expected_version": 4, "prerequisites": [a_to_b, b_to_a]},
             headers=direct,
         )
         assert cycle.status_code == 422
@@ -537,20 +557,20 @@ async def _exercise_authoring(
         ):
             denied = await client.put(
                 mappings_path,
-                json={"expected_version": 3, "mappings": [mapping | wrong]},
+                json={"expected_version": 4, "mappings": [mapping | wrong]},
                 headers=direct,
             )
             assert denied.status_code == status
         mapped = await client.put(
             mappings_path,
             json={
-                "expected_version": 3,
+                "expected_version": 4,
                 "mappings": [mapping, practice_mapping, released_practice_mapping],
             },
             headers=direct,
         )
         assert mapped.status_code == 200, mapped.text
-        assert mapped.json()["curriculum"]["version"] == 4
+        assert mapped.json()["curriculum"]["version"] == 5
         assert sorted(
             mapped.json()["mappings"], key=lambda m: (m["usage"], m["activity_uuid"])
         ) == sorted(
@@ -559,15 +579,15 @@ async def _exercise_authoring(
         )
         mapped_prerequisite = await client.put(
             f"{base}/concepts/{prerequisite_concept['uuid']}/activities",
-            json={"expected_version": 4, "mappings": [next_lesson_mapping]},
+            json={"expected_version": 5, "mappings": [next_lesson_mapping]},
             headers=direct,
         )
         assert mapped_prerequisite.status_code == 200, mapped_prerequisite.text
-        assert mapped_prerequisite.json()["curriculum"]["version"] == 5
+        assert mapped_prerequisite.json()["curriculum"]["version"] == 6
         remove_mapped_concept = await client.put(
             graph_path,
             json={
-                "expected_version": 5,
+                "expected_version": 6,
                 "concepts": graph["concepts"][1:],
                 "prerequisites": [],
             },
@@ -2053,7 +2073,7 @@ async def _exercise_publication(
     }
     endpoint = f"{base}/definitions/curriculum/{revision_uuid}"
     publication = {
-        "expected_version": 5,
+        "expected_version": snapshot["curriculum"]["version"],
         "expected_digest": snapshot["content_digest"],
         "review_evidence": "synthetic-curriculum-review-evidence",
     }
@@ -2067,6 +2087,12 @@ async def _exercise_publication(
         "19.25" not in item_preview.text and "private_answer" not in item_preview.text
     )
     item_snapshot = item_preview.json()
+    grading_preview = await client.get(
+        f"{base}/item-revisions/{native_item['uuid']}/grading-review",
+        headers=reviewer_headers,
+    )
+    assert grading_preview.status_code == 409
+    assert grading_preview.json()["detail"]["code"] == "POLICY_NOT_APPROVED"
     item_review = {
         "expected_version": native_item["version"],
         "expected_digest": item_snapshot["content_digest"],
@@ -2232,6 +2258,21 @@ async def _exercise_publication(
                 )
             )
         await db.commit()
+
+    grading_preview = await client.get(
+        f"{base}/item-revisions/{native_item['uuid']}/grading-review",
+        headers=reviewer_headers,
+    )
+    assert grading_preview.status_code == 200, grading_preview.text
+    assert grading_preview.json()["content_digest"] == item_snapshot["content_digest"]
+    assert grading_preview.json()["item_version"] == native_item["version"]
+    assert "19.25" in grading_preview.text
+    unauthorized_grading_preview = await client.get(
+        f"{base}/item-revisions/{native_item['uuid']}/grading-review",
+        headers=author_headers,
+    )
+    assert unauthorized_grading_preview.status_code == 403
+    assert unauthorized_grading_preview.json()["detail"]["code"] == "CAPABILITY_DENIED"
 
     course_uuid = snapshot["curriculum"]["owner_course_uuid"]
     catalog = await client.get(
@@ -3930,6 +3971,67 @@ async def _exercise_learner_attempt(
     assert (
         await client.get(staff_path, params=mastery_params, headers=headers)
     ).status_code == 404
+    mastery_row = (
+        await db.execute(
+            select(StudyConceptMastery).where(
+                StudyConceptMastery.org_id == org.id,
+                StudyConceptMastery.learner_profile_id == profile.id,
+            )
+        )
+    ).scalar_one()
+    concept = await db.get(StudyConcept, mastery_row.concept_id)
+    reconciliation_path = (
+        f"{base}/staff/learners/{profile.learner_uuid}/concepts/{concept.uuid}/mastery-reconciliation"
+    )
+    reconciliation_params = {"policy_uuid": mastery_row.mastery_policy_uuid}
+    preview = await client.get(
+        reconciliation_path,
+        params=reconciliation_params,
+        headers=unrelated,
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["status"] == "current"
+    assert preview.json()["evidence_watermark"] == 1
+    mastery_row.evidence_watermark = 0
+    await db.flush()
+    mismatch = await client.get(
+        reconciliation_path,
+        params=reconciliation_params,
+        headers=unrelated,
+    )
+    assert mismatch.status_code == 200, mismatch.text
+    assert mismatch.json()["status"] == "mismatch"
+    repair_path = f"{reconciliation_path}/repair"
+    repair_body = {
+        "expected_evidence_watermark": mismatch.json()["evidence_watermark"],
+        "expected_projection_version": mismatch.json()["projection_version"],
+    }
+    repair_key = f"mastery-repair-{uuid4()}"
+    repaired = await client.post(
+        repair_path,
+        params=reconciliation_params,
+        json=repair_body,
+        headers=unrelated | {"Idempotency-Key": repair_key},
+    )
+    assert repaired.status_code == 200, repaired.text
+    assert repaired.json()["status"] == "repaired"
+    assert repaired.json()["evidence_watermark"] == mismatch.json()["evidence_watermark"]
+    assert (
+        await client.post(
+            repair_path,
+            params=reconciliation_params,
+            json=repair_body,
+            headers=unrelated | {"Idempotency-Key": repair_key},
+        )
+    ).json() == repaired.json()
+    stale_repair = await client.post(
+        repair_path,
+        params=reconciliation_params,
+        json=repair_body,
+        headers=unrelated | {"Idempotency-Key": f"mastery-repair-stale-{uuid4()}"},
+    )
+    assert stale_repair.status_code == 409
+    assert stale_repair.json()["detail"]["code"] == "STALE_VERSION"
     consent = (
         await db.execute(
             select(StudyConsentEvent).where(
@@ -4364,6 +4466,98 @@ async def _exercise_learner_attempt(
             )
         )
     ).scalar_one()
+    with patch(
+        "src.services.studytomy.report_notifications.send_report_delivery",
+        new=AsyncMock(side_effect=ProviderOutcomeUnknown),
+    ):
+        unknown_tally = await run_report_delivery_batch(db, worker_id="report-unknown")
+    assert unknown_tally["reconciliation_required"] == 1
+    await db.refresh(delivery)
+    reconciliation_path = f"{base}/staff/report-deliveries/reconciliation"
+    preview = await client.get(reconciliation_path, headers=unrelated)
+    assert preview.status_code == 200, preview.text
+    assert len(preview.json()["deliveries"]) == 1
+    reconciliation_item = preview.json()["deliveries"][0]
+    assert reconciliation_item["uuid"] == delivery.record_uuid
+    assert reconciliation_item["version"] == delivery.version
+    assert (await client.get(reconciliation_path, headers=headers)).json()["deliveries"] == []
+    decision_path = f"{reconciliation_path.rsplit('/', 1)[0]}/{delivery.record_uuid}/reconciliation"
+    unknown_decision = {
+        "expected_version": delivery.version,
+        "disposition": "unknown",
+        "evidence_reference": "incident:mail-42",
+    }
+    unknown_key = f"outbox-unknown-{uuid4()}"
+    unknown_result = await client.post(
+        decision_path,
+        json=unknown_decision,
+        headers=unrelated | {"Idempotency-Key": unknown_key},
+    )
+    assert unknown_result.status_code == 200, unknown_result.text
+    assert unknown_result.json()["status"] == "reconciliation_required"
+    assert (
+        await client.post(
+            decision_path,
+            json=unknown_decision,
+            headers=unrelated | {"Idempotency-Key": unknown_key},
+        )
+    ).json() == unknown_result.json()
+    stale_reconciliation = await client.post(
+        decision_path,
+        json=unknown_decision,
+        headers=unrelated | {"Idempotency-Key": f"outbox-stale-{uuid4()}"},
+    )
+    assert stale_reconciliation.status_code == 409
+    assert stale_reconciliation.json()["detail"]["code"] == "STALE_VERSION"
+    with patch(
+        "src.services.studytomy.report_notifications.send_report_delivery",
+        new=AsyncMock(side_effect=ProviderOutcomeUnknown),
+    ):
+        retry_result = await client.post(
+            decision_path,
+            json={
+                "expected_version": unknown_result.json()["version"],
+                "disposition": "known_unsent",
+                "evidence_reference": "provider:lookup-43",
+            },
+            headers=unrelated | {"Idempotency-Key": f"outbox-unsent-{uuid4()}"},
+        )
+        assert retry_result.status_code == 200, retry_result.text
+        assert retry_result.json()["status"] == "retry"
+        unknown_again = await run_report_delivery_batch(db, worker_id="report-unknown-again")
+        assert unknown_again["reconciliation_required"] == 1
+    await db.refresh(delivery)
+    accepted_expected_version = delivery.version
+    accepted = await client.post(
+        decision_path,
+        json={
+            "expected_version": delivery.version,
+            "disposition": "accepted",
+            "evidence_reference": "provider:receipt-44",
+            "provider_message_reference": "mock-provider:accepted-1",
+        },
+        headers=unrelated | {"Idempotency-Key": f"outbox-accepted-{uuid4()}"},
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["status"] == "sent"
+    assert accepted.json()["version"] == accepted_expected_version + 1
+    await db.refresh(delivery)
+    assert delivery.provider_message_reference == "mock-provider:accepted-1"
+    followup_delivery, _ = await enqueue_delivery(
+        db,
+        org_id=org.id,
+        recipient_user_id=recipient_user.id,
+        purpose=StudyOutboxPurpose.PROGRESS_REPORT,
+        resource_kind="progress_report",
+        resource_uuid=report["uuid"],
+        resource_version=6,
+        authority_reference_uuid=valid_grant.grant_uuid,
+        policy_refs=delivery.policy_refs,
+        created_by_user_id=owner.user_id,
+        dedupe_key=f"synthetic-followup:{report['uuid']}:{uuid4()}",
+    )
+    assert followup_delivery.status == "queued"
+    await db.commit()
     current_auth = await revalidate_report_delivery(db, delivery)
     assert current_auth.allowed
     with (

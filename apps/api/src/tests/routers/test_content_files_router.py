@@ -334,11 +334,34 @@ class TestContentFilesRouter:
 
         assert full_response.status_code == 200
         assert full_response.content == b"abcdef"
+        assert full_response.headers["cache-control"] == "public, max-age=86400"
         assert range_response.status_code == 206
         assert range_response.content == b"bcd"
         assert range_response.headers["content-range"] == "bytes 1-3/6"
         assert suffix_range_response.status_code == 206
         assert suffix_range_response.content == b"ef"
+
+    async def test_gated_activity_get_head_and_range_are_never_cached(
+        self, client, org, course, activity,
+    ):
+        s3_client = _S3Client(b"abcdef")
+        path = (
+            f"/content/orgs/{org.org_uuid}/courses/{course.course_uuid}/"
+            f"activities/{activity.activity_uuid}/video.mp4"
+        )
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(content_files, "get_storage_client", lambda: s3_client)
+            mp.setattr(content_files, "get_s3_bucket_name", lambda: "bucket")
+            full = await client.get(path)
+            ranged = await client.get(path, headers={"range": "bytes=1-3"})
+            head = await client.head(path)
+
+        assert full.status_code == 200
+        assert full.headers["cache-control"] == "private, no-store"
+        assert ranged.status_code == 206 and ranged.content == b"bcd"
+        assert ranged.headers["cache-control"] == "private, no-store"
+        assert head.status_code == 200
+        assert head.headers["cache-control"] == "private, no-store"
 
     async def test_open_ended_range_invalid_range_and_empty_streams(
         self, client, app

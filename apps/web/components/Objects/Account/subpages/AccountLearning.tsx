@@ -7,6 +7,8 @@ import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { Button } from '@components/ui/button'
 import AssessmentIntegrityCases from '@components/Studytomy/AssessmentIntegrityCases'
 import AdaptiveAttemptPanel from '@components/Objects/Activities/AdaptiveAttemptPanel'
+import type { LessonRecommendation } from '@components/Objects/Activities/AdaptiveLessonProgress'
+import { LessonTutorContent, useLessonTutor } from '@components/Objects/Activities/AI/LessonTutorPanel'
 import DocumentPdfActivity from '@components/Objects/Activities/DocumentPdf/DocumentPdf'
 import LearnHousePlayer from '@components/Objects/Activities/Video/LearnHousePlayer'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
@@ -154,6 +156,47 @@ function LearningView({
       data => ({ kind: 'lesson', release, lesson: data }),
       firstUse ? 'POST' : 'GET',
     )
+  }
+
+  async function openManagedRecommendation(recommendation: LessonRecommendation): Promise<boolean> {
+    if (view.kind !== 'lesson') return false
+    const { release } = view
+    if (recommendation.course_uuid !== release.course_uuid || recommendation.course_release_uuid !== release.release_uuid) {
+      return false
+    }
+    pending.current?.abort()
+    const controller = new AbortController()
+    pending.current = controller
+    try {
+      const base = `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learning/${pathFor(release)}`
+      const indexResponse = await secureFetch(
+        `${base}/lessons`,
+        { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', signal: controller.signal },
+      )
+      if (!indexResponse.ok) return false
+      const index = await indexResponse.json() as Index
+      const target = index.lessons.find(lesson => lesson.activity_uuid === recommendation.activity_uuid)
+      if (controller.signal.aborted || !target?.available) return false
+      if (target.format === 'pdf' || target.format === 'video') {
+        await showMedia(release, target, false)
+        return true
+      }
+      if (target.format !== 'text') return false
+      const response = await secureFetch(
+        `${base}/lessons/${encodeURIComponent(recommendation.activity_uuid)}`,
+        { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', signal: controller.signal },
+      )
+      if (!response.ok) return false
+      const lesson = await response.json() as Partial<TextLesson>
+      if (controller.signal.aborted || lesson.activity_uuid !== recommendation.activity_uuid || !Array.isArray(lesson.paragraphs)) {
+        return false
+      }
+      moveFocus.current = true
+      setView({ kind: 'lesson', release, lesson: lesson as TextLesson })
+      return true
+    } catch {
+      return false
+    }
   }
 
   async function completeLesson(lessonView: Extract<View, { kind: 'lesson' }>) {
@@ -376,7 +419,13 @@ function LearningView({
         <article className="max-w-prose space-y-4 whitespace-pre-wrap break-words leading-relaxed">
           {view.lesson.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
         </article>
-        {adaptiveRelease && <AdaptiveAttemptPanel orgUuid={orgUuid} activityUuid={view.lesson.activity_uuid} release={adaptiveRelease} />}
+        {adaptiveRelease && <ManagedLessonTutor
+          orgUuid={orgUuid}
+          activityUuid={view.lesson.activity_uuid}
+          release={adaptiveRelease}
+        />}
+        {adaptiveRelease && <AdaptiveAttemptPanel orgUuid={orgUuid} activityUuid={view.lesson.activity_uuid}
+          release={adaptiveRelease} onOpenRecommendation={openManagedRecommendation} />}
         {view.lesson.completion && (
           view.lesson.completion.activity_completed
             ? <p role="status">{view.lesson.completion.course_completed ? 'Course completed.' : 'Lesson completed.'}</p>
@@ -425,6 +474,19 @@ function LearningView({
     <h1 ref={heading} id="account-learning-title" tabIndex={-1} className="break-words text-xl font-semibold">{title}</h1>
     {content}
   </section>
+}
+
+function ManagedLessonTutor({
+  orgUuid,
+  activityUuid,
+  release,
+}: {
+  orgUuid: string
+  activityUuid: string
+  release: { course_uuid: string; course_release_uuid: string }
+}) {
+  const tutor = useLessonTutor(orgUuid, activityUuid, release)
+  return <LessonTutorContent tutor={tutor} activityUuid={activityUuid} />
 }
 
 function ManagedReleaseMedia({

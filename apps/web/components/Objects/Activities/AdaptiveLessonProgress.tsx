@@ -16,18 +16,21 @@ type Concept = {
   review_due: boolean
 }
 type MasteryPage = { concepts: Concept[]; next_offset: number | null }
-type Recommendation = {
+export type LessonRecommendation = {
   activity_uuid: string
   course_uuid: string
+  course_release_uuid: string
   activity_title: string
   reason: 'prerequisite_gap' | 'practice_needed' | 'not_yet_assessed' | 'review_due'
-} | { reason: 'no_accessible_activity'; support_action: 'return_to_lesson' | null }
+}
+type Recommendation = LessonRecommendation | { reason: 'no_accessible_activity'; support_action: 'return_to_lesson' | null }
 
-export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, release }: {
+export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, release, onOpenRecommendation }: {
   client: AdaptiveRequest
   activityUuid: string
   orgSlug?: string
   release?: AdaptiveReleaseScope
+  onOpenRecommendation?: (_recommendation: LessonRecommendation) => Promise<boolean>
 }) {
   const { t } = useTranslation()
   const contentId = useId()
@@ -38,6 +41,8 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
   const [page, setPage] = useState<MasteryPage | null>(null)
   const [error, setError] = useState(false)
   const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null)
+  const [openingActivity, setOpeningActivity] = useState<string | null>(null)
+  const [recommendationNotice, setRecommendationNotice] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -56,9 +61,9 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
   }, [activityUuid, client, offset, open, release])
 
   useEffect(() => {
-    if (!open || release || !orgSlug) return
+    if (!open || (!release && !orgSlug)) return
     const controller = new AbortController()
-    const params = new URLSearchParams({ activity_uuid: activityUuid })
+    const params = new URLSearchParams({ activity_uuid: activityUuid, ...release })
     client<Recommendation[]>(`me/recommendations?${params}`, 'GET', undefined, undefined, controller.signal)
       .then(result => { if (!controller.signal.aborted) setRecommendations(result) })
       .catch(() => { if (!controller.signal.aborted) setRecommendations([]) })
@@ -74,7 +79,29 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
   function toggle() {
     requestPage(0)
     setRecommendations(null)
+    setRecommendationNotice('')
+    setOpeningActivity(null)
     setOpen(!open)
+  }
+
+  async function openRecommendation(recommendation: LessonRecommendation) {
+    if (!release || !onOpenRecommendation || openingActivity) return
+    setOpeningActivity(recommendation.activity_uuid)
+    setRecommendationNotice('')
+    try {
+      const opened = await onOpenRecommendation(recommendation)
+      if (!opened) setRecommendationNotice(t(
+        'adaptiveProgress.targetUnavailable',
+        'This suggested lesson is not available in the current release. Continue with this lesson for now.',
+      ))
+    } catch {
+      setRecommendationNotice(t(
+        'adaptiveProgress.targetUnavailable',
+        'This suggested lesson is not available in the current release. Continue with this lesson for now.',
+      ))
+    } finally {
+      setOpeningActivity(null)
+    }
   }
 
   if (!available) return null
@@ -90,7 +117,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
     not_yet_assessed: t('adaptiveProgress.try', 'Try a concept you have not yet been assessed on'),
     review_due: t('adaptiveProgress.review', 'Review this concept'),
   }
-  const suggestions = recommendations?.filter(item => item.reason !== 'no_accessible_activity')
+  const suggestions = recommendations?.filter((item): item is LessonRecommendation => item.reason !== 'no_accessible_activity')
   const support = recommendations?.some(item =>
     item.reason === 'no_accessible_activity' && item.support_action === 'return_to_lesson')
   return <div className="rounded-lg border bg-background p-4">
@@ -126,11 +153,19 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
               {t('adaptiveProgress.next', 'Next concepts')}
             </Button>}
           </div>}
-          {!release && orgSlug && <section>
+          {(release || orgSlug) && <section>
             <h3 className="font-semibold">{t('adaptiveProgress.suggestions', 'Suggested activities')}</h3>
             {recommendations === null ? <p role="status">{t('adaptiveProgress.loadingSuggestions', 'Loading suggestions…')}</p>
               : suggestions?.length ? <ul className="space-y-2">
                 {suggestions.map(item => {
+                  if (release) return <li key={`${item.course_release_uuid}:${item.activity_uuid}`} className="[overflow-wrap:anywhere]">
+                    <Button type="button" variant="outline" className="min-h-11 h-auto whitespace-normal text-start"
+                      disabled={Boolean(openingActivity)} onClick={() => void openRecommendation(item)}>
+                      <bdi>{item.activity_title}</bdi>
+                    </Button>
+                    <p className="text-sm">{reasons[item.reason]}</p>
+                  </li>
+                  if (!orgSlug) return null
                   const course = encodeURIComponent(item.course_uuid.replace(/^course_/, ''))
                   const activity = encodeURIComponent(item.activity_uuid.replace(/^activity_/, ''))
                   return <li key={item.activity_uuid} className="[overflow-wrap:anywhere]">
@@ -144,6 +179,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
               </ul> : <p>{support
                 ? t('adaptiveProgress.return', 'Continue with this lesson for now.')
                 : t('adaptiveProgress.none', 'No activities to suggest right now.')}</p>}
+            {recommendationNotice && <p role="status">{recommendationNotice}</p>}
           </section>}
         </>}
     </div>

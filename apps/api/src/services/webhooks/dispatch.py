@@ -21,6 +21,7 @@ from src.db.webhooks import WebhookEndpoint, WebhookDeliveryLog
 from src.services.utils.ssrf_guard import (
     SSRFBlockedError,
     assert_connected_peer_allowed,
+    pinned_transport,
     resolve_and_validate_url,
 )
 from src.services.webhooks.crypto import decrypt_secret, compute_signature
@@ -102,6 +103,7 @@ def _get_webhook_client() -> httpx.AsyncClient:
     global _webhook_client
     if _webhook_client is None:
         _webhook_client = httpx.AsyncClient(
+            transport=pinned_transport(),
             timeout=10.0,
             follow_redirects=False,
             headers={"User-Agent": "LearnHouse-Webhooks/1.0"},
@@ -329,18 +331,18 @@ async def _deliver_to_endpoint(
                 ) as resp:
                     try:
                         assert_connected_peer_allowed(resp, validated_ips)
-                    except SSRFBlockedError as ssrf_exc:
+                    except SSRFBlockedError:
                         log_entry.success = False
-                        log_entry.error_message = f"SSRF guard: {ssrf_exc}"[:1000]
+                        log_entry.error_message = "SSRF guard: destination is not permitted."
                     else:
                         body = await _read_capped_body(resp)
                         log_entry.response_status = resp.status_code
                         log_entry.response_body = body[:500] if body else None
                         log_entry.success = 200 <= resp.status_code < 300
 
-            except SSRFBlockedError as e:
+            except SSRFBlockedError:
                 log_entry.success = False
-                log_entry.error_message = f"SSRF guard: {e}"[:1000]
+                log_entry.error_message = "SSRF guard: destination is not permitted."
             except Exception as e:
                 log_entry.success = False
                 log_entry.error_message = str(e)[:1000]

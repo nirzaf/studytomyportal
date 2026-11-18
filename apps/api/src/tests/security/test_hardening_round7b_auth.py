@@ -618,7 +618,7 @@ class TestCustomDomainSignIn:
 
 
 class TestMfaRotatesSessions:
-    def test_rotation_revokes_all_and_reissues_with_same_provenance(self):
+    async def test_rotation_revokes_all_and_reissues_with_same_provenance(self):
         from src.routers.mfa import _rotate_sessions
 
         old = create_access_token({
@@ -626,23 +626,38 @@ class TestMfaRotatesSessions:
             **session_claims("password", 4, custom_domain=True),
         })
         response = Response()
-        with patch("src.routers.mfa.revoke_user_sessions_before") as revoke:
-            tokens = _rotate_sessions(
+        with patch(
+            "src.routers.mfa.advance_session_generation",
+            new_callable=AsyncMock,
+            return_value=2,
+        ) as revoke:
+            tokens = await _rotate_sessions(
                 _request({"authorization": f"Bearer {old}"}), response,
-                SimpleNamespace(id=9, email="a@test.com"),
+                SimpleNamespace(id=9, email="a@test.com", session_generation=1),
+                None,
             )
-        revoke.assert_called_once_with(9)
+        revoke.assert_awaited_once_with(None, 9)
         claims = _claims(tokens["access_token"])
         assert claims["amr"] == "password" and claims[SORG_CLAIM] == 4
         assert claims[CUSTOM_DOMAIN_CLAIM] is True
+        assert claims["sg"] == 2
         assert _claims(tokens["refresh_token"])["type"] == "refresh"
         assert "LH_access=" in response.headers.get("set-cookie", "")
 
-    def test_rotation_of_a_methodless_session_keeps_its_grace(self):
+    async def test_rotation_of_a_methodless_session_keeps_its_grace(self):
         from src.routers.mfa import _rotate_sessions
 
-        with patch("src.routers.mfa.revoke_user_sessions_before"):
-            tokens = _rotate_sessions(_request(), Response(), SimpleNamespace(id=9, email="a@test.com"))
+        with patch(
+            "src.routers.mfa.advance_session_generation",
+            new_callable=AsyncMock,
+            return_value=2,
+        ):
+            tokens = await _rotate_sessions(
+                _request(),
+                Response(),
+                SimpleNamespace(id=9, email="a@test.com", session_generation=1),
+                None,
+            )
         assert LEGACY_GRACE_CLAIM in _claims(tokens["access_token"])
 
     async def test_confirm_and_disable_return_fresh_tokens(self, db, regular_user):
@@ -668,7 +683,11 @@ class TestMfaRotatesSessions:
         app.dependency_overrides[get_authenticated_user] = lambda: regular_user
         with patch("src.routers.mfa.check_rate_limit", return_value=(True, 0, None)), patch(
             "src.routers.mfa.security_verify_password", return_value=True
-        ), patch("src.routers.mfa.revoke_user_sessions_before") as revoke, patch(
+        ), patch(
+            "src.routers.mfa.advance_session_generation",
+            new_callable=AsyncMock,
+            side_effect=[2, 3],
+        ) as revoke, patch(
             "src.routers.mfa.verify_and_consume_totp", new=AsyncMock(return_value=True)
         ):
             confirmed = await _post(app, "/api/v1/auth/mfa/confirm", json={"code": code})
@@ -676,8 +695,8 @@ class TestMfaRotatesSessions:
         assert confirmed.status_code == 200 and disabled.status_code == 200
         assert confirmed.json()["tokens"]["access_token"]
         assert disabled.json()["tokens"]["refresh_token"]
-        assert revoke.call_count == 2
-        assert all(call.args == (regular_user.id,) for call in revoke.call_args_list)
+        assert revoke.await_count == 2
+        assert all(call.args[1] == regular_user.id for call in revoke.await_args_list)
 
 
 # -- 5. Verify-email sign-in gates ----------------------------------------------------

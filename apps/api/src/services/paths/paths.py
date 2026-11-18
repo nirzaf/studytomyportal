@@ -853,14 +853,20 @@ async def check_path_completion(
     """Mark an enrolled learner's path complete (and certify them when the
     path awards a certificate) once the requirements are met. Returns True
     only when this call completed the path. Idempotent."""
+    path_result = await db_session.execute(
+        select(Path).where(Path.id == path.id).with_for_update()
+    )
+    path = path_result.scalars().first()
+    if path is None or not path.published:
+        return False
     enrollment = (
         await db_session.execute(
-            select(PathEnrollment).where(
-                PathEnrollment.path_id == path.id, PathEnrollment.user_id == user_id
-            )
+            select(PathEnrollment)
+            .where(PathEnrollment.path_id == path.id, PathEnrollment.user_id == user_id)
+            .with_for_update()
         )
     ).scalars().first()
-    if not enrollment or enrollment.completed_at or not path.published:
+    if not enrollment or enrollment.completed_at:
         return False
 
     rows = await _load_path_courses(db_session, path)
@@ -868,10 +874,9 @@ async def check_path_completion(
     if not _summarize(path, rows, completed_ids)["complete"]:
         return False
 
-    enrollment.completed_at = str(datetime.now())
+    now = str(datetime.now())
+    enrollment.completed_at = now
     db_session.add(enrollment)
-    await db_session.commit()
-
     user = (await db_session.execute(select(User).where(User.id == user_id))).scalars().first()
     certificate_uuid = ""
     existing = (
@@ -885,31 +890,27 @@ async def check_path_completion(
         # Earned before (and kept when they left the path), or revoked by an
         # admin. A revoked certificate stays revoked until an admin reinstates it.
         certificate_uuid = "" if existing.revoked_at else existing.certificate_uuid
-    elif path.certificate_enabled and user:
+    elif path.certificate_enabled:
+        if user is None:
+            await db_session.rollback()
+            raise HTTPException(status_code=404, detail="Certificate holder not found")
         certificate = PathCertificate(
             path_id=path.id,
             user_id=user_id,
             certificate_uuid=_certificate_uuid(user),
-            created_at=str(datetime.now()),
+            created_at=now,
         )
         db_session.add(certificate)
-        try:
-            await db_session.commit()
-            certificate_uuid = certificate.certificate_uuid
-        except IntegrityError:
-            # A concurrent completion check issued it first. The rollback
-            # expires every loaded row, so reload the ones used below.
-            await db_session.rollback()
-            await db_session.refresh(path)
-            await db_session.refresh(user)
-            raced = (
-                await db_session.execute(
-                    select(PathCertificate).where(
-                        PathCertificate.path_id == path.id, PathCertificate.user_id == user_id
-                    )
-                )
-            ).scalars().first()
-            certificate_uuid = raced.certificate_uuid if raced and not raced.revoked_at else ""
+        certificate_uuid = certificate.certificate_uuid
+
+    try:
+        await db_session.flush()
+        await db_session.commit()
+    except Exception:
+        # Completion and its credential are one database outcome. Never leave
+        # a completed enrollment behind after certificate persistence fails.
+        await db_session.rollback()
+        raise
 
     await track(
         event_name=analytics_events.PATH_COMPLETED,
@@ -1022,6 +1023,7 @@ async def get_path_certificate(
     request: Request,
     certificate_uuid: str,
     db_session: AsyncSession,
+    current_user=None,
 ) -> dict:
     """Public verification: anyone holding the link can check it, like course
     certificates."""
@@ -1035,6 +1037,21 @@ async def get_path_certificate(
     ).scalars().first()
     if not certificate:
         raise HTTPException(status_code=404, detail="Certificate not found")
+
+    from src.services.studytomy.privacy import is_protected_studytomy_learner
+    is_owner_session = (
+        isinstance(current_user, PublicUser)
+        and current_user.id == certificate.user_id
+    )
+    if (
+        await is_protected_studytomy_learner(db_session, certificate.user_id)
+        and not is_owner_session
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail="Certificate not found",
+            headers={"Cache-Control": "private, no-store"},
+        )
     return await _certificate_payload(db_session, certificate)
 
 

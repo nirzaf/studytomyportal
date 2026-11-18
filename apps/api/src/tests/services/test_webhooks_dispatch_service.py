@@ -116,11 +116,12 @@ class TestWebhookDispatchHelpers:
 
             assert first is fake_client
             assert second is fake_client
-            mock_client_cls.assert_called_once_with(
-                timeout=10.0,
-                follow_redirects=False,
-                headers={"User-Agent": "LearnHouse-Webhooks/1.0"},
-            )
+            mock_client_cls.assert_called_once()
+            client_kwargs = mock_client_cls.call_args.kwargs
+            assert isinstance(client_kwargs["transport"], httpx.AsyncHTTPTransport)
+            assert client_kwargs["timeout"] == 10.0
+            assert client_kwargs["follow_redirects"] is False
+            assert client_kwargs["headers"] == {"User-Agent": "LearnHouse-Webhooks/1.0"}
 
             await dispatch.close_webhook_client()
 
@@ -439,7 +440,11 @@ class TestWebhookDispatchHelpers:
         ).scalars().all()
         assert len(ssrf_logs) == 3
         assert all(log.success is False for log in ssrf_logs)
-        assert all(log.error_message.startswith("SSRF guard: ") for log in ssrf_logs)
+        assert all(
+            log.error_message == "SSRF guard: destination is not permitted."
+            for log in ssrf_logs
+        )
+        assert all("rebinding" not in log.error_message for log in ssrf_logs)
 
     @pytest.mark.asyncio
     async def test_deliver_to_endpoint_handles_ssrf_resolution_failure(self, db):
@@ -492,7 +497,10 @@ class TestWebhookDispatchHelpers:
         ).scalars().all()
         assert len(logs) == 3
         assert all(log.success is False for log in logs)
-        assert all("SSRF guard: blocked hostname" == log.error_message for log in logs)
+        assert all(
+            "SSRF guard: destination is not permitted." == log.error_message
+            for log in logs
+        )
 
     @pytest.mark.asyncio
     async def test_deliver_to_endpoint_handles_generic_exception(self, db):

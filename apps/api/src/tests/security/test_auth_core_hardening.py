@@ -453,14 +453,14 @@ class TestRefreshTokenIsNotASession:
         payload = jwt.decode(tokens.access_token, SECRET_KEY, algorithms=[ALGORITHM])
         assert payload["type"] == "access"
 
-    async def test_legacy_access_token_without_the_claim_still_authenticates(
+    async def test_legacy_access_token_without_session_generation_is_rejected(
         self, db, regular_user
     ):
-        """The compatibility case: requiring type == "access" outright would sign
-        out every user holding a token minted before this change."""
+        """Tokens minted before durable session generations cannot bypass revocation."""
         req = _request(cookies={JWT_COOKIE_NAME: _legacy_access_token(regular_user.email)})
 
         with patch("src.security.auth._record_activity_from_request"):
-            result = await get_current_user(req, db)
+            with pytest.raises(HTTPException) as exc_info:
+                await get_current_user(req, db)
 
-        assert result.email == regular_user.email
+        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED

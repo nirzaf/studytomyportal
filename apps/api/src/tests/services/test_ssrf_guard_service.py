@@ -1,8 +1,10 @@
 import ipaddress
+import asyncio
 import socket
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import httpx
 import pytest
 
 from src.services.utils.ssrf_guard import (
@@ -10,6 +12,7 @@ from src.services.utils.ssrf_guard import (
     _is_ip_blocked,
     _normalize,
     assert_connected_peer_allowed,
+    pinned_transport,
     resolve_and_validate_url,
 )
 
@@ -154,3 +157,34 @@ def test_assert_connected_peer_allowed_accepts_ipv4_mapped_peer():
     response = _response_with_peer(("::ffff:93.184.216.34", 443))
 
     assert_connected_peer_allowed(response, {"93.184.216.34"})
+
+
+@pytest.mark.asyncio
+async def test_pinned_transport_rejects_rebinding_before_request_reaches_private_peer(monkeypatch):
+    received = []
+
+    async def record(reader, writer):
+        received.append(await reader.read(1024))
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(record, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    answers = iter(("93.184.216.34", "127.0.0.1"))
+
+    def rebinding_lookup(host, port=None, *args, **kwargs):
+        address = next(answers)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port or 80))]
+
+    monkeypatch.setattr("src.services.utils.ssrf_guard.socket.getaddrinfo", rebinding_lookup)
+    url = f"http://rebind.example:{port}/secret"
+    try:
+        assert resolve_and_validate_url(url) == {"93.184.216.34"}
+        async with httpx.AsyncClient(transport=pinned_transport(), timeout=1) as client:
+            with pytest.raises(SSRFBlockedError, match="blocked address range"):
+                await client.get(url)
+        await asyncio.sleep(0)
+        assert received == []
+    finally:
+        server.close()
+        await server.wait_closed()

@@ -111,6 +111,14 @@ async def test_checkout_rejects_client_price_and_missing_pilot_approval(db, org,
         assert purchases.status_code == 409
         assert purchases.json()["detail"]["code"] == "POLICY_NOT_APPROVED"
         assert purchases.headers["cache-control"] == "private, no-store"
+        offers = await client.get(f"{prefix}/offers")
+        assert offers.status_code == 409
+        assert offers.headers["cache-control"] == "private, no-store"
+        assert offers.json()["detail"]["code"] == "POLICY_NOT_APPROVED"
+        learners = await client.get(f"{prefix}/learners")
+        assert learners.status_code == 200
+        assert learners.headers["cache-control"] == "private, no-store"
+        assert learners.json() == []
     assert (await db.execute(select(func.count()).select_from(StudyOrder))).scalar_one() == 0
 
 
@@ -514,6 +522,21 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
     prefix = f"/api/v1/studytomy/orgs/{org.org_uuid}/checkout"
     purchase_path = f"/api/v1/studytomy/orgs/{org.org_uuid}/purchases"
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=headers) as client:
+        checkout_offers = await client.get(f"{prefix}/offers")
+        assert checkout_offers.status_code == 200, checkout_offers.text
+        assert checkout_offers.headers["cache-control"] == "private, no-store"
+        assert checkout_offers.json() == [{
+            "offer_uuid": offer_uuid,
+            "offer_version_uuid": version_uuid,
+            "title": "Synthetic course",
+        }]
+        checkout_learners = await client.get(f"{prefix}/learners")
+        assert checkout_learners.status_code == 200, checkout_learners.text
+        assert checkout_learners.headers["cache-control"] == "private, no-store"
+        assert checkout_learners.json() == [{
+            "learner_uuid": profile.learner_uuid,
+            "label": "Purchaser Fixture",
+        }]
         quote = await client.post(f"{prefix}/quote", json=selection)
         if price_minor == 0 and not free_approved:
             assert quote.status_code == 409, quote.text

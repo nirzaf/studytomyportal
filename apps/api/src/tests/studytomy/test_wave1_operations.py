@@ -624,6 +624,7 @@ class TestOutboxEnqueue:
         record, replayed = await _enqueue(db, org, regular_user)
         assert replayed is False
         assert record.status == StudyOutboxStatus.QUEUED
+        assert record.version == 1
         assert record.attempt_count == 0
         assert record.template_key == "required_notice_v1"
         assert record.policy_refs == [7]
@@ -703,6 +704,7 @@ class TestOutboxClaimAndRelease:
         claimed = await claim_due_deliveries(db, worker_id="worker-a", limit=5)
         assert [row.id for row in claimed] == [record.id]
         assert record.status == StudyOutboxStatus.LEASED
+        assert record.version == 2
         assert record.attempt_count == 1
         assert record.lease_owner == "worker-a"
         assert _utc(record.lease_expires_at) > _now()
@@ -725,6 +727,7 @@ class TestOutboxClaimAndRelease:
         reclaimed = await claim_due_deliveries(db, worker_id="worker-b", limit=5, now=later)
         assert reclaimed == []
         assert record.status == StudyOutboxStatus.RECONCILIATION_REQUIRED
+        assert record.version == 3
         assert record.last_error_code == "LEASE_EXPIRED_OUTCOME_UNKNOWN"
         assert record.lease_owner is None
         assert record.completed_at is None
@@ -770,6 +773,7 @@ class TestOutboxClaimAndRelease:
             provider_message_reference="prov:abc-123",
         )
         assert record.status == StudyOutboxStatus.SENT
+        assert record.version == 3
         assert record.lease_owner is None
         assert record.completed_at is not None
         assert record.provider_message_reference == "prov:abc-123"
@@ -826,6 +830,38 @@ class TestOutboxClaimAndRelease:
 class TestDeliveryWorker:
     """TASK-006: revalidate immediately before sending, and never claim a lie."""
 
+    async def test_worker_claims_the_next_row_only_after_finishing_the_current_one(
+        self, db, org, regular_user, monkeypatch
+    ):
+        records = [
+            (await _enqueue(db, org, regular_user, key=f"case_{index}/notice/v1"))[0]
+            for index in range(3)
+        ]
+        real_claim = worker_service.claim_due_deliveries
+        calls = 0
+
+        async def claim_one_at_a_time(*args, **kwargs):
+            nonlocal calls
+            assert kwargs["limit"] == 1
+            assert kwargs["lease_seconds"] == worker_service._PROVIDER_LEASE_SECONDS
+            if calls:
+                assert records[calls - 1].status == StudyOutboxStatus.SENT
+            calls += 1
+            return await real_claim(*args, **kwargs)
+
+        monkeypatch.setattr(worker_service, "claim_due_deliveries", claim_one_at_a_time)
+        outcomes = await run_delivery_batch(
+            db,
+            worker_id="worker-a",
+            revalidate=_revalidation(),
+            send=_sending(),
+            limit=3,
+        )
+
+        assert outcomes["claimed"] == outcomes["sent"] == 3
+        assert calls == 3  # each claim follows the completed previous send
+        assert all(record.status == StudyOutboxStatus.SENT for record in records)
+
     async def test_allowed_delivery_is_sent_once(self, db, org, regular_user):
         record, _ = await _enqueue(db, org, regular_user)
         seen_keys = []
@@ -858,7 +894,14 @@ class TestDeliveryWorker:
         assert record.lease_expires_at is not None
         assert record.lease_expires_at.tzinfo is None
 
+        claimed_once = False
+
         async def return_reloaded_claim(*args, **kwargs):
+            nonlocal claimed_once
+            assert kwargs["limit"] == 1
+            if claimed_once:
+                return []
+            claimed_once = True
             return [record]
 
         monkeypatch.setattr(
