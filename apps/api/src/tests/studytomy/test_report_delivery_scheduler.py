@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -105,3 +106,29 @@ async def test_report_queue_summary_returns_only_aggregate_safe_fields():
     assert 120 <= summary["oldest_pending_age_seconds"] < 600
     assert summary["oldest_unknown_delivery_age_seconds"] >= 600
     assert summary["failure_code_counts"] == {"PROVIDER_TEMPORARILY_UNAVAILABLE": 1}
+
+
+@pytest.mark.asyncio
+async def test_empty_poll_logs_existing_unknown_outcome_without_private_values(monkeypatch, caplog):
+    from src.core.events import database
+    from src.services.studytomy import report_notifications
+
+    now = datetime.now(UTC)
+    rows = [("reconciliation_required", "recipient@example.invalid", 1, now - timedelta(minutes=10))]
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    session.execute.return_value = SimpleNamespace(all=lambda: rows)
+    monkeypatch.setattr(database, "_async_session_factory", lambda: session)
+    monkeypatch.setattr(scheduler, "_worker_id", "fixture-worker")
+    monkeypatch.setattr(report_notifications, "run_report_delivery_batch", AsyncMock(return_value={
+        "claimed": 0, "sent": 0, "suppressed": 0, "retry": 0,
+        "reconciliation_required": 0, "dead_letter": 0,
+    }))
+
+    with caplog.at_level(logging.INFO, logger=scheduler.__name__):
+        await scheduler._run_once()
+
+    assert "claimed=0" in caplog.text
+    assert "'provider_outcome_unknown': 1" in caplog.text
+    assert "oldest_unknown_delivery_age_seconds=" in caplog.text
+    assert "recipient@example.invalid" not in caplog.text
