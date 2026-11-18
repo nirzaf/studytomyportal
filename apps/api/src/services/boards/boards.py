@@ -550,6 +550,9 @@ async def store_ydoc_state(
     state: bytes,
     db_session: AsyncSession,
 ):
+    if not state:
+        raise HTTPException(status_code=422, detail="Board state must not be empty")
+
     # Use SELECT ... FOR UPDATE to prevent concurrent writes from overwriting each other
     statement = select(Board).where(Board.board_uuid == board_uuid).with_for_update()
     board = (await db_session.execute(statement)).scalars().first()

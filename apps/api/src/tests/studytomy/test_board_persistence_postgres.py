@@ -59,6 +59,9 @@ async def test_board_storage_distinguishes_empty_missing_and_persisted_state(
 
         stored = await client.put(path, content=update, headers=headers)
         assert stored.status_code == 200
+        rejected = await client.put(path, content=b"", headers=headers)
+        assert rejected.status_code == 422
+
         reread = await client.get(path, headers=headers)
         assert reread.status_code == 200
         assert reread.headers["x-ydoc-state"] == "present"
