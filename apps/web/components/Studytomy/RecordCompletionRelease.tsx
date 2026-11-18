@@ -76,7 +76,9 @@ export default function RecordCompletionRelease({ orgUuid, token }: { orgUuid: s
             <ul aria-label="Course completions to release" className="space-y-1">
               {preview.snapshot.completions.map((row, index) => (
                 <li key={index} className="break-words">
-                  {row.course_uuid} · <time dateTime={row.recorded_at}>{new Date(row.recorded_at).toLocaleString()}</time>
+                  {row.course_uuid}
+                  {row.release_uuid ? ` · Reviewed release ${row.release_uuid}` : ' · Historical course record'}
+                  {' · '}<time dateTime={row.recorded_at}>{new Date(row.recorded_at).toLocaleString()}</time>
                 </li>
               ))}
             </ul>

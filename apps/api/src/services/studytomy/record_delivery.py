@@ -9,6 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.courses.courses import Course
 from src.db.organizations import Organization
+from src.db.studytomy.education import StudyCourseRelease, StudyCourseReview
 from src.db.studytomy.family import StudyLearnerProfile
 from src.db.studytomy.governance import (
     StudyBusinessEvent,
@@ -39,6 +40,7 @@ _MAX_RECORDS = 500
 class RetainedCompletion(BaseModel):
     course_uuid: str
     recorded_at: datetime
+    release_uuid: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class CompletionExport(BaseModel):
@@ -76,15 +78,39 @@ def _delivery_rules(information, retention) -> tuple[int, int]:
 
 
 async def _completion_export(db: AsyncSession, request: StudyBusinessEvent, now: datetime, days: int) -> CompletionExport:
+    earliest = now - timedelta(days=days)
     rows = (await db.execute(select(Course.course_uuid, TrailRun.update_date)
         .join(TrailRun, TrailRun.course_id == Course.id)
         .where(Course.org_id == request.org_id, Course.studytomy_managed.is_(True),
                TrailRun.org_id == request.org_id, TrailRun.user_id == request.actor_user_id,
                TrailRun.status == StatusEnum.STATUS_COMPLETED)
         .order_by(Course.course_uuid, TrailRun.id).limit(_MAX_RECORDS + 1))).all()
-    if len(rows) > _MAX_RECORDS:
+    release_rows = (await db.execute(
+        select(
+            StudyBusinessEvent, StudyCourseRelease.course_uuid, StudyCourseRelease.snapshot_sha256,
+            StudyCourseRelease.progression_policy_id,
+        )
+        .join(StudyCourseRelease, StudyCourseRelease.uuid == StudyBusinessEvent.resource_uuid)
+        .join(StudyCourseReview, StudyCourseReview.id == StudyCourseRelease.review_id)
+        .where(
+            StudyBusinessEvent.org_id == request.org_id,
+            StudyBusinessEvent.actor_user_id == request.actor_user_id,
+            StudyBusinessEvent.resource_kind == "course_release",
+            StudyBusinessEvent.action == "studytomy.course.completion_recorded",
+            StudyBusinessEvent.created_at >= earliest,
+            StudyBusinessEvent.created_at <= now,
+            StudyCourseRelease.org_id == request.org_id,
+            StudyCourseRelease.policy_binding.is_not(None),
+            StudyCourseReview.org_id == request.org_id,
+            StudyCourseReview.course_uuid == StudyCourseRelease.course_uuid,
+            StudyCourseReview.decision == "approved",
+            StudyCourseReview.revision_sha256 == StudyCourseRelease.snapshot_sha256,
+        )
+        .order_by(StudyCourseRelease.course_uuid, StudyBusinessEvent.id)
+        .limit(_MAX_RECORDS + 1)
+    )).all()
+    if len(rows) + len(release_rows) > _MAX_RECORDS:
         raise studytomy_http_error(409, "RECORD_DELIVERY_REVIEW_REQUIRED", "The records require a separate reviewed export.")
-    earliest = now - timedelta(days=days)
     completions = []
     for course_uuid, recorded_at in rows:
         try:
@@ -93,6 +119,15 @@ async def _completion_export(db: AsyncSession, request: StudyBusinessEvent, now:
             continue
         if stamp.tzinfo is not None and earliest <= stamp <= now:
             completions.append(RetainedCompletion(course_uuid=course_uuid, recorded_at=stamp.astimezone(UTC)))
+    for event, course_uuid, digest, progression_policy_id in release_rows:
+        if event.policy_refs != [progression_policy_id] or event.after_state != {"source_snapshot_digest": digest}:
+            continue
+        stamp = event.created_at
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=UTC)
+        completions.append(RetainedCompletion(
+            course_uuid=course_uuid, release_uuid=event.resource_uuid, recorded_at=stamp.astimezone(UTC),
+        ))
     return CompletionExport(completions=completions)
 
 

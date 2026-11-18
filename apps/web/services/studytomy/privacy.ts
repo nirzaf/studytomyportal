@@ -26,7 +26,7 @@ export type RecordRequestStatus = RecordRequestReceipt & {
 export type RecordRequestOutcome = 'approved_for_preparation' | 'denied'
 export type RecordRequestDecisionOptions = Partial<Record<RecordRequestOutcome, string[]>>
 export type CompletionExportPreview = {
-  completions: { course_uuid: string; recorded_at: string }[]
+  completions: { course_uuid: string; recorded_at: string; release_uuid?: string }[]
   snapshot_sha256: string
 }
 export type EvidenceRetentionManifest = {

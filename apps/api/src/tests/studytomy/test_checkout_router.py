@@ -756,8 +756,35 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 assert review_event.after_state["evidence_sha256"] == uploaded.json()["content_sha256"]
             preview = await client.get(staff_export, headers=review_headers)
             assert preview.status_code == 200, preview.text
-            assert preview.json()["completions"] == [{
+            native_completion = {
                 "course_uuid": course.course_uuid, "recorded_at": previous_completion.replace("+00:00", "Z"),
+            }
+            assert preview.json()["completions"] == [native_completion]
+            before_release_completion = preview.json()["snapshot_sha256"]
+            completed_at = datetime.now(UTC) - timedelta(seconds=1)
+            async with postgres_session_factory() as db:
+                event = {
+                    "org_id": org.id, "resource_kind": "course_release",
+                    "resource_uuid": release.uuid, "action": "studytomy.course.completion_recorded",
+                    "policy_refs": [release.progression_policy_id], "created_at": completed_at,
+                }
+                db.add_all([
+                    StudyBusinessEvent(**event, actor_user_id=purchaser.id,
+                                       after_state={"source_snapshot_digest": release.snapshot_sha256}),
+                    StudyBusinessEvent(**event, actor_user_id=purchaser.id,
+                                       after_state={"source_snapshot_digest": "0" * 64}),
+                    StudyBusinessEvent(**event, actor_user_id=owner.id,
+                                       after_state={"source_snapshot_digest": release.snapshot_sha256}),
+                ])
+                await db.commit()
+            stale = await client.put(staff_export, json={"snapshot_sha256": before_release_completion}, headers=review_headers)
+            assert stale.status_code == 409
+            assert stale.json()["detail"]["code"] == "RECORD_DELIVERY_SNAPSHOT_CHANGED"
+            preview = await client.get(staff_export, headers=review_headers)
+            assert preview.status_code == 200, preview.text
+            assert preview.json()["completions"] == [native_completion, {
+                "course_uuid": course.course_uuid, "release_uuid": release.uuid,
+                "recorded_at": completed_at.isoformat().replace("+00:00", "Z"),
             }]
             wrong_snapshot = await client.put(staff_export, json={"snapshot_sha256": "f" * 64}, headers=review_headers)
             assert wrong_snapshot.status_code == 409
