@@ -69,6 +69,25 @@ def _delay(days: int, **extra) -> dict:
 
 
 class TestModels:
+    @pytest.mark.parametrize("value", ["2026-11-01T01:30:00", "1793496600", 1793496600])
+    def test_schedule_write_requires_explicit_offset(self, value):
+        with pytest.raises(ValidationError, match="start_date"):
+            DripScheduleUpdate.model_validate({"settings": {"start_date": value}})
+        with pytest.raises(ValidationError, match="release_at"):
+            DripScheduleUpdate.model_validate({
+                "settings": {},
+                "chapters": [{"chapter_uuid": "chapter_1", "rule": {"release_at": value}}],
+            })
+
+    def test_schedule_write_distinguishes_repeated_local_hour(self):
+        payload = DripScheduleUpdate.model_validate({
+            "settings": {"start_date": "2026-11-01T01:30:00-04:00"},
+            "chapters": [{"chapter_uuid": "chapter_1", "rule": {
+                "mode": "date", "release_at": "2026-11-01T01:30:00-05:00",
+            }}],
+        })
+        assert payload.chapters[0].rule.release_at - payload.settings.start_date == timedelta(hours=1)
+
     def test_fixed_anchor_needs_start_date(self):
         with pytest.raises(ValidationError):
             CourseDripSettings(enabled=True, anchor=DripAnchor.FIXED_DATE)
@@ -646,6 +665,24 @@ class TestMoreConditions:
 
 
 class TestScheduleValidation:
+    async def test_forward_reference_rejects_cycle_without_saving(
+        self, db, org, course, admin_user, mock_request, allow_update,
+    ):
+        await _add_chapter(db, org, course, 1, 1)
+        await _add_chapter(db, org, course, 2, 2)
+        payload = DripScheduleUpdate.model_validate({
+            "settings": ENROLL,
+            "chapters": [
+                {"chapter_uuid": "chapter_2", "rule": {"require_chapters": ["chapter_1"]}},
+                {"chapter_uuid": "chapter_1", "rule": {"require_chapters": ["chapter_2"]}},
+            ],
+        })
+        with pytest.raises(HTTPException, match="earlier in this course") as exc:
+            await update_drip_schedule(mock_request, course.course_uuid, payload, admin_user, db)
+        assert exc.value.status_code == 400
+        assert (await db.get(Chapter, 1)).drip_rule is None
+        assert (await db.get(Chapter, 2)).drip_rule is None
+
     async def test_required_chapter_must_be_in_course(self, db, org, course, admin_user, mock_request, allow_update):
         await _add_chapter(db, org, course, 1, 1)
         for rule in ({"require_chapters": ["chapter_elsewhere"]}, {"require_chapters": ["chapter_1"]}):

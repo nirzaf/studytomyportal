@@ -437,6 +437,8 @@ async def update_drip_schedule(
     chapters_by_uuid: dict[str, Chapter] = {}
     if schedule.chapters:
         uuids = [c.chapter_uuid for c in schedule.chapters]
+        if len(set(uuids)) != len(uuids):
+            raise HTTPException(status_code=400, detail="Chapter rules must be unique")
         chapters_by_uuid = {
             chapter.chapter_uuid: chapter
             for chapter in (await db_session.execute(
@@ -447,13 +449,20 @@ async def update_drip_schedule(
         if missing:
             raise HTTPException(status_code=400, detail="Chapter does not belong to this course")
 
-    required = {u for item in schedule.chapters for u in item.rule.require_chapters}
-    if required:
-        course_chapters = set((await db_session.execute(
-            select(Chapter.chapter_uuid).where(Chapter.course_id == course.id, Chapter.chapter_uuid.in_(required))  # type: ignore[attr-defined]
-        )).scalars().all())
-        if required - course_chapters or any(item.chapter_uuid in item.rule.require_chapters for item in schedule.chapters):
-            raise HTTPException(status_code=400, detail="A required chapter must be another chapter of this course")
+    if any(item.rule.require_chapters for item in schedule.chapters):
+        positions = {
+            chapter.uuid: index
+            for index, chapter in enumerate(await _ordered_chapters(course.id, db_session))
+        }
+        for item in schedule.chapters:
+            if item.rule.require_chapters and (
+                item.chapter_uuid not in positions
+                or any(
+                    required not in positions or positions[required] >= positions[item.chapter_uuid]
+                    for required in item.rule.require_chapters
+                )
+            ):
+                raise HTTPException(status_code=400, detail="A required chapter must be earlier in this course")
 
     groups = set(schedule.settings.early_access_usergroups)
     if groups:

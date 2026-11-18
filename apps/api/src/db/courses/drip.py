@@ -48,6 +48,18 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     return value.astimezone(timezone.utc)
 
 
+def _require_explicit_offset(payload, field: str):
+    """Validate incoming dates before the legacy read model normalizes them."""
+    if not isinstance(payload, dict) or payload.get(field) is None:
+        return payload
+    value = payload[field]
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    if not isinstance(value, datetime) or value.utcoffset() is None:
+        raise ValueError(f"{field} must include a UTC offset")
+    return payload
+
+
 class CourseDripSettings(BaseModel):
     enabled: bool = False
     anchor: DripAnchor = DripAnchor.ENROLLMENT
@@ -100,11 +112,21 @@ class ChapterDripRuleUpdate(BaseModel):
     chapter_uuid: str
     rule: ChapterDripRule
 
+    @field_validator("rule", mode="before")
+    @classmethod
+    def _require_release_offset(cls, value):
+        return _require_explicit_offset(value, "release_at")
+
 
 class DripScheduleUpdate(BaseModel):
     settings: CourseDripSettings
     # Chapters left out keep their current rule.
     chapters: List[ChapterDripRuleUpdate] = Field(default_factory=list)
+
+    @field_validator("settings", mode="before")
+    @classmethod
+    def _require_start_offset(cls, value):
+        return _require_explicit_offset(value, "start_date")
 
 
 class ChapterDripRead(BaseModel):
