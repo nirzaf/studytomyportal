@@ -24,6 +24,8 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
     source_uuid: source.source_uuid, label: source.label, sha256: source.sha256,
     page: 3, quote: 'Photosynthesis converts light energy into chemical energy.',
   }
+  const unsupportedTopicMessage =
+    'The selected source pages do not support the requested draft. Choose a narrower topic or link a source that explains it.'
   let version = 4
   let saved = false
   let saveAttempts = 0
@@ -61,7 +63,7 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
     const body = route.request().postDataJSON()
     expect(body.source_uuids).toEqual([source.source_uuid])
     if (body.topic === 'Quadratic equations') {
-      return route.fulfill({ status: 422, json: { detail: 'No selected source supports this topic.' } })
+      return route.fulfill({ status: 422, json: { detail: unsupportedTopicMessage } })
     }
     expect(body.topic).toBe('Photosynthesis')
     return route.fulfill({
@@ -117,8 +119,9 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   await expect(dialog.getByRole('status').filter({ hasText: 'Some pages matched the topic' })).toBeVisible()
   await topic.fill('Quadratic equations')
   await dialog.getByRole('button', { name: 'Generate lesson draft' }).click()
-  await expect(dialog.getByRole('alert')).toContainText('No selected source supports this topic.')
+  await expect(dialog.getByRole('alert')).toContainText(unsupportedTopicMessage)
   await expect(dialog.getByRole('button', { name: 'Save unpublished lesson' })).toHaveCount(0)
+  expect(requestIds).toHaveLength(0)
   await topic.fill('Photosynthesis')
   await dialog.getByRole('button', { name: 'Generate lesson draft' }).click()
   const draft = dialog.getByRole('textbox', { name: 'Draft paragraph 1' })
