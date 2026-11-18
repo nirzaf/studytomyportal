@@ -117,6 +117,12 @@ matched; the synthetic row digest was
 not a full database backup restore or a production-shaped snapshot. Temporary
 rehearsal databases and dump files were removed after verification.
 
+### Full synthetic database restore follow-up
+
+At repository revision `85686f3cd7fea3b9234f34f1fa7515d742caae59`, a custom-format `pg_dump` of `studytomy_aud03_test` was restored with `pg_restore --exit-on-error --single-transaction` into a fresh `template0` database named `studytomy_aud19_full_restore_test`. Both databases were inside the same disposable Docker PostgreSQL instance bound to `127.0.0.1:60607`. The restore completed successfully. The source and restored database matched on Alembic head `b91d2f6a08c3`, pgvector `0.8.7`, row counts for 137 public tables and definitions for 42 public user triggers. The compared counts included 3,041 business events, 253 consent events, 205 course releases and 229 learning evidence records.
+
+This rehearsal compared counts and trigger definitions. Row content equality, restored application behavior, external object recovery and restore from a production snapshot remain unverified. The local dump and restored test database were retained for follow-up.
+
 The retention/replay check covers synthetic database evidence and local test
 fixtures only. It does not verify deletion, versioning or restoration in the
 configured external object store. A production-shaped pre-migration backup,
