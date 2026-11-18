@@ -19,6 +19,7 @@ export default function GroundedLessonDraftForm({ route, token, version, selecte
   const [messageState, setMessageState] = useState<{ token: string; message: string }>()
   const [pendingState, setPendingState] = useState<{ token: string; action: 'preview' | 'draft' }>()
   const request = useRef<AbortController | null>(null)
+  const saveAttempt = useRef<{ token: string; signature: string; id: string } | null>(null)
   const selectionKey = selected.join(':')
   const draft = draftState?.token === token && draftState.selectionKey === selectionKey ? draftState.draft : undefined
   const message = messageState?.token === token ? messageState.message : undefined
@@ -40,12 +41,22 @@ export default function GroundedLessonDraftForm({ route, token, version, selecte
     setMessageState(undefined)
     if (action === 'preview') setDraftState(undefined)
     try {
-      const payload = action === 'preview' ? { source_uuids: selected, topic: topic.trim() } : draft && {
+      const draftPayload = action === 'draft' && draft ? {
         expected_current_version: version,
         title: draft.title,
         blocks: draft.blocks.map(({ text, citation: { source_uuid, sha256, page, quote } }) => ({
           text, citation: { source_uuid, sha256, page, quote },
         })),
+      } : undefined
+      let payload
+      if (draftPayload) {
+        const signature = JSON.stringify([route, draftPayload])
+        if (saveAttempt.current?.token !== token || saveAttempt.current.signature !== signature) {
+          saveAttempt.current = { token, signature, id: crypto.randomUUID() }
+        }
+        payload = { ...draftPayload, request_id: saveAttempt.current.id }
+      } else {
+        payload = { source_uuids: selected, topic: topic.trim() }
       }
       const response = await secureFetch(`${getAPIUrl()}${route}/grounded-lesson-${action}`, {
         ...RequestBodyWithAuthHeader('POST', payload, null, token),

@@ -24,6 +24,7 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   let version = 4
   let saved = false
   let saveAttempts = 0
+  const requestIds: string[] = []
   await page.route(`**/activities/${activityUuid}/editor-bootstrap`, route => route.fulfill({
     json: {
       org: { id: 1, org_uuid: orgUuid, slug: 'default', name: 'Synthetic Studytomy' },
@@ -67,8 +68,11 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   await page.route(`${path}/grounded-lesson-draft`, route => {
     const { label, ...savedCitation } = citation
     expect(label).toBe(source.label)
-    expect(route.request().postDataJSON()).toEqual({
-      expected_current_version: version, title: 'Photosynthesis',
+    const { request_id: requestId, ...body } = route.request().postDataJSON()
+    expect(requestId).toMatch(/^[0-9a-f-]{36}$/)
+    requestIds.push(requestId)
+    expect(body).toEqual({
+      expected_current_version: saveAttempts === 2 ? 5 : version, title: 'Photosynthesis',
       blocks: [{ text: 'Teacher-edited paragraph.', citation: savedCitation }],
     })
     if (++saveAttempts === 1) {
@@ -77,6 +81,9 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
     }
     saved = true
     version = 6
+    if (saveAttempts === 2) {
+      return route.fulfill({ status: 503, json: { detail: 'Save response unavailable. Try again.' } })
+    }
     return route.fulfill({ json: { current_version: version, lesson_uuid: activityUuid, status: 'teacher_review_required' } })
   })
 
@@ -127,7 +134,13 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   await expect(draft).toHaveValue('Initial draft.')
   await draft.fill('Teacher-edited paragraph.')
   await dialog.getByRole('button', { name: 'Save unpublished lesson' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Save response unavailable')
+  await expect(draft).toHaveValue('Teacher-edited paragraph.')
+  await dialog.getByRole('button', { name: 'Save unpublished lesson' }).click()
   await expect(dialog).toBeHidden()
+  expect(requestIds).toHaveLength(3)
+  expect(requestIds[0]).not.toBe(requestIds[1])
+  expect(requestIds[2]).toBe(requestIds[1])
   await expect(page.getByText('Teacher-edited paragraph.', { exact: true })).toBeVisible()
   await sources.click()
   await expect(dialog.getByRole('region', { name: 'Saved citations' }).getByText(citation.quote)).toBeVisible()
