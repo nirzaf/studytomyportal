@@ -211,25 +211,41 @@ async def _retrieve_pages(db: AsyncSession, course: Course, lesson: Activity, co
         raise HTTPException(404, "One or more selected draft sources are unavailable.")
     terms = _terms(command.topic)
     candidates = []
+    supplemental = []
     stride = _PAGE_EXCERPT_STRIDE
     for source_uuid, digest, label, pages in rows:
         for page in pages:
             text = page["text"]
-            best: tuple[int, str] | None = None
+            windows: list[tuple[set[str], str]] = []
             for offset in range(0, len(text), stride):
                 excerpt = text[offset:offset + _PAGE_EXCERPT_LIMIT].strip()
-                score = len(terms & _terms(excerpt))
-                if score and (best is None or score > best[0]):
-                    best = (score, excerpt)
-            if best:
-                candidates.append((best[0], {
-                    "source_uuid": source_uuid, "sha256": digest, "label": label,
-                    "page": page["page"], "text": best[1],
-                }))
-    candidates.sort(key=lambda item: (-item[0], item[1]["source_uuid"], item[1]["page"]))
+                matched = terms & _terms(excerpt)
+                if matched:
+                    windows.append((matched, excerpt))
+            if not windows:
+                continue
+            windows.sort(key=lambda window: -len(window[0]))
+            locator = {"source_uuid": source_uuid, "sha256": digest, "label": label, "page": page["page"]}
+            best_terms, best_excerpt = windows[0]
+            candidates.append((best_terms, {**locator, "text": best_excerpt}))
+            supplemental.extend(
+                (matched, {**locator, "text": excerpt})
+                for matched, excerpt in windows[1:]
+                if matched - best_terms
+            )
+    candidates.sort(key=lambda item: (-len(item[0]), item[1]["source_uuid"], item[1]["page"]))
     if not candidates:
         raise HTTPException(422, "No selected source supports this topic. Choose relevant PDF sources or refine the topic.")
-    return [page for _, page in candidates[:6]]
+    selected = candidates[:6]
+    covered = set().union(*(matched for matched, _ in selected))
+    supplemental.sort(key=lambda item: (item[1]["source_uuid"], item[1]["page"]))
+    while len(selected) < 6 and supplemental:
+        candidate = max(supplemental, key=lambda item: len(item[0] - covered))
+        if not candidate[0] - covered:
+            break
+        selected.append(candidate)
+        covered.update(candidate[0])
+    return [page for _, page in selected]
 
 
 class DraftMaterialReceipt(BaseModel):
