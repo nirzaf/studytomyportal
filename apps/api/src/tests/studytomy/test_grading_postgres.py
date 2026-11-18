@@ -197,6 +197,7 @@ async def test_issued_round_retains_exact_started_release(
             "certificate_presentation": {"managed_certificates_by_course": {course.course_uuid: {
                 "award_name": "Synthetic certificate", "issuer_name": "Synthetic issuer",
                 "verification": "private", "issuance": "reviewed",
+                "changes": "reviewed_assessment_corrections",
                 "required_assessment_uuids": [assignment.assignment_uuid],
             }}},
         }).model_dump(mode="json")
@@ -426,10 +427,38 @@ async def test_issued_round_retains_exact_started_release(
             await db.flush()
             assert await status_for() == expected
             assert (await delivery_for())[0] == (status == "result_confirmed")
-        await grading.record_assessment_result(
-            db, assignment, stored, bound, {**computed, "grade": 40, "passed": False}, actor,
-        )
-        await db.flush()
+        review_args = (*issue_args, UUID(award.award_uuid))
+        with pytest.raises(HTTPException) as unverified:
+            await awards.review_managed_certificate_change(
+                *review_args, awards.ManagedCertificateChange(corrected_result_uuid=UUID(result.event_uuid)),
+            )
+        assert unverified.value.detail["code"] == "MANAGED_CERTIFICATE_CORRECTION_UNVERIFIED"
+
+        previous_result = result
+        for score, status, version in ((80, "corrected", 2), (40, "withdrawn", 3)):
+            revision = StudyBusinessEvent(
+                org_id=org.id, actor_user_id=certificate_reviewer.id,
+                action=grading.RESULT_RECORDED_ACTION, reason=grading.APPEAL_CORRECTION_REASON,
+                resource_kind="assignment_round", resource_uuid=result.resource_uuid,
+                after_state={
+                    **previous_result.after_state, "previous_event_uuid": previous_result.event_uuid,
+                    "score_points": score, "passed": score >= 50, "version": version,
+                },
+            )
+            db.add(revision)
+            await db.flush()
+            db.add(StudyBusinessEvent(
+                org_id=org.id, subject_uuid=profile.learner_uuid,
+                action="studytomy.assessment.appeal_corrected", resource_kind="assessment_appeal",
+                resource_uuid=appeal.event_uuid, operation_uuid=result.resource_uuid,
+                after_state={"status": "result_corrected", "result_uuid": revision.event_uuid},
+            ))
+            await db.flush()
+            change_command = awards.ManagedCertificateChange(corrected_result_uuid=UUID(revision.event_uuid))
+            change = await awards.review_managed_certificate_change(*review_args, change_command)
+            assert (change.award_uuid, change.status, change.version) == (award.award_uuid, status, version)
+            assert await awards.review_managed_certificate_change(*review_args, change_command) == change
+            previous_result = revision
         assert await status_for() == "assessment_pass_required"
 
         stored.attempt_number += 1
@@ -457,7 +486,7 @@ async def test_issued_round_retains_exact_started_release(
             verified = await awards.verify_my_managed_certificate(db, org, actor, UUID(award.award_uuid))
             assert verified.model_dump() == award.model_dump() | {
                 "award_name": "Synthetic certificate", "issuer_name": "Synthetic issuer",
-                "course_name": course.name,
+                "course_name": course.name, "status": "withdrawn", "version": 3,
             }
             with pytest.raises(HTTPException) as other_profile:
                 await awards.verify_my_managed_certificate(db, org, certificate_reviewer, UUID(award.award_uuid))

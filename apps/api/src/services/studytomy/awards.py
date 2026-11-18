@@ -32,6 +32,7 @@ class ManagedCertificateConditions(BaseModel):
     issuer_name: _DisplayName
     verification: Literal["private"]
     issuance: Literal["reviewed"] | None = None
+    changes: Literal["reviewed_assessment_corrections"] | None = None
     required_assessment_uuids: Annotated[list[ResourceUUID], Field(max_length=50)] = Field(default_factory=list)
 
 
@@ -101,7 +102,7 @@ async def preview_managed_certificate_eligibility(
     course_uuid: str, release_uuid: str, learner_uuid: str,
 ) -> ManagedCertificateEligibility:
     """Select evidence for an authorized reviewer without issuing an award."""
-    preview, _ = await _authorized_certificate_evidence(
+    preview, _, _ = await _authorized_certificate_evidence(
         db, org, reviewer, course_uuid, release_uuid, learner_uuid,
     )
     return preview
@@ -110,7 +111,7 @@ async def preview_managed_certificate_eligibility(
 async def _authorized_certificate_evidence(
     db: AsyncSession, org: Organization, reviewer: PublicUser,
     course_uuid: str, release_uuid: str, learner_uuid: str,
-) -> tuple[ManagedCertificateEligibility, list[int]]:
+) -> tuple[ManagedCertificateEligibility, list[int], ManagedCertificateConditions]:
     from src.services.studytomy.releases import load_release_policy_binding
 
     org = await lock_organization(db, org.id)
@@ -183,7 +184,7 @@ async def _authorized_certificate_evidence(
         completion_event_uuid=completion_uuid, assessment_result_uuids=results, missing_assessment_uuids=missing,
         issuance_enabled=conditions.issuance == "reviewed", evidence_sha256=evidence_sha256,
     )
-    return preview, sorted(version.policy_id for version in binding.versions.values())
+    return preview, sorted(version.policy_id for version in binding.versions.values()), conditions
 
 
 class ManagedCertificateIssue(BaseModel):
@@ -203,7 +204,7 @@ async def issue_managed_certificate(
     course_uuid: str, release_uuid: str, learner_uuid: str, command: ManagedCertificateIssue,
 ) -> ManagedCertificateIssueReceipt:
     """Issue one immutable award from the exact evidence affirmed by the reviewer."""
-    evidence, policy_refs = await _authorized_certificate_evidence(
+    evidence, policy_refs, _ = await _authorized_certificate_evidence(
         db, org, reviewer, course_uuid, release_uuid, learner_uuid,
     )
     if not evidence.issuance_enabled:
@@ -235,10 +236,143 @@ async def issue_managed_certificate(
     )
 
 
+_AWARD_CHANGED = "studytomy.award.assessment_reviewed"
+
+
+async def _latest_award_change(db: AsyncSession, award: StudyBusinessEvent) -> StudyBusinessEvent | None:
+    return await db.scalar(
+        select(StudyBusinessEvent).where(
+            StudyBusinessEvent.org_id == award.org_id,
+            StudyBusinessEvent.resource_kind == "managed_award",
+            StudyBusinessEvent.resource_uuid == award.event_uuid,
+            StudyBusinessEvent.subject_uuid == award.subject_uuid,
+            StudyBusinessEvent.action == _AWARD_CHANGED,
+        ).order_by(StudyBusinessEvent.id.desc()).limit(1)
+    )
+
+
+class ManagedCertificateChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    corrected_result_uuid: UUID
+
+
+class ManagedCertificateChangeReceipt(BaseModel):
+    award_uuid: str
+    review_uuid: str
+    status: Literal["corrected", "withdrawn"]
+    version: int
+
+
+async def review_managed_certificate_change(
+    db: AsyncSession, org: Organization, reviewer: PublicUser,
+    course_uuid: str, release_uuid: str, learner_uuid: str, award_uuid: UUID,
+    command: ManagedCertificateChange,
+) -> ManagedCertificateChangeReceipt:
+    """Apply a reviewed academic correction to an existing award reference."""
+    from src.services.studytomy.grading import APPEAL_CORRECTION_REASON, RESULT_RECORDED_ACTION
+
+    evidence, policy_refs, conditions = await _authorized_certificate_evidence(
+        db, org, reviewer, course_uuid, release_uuid, learner_uuid,
+    )
+    unavailable = studytomy_http_error(404, "MANAGED_CERTIFICATE_UNAVAILABLE", "Certificate review unavailable.")
+    if conditions.changes != "reviewed_assessment_corrections":
+        raise unavailable
+    award = await db.scalar(select(StudyBusinessEvent).where(
+        StudyBusinessEvent.org_id == org.id,
+        StudyBusinessEvent.event_uuid == str(award_uuid),
+        StudyBusinessEvent.subject_uuid == learner_uuid,
+        StudyBusinessEvent.resource_kind == "course_release",
+        StudyBusinessEvent.resource_uuid == release_uuid,
+        StudyBusinessEvent.action == "studytomy.award.issued",
+    ))
+    if award is None:
+        raise unavailable
+    key = f"studytomy:award:review:{org.id}:{award_uuid}:{command.corrected_result_uuid}"
+    change = await db.scalar(select(StudyBusinessEvent).where(
+        StudyBusinessEvent.org_id == org.id, StudyBusinessEvent.dedupe_key == key,
+        StudyBusinessEvent.action == _AWARD_CHANGED,
+    ))
+    if change is None:
+        previous = await _latest_award_change(db, award)
+        state = (previous or award).after_state or {}
+        conflict = studytomy_http_error(
+            409, "MANAGED_CERTIFICATE_CORRECTION_UNVERIFIED",
+            "An applicable finalized assessment correction is required.",
+        )
+        if state.get("status") == "withdrawn":
+            raise conflict
+        selected = state.get("assessment_result_event_uuids", [])
+        result = await db.scalar(select(StudyBusinessEvent).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.event_uuid == str(command.corrected_result_uuid),
+            StudyBusinessEvent.resource_kind == "assignment_round",
+            StudyBusinessEvent.action == RESULT_RECORDED_ACTION,
+            StudyBusinessEvent.reason == APPEAL_CORRECTION_REASON,
+        ))
+        corrected = result.after_state if result is not None else None
+        if (
+            not isinstance(corrected, dict)
+            or corrected.get("previous_event_uuid") not in selected
+            or type(corrected.get("passed")) is not bool
+        ):
+            raise conflict
+        prior = await db.scalar(select(StudyBusinessEvent).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.event_uuid == corrected["previous_event_uuid"],
+            StudyBusinessEvent.resource_uuid == result.resource_uuid,
+            StudyBusinessEvent.action == RESULT_RECORDED_ACTION,
+        ))
+        prior_contract = (prior.after_state or {}).get("grading_contract_event_uuid") if prior else None
+        if not prior_contract or corrected.get("grading_contract_event_uuid") != prior_contract:
+            raise conflict
+        appeal_outcome = await db.scalar(select(StudyBusinessEvent.id).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.action == "studytomy.assessment.appeal_corrected",
+            StudyBusinessEvent.subject_uuid == learner_uuid,
+            StudyBusinessEvent.operation_uuid == result.resource_uuid,
+            StudyBusinessEvent.after_state["result_uuid"].as_string() == result.event_uuid,
+        ).limit(1))
+        if appeal_outcome is None:
+            raise conflict
+        # Follow the exact reviewed result lineage, regardless of later retries.
+        newest_result_id = await db.scalar(select(StudyBusinessEvent.id).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.resource_uuid == result.resource_uuid,
+            StudyBusinessEvent.action == RESULT_RECORDED_ACTION,
+        ).order_by(StudyBusinessEvent.id.desc()).limit(1))
+        if newest_result_id != result.id:
+            raise conflict
+        updated = sorted((set(selected) - {corrected["previous_event_uuid"]}) | {result.event_uuid})
+        if corrected["passed"] and (
+            not evidence.eligible or sorted(evidence.assessment_result_uuids.values()) != updated
+        ):
+            raise conflict
+        status = "corrected" if corrected["passed"] else "withdrawn"
+        change = await append_business_event(
+            db, org_id=org.id, actor_user_id=reviewer.id, actor_capacity="assessment_moderator",
+            subject_uuid=learner_uuid, resource_kind="managed_award", resource_uuid=award.event_uuid,
+            action=_AWARD_CHANGED, reason_code="AWARD_ASSESSMENT_CORRECTION" if corrected["passed"]
+            else "AWARD_WITHDRAWN_AFTER_ASSESSMENT_CORRECTION",
+            dedupe_key=key, policy_refs=policy_refs,
+            after_state={
+                "status": status, "version": state.get("version", 1) + 1,
+                "previous_event_uuid": (previous or award).event_uuid,
+                "assessment_result_event_uuids": updated,
+            },
+        )
+    return ManagedCertificateChangeReceipt(
+        award_uuid=award.event_uuid, review_uuid=change.event_uuid,
+        status=change.after_state["status"], version=change.after_state["version"],
+    )
+
+
 class ManagedCertificateVerification(ManagedCertificateIssueReceipt):
     award_name: str
     issuer_name: str
     course_name: str
+    status: Literal["issued", "corrected", "withdrawn"]
+    version: int
 
 
 async def verify_my_managed_certificate(
@@ -293,7 +427,10 @@ async def verify_my_managed_certificate(
     course_name = course.get("name") if isinstance(course, dict) else None
     if conditions is None or conditions.issuance != "reviewed" or not isinstance(course_name, str) or not course_name.strip():
         raise unavailable
+    change = await _latest_award_change(db, award)
     return ManagedCertificateVerification(
         award_uuid=award.event_uuid, release_uuid=release.uuid, issued_at=award.created_at,
         award_name=conditions.award_name, issuer_name=conditions.issuer_name, course_name=course_name,
+        status=change.after_state["status"] if change else "issued",
+        version=change.after_state["version"] if change else 1,
     )

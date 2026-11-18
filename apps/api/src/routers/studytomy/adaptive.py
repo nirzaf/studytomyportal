@@ -47,12 +47,15 @@ from src.services.studytomy.assessment_reviews import (
 )
 from src.services.studytomy.assessment_archive_retention import ArchiveRemovalReceipt, remove_assessment_archive
 from src.services.studytomy.awards import (
+    ManagedCertificateChange,
+    ManagedCertificateChangeReceipt,
     ManagedCertificateEligibility,
     ManagedCertificateIssue,
     ManagedCertificateIssueReceipt,
     ManagedCertificateVerification,
     issue_managed_certificate,
     preview_managed_certificate_eligibility,
+    review_managed_certificate_change,
     verify_my_managed_certificate,
 )
 from src.services.studytomy.assessment_integrity import (
@@ -410,6 +413,24 @@ async def api_issue_managed_certificate(
     body: ManagedCertificateIssue,
 ) -> ManagedCertificateIssueReceipt:
     receipt = await issue_managed_certificate(db, org, actor, course_uuid, release_uuid, learner_uuid, body)
+    await db.commit()
+    return receipt
+
+
+@router.post("/orgs/{org_uuid}/courses/{course_uuid}/releases/{release_uuid}/learners/{learner_uuid}/awards/{award_uuid}/review")
+async def api_review_managed_certificate_change(
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    course_uuid: Annotated[str, Path(min_length=1, max_length=255)],
+    release_uuid: Annotated[str, Path(min_length=1, max_length=64)],
+    learner_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    award_uuid: UUID,
+    body: ManagedCertificateChange,
+) -> ManagedCertificateChangeReceipt:
+    receipt = await review_managed_certificate_change(
+        db, org, actor, course_uuid, release_uuid, learner_uuid, award_uuid, body,
+    )
     await db.commit()
     return receipt
 
