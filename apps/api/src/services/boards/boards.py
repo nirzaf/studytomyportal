@@ -1,3 +1,4 @@
+from hashlib import sha256
 from typing import List, Optional
 from uuid import uuid4
 from datetime import datetime
@@ -545,10 +546,16 @@ async def get_ydoc_state(
     return board.ydoc_state
 
 
+def ydoc_state_etag(state: bytes | None) -> str:
+    return '"empty"' if state is None else f'"{sha256(state).hexdigest()}"'
+
+
 async def store_ydoc_state(
     board_uuid: str,
     state: bytes,
     db_session: AsyncSession,
+    *,
+    expected_etag: str | None = None,
 ):
     if not state:
         raise HTTPException(status_code=422, detail="Board state must not be empty")
@@ -558,6 +565,8 @@ async def store_ydoc_state(
     board = (await db_session.execute(statement)).scalars().first()
     if not board:
         raise HTTPException(status_code=404, detail="Board not found")
+    if expected_etag is not None and expected_etag != ydoc_state_etag(board.ydoc_state):
+        raise HTTPException(status_code=412, detail="Board state changed; reload before writing")
     board.ydoc_state = state
     board.update_date = str(datetime.now())
     db_session.add(board)

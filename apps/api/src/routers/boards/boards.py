@@ -32,6 +32,7 @@ from src.services.boards.boards import (
     update_board_thumbnail,
     get_ydoc_state,
     store_ydoc_state,
+    ydoc_state_etag,
 )
 
 router = APIRouter(dependencies=[Depends(require_boards_feature)])
@@ -328,23 +329,24 @@ async def api_get_ydoc_state(
         return Response(
             content=b"",
             media_type="application/octet-stream",
-            headers={"X-YDoc-State": "empty"},
+            headers={"X-YDoc-State": "empty", "ETag": ydoc_state_etag(state)},
         )
     return Response(
         content=state,
         media_type="application/octet-stream",
-        headers={"X-YDoc-State": "present"},
+        headers={"X-YDoc-State": "present", "ETag": ydoc_state_etag(state)},
     )
 
 
 @internal_router.put(
     "/{board_uuid}/ydoc",
     summary="Persist the Yjs document state for a board",
-    description="Store the latest Yjs document binary state for a board. Internal endpoint used by the Hocuspocus collab server; requires the shared internal key header.",
+    description="Store the latest Yjs document binary state for a board. Requires the shared internal key header. Optionally supply the exact ETag returned by GET in If-Match to reject stale writes.",
     responses={
         200: {"description": "Yjs document state persisted successfully."},
         403: {"description": "Invalid internal key"},
         404: {"description": "Board not found"},
+        412: {"description": "The supplied snapshot ETag no longer matches."},
     },
 )
 async def api_store_ydoc_state(
@@ -353,4 +355,6 @@ async def api_store_ydoc_state(
     db_session: AsyncSession = Depends(get_db_session),
 ):
     body = await request.body()
-    return await store_ydoc_state(board_uuid, body, db_session)
+    return await store_ydoc_state(
+        board_uuid, body, db_session, expected_etag=request.headers.get("If-Match")
+    )

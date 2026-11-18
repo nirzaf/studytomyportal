@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -66,3 +68,27 @@ async def test_board_storage_distinguishes_empty_missing_and_persisted_state(
         assert reread.status_code == 200
         assert reread.headers["x-ydoc-state"] == "present"
         assert reread.content == update
+
+        assert reread.headers["etag"] != empty.headers["etag"]
+        stale = await client.put(
+            path, content=b"stale", headers={**headers, "If-Match": empty.headers["etag"]}
+        )
+        assert stale.status_code == 412
+        assert (await client.get(path, headers=headers)).content == update
+
+        contenders = (b"snapshot one", b"snapshot two")
+        conditional_headers = {**headers, "If-Match": reread.headers["etag"]}
+        responses = await asyncio.gather(
+            *(
+                client.put(path, content=state, headers=conditional_headers)
+                for state in contenders
+            )
+        )
+        assert sorted(response.status_code for response in responses) == [200, 412]
+        winner = next(
+            state for state, response in zip(contenders, responses)
+            if response.status_code == 200
+        )
+        latest = await client.get(path, headers=headers)
+        assert latest.content == winner
+        assert latest.headers["etag"] != reread.headers["etag"]
