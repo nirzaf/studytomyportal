@@ -530,8 +530,30 @@ def _plain_paragraphs(content: object) -> list[str]:
     return paragraphs
 
 
+async def _assessed_pass_delivery(
+    db: AsyncSession, release: StudyCourseRelease, policy: StudyPolicyVersion,
+    user_id: int, activity_uuid: str, *, lock_result: bool = False,
+) -> tuple[bool, Literal["assessment_pass_required", "assessment_pass_delivery_pending"] | None]:
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
+    if body is None or any(blockers.values()) or policy.id != release.progression_policy_id:
+        return False, None
+    status = await managed_assessed_pass_status(
+        db, body, release, user_id, activity_uuid, lock_result=lock_result,
+    )
+    schedule = body.specified_value("release_schedule")
+    approved = schedule.get("assessed_pass_delivery_activities") if isinstance(schedule, dict) else None
+    activities = approved.get(release.course_uuid) if isinstance(approved, dict) else None
+    return (
+        status == "assessment_pass_delivery_pending"
+        and isinstance(activities, list)
+        and activity_uuid in activities,
+        status,
+    )
+
+
 def _project_text_lesson(
     release: StudyCourseRelease, policy: StudyPolicyVersion, activity_uuid: str,
+    *, assessed_pass_verified: bool = False,
 ) -> ManagedTextLesson:
     body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
     schedule = body.specified_value("release_schedule") if body else None
@@ -541,7 +563,7 @@ def _project_text_lesson(
         policy.id != release.progression_policy_id
         or body is None
         or any(blockers.values())
-        or not ungated_by_assessed_pass(body, release.course_uuid, activity_uuid)
+        or (not assessed_pass_verified and not ungated_by_assessed_pass(body, release.course_uuid, activity_uuid))
         or not isinstance(activities, list)
         or activity_uuid not in activities
     ):
@@ -589,6 +611,7 @@ def _project_media_activity(
     activity_uuid: str,
     *,
     caption_code: str | None = None,
+    assessed_pass_verified: bool = False,
 ) -> tuple[str, dict, str]:
     snapshot = release.snapshot
     course = snapshot.get("course")
@@ -658,7 +681,7 @@ def _project_media_activity(
         policy.id != release.progression_policy_id
         or body is None
         or any(blockers.values())
-        or not ungated_by_assessed_pass(body, release.course_uuid, activity_uuid)
+        or (not assessed_pass_verified and not ungated_by_assessed_pass(body, release.course_uuid, activity_uuid))
         or not isinstance(course_activities, list)
         or activity_uuid not in course_activities
     ):
@@ -787,6 +810,8 @@ def _approved_caption_codes(
     progression: StudyPolicyVersion,
     policy: StudyPolicyVersion | None,
     activity_uuid: str,
+    *,
+    assessed_pass_verified: bool = False,
 ) -> list[str]:
     activity = next(
         row for row in release.snapshot["activities"]
@@ -797,6 +822,7 @@ def _approved_caption_codes(
         try:
             _, track, track_type = _project_media_activity(
                 release, progression, activity_uuid, caption_code=code,
+                assessed_pass_verified=assessed_pass_verified,
             )
         except HTTPException as error:
             if error.status_code != 404:
@@ -814,10 +840,16 @@ def _project_authorized_media(
     policy: StudyPolicyVersion,
     activity_uuid: str,
     caption_code: str | None,
+    *,
+    assessed_pass_verified: bool = False,
 ) -> tuple[str, dict, str]:
-    source, media, media_type = _project_media_activity(release, progression, activity_uuid)
+    source, media, media_type = _project_media_activity(
+        release, progression, activity_uuid, assessed_pass_verified=assessed_pass_verified,
+    )
     codes = (
-        _approved_caption_codes(release, progression, policy, activity_uuid)
+        _approved_caption_codes(
+            release, progression, policy, activity_uuid, assessed_pass_verified=assessed_pass_verified,
+        )
         if media_type.startswith("video/") else []
     )
     _validate_media_delivery_policy(policy, media_type, media["size_bytes"], has_captions=bool(codes))
@@ -825,7 +857,10 @@ def _project_authorized_media(
         return source, media, media_type
     if caption_code not in codes:
         raise _unavailable()
-    return _project_media_activity(release, progression, activity_uuid, caption_code=caption_code)
+    return _project_media_activity(
+        release, progression, activity_uuid, caption_code=caption_code,
+        assessed_pass_verified=assessed_pass_verified,
+    )
 
 
 async def _stage_release_media(org_uuid: str, media: dict) -> BinaryIO:
@@ -910,8 +945,12 @@ async def read_managed_activity_media(
     policy = (await _current_policies(
         db, org, (StudyPolicyKey.D_15,), datetime.now(UTC)
     ))[0]
+    assessed_pass_verified, _ = await _assessed_pass_delivery(
+        db, release, progression, actor.id, activity_uuid, lock_result=True,
+    )
     source_reference, media, media_type = _project_authorized_media(
         release, progression, policy, activity_uuid, caption_code,
+        assessed_pass_verified=assessed_pass_verified,
     )
     start, end, status_code = _parse_media_range(range_header, media["size_bytes"])
     release_id = release.id
@@ -950,8 +989,12 @@ async def read_managed_activity_media(
                 "POLICY_CHANGED",
                 "The current media-access policy changed while the resource was being prepared. Retry the request.",
             )
+        current_pass_verified, _ = await _assessed_pass_delivery(
+            db, current_release, current_progression, actor.id, activity_uuid, lock_result=True,
+        )
         current_source_reference, current_media, current_media_type = _project_authorized_media(
             current_release, current_progression, current_policy, activity_uuid, caption_code,
+            assessed_pass_verified=current_pass_verified,
         )
         if (
             current_source_reference != source_reference
@@ -996,7 +1039,10 @@ async def read_managed_text_lesson(
     release, policy, profile_id = await _authorized_release(
         db, org, actor, course_uuid, release_uuid, require_active_grant=False,
     )
-    result = _project_text_lesson(release, policy, activity_uuid)
+    assessed_pass_verified, _ = await _assessed_pass_delivery(
+        db, release, policy, actor.id, activity_uuid, lock_result=True,
+    )
+    result = _project_text_lesson(release, policy, activity_uuid, assessed_pass_verified=assessed_pass_verified)
     now = datetime.now(UTC)
     grants = await resolve_active_course_grants(
         db, org_id=org.id, learner_profile_id=profile_id, course_uuid=course_uuid,
@@ -1163,9 +1209,14 @@ async def list_managed_text_lessons(
             ))
             continue
 
+        assessed_pass_verified, pass_status = await _assessed_pass_delivery(
+            db, release, policy, actor.id, activity_uuid,
+        )
         if is_text:
             try:
-                lesson = _project_text_lesson(release, policy, activity_uuid)
+                lesson = _project_text_lesson(
+                    release, policy, activity_uuid, assessed_pass_verified=assessed_pass_verified,
+                )
             except HTTPException as error:
                 if error.status_code != 404:
                     raise
@@ -1176,10 +1227,8 @@ async def list_managed_text_lessons(
                     format="text",
                     media_type=None,
                     available=False,
-                    unavailable_reason=(
-                        await managed_assessed_pass_status(db, schedule_body, release, actor.id, activity_uuid)
-                        if schedule_body else None
-                    ) or "release_content_unavailable",
+                    unavailable_reason=(pass_status if not assessed_pass_verified else None)
+                    or "release_content_unavailable",
                 ))
                 continue
             lessons.append(ManagedLessonSummary(
@@ -1195,7 +1244,7 @@ async def list_managed_text_lessons(
 
         try:
             _source_reference, media, media_type = _project_media_activity(
-                release, policy, activity_uuid
+                release, policy, activity_uuid, assessed_pass_verified=assessed_pass_verified,
             )
         except HTTPException as error:
             if error.status_code != 404:
@@ -1214,8 +1263,7 @@ async def list_managed_text_lessons(
                 media_type=None,
                 available=False,
                 unavailable_reason=(
-                    (await managed_assessed_pass_status(db, schedule_body, release, actor.id, activity_uuid)
-                     if schedule_body else None) or "release_media_unavailable"
+                    (pass_status if not assessed_pass_verified else None) or "release_media_unavailable"
                     if media_format != "unsupported"
                     else "unsupported_release_format"
                 ),
@@ -1223,7 +1271,9 @@ async def list_managed_text_lessons(
             continue
         media_format = "pdf" if media_type == "application/pdf" else "video"
         caption_codes = (
-            _approved_caption_codes(release, policy, media_policy, activity_uuid)
+            _approved_caption_codes(
+                release, policy, media_policy, activity_uuid, assessed_pass_verified=assessed_pass_verified,
+            )
             if media_format == "video" else []
         )
         available, unavailable_reason = _managed_media_availability(

@@ -203,23 +203,35 @@ async def test_issued_round_retains_exact_started_release(
         authority.assert_awaited_once()
 
         target = "activity_pass_gated"
-        policy_body = _synthetic_policy_body(StudyPolicyKey.D_09, {
+        decisions = {
             "completion_prerequisites": {"assessed_pass_by_course": {course.course_uuid: [{
                 "kind": "assessed_pass", "target_activity_uuid": target,
                 "assessment_assignment_uuid": assignment.assignment_uuid,
             }]}},
-        })
+        }
+        policy_body = _synthetic_policy_body(StudyPolicyKey.D_09, decisions)
+        progression = SimpleNamespace(id=release.progression_policy_id, body=policy_body.model_dump(mode="json"))
 
         async def status_for(user_id=user.id):
             return await managed_assessed_pass_status(db, policy_body, release, user_id, target)
 
+        async def delivery_for():
+            return await access_policy._assessed_pass_delivery(
+                db, release, progression, user.id, target, lock_result=True,
+            )
+
         assert await status_for() == "assessment_pass_required"
+        assert await delivery_for() == (False, "assessment_pass_required")
         stored.submission_status = AssignmentUserSubmissionStatus.GRADED
         computed = {"grade": 90, "max_grade": 100, "passing_threshold": 50, "passed": True, "tasks": []}
         await grading.record_assessment_result(db, assignment, stored, bound, computed, actor)
         await db.flush()
         assert await status_for() == "assessment_pass_delivery_pending"
+        assert await delivery_for() == (False, "assessment_pass_delivery_pending")
         assert await status_for(user.id + 1_000_000) == "assessment_pass_required"
+        decisions["release_schedule"] = {"assessed_pass_delivery_activities": {course.course_uuid: [target]}}
+        progression.body = _synthetic_policy_body(StudyPolicyKey.D_09, decisions).model_dump(mode="json")
+        assert await delivery_for() == (True, "assessment_pass_delivery_pending")
 
         result = await grading.latest_assessment_result(db, assignment, stored)
         appeal = StudyBusinessEvent(
@@ -230,6 +242,7 @@ async def test_issued_round_retains_exact_started_release(
         db.add(appeal)
         await db.flush()
         assert await status_for() == "assessment_pass_required"
+        assert await delivery_for() == (False, "assessment_pass_required")
         for status, action, expected in (
             ("result_confirmed", "appeal_confirmed", "assessment_pass_delivery_pending"),
             ("reopened", "appeal_reopened", "assessment_pass_required"),
@@ -243,6 +256,7 @@ async def test_issued_round_retains_exact_started_release(
             ))
             await db.flush()
             assert await status_for() == expected
+            assert (await delivery_for())[0] == (status == "result_confirmed")
         await grading.record_assessment_result(
             db, assignment, stored, bound, {**computed, "grade": 40, "passed": False}, actor,
         )

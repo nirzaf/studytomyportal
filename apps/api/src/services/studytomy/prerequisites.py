@@ -55,6 +55,8 @@ async def managed_assessed_pass_status(
     release: StudyCourseRelease,
     user_id: int,
     activity_uuid: str,
+    *,
+    lock_result: bool = False,
 ) -> Literal["assessment_pass_required", "assessment_pass_delivery_pending"] | None:
     """Project evidence status for an already authorized release without opening delivery."""
     from src.services.studytomy.assessment_reviews import _appeal_receipt
@@ -85,7 +87,7 @@ async def managed_assessed_pass_status(
             digest = retained_grading_contract_digest(retained[0], release.snapshot["assignment_tasks"])
         except (KeyError, TypeError, ValueError):
             return "assessment_pass_required"
-        row = (await db.execute(
+        query = (
             select(Assignment, AssignmentUserSubmission)
             .join(AssignmentUserSubmission, AssignmentUserSubmission.assignment_id == Assignment.id)
             .where(
@@ -96,7 +98,10 @@ async def managed_assessed_pass_status(
                 AssignmentUserSubmission.user_id == user_id,
                 AssignmentUserSubmission.submission_status == AssignmentUserSubmissionStatus.GRADED,
             )
-        )).one_or_none()
+        )
+        if lock_result:
+            query = query.with_for_update(of=AssignmentUserSubmission)
+        row = (await db.execute(query)).one_or_none()
         if row is None:
             return "assessment_pass_required"
         result = await latest_assessment_result(db, *row)

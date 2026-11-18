@@ -88,6 +88,8 @@ def test_retained_schedule_values_prevent_ungated_delivery(location, rule):
         with pytest.raises(HTTPException) as error:
             project(release, policy, activity_uuid)
         assert error.value.status_code == 404
+        if location == "policy" and rule == "explicit":
+            assert project(release, policy, activity_uuid, assessed_pass_verified=True)
 
 
 @pytest.mark.parametrize("scenario", [
