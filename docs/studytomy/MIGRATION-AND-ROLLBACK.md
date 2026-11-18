@@ -85,6 +85,45 @@ production rollback safe by itself. Disable it after returning to a version
 that recognizes the database head. A deployed older version that predates this
 compatibility option still cannot start against an unknown newer Alembic head.
 
+## Synthetic PostgreSQL migration and recovery rehearsal on 18 November 2026
+
+The opt-in migration test suite added in commit
+[`ec0cebbe373f1a201b30cebea5820a401705e8b6`](../../apps/api/src/tests/core/test_migrations_postgres.py)
+uses a loopback PostgreSQL URL ending in `_test`. Each test creates a unique
+database from `template0` and drops only that exact database afterward. The
+rehearsal used the dedicated Docker PostgreSQL 16.16 server with pgvector 0.8.7;
+it did not use the normal development database.
+
+| Check | Result |
+| --- | --- |
+| Concurrent empty-database `ensure_schema()` calls, current tables, integrity triggers/constraints, vector extension and immutable business-event update rejection | 3 PostgreSQL migration tests passed overall |
+| Interrupted startup migration and transactional DDL rollback | Passed; the synthetic probe table was absent and the revision remained unchanged |
+| Parent-to-current application startup path | Passed from `a78f2c9d1e64` to `b91d2f6a08c3` through `ensure_schema()`; a synthetic business-event row survived |
+| Core migration and graph tests | 52 passed |
+| Synthetic evidence hold, tombstone and restore replay regression (`test_checkout_router.py -m studytomy_postgres -k free-reentry`) | 1 passed, 11 deselected |
+
+The parent-state rehearsal was constructed in a fresh synthetic database by
+downgrading the current head's migration one step. The affected attempt and
+tutor-session tables were empty before doing so. It verifies the current
+migration's parent revision and the application upgrade path, but it is not a
+restore or upgrade of an independently captured historical database.
+
+A separate manual check used a custom-format, schema-scoped `pg_dump` of a
+synthetic schema and `pg_restore` into a second disposable database. The target
+had pgvector installed in `public` before restore. The restored synthetic
+business event, migration head, immutable-event trigger and relevant constraints
+matched; the synthetic row digest was
+`46ea1bc69b322efcb2cec8a3e88c12deed7569ceaccd37813dd900056addf6d1`. This was
+not a full database backup restore or a production-shaped snapshot. Temporary
+rehearsal databases and dump files were removed after verification.
+
+The retention/replay check covers synthetic database evidence and local test
+fixtures only. It does not verify deletion, versioning or restoration in the
+configured external object store. A production-shaped pre-migration backup,
+independent historical schema/data upgrade, object-store retention/recovery,
+and older-application product reads/writes remain unverified. No production
+migration, downgrade or destructive recovery was run.
+
 ## Remaining verification
 
 - Rehearse the actual deployed pre-migration snapshot and restore process in an
