@@ -353,8 +353,9 @@ async def _managed_activity_media_response(
     )
     try:
         await db.commit()
-    except Exception:
-        await media.close()
+    except BaseException:
+        # The response has not taken ownership yet. Close even on cancellation.
+        media.file.close()
         raise
     headers = {
         "Accept-Ranges": "bytes",
