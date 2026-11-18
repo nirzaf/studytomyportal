@@ -37,3 +37,24 @@ The first full web-suite run overlapped with strict lint and PostgreSQL checks: 
 - **Production deployment, production migrations, or real learner activation:** not run or authorized by this verification record.
 
 A preliminary PostgreSQL test invocation used the wrong relative path and ran zero tests. The corrected command and its 11-pass result are the only PostgreSQL result counted above.
+
+## Focused audit follow-up — AUD-13 and AUD-15
+
+- **Recorded:** 2026-11-18
+- **Source revision tested:** `7d5526d983f09141556d2d3a1b546821fdaca862`
+- **Database:** Disposable Docker PostgreSQL 16.16 at loopback `127.0.0.1:60607`, database `studytomy_aud03_test`, already at the current migration head. PostgreSQL fixtures used only `STUDYTOMY_TEST_DATABASE_URL`; no normal development or production database was targeted.
+
+| Scope | Command | Result |
+|---|---|---|
+| Report scheduler unit | `uv run --no-sync python -m pytest -q src/tests/studytomy/test_report_delivery_scheduler.py` from `apps/api` | **PASS:** 5 passed. |
+| API lifecycle wiring | `uv run --no-sync python -m pytest -q src/tests/core/test_core_events.py -k startup_and_shutdown_app` from `apps/api` | **PASS:** 1 passed, 21 deselected. |
+| Outbox lease, authority, outcomes and lifecycle | `uv run --no-sync python -m pytest -q src/tests/studytomy/test_concurrency_postgres.py -m studytomy_postgres` from `apps/api` | **PASS:** 8 passed, 5 deselected; includes the scheduler polling a synthetic PostgreSQL outbox row without a manual batch call. Provider and authorization callbacks were synthetic. |
+| Outbox retry/reconciliation | `uv run --no-sync python -m pytest -q src/tests/studytomy/test_wave1_operations.py -k outbox` from `apps/api` | **PASS:** 23 passed, 73 deselected. |
+| Managed release learner/report workflow | `uv run --no-sync python -m pytest -q src/tests/studytomy/test_adaptive_curriculum_api.py -m studytomy_postgres -k drafts_round_trip_on_postgres` from `apps/api` | **PASS:** 1 passed, 1 deselected. This is an ASGI/PostgreSQL synthetic integration test; report email is mocked. |
+| Assessment finalization, freeze, appeal and retry archive | `uv run --no-sync python -m pytest -q src/tests/studytomy/test_grading_postgres.py -m studytomy_postgres` from `apps/api` | **PASS:** 6 passed, including concurrent finalization and late-save serialization. |
+| Native retry, manual grading and certificate edge paths | `uv run --no-sync python -m pytest -q src/tests/routers/test_assignments_retry.py src/tests/services/test_assignment_manual_grading.py src/tests/services/test_certification_edge_paths.py` from `apps/api` | **PASS:** 29 passed on the SQLite unit-test fixture. This is not PostgreSQL evidence. |
+| Managed historical award retention | `uv run --no-sync python -m pytest -q src/tests/services/test_certifications_service.py -k managed_template_and_automatic_revocation_preserve_award` from `apps/api` | **PASS:** 1 passed, 71 deselected on the SQLite unit-test fixture. |
+| API lint | `uv run --no-sync ruff check src/services/studytomy/report_delivery_scheduler.py src/tests/studytomy/test_report_delivery_scheduler.py src/tests/studytomy/test_concurrency_postgres.py` from `apps/api` | **PASS:** all checks passed. |
+| Report-review UI checks | `node node_modules/eslint/bin/eslint.js components/Studytomy/StaffReportReview.tsx`; `node node_modules/typescript/bin/tsc --noEmit` from `apps/web` | **PASS:** both exited 0. |
+
+The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 approval records/dates remain unverified. No email provider call, browser acceptance, full suite, production migration or real-learner activation was run. This focused evidence does not substitute for AUD-21's integrated acceptance gate.
