@@ -14,6 +14,7 @@ export type CourseReviewCandidate = {
   next_before_id: number | null
   current_review?: CourseReviewReceipt | null
   grounding_review_required?: boolean
+  media_review_blocked?: boolean
 }
 
 type CourseReviewReceipt = {

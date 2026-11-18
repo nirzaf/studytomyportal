@@ -42,7 +42,11 @@ from src.services.studytomy.idempotency import (
 )
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization, lock_users
-from src.services.studytomy.releases import course_candidate_snapshot, grounded_source_review_required
+from src.services.studytomy.releases import (
+    course_candidate_snapshot,
+    grounded_source_review_required,
+    validate_release_media_coverage,
+)
 from src.services.utils.upload_content import upload_content
 
 ContentEvidencePurpose = Literal["content_rights", "content_accessibility"]
@@ -85,6 +89,7 @@ class ContentReviewCandidate(BaseModel):
     next_before_id: int | None = None
     current_review: CourseReviewReceipt | None = None
     grounding_review_required: bool = False
+    media_review_blocked: bool = False
 
 
 class ContentReviewEvidenceSelection(BaseModel):
@@ -125,6 +130,13 @@ async def get_course_content_candidate(
 ) -> ContentReviewCandidate:
     course, policies = await _course_scope(db, organization, actor, course_uuid)
     snapshot = await course_candidate_snapshot(db, course)
+    media_review_blocked = False
+    try:
+        validate_release_media_coverage(snapshot)
+    except HTTPException as error:
+        if not isinstance(error.detail, dict) or error.detail.get("code") != "RELEASE_MEDIA_UNSUPPORTED":
+            raise
+        media_review_blocked = True
     revision = canonical_request_hash(snapshot)
     policy_ids = [int(policy.id) for policy in policies]
     query = select(StudyEvidenceFile).where(
@@ -152,6 +164,7 @@ async def get_course_content_candidate(
     return ContentReviewCandidate(
         revision_sha256=revision,
         grounding_review_required=grounded_source_review_required(snapshot),
+        media_review_blocked=media_review_blocked,
         evidence=[_projection(row) for row in page if row.policy_version_ids == policy_ids],
         next_before_id=page[-1].id if len(rows) > page_size else None,
         current_review=(

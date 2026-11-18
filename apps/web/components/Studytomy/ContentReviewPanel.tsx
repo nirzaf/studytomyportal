@@ -136,7 +136,7 @@ export default function ContentReviewPanel({ client, initial }: {
     const button = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
     const decision = button?.value
     if (decision !== 'approved' && decision !== 'changes_requested') return
-    if (decision === 'approved' && candidate.grounding_review_required) return
+    if (decision === 'approved' && (candidate.grounding_review_required || candidate.media_review_blocked)) return
     const body = {
       revision_sha256: candidate.revision_sha256,
       rights_evidence_uuid: rights,
@@ -157,6 +157,7 @@ export default function ContentReviewPanel({ client, initial }: {
         ...current,
         current_review: latest.revision_sha256 === current.revision_sha256 ? latest.current_review : null,
         grounding_review_required: latest.grounding_review_required,
+        media_review_blocked: latest.media_review_blocked,
       }))
       setStatus(t('contentReview.saved', 'Review decision recorded.'))
     })
@@ -169,6 +170,9 @@ export default function ContentReviewPanel({ client, initial }: {
       {candidate.grounding_review_required && <p role="status" className="text-sm text-gray-800">
         {t('contentReview.groundingReviewRequired',
           'A lesson or quiz changed, or a cited source is unavailable. Update its source evidence and reload this candidate before approving.')}
+      </p>}
+      {candidate.media_review_blocked && <p role="status" className="text-sm text-gray-800">
+        {t('contentReview.unsupportedMedia', 'This release cannot retain one or more lesson formats or media dependencies. Keep this version in draft and review the affected lessons.')}
       </p>}
       {candidate.current_review && <p className="text-sm font-medium text-gray-800">
         {candidate.current_review.decision === 'approved'
@@ -242,7 +246,7 @@ export default function ContentReviewPanel({ client, initial }: {
             {t('contentReview.requestChanges', 'Request changes')}
           </button>
           <button className={control} type="submit" value="approved"
-            disabled={busy || !rights || !accessibility || !accessible || !assessment || candidate.grounding_review_required}>
+            disabled={busy || !rights || !accessibility || !accessible || !assessment || candidate.grounding_review_required || candidate.media_review_blocked}>
             {t('contentReview.approve', 'Record approval')}
           </button>
         </div>

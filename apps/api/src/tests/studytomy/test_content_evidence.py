@@ -337,6 +337,7 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
             "next_before_id": None,
             "current_review": None,
             "grounding_review_required": False,
+            "media_review_blocked": False,
         }
 
         replay = await client.post(files, data=payload, files=evidence, headers=headers)
@@ -408,6 +409,10 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         for video_metadata in ({"captions": {"enabled": True}}, {}):
             with monkeypatch.context() as review_fixture:
                 review_fixture.setattr(publication, "course_candidate_snapshot", candidate_with_video)
+                review_fixture.setattr(content_evidence, "course_candidate_snapshot", candidate_with_video)
+                blocked_candidate = await client.get(candidate)
+                assert blocked_candidate.status_code == 200
+                assert blocked_candidate.json()["media_review_blocked"] is True
                 blocked_review = await client.post(review_url, json=approval, headers=review_headers)
             assert blocked_review.status_code == 409, blocked_review.text
             assert blocked_review.json()["detail"]["code"] == "RELEASE_MEDIA_UNSUPPORTED"
