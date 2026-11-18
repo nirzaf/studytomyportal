@@ -4,7 +4,7 @@ from httpx import ASGITransport, AsyncClient
 
 from src.core.events.database import get_db_session
 from src.db.boards import Board
-from src.routers.boards.boards import internal_router
+from src.router import v1_router
 
 
 @pytest.mark.asyncio
@@ -30,11 +30,11 @@ async def test_board_storage_distinguishes_empty_missing_and_persisted_state(
             yield session
 
     app = FastAPI()
-    app.include_router(internal_router, prefix="/api/v1/internal/boards")
+    app.include_router(v1_router)
     app.dependency_overrides[get_db_session] = test_session
     monkeypatch.setenv("COLLAB_INTERNAL_KEY", fixture.token)
     headers = {"X-Internal-Key": fixture.token}
-    path = f"/api/v1/internal/boards/{board_uuid}/ydoc"
+    path = f"/api/v1/boards/{board_uuid}/ydoc"
     # The storage API retains an opaque Yjs update.
     update = b"\x00\x00"
     async with AsyncClient(
@@ -46,7 +46,7 @@ async def test_board_storage_distinguishes_empty_missing_and_persisted_state(
         assert empty.content == b""
 
         missing = await client.get(
-            f"/api/v1/internal/boards/{board_uuid}_missing/ydoc", headers=headers
+            f"/api/v1/boards/{board_uuid}_missing/ydoc", headers=headers
         )
         assert missing.status_code == 404
         assert "x-ydoc-state" not in missing.headers
