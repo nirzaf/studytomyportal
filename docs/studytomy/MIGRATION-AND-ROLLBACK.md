@@ -136,6 +136,8 @@ migration, downgrade or destructive recovery was run.
 
 ## Remaining verification
 
+An older-code probe used an archived copy of `69e2e562baf7ce0c741d3d04cf565a11ddc8fd49`, the parent of the commit that added `b91d2f6a08c3`. On a separate disposable clone of the synthetic restore, `ensure_schema` with the explicit compatibility option reported `forward-compatible`, preserved `b91d2f6a08c3`, and reconciled zero items. The older `Course` model read an existing course, flushed and refreshed a synthetic description edit, and rolled the edit back. The initial probe stopped after schema startup because it read the wrong report attribute. The corrected probe checked `state` and `after` and passed. This covers one native ORM write path. HTTP authorization and broader product compatibility still need rehearsal.
+
 - Rehearse the actual deployed pre-migration snapshot and restore process in an
   isolated environment before any production approval.
 - Validate the older app's product reads and writes with new Studytomy tables
