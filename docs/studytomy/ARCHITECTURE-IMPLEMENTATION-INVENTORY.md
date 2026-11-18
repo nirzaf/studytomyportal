@@ -1,5 +1,17 @@
 # Architecture improvement implementation inventory
 
+## Current authoring and disclosure checkpoint
+
+Reviewed primary `main` at `fa404b6abd4f5128c8306bf03ac51f298b135ead`. The [local verification log](LOCAL-VERIFICATION.md) records the fixture boundaries and exact test revisions.
+
+| Scope | Current evidence | Remaining work |
+| --- | --- | --- |
+| TASK-03 and AUD-17 | The editor uploaded a real PDF, reopened the persisted version and saved a teacher-edited lesson with its exact source digest and page locator through FastAPI and PostgreSQL. The generation response in the save journey was simulated. Real revocation hid the quote and denied reuse. A separate live API check saved a cited native quiz task and verified idempotent replay. | Provider factual-support and refusal quality, educator judgments, and approved source retention and release decisions. |
+| MCP draft authoring | Synthetic teacher and administrator accounts each completed live browser OAuth consent and separate write approvals. The retained course and lesson stayed unpublished. The next request after OAuth revocation returned HTTP 401. | Authorized external-client acceptance and operating approval. |
+| TASK-07 and AUD-12 | Stored reports are readable under a current independent sharing grant. Browser checks cover grant expiry and staff API withdrawal. The dependent guardian purpose resolver can bind an exact relationship and authority version, while the report service still restricts its lifecycle to independent learners. | AUD-10 and AUD-11 authority and reviewed evidence dependencies, then a distinct guardian recipient authority binding and approved field projection. Verify reads and sends for separate guardians, payer-only denial, revocation and correction across the full dependent lifecycle. |
+
+A focused run of `test_family_authority.py` and `test_adaptive_curriculum_api.py` passed all 12 tests in 188.01 seconds. The PostgreSQL case used the disposable loopback Docker database at revision `b91d2f6a08c3`. This verifies existing authority and report boundaries without exercising dependent recipient disclosure.
+
 Reviewed 2026-11-17 in `studytomyportal` on primary `main`, at `dc661329e30c0b2f61b008b6519cc81f93f2fc7b` with a dirty worktree. This inventory follows TASK-01 through TASK-11 in the supplied *Studytomy — Complete Architecture Improvement Implementation* specification. The [agent architecture guide](AGENT-ARCHITECTURE-GUIDE.md) describes the system and its boundaries.
 
 Status describes the inspected engineering evidence. Local builds, database fixtures, and mocked model or browser checks do not establish operational or real-learner acceptance.
