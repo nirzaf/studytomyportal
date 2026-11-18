@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
+import { createServer } from 'node:http'
 import { describe, it } from 'node:test'
+import * as Y from 'yjs'
+import { loadBoardState } from '../src/boardState.ts'
 import {
   assertSuccessfulYdocWrite,
   BoardPersistenceQueue,
@@ -23,6 +27,74 @@ function queueOptions(
 }
 
 describe('board persistence queue', () => {
+  it('retries a failed HTTP write and reloads the acknowledged Yjs snapshot', async () => {
+    const received: Buffer[] = []
+    let saved: Buffer | undefined
+    const server = createServer(async (request, response) => {
+      if (request.method === 'PUT') {
+        const chunks: Buffer[] = []
+        for await (const chunk of request) chunks.push(chunk)
+        const body = Buffer.concat(chunks)
+        received.push(body)
+        if (received.length === 1) {
+          response.writeHead(503).end()
+          return
+        }
+        saved = body
+        response.writeHead(200).end()
+        return
+      }
+      response.writeHead(200, { 'X-YDoc-State': saved ? 'present' : 'empty' })
+      response.end(saved)
+    })
+    const source = new Y.Doc()
+    const reloaded = new Y.Doc()
+    try {
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      const address = server.address()
+      assert(address && typeof address !== 'string')
+      const url = `http://127.0.0.1:${address.port}/board/ydoc`
+      const queue = new BoardPersistenceQueue(
+        queueOptions(
+          async (_boardUuid, state, timeoutMs) => {
+            const response = await fetch(url, {
+              method: 'PUT',
+              body: Buffer.from(state),
+              signal: AbortSignal.timeout(timeoutMs),
+            })
+            assertSuccessfulYdocWrite(response)
+          },
+          { debounceMs: 0, retryDelaysMs: [5], requestTimeoutMs: 2000 },
+        ),
+      )
+      source.getText('content').insert(0, 'final synthetic edit')
+      const original = Y.encodeStateAsUpdate(source)
+      queue.schedule('board_http_retry', original)
+      // Wait for automatic persistence, without another edit or shutdown flush.
+      const deadline = Date.now() + 4000
+      while (queue.pendingCount && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      assert.equal(queue.pendingCount, 0)
+      assert.deepEqual(received, [Buffer.from(original), Buffer.from(original)])
+      const snapshot = await loadBoardState('board_http_retry', {
+        readCache: async () => null,
+        fetchDatabase: () => fetch(url, { signal: AbortSignal.timeout(2000) }),
+        warmCache: async () => {},
+        reportError: () => {},
+      })
+      assert(snapshot)
+      Y.applyUpdate(reloaded, snapshot)
+      assert.equal(reloaded.getText('content').toString(), 'final synthetic edit')
+    } finally {
+      server.close()
+      server.closeAllConnections()
+      source.destroy()
+      reloaded.destroy()
+    }
+  })
+
   it('retries a non-success response and persists the last snapshot without another edit', async () => {
     const writes: number[][] = []
     const responses = [503, 200]
