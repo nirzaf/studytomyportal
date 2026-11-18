@@ -151,6 +151,7 @@ class SaveGroundedLessonRequest(BaseModel):
     expected_current_version: Annotated[int, Field(strict=True, ge=1)]
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
     blocks: Annotated[list[_EditableGroundedBlock], Field(min_length=1, max_length=6)]
+    request_id: UUID | None = None
 
 
 class GroundedLessonSave(BaseModel):
@@ -564,6 +565,19 @@ async def save_grounded_lesson(
     ):
         raise HTTPException(409, "Grounded text drafts require a text lesson.")
     citations = await _validate_saved_citations(db, course, lesson, [block.citation for block in command.blocks])
+    operation = "studytomy.grounding.save_lesson"
+    key = str(command.request_id) if command.request_id is not None else None
+    replay = await claim_idempotency(
+        db, org_id=course.org_id, actor_user_id=actor.id, operation=operation,
+        idempotency_key=key,
+        request_payload={
+            **command.model_dump(mode="json"),
+            "course_uuid": course.course_uuid,
+            "lesson_uuid": lesson.activity_uuid,
+        },
+    )
+    if replay is not None:
+        return GroundedLessonSave.model_validate(replay.response_projection)
     content = {
         "type": "doc",
         "content": [
@@ -580,9 +594,16 @@ async def save_grounded_lesson(
         ))
         await append_business_event(
             db, org_id=course.org_id, actor_user_id=actor.id, resource_kind="activity",
-            resource_uuid=activity.activity_uuid, action="studytomy.grounding.save_lesson",
+            resource_uuid=activity.activity_uuid, action=operation,
             reason_code="GROUNDED_LESSON_DRAFT_SAVED",
             after_state={"version": activity.current_version, "evidence_sha256": digest},
+        )
+        await complete_idempotency(
+            db, org_id=course.org_id, actor_user_id=actor.id, operation=operation,
+            idempotency_key=key, resource_kind="activity", resource_uuid=activity.activity_uuid,
+            response_projection=GroundedLessonSave(
+                lesson_uuid=activity.activity_uuid, current_version=activity.current_version,
+            ).model_dump(mode="json"),
         )
 
     changed = await update_activity(

@@ -373,6 +373,7 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
             }
             lesson_save = GroundedLessonSaveInput(
                 course_uuid=course.course_uuid, lesson_uuid=lesson.activity_uuid,
+                request_id=uuid4(),
                 expected_current_version=2, title="MCP edited lesson",
                 blocks=[{"text": "Teacher-edited, source-cited text.", "citation": mcp_citation}],
             )
@@ -395,6 +396,15 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
                 "status": "teacher_review_required",
             }
             await mcp_db.commit()
+        retry_lesson = lesson_save.model_dump(
+            mode="json", exclude={"course_uuid", "lesson_uuid"},
+        )
+        retried_lesson = await client.post(save, json=retry_lesson)
+        assert retried_lesson.status_code == 200, retried_lesson.text
+        assert retried_lesson.json() == saved_lesson
+        changed_retry = await client.post(save, json={**retry_lesson, "title": "Different title"})
+        assert changed_retry.status_code == 409
+        assert changed_retry.json()["detail"]["code"] == "IDEMPOTENCY_CONFLICT"
         provider.return_value = quiz
         quiz["questions"][0]["options"][1]["is_correct"] = True
         invalid_key = await client.post(quiz_preview, json=command)
@@ -518,6 +528,7 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         assert (await client.post(path, files=upload)).status_code == 409
         assert (await client.get(path)).json() == {"sources": [], "next_cursor": None}
         assert (await client.post(save, json={**edit, "expected_current_version": 2})).status_code == 404
+        assert (await client.post(save, json=retry_lesson)).status_code == 404
         assert (await client.get(sources_path)).json() == {
             "status": "stale", "current_version": 3, "citations": [],
         }
