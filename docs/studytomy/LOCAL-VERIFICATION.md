@@ -59,6 +59,8 @@ A preliminary PostgreSQL test invocation used the wrong relative path and ran ze
 
 The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 approval records/dates remain unverified. No email provider call, browser acceptance, full suite, production migration or real-learner activation was run. This focused evidence does not substitute for AUD-21's integrated acceptance gate.
 
+At `d83ac01282dd0f527f8a9c40cabcd7771762b4ee`, a disposable SMTP sink bound to an ephemeral loopback port accepted one synthetic report notification from the existing SMTP adapter in single-attempt mode. The adapter returned the intended recipient and no provider message ID. The sink decoded the message and verified its recipient, subject and sign-in link text. The probe used unauthenticated local SMTP and neither relayed mail nor exercised TLS, an external provider, or an actual outbox dispatch.
+
 ## AUD-14 discovery-to-checkout trace
 
 - **Recorded:** 2026-11-18
