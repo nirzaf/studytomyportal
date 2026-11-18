@@ -21,7 +21,7 @@ from src.db.studytomy.commerce import (
     StudyOfferVersion,
 )
 from src.db.studytomy.education import StudyCourseRelease, StudyCourseReview
-from src.db.studytomy.governance import StudyPolicyKey
+from src.db.studytomy.governance import StudyPolicyKey, inspect_study_policy_body
 from src.db.users import PublicUser
 from src.security.studytomy_access import (
     StudytomyCapabilityName,
@@ -36,6 +36,7 @@ from src.services.studytomy.idempotency import (
 )
 from src.services.studytomy.learners import _active_policy
 from src.services.studytomy.policies import lock_organization
+from src.services.studytomy.prerequisites import ungated_by_assessed_pass
 from src.services.studytomy.releases import load_release_policy_binding
 
 
@@ -149,6 +150,7 @@ async def _snapshot_resource_titles(
         )).scalars().all()
         releases = {(row.course_uuid, row.uuid): row for row in rows}
     current_binding = None
+    progression_body = None
     for reference in projected:
         course_uuid = reference["resource_uuid"]
         reference["title_snapshot"] = title_by_uuid[course_uuid]
@@ -160,13 +162,25 @@ async def _snapshot_resource_titles(
             raise HTTPException(status_code=404, detail="Referenced course release not found")
         if require_current_release_policies_at is not None:
             if current_binding is None:
-                current_binding = (await load_release_policy_binding(
+                binding = await load_release_policy_binding(
                     db_session, organization, require_current_release_policies_at,
-                )).model_dump(mode="json")
+                )
+                current_binding = binding.model_dump(mode="json")
+                progression = await _active_policy(
+                    db_session, organization, StudyPolicyKey.D_09, require_current_release_policies_at,
+                )
+                version = binding.versions[StudyPolicyKey.D_09]
+                if progression.id == version.policy_id and canonical_request_hash(progression.body) == version.body_sha256:
+                    progression_body, _ = inspect_study_policy_body(StudyPolicyKey.D_09, progression.body)
             if release.policy_binding != current_binding:
                 raise HTTPException(status_code=409, detail={
                     "code": "OFFER_COURSE_RELEASE_POLICY_CHANGED",
                     "message": "The reviewed release does not bind the current policy decisions.",
+                })
+            if progression_body is None or not ungated_by_assessed_pass(progression_body, course_uuid):
+                raise HTTPException(status_code=409, detail={
+                    "code": "OFFER_ASSESSED_PASS_UNAVAILABLE",
+                    "message": "The offer requires assessed-pass progression that is unavailable.",
                 })
         course_snapshot = release.snapshot.get("course")
         title = course_snapshot.get("name") if isinstance(course_snapshot, dict) else None
@@ -475,7 +489,7 @@ async def get_offer_draft_readiness(
             if error.status_code not in (404, 409):
                 raise
             code = error.detail.get("code") if isinstance(error.detail, dict) else None
-            if code == "OFFER_COURSE_RELEASE_POLICY_CHANGED":
+            if code in {"OFFER_COURSE_RELEASE_POLICY_CHANGED", "OFFER_ASSESSED_PASS_UNAVAILABLE"}:
                 validation_blockers.append(code)
             elif code and (code.startswith("POLICY_") or code == "RELEASE_RETENTION_UNCONFIGURED"):
                 validation_blockers.append("OFFER_COURSE_RELEASE_POLICY_UNAVAILABLE")

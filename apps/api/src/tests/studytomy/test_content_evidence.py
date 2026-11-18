@@ -712,6 +712,14 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
     assert await _snapshot_resource_titles(
         db, org, terms, require_current_release_policies_at=current_at,
     ) == bound
+    with monkeypatch.context() as patch:
+        patch.setattr(offers, "ungated_by_assessed_pass", lambda body, course: False)
+        with pytest.raises(HTTPException) as pass_gate:
+            await _snapshot_resource_titles(
+                db, org, terms, require_current_release_policies_at=current_at,
+            )
+        assert pass_gate.value.detail["code"] == "OFFER_ASSESSED_PASS_UNAVAILABLE"
+        assert await _snapshot_resource_titles(db, org, terms) == bound
     current_binding = await load_release_policy_binding(db, org, current_at)
     with monkeypatch.context() as patch:
         patch.setattr(offers, "load_release_policy_binding", AsyncMock(

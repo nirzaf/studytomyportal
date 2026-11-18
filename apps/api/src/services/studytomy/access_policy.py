@@ -43,6 +43,7 @@ from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
+from src.services.studytomy.prerequisites import ungated_by_assessed_pass
 from src.services.studytomy.releases import (
     _MAX_RELEASE_CAPTION_BYTES,
     _NATIVE_ACTIVITY_MEDIA,
@@ -493,7 +494,9 @@ def _project_text_lesson(
     activities = allowed.get(release.course_uuid) if isinstance(allowed, dict) else None
     if (
         policy.id != release.progression_policy_id
+        or body is None
         or any(blockers.values())
+        or not ungated_by_assessed_pass(body, release.course_uuid, activity_uuid)
         or not isinstance(activities, list)
         or activity_uuid not in activities
     ):
@@ -608,7 +611,9 @@ def _project_media_activity(
     )
     if (
         policy.id != release.progression_policy_id
+        or body is None
         or any(blockers.values())
+        or not ungated_by_assessed_pass(body, release.course_uuid, activity_uuid)
         or not isinstance(course_activities, list)
         or activity_uuid not in course_activities
     ):

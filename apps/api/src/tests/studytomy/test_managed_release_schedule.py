@@ -5,11 +5,16 @@ from fastapi import HTTPException
 
 from src.db.studytomy.governance import StudyPolicyKey
 from src.services.studytomy.access_policy import _project_media_activity, _project_text_lesson
+from src.services.studytomy.prerequisites import ungated_by_assessed_pass
 from src.tests.studytomy.test_studytomy_access import _synthetic_policy_body
 
 
-@pytest.mark.parametrize("location", ["course", "chapter"])
-@pytest.mark.parametrize("rule", [{}, [], False, 0, "", {"enabled": True}])
+@pytest.mark.parametrize("location,rule", [
+    *((location, rule) for location in ("course", "chapter")
+      for rule in ({}, [], False, 0, "", {"enabled": True})),
+    ("policy", None),
+    ("policy", "explicit"),
+])
 def test_retained_schedule_values_prevent_ungated_delivery(location, rule):
     course_uuid, text_uuid, media_uuid = "course_synthetic", "activity_text", "activity_pdf"
     course = {"course_uuid": course_uuid}
@@ -41,20 +46,37 @@ def test_retained_schedule_values_prevent_ungated_delivery(location, rule):
             "storage_reference": "studytomy/releases/synthetic/source.bin",
         }},
     )
-    policy = SimpleNamespace(id=1, body=_synthetic_policy_body(StudyPolicyKey.D_09, {
+    decision = {
         "release_schedule": {
             "ungated_text_activities": {course_uuid: [text_uuid]},
             "ungated_media_activities": {course_uuid: [media_uuid]},
         },
-    }).model_dump(mode="json"))
+    }
+    policy = SimpleNamespace(
+        id=1, body=_synthetic_policy_body(StudyPolicyKey.D_09, decision).model_dump(mode="json"),
+    )
 
     assert _project_text_lesson(release, policy, text_uuid).paragraphs == ["Synthetic lesson"]
     assert _project_media_activity(release, policy, media_uuid)[0] == reference
 
     if location == "course":
         course["drip_settings"] = rule
-    else:
+    elif location == "chapter":
         chapter["drip_rule"] = rule
+    else:
+        decision["completion_prerequisites"] = {"assessed_pass_by_course": (
+            {course_uuid: [
+                {"kind": "assessed_pass", "target_activity_uuid": target,
+                 "assessment_assignment_uuid": "assignment_synthetic"}
+                for target in (text_uuid, media_uuid)
+            ]} if rule == "explicit" else None
+        )}
+        policy.body = _synthetic_policy_body(StudyPolicyKey.D_09, decision).model_dump(mode="json")
+        body = _synthetic_policy_body(StudyPolicyKey.D_09, decision)
+        assert not ungated_by_assessed_pass(body, course_uuid)
+        if rule == "explicit":
+            assert ungated_by_assessed_pass(body, "course_other")
+            assert ungated_by_assessed_pass(body, course_uuid, "activity_other")
 
     for project, activity_uuid in ((_project_text_lesson, text_uuid), (_project_media_activity, media_uuid)):
         with pytest.raises(HTTPException) as error:
