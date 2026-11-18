@@ -49,6 +49,7 @@ async def verify_internal_key(x_internal_key: str = Header(...)):
 
 
 internal_router = APIRouter(dependencies=[Depends(verify_internal_key)])
+MAX_YDOC_BYTES = 5 * 1024 * 1024  # Match the existing collaboration document cap.
 
 
 @router.post(
@@ -347,6 +348,7 @@ async def api_get_ydoc_state(
         403: {"description": "Invalid internal key"},
         404: {"description": "Board not found"},
         412: {"description": "The supplied snapshot ETag no longer matches."},
+        413: {"description": "Board state exceeds the collaboration document limit."},
     },
 )
 async def api_store_ydoc_state(
@@ -354,7 +356,11 @@ async def api_store_ydoc_state(
     board_uuid: str,
     db_session: AsyncSession = Depends(get_db_session),
 ):
-    body = await request.body()
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_YDOC_BYTES:
+            raise HTTPException(status_code=413, detail="Board state exceeds the size limit")
+        body.extend(chunk)
     return await store_ydoc_state(
-        board_uuid, body, db_session, expected_etag=request.headers.get("If-Match")
+        board_uuid, bytes(body), db_session, expected_etag=request.headers.get("If-Match")
     )

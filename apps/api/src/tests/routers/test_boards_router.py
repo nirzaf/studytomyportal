@@ -595,6 +595,29 @@ class TestBoardsRouter:
             else:
                 os.environ["COLLAB_INTERNAL_KEY"] = old
 
+    async def test_internal_ydoc_enforces_stream_size_limit(self, client, monkeypatch):
+        monkeypatch.setenv("COLLAB_INTERNAL_KEY", "synthetic-test-key")
+        monkeypatch.setattr("src.routers.boards.boards.MAX_YDOC_BYTES", 5)
+
+        async def chunks(last):
+            yield b"abc"
+            yield last
+
+        with patch(
+            "src.routers.boards.boards.store_ydoc_state",
+            new_callable=AsyncMock,
+            return_value={"stored": True},
+        ) as store:
+            url = "/api/v1/internal/boards/board_test/ydoc"
+            headers = {"x-internal-key": "synthetic-test-key", "if-match": '"empty"'}
+            accepted = await client.put(url, headers=headers, content=chunks(b"de"))
+            assert accepted.status_code == 200
+            rejected = await client.put(url, headers=headers, content=chunks(b"def"))
+            assert rejected.status_code == 413
+            store.assert_awaited_once()
+            assert store.await_args.args[:2] == ("board_test", b"abcde")
+            assert store.await_args.kwargs == {"expected_etag": '"empty"'}
+
     async def test_internal_ydoc_rejects_invalid_key(self, client):
         old = os.environ.get("COLLAB_INTERNAL_KEY")
         os.environ["COLLAB_INTERNAL_KEY"] = "collab-secret"
