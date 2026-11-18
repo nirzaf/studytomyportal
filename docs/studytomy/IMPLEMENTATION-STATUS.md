@@ -8,19 +8,28 @@ This checkpoint records existing current-code equivalents and focused verificati
 
 | Audit task | Current evidence/status |
 |---|---|
-| AUD-01, AUD-03, AUD-04 | Current PostgreSQL characterization uses synthetic staff, learner, payer, guardian, private managed course, reviewed frozen release and grant. Exact-release diagnostic/access/attempt behavior passes; partial scope and an out-of-release lesson deny. The old audit denial is no longer current. |
-| AUD-05 | Mobile Chromium passed mixed-format lesson navigation and first-use PDF activation with intercepted release responses. The PostgreSQL API test separately verified authenticated PDF range delivery from local storage. Browser playback through the actual media endpoint, captions/alternatives and accessibility acceptance remain open. |
+| AUD-01, AUD-03, AUD-04 | Reused the PostgreSQL fixture with synthetic staff, learner, payer, guardian, private managed course, reviewed frozen release and grant. It exercises exact-release access, server-scored evidence, mastery and permitted recommendations. Partial scope and an out-of-release lesson deny. The managed course stays private, so the audit baseline's denial no longer characterizes current code. See the rerun below. |
+| AUD-05 | Mobile Chromium covered mixed-format navigation with intercepted release responses. PostgreSQL API tests separately verified authenticated PDF ranges from local storage. Video delivery fails closed pending retained captions or a reviewed alternative. Successful browser playback through the actual media endpoint and accessibility acceptance remain open. |
 | AUD-06 | Media staging occurs outside the organization lock and rechecks release, policy and grant before delivery. Focused PostgreSQL lock/revocation and storage failure tests pass. Repeated ranges reread the full staged object; representative workload evidence does not justify a cache yet. |
 | AUD-07, AUD-08 | Collaboration loading fails closed on ambiguous/error responses; persistence retains the latest unacknowledged state, bounds retries/queue size and reports unresolved shutdown writes. Focused unit tests and TypeScript build pass; live Redis/API and multi-client recovery remain unverified. |
 | AUD-13, AUD-15 | Existing report runner, grading, evidence, mastery, retry and award mechanisms have focused synthetic/local evidence. Report delivery remains opt-in and no end-to-end approved offer/report notification was accepted. Integrated learner/browser acceptance remains open. |
 | AUD-16 | Case ownership, exact grants, private narrative and access after course expiry have PostgreSQL evidence. Persisted next action/correspondence/outcome handling and confidential guardian/staff conflict routing lack approved operational arrangements. |
 | AUD-17 | Bounded source retrieval, citations, revocation and synthetic exact-vs-hybrid comparisons are verified. Hybrid remains evaluation-only; educator judgments, real-provider factual support and browser acceptance are absent. |
 | AUD-18 | Full WSL API verification after both fixture corrections passed at `5265fe46` with 10,479 passed, 0 failed and 29 skipped. Strict web lint passed at `c5d920eab` with 0 errors and 976 warnings. Browser and live provider acceptance remain open. See [local verification evidence](LOCAL-VERIFICATION.md). |
-| AUD-19 | Current single migration head and 53 local migration tests are verified, with an existing schema-scoped synthetic dump/restore record. Production-shaped snapshot, object-store retention and older-app restore acceptance remain unverified. |
+| AUD-19 | The local migration suite passed 53 tests. A full synthetic restore matched row fingerprints and trigger definitions, and the retained release overview matched through a read-only service probe. See the [recovery record](MIGRATION-AND-ROLLBACK.md) for remaining object-store, production-shaped backup and older-application limits. |
 | AUD-02, AUD-09–AUD-12, AUD-14, AUD-20 | Approval-dependent. No named cohort, credential/recovery choice, guardian authority, customer offer/terms/payment choice, safeguarding routing, or educator content/rubric acceptance was verified. Related learner, guardian, checkout, notification and content activation gates remain closed. |
 | AUD-21, AUD-22 | Not complete. The integrated gate depends on the unresolved approvals above plus unverified browser/provider/operational evidence. This interim note is not the final post-acceptance status publication. |
 
 The audit findings group into managed release/adaptive learning (F-01), media index/locking (F-02/F-03), dependent identity and guardian authority/reporting (F-04–F-06), report runner (F-07), collaboration persistence/load safety (F-08/F-09), current-revision acceptance and truthful verification (F-10), retrieval coverage (F-11), lint-result propagation (F-12), and dated status drift (F-13). No deployment, CI/CD, production migration, real payment, or real-learner activation was run.
+
+### Local reconciliation on 18 November 2026
+
+The audit attachment is pinned to `210cb56192f60b3140679d81a84927dd1efee95b`. This pass inspected and tested `7084a0f2add4024d10d416437a74c313b2297114` on the primary main worktree. Existing release, media and collaboration work was retained.
+
+- From `apps/api`, `python -m pytest -q --tb=short src/tests/studytomy/test_adaptive_curriculum_api.py src/tests/studytomy/test_adaptive_evidence_postgres.py` passed all 7 tests in 106.14 seconds. PostgreSQL tests targeted the disposable Docker database `studytomy_aud19_full_restore_test` at `127.0.0.1:60607`. This rerun includes managed curriculum characterization and append-only evidence integrity.
+- From `apps/collab`, `bun run test` passed all 43 tests across 9 suites. These exercise fault handling and persistence with synthetic adapters. Live Redis/API and multi-client recovery still require acceptance.
+
+The next independent verification is live local collaboration recovery against disposable Redis and API state. AUD-21 remains gated on the selected offer and educator sign-off, and AUD-22 follows that acceptance gate.
 
 **Updated:** 2026-11-18
 
