@@ -160,6 +160,7 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         assert receipt == {
             "source_uuid": receipt["source_uuid"], "label": "source.pdf",
             "sha256": sha256(pdf).hexdigest(), "readable_pages": [1, 3, *range(4, 12)],
+            "pages_without_readable_text": [2],
         }
         listed = await client.get(path)
         assert listed.headers["cache-control"] == "private, no-store"
@@ -652,7 +653,8 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
                     .execution_options(synchronize_session=False)
                 )
         assert source.pages == [
-            {"page": 1, "text": "first page"}, {"page": 3, "text": source_text},
+            {"page": 1, "text": "first page"}, {"page": 2, "text": ""},
+            {"page": 3, "text": source_text},
             {"page": 4, "text": late_page},
             *({"page": page, "text": repeat_evidence} for page in range(5, 12)),
         ]

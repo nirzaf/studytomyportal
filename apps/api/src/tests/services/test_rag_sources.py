@@ -519,7 +519,7 @@ class TestFormats:
 
     def test_grounding_pdf_retains_original_page_numbers(self):
         pages = formats.pdf_pages(make_pdf(["first page", "", "third page"]), for_grounding=True)
-        assert pages == [(1, "first page"), (3, "third page")]
+        assert pages == [(1, "first page"), (2, ""), (3, "third page")]
 
     @pytest.mark.parametrize(("pdf", "message"), [
         (b"not a pdf", "could not be read"),

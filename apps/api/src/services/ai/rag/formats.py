@@ -49,10 +49,10 @@ def pdf_pages(
             if for_grounding and len(text) > budget:
                 raise GroundingPDFError("Split the PDF into smaller files before using it as a source.")
             text = text[:budget]
-            if text:
+            if text or for_grounding:
                 pages.append((number, text))
                 budget -= len(text)
-        if for_grounding and not pages:
+        if for_grounding and not any(text for _, text in pages):
             raise GroundingPDFError("The PDF has no readable text. Upload a searchable or OCR-processed PDF.")
         return pages
     except GroundingPDFError:

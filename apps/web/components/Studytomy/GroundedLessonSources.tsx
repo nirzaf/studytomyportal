@@ -9,7 +9,12 @@ import GroundedLessonDraftForm from './GroundedLessonDraftForm'
 
 type Citation = { source_uuid: string; label: string; page: number; quote: string }
 type SourceState = { status: 'current' | 'stale' | 'none'; current_version: number; citations: Citation[] }
-type DraftSource = { source_uuid: string; label: string; readable_pages: number[] }
+type DraftSource = {
+  source_uuid: string
+  label: string
+  readable_pages: number[]
+  pages_without_readable_text?: number[]
+}
 type DraftSourcePage = { sources: DraftSource[]; next_cursor: string | null }
 type Props = { orgUuid: string; courseUuid: string; activityUuid: string; version: number; token: string }
 
@@ -149,7 +154,14 @@ function DraftMaterials({ route, token, version }: { route: string; token: strin
                       token, sources: event.target.checked ? [...selected, source.source_uuid]
                         : selected.filter((uuid) => uuid !== source.source_uuid),
                     })} />
-                  <span>{source.label} · {source.readable_pages.length} readable {source.readable_pages.length === 1 ? 'page' : 'pages'}</span>
+                  <span>
+                    {source.label} · {source.readable_pages.length} readable {source.readable_pages.length === 1 ? 'page' : 'pages'}
+                    {!!source.pages_without_readable_text?.length && (
+                      <span className="block">
+                        No readable text on {source.pages_without_readable_text.length === 1 ? 'page' : 'pages'} {source.pages_without_readable_text.join(', ')}.
+                      </span>
+                    )}
+                  </span>
                 </label>
               </li>
             ))}

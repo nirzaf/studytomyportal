@@ -267,6 +267,15 @@ class DraftMaterialReceipt(BaseModel):
     sha256: str
     label: str
     readable_pages: list[int]
+    pages_without_readable_text: list[int] = Field(default_factory=list)
+
+
+def _draft_material_receipt(source_uuid: str, digest: str, label: str, pages: list[dict]) -> DraftMaterialReceipt:
+    return DraftMaterialReceipt(
+        source_uuid=UUID(source_uuid), sha256=digest, label=label,
+        readable_pages=[page["page"] for page in pages if page["text"]],
+        pages_without_readable_text=[page["page"] for page in pages if not page["text"]],
+    )
 
 
 class DraftMaterialPage(BaseModel):
@@ -741,10 +750,7 @@ async def upload_draft_material(
         source_uuid, label, saved_pages, revoked_at = found
         if revoked_at is not None:
             raise HTTPException(409, "This source version was revoked for this lesson.")
-        return DraftMaterialReceipt(
-            source_uuid=UUID(source_uuid), sha256=digest, label=label,
-            readable_pages=[page["page"] for page in saved_pages],
-        )
+        return _draft_material_receipt(source_uuid, digest, label, saved_pages)
 
     filename = re.split(r"[/\\]", file.filename or "")[-1]
     label = re.sub(r"[\x00-\x1f\x7f]", "", filename).strip()[:160] or "PDF source"
@@ -758,10 +764,7 @@ async def upload_draft_material(
         resource_uuid=source.source_uuid, action="studytomy.grounding.upload_source",
         reason_code="DRAFT_SOURCE_RETAINED", after_state={"evidence_sha256": digest},
     )
-    return DraftMaterialReceipt(
-        source_uuid=UUID(source.source_uuid), sha256=digest, label=label,
-        readable_pages=[page["page"] for page in pages],
-    )
+    return _draft_material_receipt(source.source_uuid, digest, label, pages)
 
 
 async def revoke_draft_material(
@@ -801,8 +804,7 @@ async def list_draft_materials(
         statement = statement.where(material.source_uuid > str(after))
     rows = (await db.exec(statement.order_by(material.source_uuid).limit(21))).all()
     sources = [
-        DraftMaterialReceipt(source_uuid=source_uuid, sha256=digest, label=label,
-                             readable_pages=[page["page"] for page in pages])
+        _draft_material_receipt(source_uuid, digest, label, pages)
         for source_uuid, digest, label, pages in rows[:20]
     ]
     return DraftMaterialPage(sources=sources, next_cursor=sources[-1].source_uuid if len(rows) > 20 else None)

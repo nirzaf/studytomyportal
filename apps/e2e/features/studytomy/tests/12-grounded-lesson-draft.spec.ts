@@ -16,7 +16,10 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   const courseUuid = `course_${randomUUID()}`
   const activityId = randomUUID()
   const activityUuid = `activity_${activityId}`
-  const source = { source_uuid: randomUUID(), label: 'energy.pdf', sha256: 'a'.repeat(64), readable_pages: [3] }
+  const source = {
+    source_uuid: randomUUID(), label: 'energy.pdf', sha256: 'a'.repeat(64),
+    readable_pages: [3], pages_without_readable_text: [4],
+  }
   const citation = {
     source_uuid: source.source_uuid, label: source.label, sha256: source.sha256,
     page: 3, quote: 'Photosynthesis converts light energy into chemical energy.',
@@ -101,6 +104,7 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   })
   await dialog.getByRole('button', { name: 'Upload PDF' }).click()
   await expect(dialog.getByText('PDF source saved.')).toBeVisible()
+  await expect(dialog.getByText('No readable text on page 4.')).toBeVisible()
   const pdf = dialog.getByRole('checkbox', { name: /energy.pdf/ })
   await expect(pdf).toBeEnabled()
   await pdf.check()
