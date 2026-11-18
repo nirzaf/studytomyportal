@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 
 from src.routers.studytomy import commerce
 from src.services.studytomy import access_policy
@@ -90,6 +90,25 @@ async def test_media_response_closes_staged_file_if_commit_is_cancelled(monkeypa
                 "org_test", "course_test", "release_test", "activity_test",
                 Request({"type": "http", "headers": []}), object(), db,
                 start_first_use=False,
+            )
+
+        assert staged.closed
+
+
+@pytest.mark.asyncio
+async def test_media_response_closes_file_on_header_send_failure():
+    with TemporaryFile() as staged:
+        media = access_policy.ManagedActivityMedia(
+            file=staged, media_type="application/pdf", filename="lesson.pdf",
+            size_bytes=1, start=0, end=0, status_code=200,
+        )
+        response = commerce._ManagedMediaResponse(media, {})
+        send = AsyncMock(side_effect=OSError("client disconnected"))
+
+        with pytest.raises(ClientDisconnect):
+            await response(
+                {"type": "http", "asgi": {"spec_version": "2.4"}},
+                AsyncMock(), send,
             )
 
         assert staged.closed

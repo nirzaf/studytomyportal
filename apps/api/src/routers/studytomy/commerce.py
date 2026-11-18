@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from starlette.types import Receive, Scope, Send
 
 from src.core.events.database import get_db_session
 from src.db.organizations import Organization
@@ -30,6 +31,7 @@ from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.security.org_auth import require_org_membership
 from src.services.studytomy.access_policy import (
     ManagedAccessHistory,
+    ManagedActivityMedia,
     ManagedLessonIndex,
     ManagedReleaseCatalog,
     ManagedReleaseOverview,
@@ -329,6 +331,21 @@ async def open_managed_text_lesson(
     return lesson
 
 
+class _ManagedMediaResponse(StreamingResponse):
+    def __init__(self, media: ManagedActivityMedia, headers: dict[str, str]):
+        self.media = media
+        super().__init__(
+            media.stream(), status_code=media.status_code,
+            media_type=media.media_type, headers=headers,
+        )
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.media.file.close()
+
+
 async def _managed_activity_media_response(
     org_uuid: str,
     course_uuid: str,
@@ -368,12 +385,7 @@ async def _managed_activity_media_response(
         headers["Content-Range"] = (
             f"bytes {media.start}-{media.end}/{media.size_bytes}"
         )
-    return StreamingResponse(
-        media.stream(),
-        status_code=media.status_code,
-        media_type=media.media_type,
-        headers=headers,
-    )
+    return _ManagedMediaResponse(media, headers)
 
 
 @router.get(
