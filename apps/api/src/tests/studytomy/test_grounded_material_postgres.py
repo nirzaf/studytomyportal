@@ -277,14 +277,38 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         invalid = {**edit, "blocks": [{"text": "Teacher edit.", "citation": {**saved_citation, "page": 2}}]}
         assert (await client.post(save, json=invalid)).status_code == 422
         assert (await client.post(save.replace(lesson.activity_uuid, sibling.activity_uuid), json=edit)).status_code == 404
+        competing_edit = {
+            **edit, "title": "Competing photosynthesis draft",
+            "blocks": [{"text": "Competing teacher wording.", "citation": saved_citation}],
+        }
+        submitted_edits = [edit, competing_edit]
         edits = await asyncio.wait_for(
-            asyncio.gather(client.post(save, json=edit), client.post(save, json=edit)), timeout=15,
+            asyncio.gather(*(client.post(save, json=body) for body in submitted_edits)), timeout=15,
         )
         assert sorted(result.status_code for result in edits) == [200, 409], [result.text for result in edits]
         updated = next(result.json() for result in edits if result.status_code == 200)
+        winning_edit = next(
+            body for body, result in zip(submitted_edits, edits, strict=True)
+            if result.status_code == 200
+        )
         assert updated == {
             "lesson_uuid": lesson.activity_uuid, "current_version": 2, "status": "teacher_review_required",
         }
+        async with postgres_session_factory() as verify_db:
+            stored = await verify_db.get(Activity, lesson.id)
+            assert stored.current_version == 2 and not stored.published
+            assert stored.name == winning_edit["title"]
+            assert stored.content["content"][0]["content"][0]["text"] == winning_edit["blocks"][0]["text"]
+            retained = (await verify_db.exec(select(StudyGroundedLessonEvidence).where(
+                StudyGroundedLessonEvidence.activity_id == lesson.id,
+            ))).one()
+            assert retained.activity_version == 2 and retained.citations == [citation]
+            event = (await verify_db.exec(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_uuid == lesson.activity_uuid,
+                StudyBusinessEvent.action == "studytomy.grounding.save_lesson",
+            ))).one()
+            assert event.after_state == {"version": 2, "evidence_sha256": retained.content_sha256}
         sources = await client.get(sources_path)
         assert sources.headers["cache-control"] == "private, no-store"
         assert sources.json() == {"status": "current", "current_version": 2, "citations": [citation]}
