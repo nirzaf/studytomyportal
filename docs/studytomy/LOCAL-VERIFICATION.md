@@ -155,6 +155,12 @@ At `4892e0f708caa033090239033b7a2f504f5d3bce`, a local Bun probe exercised the e
 
 The probe induced client disconnection without stopping Redis. The HTTP fixture served a synthetic snapshot. This verifies the Redis transport and loader recovery branch. Full FastAPI and Hocuspocus WebSocket recovery across multiple clients and a process restart remain open.
 
+### Multi-client WebSocket recovery probe
+
+At `a1804ed2c64b40ef491648f44023745a6497f3a4`, a loopback Node.js 24.19.0 probe used two Hocuspocus providers, the Hocuspocus server and database extension, and the repository's persistence queue and state loader. One client made a final synthetic edit and the other received it. The HTTP fixture returned 503 on the first write. The queue retried without another edit and reached zero pending writes. After both clients disconnected and the server instance was destroyed, a fresh instance and client reloaded the exact edit.
+
+This exercised real WebSockets and HTTP with in-memory fixture storage and synthetic authentication. Both server instances ran in the same Node process. Node emitted a duplicate Yjs import warning from the separate web and collaboration dependency trees. The fixture did not exercise the full collaboration entry point, FastAPI membership, Redis, PostgreSQL or process-level restart.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
