@@ -280,6 +280,25 @@ async def test_issued_round_retains_exact_started_release(
         assert lesson.paragraphs == ["Synthetic practice"]
         index = await access_policy.list_managed_text_lessons(*lesson_args)
         assert {lesson.activity_uuid for lesson in index.lessons if lesson.available} == {text_target, target}
+        with pytest.raises(HTTPException) as no_completion_policy:
+            await access_policy.acknowledge_managed_text_completion(*lesson_args, text_target)
+        assert no_completion_policy.value.status_code == 404
+        decisions["completion_prerequisites"]["course_completion_text_activities"] = {
+            course.course_uuid: [text_target],
+        }
+        progression.body = _synthetic_policy_body(StudyPolicyKey.D_09, decisions).model_dump(mode="json")
+        completed = await access_policy.acknowledge_managed_text_completion(*lesson_args, text_target)
+        assert completed.activity_completed and completed.course_completed
+        assert await access_policy.acknowledge_managed_text_completion(*lesson_args, text_target) == completed
+        completion_events = (await db.execute(select(StudyBusinessEvent).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.action.in_((
+                "studytomy.activity.completion_acknowledged", "studytomy.course.completion_recorded",
+            )),
+        ))).scalars().all()
+        assert len(completion_events) == 2
+        assert all(event.after_state == {"source_snapshot_digest": release.snapshot_sha256}
+                   for event in completion_events)
         first_stage = BytesIO(pdf)
         monkeypatch.setattr(access_policy, "_stage_release_media", AsyncMock(return_value=first_stage))
         args = (db, org, actor, course.course_uuid, release.uuid, target)

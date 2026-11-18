@@ -45,6 +45,7 @@ from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
 from src.services.studytomy.prerequisites import (
     approved_pass_delivery_activities,
+    course_completion_text_activities,
     managed_assessed_pass_status,
     ungated_by_assessed_pass,
 )
@@ -1037,6 +1038,16 @@ async def read_managed_text_lesson(
     db: AsyncSession, org: Organization, actor: PublicUser, course_uuid: str,
     release_uuid: str, activity_uuid: str, *, start_first_use: bool = False,
 ) -> ManagedTextLesson:
+    lesson, _, _, _ = await _authorized_text_lesson(
+        db, org, actor, course_uuid, release_uuid, activity_uuid, start_first_use=start_first_use,
+    )
+    return lesson
+
+
+async def _authorized_text_lesson(
+    db: AsyncSession, org: Organization, actor: PublicUser, course_uuid: str,
+    release_uuid: str, activity_uuid: str, *, start_first_use: bool = False, record_delivery: bool = True,
+) -> tuple[ManagedTextLesson, StudyCourseRelease, StudyPolicyVersion, int]:
     org = await lock_organization(db, org.id)
     release, policy, profile_id = await _authorized_release(
         db, org, actor, course_uuid, release_uuid, require_active_grant=False,
@@ -1052,8 +1063,73 @@ async def read_managed_text_lesson(
     )
     if not grants:
         raise _unavailable()
-    await _retain_allocation_delivery(db, org, actor, grants, now)
-    return result
+    if record_delivery:
+        await _retain_allocation_delivery(db, org, actor, grants, now)
+    return result, release, policy, profile_id
+
+
+class ManagedCompletionReceipt(BaseModel):
+    activity_uuid: str
+    activity_completed: bool
+    course_completed: bool
+
+
+async def acknowledge_managed_text_completion(
+    db: AsyncSession, org: Organization, actor: PublicUser, course_uuid: str,
+    release_uuid: str, activity_uuid: str,
+) -> ManagedCompletionReceipt:
+    """Record explicit learner acknowledgement against one approved text-course release."""
+    _, release, policy, profile_id = await _authorized_text_lesson(
+        db, org, actor, course_uuid, release_uuid, activity_uuid, record_delivery=False,
+    )
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
+    if body is None or any(blockers.values()):
+        raise _unavailable()
+    try:
+        required = course_completion_text_activities(body, course_uuid)
+    except ValueError:
+        raise _unavailable() from None
+    if activity_uuid not in required:
+        raise _unavailable()
+    # Authorization locks the organization, so concurrent acknowledgements
+    # cannot lose the transition that satisfies the final requirement.
+    prefix = f"studytomy:completion:{org.id}:{profile_id}:{release.uuid}"
+    records = (await db.execute(select(StudyBusinessEvent).where(
+        StudyBusinessEvent.org_id == org.id,
+        StudyBusinessEvent.actor_user_id == actor.id,
+        StudyBusinessEvent.action == "studytomy.activity.completion_acknowledged",
+        StudyBusinessEvent.operation_uuid == release.uuid,
+        StudyBusinessEvent.resource_uuid.in_(required),
+    ))).scalars()
+    completed = {
+        event.resource_uuid for event in records
+        if event.policy_refs == [policy.id]
+        and event.after_state == {"source_snapshot_digest": release.snapshot_sha256}
+    }
+    if activity_uuid not in completed:
+        await append_business_event(
+            db, org_id=org.id, actor_user_id=actor.id, actor_capacity="learner",
+            action="studytomy.activity.completion_acknowledged", reason_code="LEARNER_ACKNOWLEDGED_COMPLETION",
+            resource_kind="release_activity", resource_uuid=activity_uuid,
+            operation_uuid=release.uuid, policy_refs=[policy.id],
+            after_state={"source_snapshot_digest": release.snapshot_sha256},
+            dedupe_key=f"{prefix}:{activity_uuid}",
+        )
+        completed.add(activity_uuid)
+    course_completed = completed == required
+    if course_completed and not await db.scalar(select(StudyBusinessEvent.id).where(
+        StudyBusinessEvent.org_id == org.id, StudyBusinessEvent.dedupe_key == prefix,
+    )):
+        await append_business_event(
+            db, org_id=org.id, actor_user_id=actor.id, actor_capacity="learner",
+            action="studytomy.course.completion_recorded", reason_code="RELEASE_REQUIREMENTS_COMPLETED",
+            resource_kind="course_release", resource_uuid=release.uuid,
+            policy_refs=[policy.id], after_state={"source_snapshot_digest": release.snapshot_sha256},
+            dedupe_key=prefix,
+        )
+    return ManagedCompletionReceipt(
+        activity_uuid=activity_uuid, activity_completed=True, course_completed=course_completed,
+    )
 
 
 async def _retain_allocation_delivery(

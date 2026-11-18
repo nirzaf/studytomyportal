@@ -29,6 +29,17 @@ _PASS_RULES = TypeAdapter(
 _PASS_DELIVERY = TypeAdapter(dict[ResourceUUID, Annotated[list[ResourceUUID], Field(max_length=500)]])
 
 
+def course_completion_text_activities(body: StudyPolicyBody, course_uuid: str) -> set[str]:
+    completion = body.specified_value("completion_prerequisites")
+    if not isinstance(completion, dict) or "course_completion_text_activities" not in completion:
+        return set()
+    activities = _PASS_DELIVERY.validate_python(completion["course_completion_text_activities"])
+    required = activities.get(course_uuid, [])
+    if len(set(required)) != len(required):
+        raise ValueError("Course completion activities must be unique.")
+    return set(required)
+
+
 def approved_pass_delivery_activities(body: StudyPolicyBody, course_uuid: str) -> set[str]:
     schedule = body.specified_value("release_schedule")
     if not isinstance(schedule, dict) or "assessed_pass_delivery_activities" not in schedule:
@@ -218,3 +229,32 @@ def validate_release_pass_prerequisites(body: StudyPolicyBody, snapshot: dict) -
             retained_grading_contract_digest(assignment, snapshot["assignment_tasks"])
         except (KeyError, TypeError, ValueError) as error:
             raise invalid from error
+
+
+def validate_release_completion_requirements(body: StudyPolicyBody, snapshot: dict) -> None:
+    invalid = studytomy_http_error(
+        409, "RELEASE_COMPLETION_REQUIREMENTS_INVALID",
+        "Course completion requirements must reference published text activities in the reviewed course.",
+    )
+    course_uuid = snapshot["course"]["course_uuid"]
+    try:
+        required = course_completion_text_activities(body, course_uuid)
+    except ValueError as error:
+        raise invalid from error
+    if not required:
+        return
+    schedule = body.specified_value("release_schedule")
+    courses = schedule.get("ungated_text_activities") if isinstance(schedule, dict) else None
+    allowed = courses.get(course_uuid) if isinstance(courses, dict) else None
+    if (
+        not isinstance(allowed, list)
+        or any(not isinstance(item, str) for item in allowed)
+        or not required.issubset(allowed)
+    ):
+        raise invalid
+    published_text = {
+        row["activity_uuid"] for row in snapshot["activities"]
+        if row.get("published") is True and row.get("activity_sub_type") == "SUBTYPE_DYNAMIC_PAGE"
+    }
+    if not required.issubset(published_text):
+        raise invalid

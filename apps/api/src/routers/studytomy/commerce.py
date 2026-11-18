@@ -32,10 +32,12 @@ from src.security.org_auth import require_org_membership
 from src.services.studytomy.access_policy import (
     ManagedAccessHistory,
     ManagedActivityMedia,
+    ManagedCompletionReceipt,
     ManagedLessonIndex,
     ManagedReleaseCatalog,
     ManagedReleaseOverview,
     ManagedTextLesson,
+    acknowledge_managed_text_completion,
     list_managed_text_lessons,
     list_my_managed_access_history,
     list_my_managed_releases,
@@ -359,6 +361,20 @@ async def open_managed_text_lesson(
     await db.commit()
     response.headers["Cache-Control"] = "private, no-store"
     return lesson
+
+
+@router.post("/learning/courses/{course_uuid}/releases/{release_uuid}/lessons/{activity_uuid}/completion")
+async def complete_managed_text_lesson(
+    org_uuid: str, course_uuid: str, release_uuid: str, activity_uuid: str,
+    response: Response, actor: Purchaser, db: Session,
+) -> ManagedCompletionReceipt:
+    org = await _member_org(org_uuid, actor, db)
+    receipt = await acknowledge_managed_text_completion(
+        db, org, actor, course_uuid, release_uuid, activity_uuid,
+    )
+    await db.commit()
+    response.headers["Cache-Control"] = "private, no-store"
+    return receipt
 
 
 class _ManagedMediaResponse(StreamingResponse):
