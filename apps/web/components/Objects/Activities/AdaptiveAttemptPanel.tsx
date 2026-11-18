@@ -46,7 +46,7 @@ function RecoveredAttempts({ orgUuid, orgSlug, activityUuid, token, tutorScope, 
       .catch(() => { if (!controller.signal.aborted) setOptions([]) })
     return () => controller.abort()
   }, [client, activityUuid, release])
-  return <>{!release && orgSlug && <AdaptiveLessonProgress {...{ client, activityUuid, orgSlug }} />}{purposes.map(purpose => <RecoveredAttempt key={purpose}
+  return <><AdaptiveLessonProgress {...{ client, activityUuid, orgSlug, release }} />{purposes.map(purpose => <RecoveredAttempt key={purpose}
     options={options.filter(option => option.purpose === purpose)} {...{ client, activityUuid, purpose, tutorScope, release }} />)}</>
 }
 

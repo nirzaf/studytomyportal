@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@components/ui/button'
 import { getUriWithOrg } from '@services/config/config'
-import type { AdaptiveRequest } from '@services/studytomy/adaptive'
+import type { AdaptiveReleaseScope, AdaptiveRequest } from '@services/studytomy/adaptive'
 
 type Concept = {
   concept_uuid: string
@@ -23,10 +23,11 @@ type Recommendation = {
   reason: 'prerequisite_gap' | 'practice_needed' | 'not_yet_assessed' | 'review_due'
 } | { reason: 'no_accessible_activity'; support_action: 'return_to_lesson' | null }
 
-export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug }: {
+export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, release }: {
   client: AdaptiveRequest
   activityUuid: string
-  orgSlug: string
+  orgSlug?: string
+  release?: AdaptiveReleaseScope
 }) {
   const { t } = useTranslation()
   const contentId = useId()
@@ -40,7 +41,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug }
 
   useEffect(() => {
     const controller = new AbortController()
-    const params = new URLSearchParams({ activity_uuid: activityUuid, offset: String(offset) })
+    const params = new URLSearchParams({ activity_uuid: activityUuid, offset: String(offset), ...release })
     client<MasteryPage>(`me/lesson-mastery?${params}`, 'GET', undefined, undefined, controller.signal)
       .then(result => {
         if (controller.signal.aborted) return
@@ -52,17 +53,17 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug }
         setError(true)
       })
     return () => controller.abort()
-  }, [activityUuid, client, offset, open])
+  }, [activityUuid, client, offset, open, release])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || release || !orgSlug) return
     const controller = new AbortController()
     const params = new URLSearchParams({ activity_uuid: activityUuid })
     client<Recommendation[]>(`me/recommendations?${params}`, 'GET', undefined, undefined, controller.signal)
       .then(result => { if (!controller.signal.aborted) setRecommendations(result) })
       .catch(() => { if (!controller.signal.aborted) setRecommendations([]) })
     return () => controller.abort()
-  }, [activityUuid, client, open])
+  }, [activityUuid, client, open, orgSlug, release])
 
   function requestPage(next: number) {
     setPage(null)
@@ -125,7 +126,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug }
               {t('adaptiveProgress.next', 'Next concepts')}
             </Button>}
           </div>}
-          <section>
+          {!release && orgSlug && <section>
             <h3 className="font-semibold">{t('adaptiveProgress.suggestions', 'Suggested activities')}</h3>
             {recommendations === null ? <p role="status">{t('adaptiveProgress.loadingSuggestions', 'Loading suggestions…')}</p>
               : suggestions?.length ? <ul className="space-y-2">
@@ -143,7 +144,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug }
               </ul> : <p>{support
                 ? t('adaptiveProgress.return', 'Continue with this lesson for now.')
                 : t('adaptiveProgress.none', 'No activities to suggest right now.')}</p>}
-          </section>
+          </section>}
         </>}
     </div>
   </div>
