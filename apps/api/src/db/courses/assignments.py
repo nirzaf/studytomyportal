@@ -116,6 +116,7 @@ class AssignmentRead(AssignmentBase):
     # build file-ref URLs without a second round-trip per request.
     course_uuid: Optional[str] = None
     activity_uuid: Optional[str] = None
+    deadline_time_zone: Optional[str] = None
     # Reveal state of the model answer, computed per-reader by the read
     # services. `has_solution` says a corrigé exists at all (so the learner
     # UI can show "submit to unlock" without leaking it); `solution_unlocked`

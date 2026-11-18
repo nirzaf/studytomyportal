@@ -1061,6 +1061,10 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
             )
             assert assignment.due_date == "2000-01-01"
 
+            previous_profile_status = profile.status
+            profile.status = "active"
+            profile.time_zone = "Australia/Sydney"
+            await db.commit()
             visible = await assignments.read_assignment(
                 mock_request,
                 assignment.assignment_uuid,
@@ -1070,6 +1074,17 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
             assert datetime.fromisoformat(visible.due_date) == datetime.fromisoformat(
                 extension["expires_at"]
             )
+            assert visible.deadline_time_zone == "Australia/Sydney"
+            profile.time_zone = "Australia/Perth"
+            await db.commit()
+            refreshed = await assignments.read_assignment_from_activity_uuid(
+                mock_request, visible.activity_uuid, original_marker, db,
+            )
+            assert refreshed.due_date == visible.due_date
+            assert refreshed.deadline_time_zone == "Australia/Perth"
+            profile.status = previous_profile_status
+            profile.time_zone = None
+            await db.commit()
             saved = await assignments.handle_assignment_task_submission(
                 mock_request,
                 task.assignment_task_uuid,

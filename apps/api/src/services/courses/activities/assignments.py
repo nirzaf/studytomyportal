@@ -259,6 +259,7 @@ async def _project_assessment_deadline(
 ) -> None:
     if managed and isinstance(actor, PublicUser):
         from src.services.studytomy.assessment_reviews import assessment_deadline_extension
+        from src.db.studytomy.family import StudyLearnerProfile, StudyLearnerProfileStatus
 
         original = _assignment_deadline(assignment)
         if original is None:
@@ -266,6 +267,14 @@ async def _project_assessment_deadline(
         deadline = await assessment_deadline_extension(db_session, assignment, actor.id)
         if deadline is not None and deadline > original.astimezone(deadline.tzinfo):
             result.due_date = deadline.isoformat()
+        if original.tzinfo is not None or result.due_date != assignment.due_date:
+            result.deadline_time_zone = await db_session.scalar(
+                select(StudyLearnerProfile.time_zone).where(
+                    StudyLearnerProfile.org_id == assignment.org_id,
+                    StudyLearnerProfile.user_id == actor.id,
+                    StudyLearnerProfile.status == StudyLearnerProfileStatus.ACTIVE.value,
+                )
+            )
 
 
 def _strip_answer_key(contents, keep_answer_keys: bool = False):

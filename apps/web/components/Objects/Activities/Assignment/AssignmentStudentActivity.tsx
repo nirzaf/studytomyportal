@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { sortTasksByOrder } from '@/lib/assignments/taskOrder'
 import { ASSIGNMENT_SUBMIT_EVENT, taskSubmissionHasAnswer } from './assignmentUI'
 
-import { isAssignmentPastDue, parseDueDate } from '@/lib/assignments/deadline'
+import { formatAssignmentDueDate, isAssignmentPastDue, parseDueDate } from '@/lib/assignments/deadline'
 
 function AssignmentStudentActivity() {
   const { t, i18n } = useTranslation()
@@ -78,6 +78,7 @@ function AssignmentStudentActivity() {
   // (see `_is_assignment_past_due`), so the learner needs to be told before
   // auto-save starts failing behind their back.
   const dueDateRaw = assignments?.assignment_object?.due_date as string | undefined;
+  const deadlineTimeZone = assignments?.assignment_object?.deadline_time_zone as string | undefined;
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
     if (!parseDueDate(dueDateRaw)) return;
@@ -95,15 +96,9 @@ function AssignmentStudentActivity() {
   // Render the raw ISO-ish string as a readable, localized date. Falls back to
   // the raw value when it can't be parsed (same tolerance as the server).
   const dueDateLabel = useMemo(() => {
-    const parsed = parseDueDate(dueDateRaw);
-    if (!parsed) return dueDateRaw ?? '';
     const locale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
-    return parsed.hasTime
-      ? parsed.at.toLocaleString(locale, {
-          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-        })
-      : parsed.at.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
-  }, [dueDateRaw, i18n.language]);
+    return formatAssignmentDueDate(dueDateRaw, locale, deadlineTimeZone);
+  }, [dueDateRaw, deadlineTimeZone, i18n.language]);
 
   const tasks: any[] = useMemo(() => (assignments ? sortTasksByOrder(assignments?.assignment_tasks) : []), [assignments])
   const totalPoints = tasks.reduce((sum, task) => sum + (Number(task.max_grade_value) || 0), 0)
