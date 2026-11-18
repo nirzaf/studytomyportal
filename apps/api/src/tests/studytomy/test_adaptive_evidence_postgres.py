@@ -371,7 +371,10 @@ async def test_append_only_corrections_and_projection_watermark(
         }
         assert await assessment_evidence_breakdown(
             db, org_id=rows.org_id, curriculum_revision_id=rows.curriculum_id, **period,
-        ) == [{"independence": "independent", "evidence_outcome": "incorrect", "observations": 1}]
+        ) == [{
+            "independence": "independent", "evidence_outcome": "incorrect", "observations": 1,
+            "mastery_eligible_observations": 1,
+        }]
         assert await assessment_evidence_breakdown(
             db, org_id=rows.org_id, curriculum_revision_id=rows.curriculum_id + 1, **period,
         ) == []
@@ -436,8 +439,10 @@ async def test_append_only_corrections_and_projection_watermark(
         assert await assessment_evidence_breakdown(
             db, org_id=rows.org_id, curriculum_revision_id=rows.curriculum_id, **period,
         ) == [
-            {"independence": "assisted", "evidence_outcome": "correct", "observations": 1},
-            {"independence": "independent", "evidence_outcome": "retracted", "observations": 1},
+            {"independence": "assisted", "evidence_outcome": "correct", "observations": 1,
+             "mastery_eligible_observations": 0},
+            {"independence": "independent", "evidence_outcome": "retracted", "observations": 1,
+             "mastery_eligible_observations": 0},
         ]
 
 

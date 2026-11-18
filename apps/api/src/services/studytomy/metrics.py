@@ -146,35 +146,47 @@ async def current_support_backlog(
 async def assessment_evidence_breakdown(
     db: AsyncSession, *, org_id: int, curriculum_revision_id: int,
     start: datetime, end: datetime,
+    course_uuid: str | None = None, release_uuid: str | None = None,
 ) -> list[dict[str, int | str]]:
     """Count current evidence heads by assistance and outcome for one revision.
 
-    The caller must authorize access to the requested scope. Entries count
+    The caller must authorize access to the requested scope. Release filters
+    use the frozen attempt binding. Entries count
     logical observations, not learners, comparable pairs, or mastery gains.
+    Mastery-eligible counts use the evidence journal's recorded eligibility.
     """
     if (
         org_id < 1 or curriculum_revision_id < 1
         or start.utcoffset() is None or end.utcoffset() is None or start >= end
+        or (release_uuid is not None and not course_uuid)
     ):
         raise ValueError("An organization, curriculum revision and ordered, timezone-aware period are required.")
     result = await db.execute(text("""
         WITH ranked AS (
-            SELECT observed_at, independence, outcome, is_retraction,
+            SELECT e.observed_at, e.independence, e.outcome, e.is_retraction, e.eligible,
                    row_number() OVER (
-                       PARTITION BY learner_profile_id, concept_id, logical_source_uuid
-                       ORDER BY result_revision DESC, evidence_sequence DESC
+                       PARTITION BY e.learner_profile_id, e.concept_id, e.logical_source_uuid
+                       ORDER BY e.result_revision DESC, e.evidence_sequence DESC
                    ) AS position
-            FROM st_learning_evidence
-            WHERE org_id = :org_id AND curriculum_revision_id = :revision
+            FROM st_learning_evidence e
+            JOIN st_attempt_item i ON i.org_id = e.org_id AND i.id = e.attempt_item_id
+            JOIN st_learning_attempt a ON a.org_id = i.org_id AND a.id = i.attempt_id
+            WHERE e.org_id = :org_id AND e.curriculum_revision_id = :revision
+              AND (CAST(:course_uuid AS text) IS NULL OR a.source_course_uuid = CAST(:course_uuid AS text))
+              AND (CAST(:release_uuid AS text) IS NULL OR a.source_release_uuid = CAST(:release_uuid AS text))
         )
         SELECT independence,
                CASE WHEN is_retraction THEN 'retracted' ELSE outcome END AS evidence_outcome,
-               count(*) AS observations
+               count(*) AS observations,
+               count(*) FILTER (WHERE eligible AND NOT is_retraction) AS mastery_eligible_observations
         FROM ranked
         WHERE position = 1 AND observed_at >= :start AND observed_at < :end
         GROUP BY independence, evidence_outcome
         ORDER BY independence, evidence_outcome
-    """), {"org_id": org_id, "revision": curriculum_revision_id, "start": start, "end": end})
+    """), {
+        "org_id": org_id, "revision": curriculum_revision_id, "start": start, "end": end,
+        "course_uuid": course_uuid, "release_uuid": release_uuid,
+    })
     return [dict(row) for row in result.mappings()]
 
 

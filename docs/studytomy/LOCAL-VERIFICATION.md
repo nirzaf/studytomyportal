@@ -238,6 +238,12 @@ To repeat the browser case, provide authenticated synthetic storage states with 
 
 The follow-up based on `6a3a43ebf245c7af29f372f2686fc19d09bc45b1` verified the settled refund reason breakdown against the same scoped ledger. Docker PostgreSQL checkout tests passed (**2 passed, 10 deselected**), and live Chrome passed (**1 passed** in 3.4 minutes). The synthetic paid fixture produced two settlements for one recorded reason. Both the API breakdown and the amount by currency reconciled to the existing totals. The purchaser remained excluded. Ruff, targeted web lint, and web and Playwright type checking passed.
 
+### Assessment evidence scope
+
+The internal assessment projection can filter a curriculum revision by the exact course and frozen release recorded on the learning attempt. It counts current logical observations by assistance and outcome, with the number eligible for mastery shown separately. A superseded result contributes only through its current head. Retracted and assisted observations do not contribute to mastery eligibility. This is a source inventory for pilot measurement. It does not yet match starting and follow-up work or report a denominator of eligible learners. D-17 cohort and comparison decisions and AUD-20 educator acceptance remain open.
+
+The checkpoint based on `7fd5fb8c3b8471ecf11c5f9d5ba047f95f9ded61` passed **7 tests** across `test_adaptive_evidence_postgres.py` and `test_adaptive_curriculum_api.py`. The managed release scope assertions ran in disposable Docker PostgreSQL. The SQLite workflow fixture retained its existing application assertions.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18

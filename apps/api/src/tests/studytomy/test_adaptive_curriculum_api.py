@@ -1359,6 +1359,28 @@ async def _characterize_managed_course_diagnostic_conflict(
         )
     ).scalar_one()
     assert evidence.outcome == "incorrect" and evidence.eligible is True
+    if db.get_bind().dialect.name == "postgresql":
+        from src.services.studytomy.metrics import assessment_evidence_breakdown
+
+        evidence_period = {
+            "start": evidence.observed_at,
+            "end": evidence.observed_at + timedelta(seconds=1),
+            "curriculum_revision_id": evidence.curriculum_revision_id,
+            "course_uuid": course.course_uuid,
+        }
+        assert await assessment_evidence_breakdown(
+            db, org_id=org.id, release_uuid=release.uuid, **evidence_period,
+        ) == [{
+            "independence": "independent", "evidence_outcome": "incorrect", "observations": 1,
+            "mastery_eligible_observations": 1,
+        }]
+        assert await assessment_evidence_breakdown(
+            db, org_id=org.id, release_uuid=f"course_release_{uuid4()}", **evidence_period,
+        ) == []
+        assert await assessment_evidence_breakdown(
+            db, org_id=org.id, release_uuid=release.uuid,
+            **(evidence_period | {"course_uuid": f"course_{uuid4()}"}),
+        ) == []
 
     progress = await client.get(
         f"{base}/me/lesson-mastery",
