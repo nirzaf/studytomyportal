@@ -10,6 +10,7 @@ from sqlalchemy import update
 from sqlmodel import select
 
 from src.db.course_embeddings import CourseEmbedding
+from src.db.courses.activities import Activity
 from src.db.courses.chapters import Chapter
 from src.db.courses.courses import Course
 from src.db.organization_config import OrganizationConfig
@@ -84,8 +85,11 @@ class TestSweep:
         await _page(session, org, course, chapter, 11)
         await pipeline.run_course(course.id)
 
-        activity.update_date = _later()
-        session.add(activity)
+        # Exercise the sweep with only the activity timestamp changed. ORM
+        # author edits also stamp the parent course when hooks are registered.
+        await session.execute(
+            update(Activity).where(Activity.id == activity.id).values(update_date=_later())
+        )
         await session.commit()
 
         result = await scheduler.sweep(session)
