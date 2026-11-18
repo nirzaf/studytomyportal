@@ -161,6 +161,12 @@ At `a1804ed2c64b40ef491648f44023745a6497f3a4`, a loopback Node.js 24.19.0 probe 
 
 This exercised real WebSockets and HTTP with in-memory fixture storage and synthetic authentication. Both server instances ran in the same Node process. Node emitted a duplicate Yjs import warning from the separate web and collaboration dependency trees. The fixture did not exercise the full collaboration entry point, FastAPI membership, Redis, PostgreSQL or process-level restart.
 
+### Collaboration process restart probe
+
+At `25dc20b40892086de7c78c44495ac5c90f6e43f6`, a Node.js 24.19.0 probe launched the actual collaboration entry point in two successive loopback subprocesses. Two authenticated WebSocket clients shared a synthetic edit. The real Docker Redis instance at `127.0.0.1:51238` received the cache entry. The board HTTP fixture rejected the initial persistence request with 503 and acknowledged the retry without another edit. Both processes exited successfully through the application's SIGTERM handler. Between processes, the probe removed only its unique Redis key and verified that the new process requested the authoritative HTTP snapshot and reloaded the exact text.
+
+The probe signed synthetic JWTs and served membership and board storage from an in-memory HTTP fixture. SIGTERM was emitted inside each child because this was a Windows run. The first run recovered the edit but hit a Windows libuv shutdown assertion while the test IPC channel remained open. Closing the IPC channel before emitting SIGTERM produced the passing run. Real FastAPI membership and database recovery across the collaboration restart remain open.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
