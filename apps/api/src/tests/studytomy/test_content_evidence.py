@@ -390,6 +390,25 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         ))).scalar_one()
         authorship.user_id = assigner_id
         await db.commit()
+
+        from src.services.studytomy import publication
+
+        read_candidate = publication.course_candidate_snapshot
+
+        async def candidate_with_caption_dependency(*args, **kwargs):
+            snapshot = await read_candidate(*args, **kwargs)
+            return {**snapshot, "activities": [*snapshot["activities"], {
+                "activity_sub_type": "SUBTYPE_VIDEO_HOSTED",
+                "extra_metadata": {"captions": {"enabled": True}},
+            }]}
+
+        with monkeypatch.context() as review_fixture:
+            review_fixture.setattr(publication, "course_candidate_snapshot", candidate_with_caption_dependency)
+            blocked_review = await client.post(review_url, json=approval, headers=review_headers)
+        assert blocked_review.status_code == 409, blocked_review.text
+        assert blocked_review.json()["detail"]["code"] == "RELEASE_MEDIA_UNSUPPORTED"
+        assert (await client.get(candidate)).json()["current_review"] is None
+
         approved = await client.post(review_url, json=approval, headers=review_headers)
         assert approved.status_code == 201, approved.text
         assert approved.json()["revision_sha256"] == revision
