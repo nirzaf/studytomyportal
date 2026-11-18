@@ -278,6 +278,7 @@ async def test_issued_round_retains_exact_started_release(
         lesson_args = (db, org, actor, course.course_uuid, release.uuid)
         lesson = await access_policy.read_managed_text_lesson(*lesson_args, text_target)
         assert lesson.paragraphs == ["Synthetic practice"]
+        assert "completion" not in lesson.model_dump(mode="json")
         index = await access_policy.list_managed_text_lessons(*lesson_args)
         assert {lesson.activity_uuid for lesson in index.lessons if lesson.available} == {text_target, target}
         with pytest.raises(HTTPException) as no_completion_policy:
@@ -287,9 +288,13 @@ async def test_issued_round_retains_exact_started_release(
             course.course_uuid: [text_target],
         }
         progression.body = _synthetic_policy_body(StudyPolicyKey.D_09, decisions).model_dump(mode="json")
+        before = await access_policy.read_managed_text_lesson(*lesson_args, text_target)
+        assert before.completion is not None and not before.completion.activity_completed
         completed = await access_policy.acknowledge_managed_text_completion(*lesson_args, text_target)
         assert completed.activity_completed and completed.course_completed
         assert await access_policy.acknowledge_managed_text_completion(*lesson_args, text_target) == completed
+        reloaded = await access_policy.read_managed_text_lesson(*lesson_args, text_target)
+        assert reloaded.completion == completed
         completion_events = (await db.execute(select(StudyBusinessEvent).where(
             StudyBusinessEvent.org_id == org.id,
             StudyBusinessEvent.action.in_((

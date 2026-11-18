@@ -26,7 +26,8 @@ type Lesson = {
 }
 type Catalog = { releases: Release[]; next_cursor: string | null }
 type Index = { lessons: Lesson[]; requires_first_use: boolean }
-type TextLesson = Lesson & { paragraphs: string[] }
+type Completion = { activity_uuid: string; activity_completed: boolean; course_completed: boolean }
+type TextLesson = Lesson & { paragraphs: string[]; completion?: Completion }
 type AccessWindow = Release & {
   status: 'active' | 'first_use_pending' | 'scheduled' | 'expired' | 'revoked'
   start_basis: 'after_purchase' | 'after_first_access' | 'fixed_period'
@@ -49,7 +50,7 @@ type View =
   | { kind: 'catalog'; page: Catalog; after?: string; history: boolean }
   | { kind: 'access'; window: AccessWindow }
   | { kind: 'lessons'; release: Release; index: Index }
-  | { kind: 'lesson'; release: Release; lesson: TextLesson }
+  | { kind: 'lesson'; release: Release; lesson: TextLesson; completionRequest?: 'saving' | 'failed' }
   | { kind: 'media'; release: Release; lesson: Lesson }
 
 export default function AccountLearning({ orgUuid }: { orgUuid: string }) {
@@ -125,6 +126,31 @@ function LearningView({
       data => ({ kind: 'lesson', release, lesson: data }),
       firstUse ? 'POST' : 'GET',
     )
+  }
+
+  async function completeLesson(lessonView: Extract<View, { kind: 'lesson' }>) {
+    const { release, lesson } = lessonView
+    pending.current?.abort()
+    const controller = new AbortController()
+    pending.current = controller
+    setView({ ...lessonView, completionRequest: 'saving' })
+    try {
+      const path = `${pathFor(release)}/lessons/${encodeURIComponent(lesson.activity_uuid)}/completion`
+      const response = await secureFetch(
+        `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learning/${path}`,
+        { ...RequestBodyWithAuthHeader('POST', null, null, token), cache: 'no-store', signal: controller.signal },
+      )
+      if (!response.ok) throw new Error('Completion could not be recorded')
+      const completion = await response.json() as Completion
+      if (completion.activity_uuid !== lesson.activity_uuid || completion.activity_completed !== true) {
+        throw new Error('Completion response did not match this lesson')
+      }
+      if (!controller.signal.aborted) setView({
+        ...lessonView, lesson: { ...lesson, completion }, completionRequest: undefined,
+      })
+    } catch {
+      if (!controller.signal.aborted) setView({ ...lessonView, completionRequest: 'failed' })
+    }
   }
 
   async function showMedia(release: Release, lesson: Lesson, firstUse: boolean) {
@@ -290,6 +316,17 @@ function LearningView({
         <article className="max-w-prose space-y-4 whitespace-pre-wrap break-words leading-relaxed">
           {view.lesson.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
         </article>
+        {view.lesson.completion && (
+          view.lesson.completion.activity_completed
+            ? <p role="status">{view.lesson.completion.course_completed ? 'Course completed.' : 'Lesson completed.'}</p>
+            : <div className="space-y-2">
+                <Button className="min-h-11" disabled={view.completionRequest === 'saving'}
+                  onClick={() => void completeLesson(view)}>
+                  {view.completionRequest === 'saving' ? 'Saving completion…' : 'Mark lesson complete'}
+                </Button>
+                {view.completionRequest === 'failed' && <p role="alert">Completion could not be saved. Try again.</p>}
+              </div>
+        )}
       </>
       break
     case 'media': {

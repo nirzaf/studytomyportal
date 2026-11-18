@@ -74,9 +74,16 @@ class ManagedReleaseOverview(BaseModel):
     name: str
 
 
+class ManagedCompletionReceipt(BaseModel):
+    activity_uuid: str
+    activity_completed: bool
+    course_completed: bool
+
+
 class ManagedTextLesson(ManagedReleaseOverview):
     activity_uuid: str
     paragraphs: list[str]
+    completion: ManagedCompletionReceipt | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 @dataclass(slots=True)
@@ -1038,9 +1045,20 @@ async def read_managed_text_lesson(
     db: AsyncSession, org: Organization, actor: PublicUser, course_uuid: str,
     release_uuid: str, activity_uuid: str, *, start_first_use: bool = False,
 ) -> ManagedTextLesson:
-    lesson, _, _, _ = await _authorized_text_lesson(
+    lesson, release, policy, profile_id = await _authorized_text_lesson(
         db, org, actor, course_uuid, release_uuid, activity_uuid, start_first_use=start_first_use,
     )
+    if activity_uuid in _required_text_completions(policy, course_uuid):
+        prefix = f"studytomy:completion:{org.id}:{profile_id}:{release.uuid}"
+        keys = set((await db.execute(select(StudyBusinessEvent.dedupe_key).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.actor_user_id == actor.id,
+            StudyBusinessEvent.dedupe_key.in_((prefix, f"{prefix}:{activity_uuid}")),
+        ))).scalars())
+        lesson.completion = ManagedCompletionReceipt(
+            activity_uuid=activity_uuid, activity_completed=f"{prefix}:{activity_uuid}" in keys,
+            course_completed=prefix in keys,
+        )
     return lesson
 
 
@@ -1068,10 +1086,14 @@ async def _authorized_text_lesson(
     return result, release, policy, profile_id
 
 
-class ManagedCompletionReceipt(BaseModel):
-    activity_uuid: str
-    activity_completed: bool
-    course_completed: bool
+def _required_text_completions(policy: StudyPolicyVersion, course_uuid: str) -> set[str]:
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
+    if body is None or any(blockers.values()):
+        return set()
+    try:
+        return course_completion_text_activities(body, course_uuid)
+    except ValueError:
+        return set()
 
 
 async def acknowledge_managed_text_completion(
@@ -1082,13 +1104,7 @@ async def acknowledge_managed_text_completion(
     _, release, policy, profile_id = await _authorized_text_lesson(
         db, org, actor, course_uuid, release_uuid, activity_uuid, record_delivery=False,
     )
-    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
-    if body is None or any(blockers.values()):
-        raise _unavailable()
-    try:
-        required = course_completion_text_activities(body, course_uuid)
-    except ValueError:
-        raise _unavailable() from None
+    required = _required_text_completions(policy, course_uuid)
     if activity_uuid not in required:
         raise _unavailable()
     # Authorization locks the organization, so concurrent acknowledgements
