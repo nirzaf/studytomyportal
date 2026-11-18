@@ -108,6 +108,9 @@ The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 ap
 - At `823967491529d48652fbed341a5c38585687107b`, the mobile Chromium test passed again (**1 passed** in 26.8 seconds), with TypeScript checking also passing. The PDF frame requested the real API using the learner session. The API returned `404 Course release unavailable` because the intercepted release does not exist in the database.
 - At `f0067774ec06d2370ae262898842660bcd4177cc`, the media endpoint rejected both direct video reads and first-use video requests before opening storage, matching the lesson index. The checkout and staging selection passed (**7 passed, 11 deselected** in 11.09 seconds) with disposable Docker PostgreSQL and a temporary filesystem for the retained PDF. The immutable release format still lacks retained captions or an approved alternative. An accessible video release needs a reviewed alternative tied to the exact release and evidence that the browser can deliver it.
 
+- At `4d03faf9e1d4c1d3d658f3d1364e75f28abc87d1`, the combined content evidence, checkout and managed media staging selection passed **31 tests** in 71.52 seconds with disposable Docker PostgreSQL. It covers missing PDF recovery without consuming first use and caption dependency rejection at review. The review case injects the caption dependency into the candidate snapshot. The prior combined run failed in free re-entry because a branch-local import shadowed the shared storage fixture import. The corrected run passed both branches.
+- At `9c0a7e0ee03841178c6b485b0da7aa5c70e132b5`, Playwright type checking passed and `07-content-review.spec.ts` passed in Chromium. With real local sign-in and simulated review responses, the panel focused the unsupported-media message and showed no approval after rejection. Successful delivery and accessibility for a captioned release remain open.
+
 ## AUD-06 managed-media lock and staging verification
 
 - **Recorded:** 2026-11-18
