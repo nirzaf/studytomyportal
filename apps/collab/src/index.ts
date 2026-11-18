@@ -266,6 +266,8 @@ const awarenessClaims = new WeakMap<object, Map<number, any>>()
 
 const server = new Server({
   port: PORT,
+  // The application must finish its persistence flush before exiting.
+  stopOnSignals: false,
   // ws drops oversized frames before they are buffered into a document
   websocketOptions: { maxPayload: MAX_MESSAGE_BYTES },
 
@@ -565,6 +567,7 @@ async function gracefulShutdown() {
 }
 
 process.on('SIGINT', gracefulShutdown)
+process.on('SIGQUIT', gracefulShutdown)
 process.on('SIGTERM', gracefulShutdown)
 
 server.listen().then(() => {
