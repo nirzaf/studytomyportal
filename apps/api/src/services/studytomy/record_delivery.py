@@ -86,26 +86,8 @@ async def _completion_export(db: AsyncSession, request: StudyBusinessEvent, now:
                TrailRun.status == StatusEnum.STATUS_COMPLETED)
         .order_by(Course.course_uuid, TrailRun.id).limit(_MAX_RECORDS + 1))).all()
     release_rows = (await db.execute(
-        select(
-            StudyBusinessEvent, StudyCourseRelease.course_uuid, StudyCourseRelease.snapshot_sha256,
-            StudyCourseRelease.progression_policy_id,
-        )
-        .join(StudyCourseRelease, StudyCourseRelease.uuid == StudyBusinessEvent.resource_uuid)
-        .join(StudyCourseReview, StudyCourseReview.id == StudyCourseRelease.review_id)
-        .where(
-            StudyBusinessEvent.org_id == request.org_id,
-            StudyBusinessEvent.actor_user_id == request.actor_user_id,
-            StudyBusinessEvent.resource_kind == "course_release",
-            StudyBusinessEvent.action == "studytomy.course.completion_recorded",
-            StudyBusinessEvent.created_at >= earliest,
-            StudyBusinessEvent.created_at <= now,
-            StudyCourseRelease.org_id == request.org_id,
-            StudyCourseRelease.policy_binding.is_not(None),
-            StudyCourseReview.org_id == request.org_id,
-            StudyCourseReview.course_uuid == StudyCourseRelease.course_uuid,
-            StudyCourseReview.decision == "approved",
-            StudyCourseReview.revision_sha256 == StudyCourseRelease.snapshot_sha256,
-        )
+        _reviewed_completion_rows(request.org_id, request.actor_user_id)
+        .where(StudyBusinessEvent.created_at >= earliest, StudyBusinessEvent.created_at <= now)
         .order_by(StudyCourseRelease.course_uuid, StudyBusinessEvent.id)
         .limit(_MAX_RECORDS + 1)
     )).all()
@@ -120,7 +102,7 @@ async def _completion_export(db: AsyncSession, request: StudyBusinessEvent, now:
         if stamp.tzinfo is not None and earliest <= stamp <= now:
             completions.append(RetainedCompletion(course_uuid=course_uuid, recorded_at=stamp.astimezone(UTC)))
     for event, course_uuid, digest, progression_policy_id in release_rows:
-        if event.policy_refs != [progression_policy_id] or event.after_state != {"source_snapshot_digest": digest}:
+        if not _matches_release_completion(event, digest, progression_policy_id):
             continue
         stamp = event.created_at
         if stamp.tzinfo is None:
@@ -129,6 +111,48 @@ async def _completion_export(db: AsyncSession, request: StudyBusinessEvent, now:
             course_uuid=course_uuid, release_uuid=event.resource_uuid, recorded_at=stamp.astimezone(UTC),
         ))
     return CompletionExport(completions=completions)
+
+
+def _reviewed_completion_rows(org_id: int, learner_user_id: int):
+    return (
+        select(
+            StudyBusinessEvent, StudyCourseRelease.course_uuid, StudyCourseRelease.snapshot_sha256,
+            StudyCourseRelease.progression_policy_id,
+        )
+        .join(StudyCourseRelease, StudyCourseRelease.uuid == StudyBusinessEvent.resource_uuid)
+        .join(StudyCourseReview, StudyCourseReview.id == StudyCourseRelease.review_id)
+        .where(
+            StudyBusinessEvent.org_id == org_id,
+            StudyBusinessEvent.actor_user_id == learner_user_id,
+            StudyBusinessEvent.resource_kind == "course_release",
+            StudyBusinessEvent.action == "studytomy.course.completion_recorded",
+            StudyCourseRelease.org_id == org_id,
+            StudyCourseRelease.policy_binding.is_not(None),
+            StudyCourseReview.org_id == org_id,
+            StudyCourseReview.course_uuid == StudyCourseRelease.course_uuid,
+            StudyCourseReview.decision == "approved",
+            StudyCourseReview.revision_sha256 == StudyCourseRelease.snapshot_sha256,
+        )
+    )
+
+
+def _matches_release_completion(event: StudyBusinessEvent, digest: str, progression_policy_id: int) -> bool:
+    return event.policy_refs == [progression_policy_id] and event.after_state == {"source_snapshot_digest": digest}
+
+
+async def has_reviewed_completion_before_window(
+    db: AsyncSession, org_id: int, learner_user_id: int, course_uuid: str,
+    earliest: datetime, starts_at: datetime, now: datetime,
+) -> bool:
+    rows = (await db.execute(_reviewed_completion_rows(org_id, learner_user_id).where(
+        StudyCourseRelease.course_uuid == course_uuid,
+        StudyBusinessEvent.created_at >= earliest,
+        StudyBusinessEvent.created_at < starts_at,
+        StudyBusinessEvent.created_at <= now,
+    ).limit(_MAX_RECORDS + 1))).all()
+    return len(rows) <= _MAX_RECORDS and any(
+        _matches_release_completion(event, digest, policy_id) for event, _, digest, policy_id in rows
+    )
 
 
 async def _prepared_request(db, org, actor, reference):

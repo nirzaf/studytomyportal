@@ -492,6 +492,8 @@ async def _retained_completion_before_window(
     db: AsyncSession, org_id: int, learner_user_id: int, course_uuid: str,
     retention: StudyPolicyVersion, starts_at: datetime | None, now: datetime,
 ) -> Literal[True] | None:
+    from src.services.studytomy.record_delivery import has_reviewed_completion_before_window
+
     body, _ = inspect_study_policy_body(StudyPolicyKey.D_13, retention.body)
     record_access = body.specified_value("record_access") if body else None
     rules = body.specified_value("retention") if body else None
@@ -502,6 +504,13 @@ async def _retained_completion_before_window(
         or type(days) is not int or not 1 <= days <= 36500
     ):
         return None
+    if starts_at.tzinfo is None:
+        starts_at = starts_at.replace(tzinfo=UTC)
+    earliest = now - timedelta(days=days)
+    if await has_reviewed_completion_before_window(
+        db, org_id, learner_user_id, course_uuid, earliest, starts_at, now,
+    ):
+        return True
     updated = (await db.execute(select(TrailRun.update_date).join(Course, Course.id == TrailRun.course_id).where(
         Course.org_id == org_id, Course.course_uuid == course_uuid,
         TrailRun.org_id == org_id, TrailRun.user_id == learner_user_id,
@@ -513,7 +522,7 @@ async def _retained_completion_before_window(
         recorded_at = datetime.fromisoformat(updated[0])
     except ValueError:
         return None
-    if recorded_at.tzinfo is not None and now - timedelta(days=days) <= recorded_at < starts_at and recorded_at <= now:
+    if recorded_at.tzinfo is not None and earliest <= recorded_at < starts_at and recorded_at <= now:
         return True
     return None
 

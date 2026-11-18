@@ -761,7 +761,7 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             }
             assert preview.json()["completions"] == [native_completion]
             before_release_completion = preview.json()["snapshot_sha256"]
-            completed_at = datetime.now(UTC) - timedelta(seconds=1)
+            completed_at = datetime.fromisoformat(previous_completion) + timedelta(hours=1)
             async with postgres_session_factory() as db:
                 event = {
                     "org_id": org.id, "resource_kind": "course_release",
@@ -955,6 +955,15 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                     StudyBusinessEvent.org_id == org.id,
                     StudyBusinessEvent.dedupe_key == f"studytomy:course_grant:{org.id}:{current.id}",
                 ))).scalar_one()
+                await db.execute(update(TrailRun).where(TrailRun.id == run.id).values(
+                    update_date=current.starts_at.isoformat(),
+                ))
+                await db.commit()
+            event_history = await client.get(f"{release_path}/access-history")
+            assert event_history.status_code == 200 and event_history.json()["completion_before_window"] is True
+            async with postgres_session_factory() as db:
+                await db.execute(update(TrailRun).where(TrailRun.id == run.id).values(update_date=previous_completion))
+                await db.commit()
             return
         accepted = await client.post(f"{prefix}/orders/{ref}/accept", json=confirmation)
         assert accepted.status_code == 200, accepted.text
