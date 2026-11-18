@@ -726,7 +726,8 @@ async def test_late_answer_save_serializes_with_attempt_transition(
 
 @pytest.mark.studytomy_postgres
 @pytest.mark.parametrize(
-    ("correct_score", "historical"), [(False, False), (True, False), (True, True)]
+    ("correct_score", "historical", "certificate_changes"),
+    [(False, False, False), (False, False, True), (True, False, False), (True, True, False)],
 )
 async def test_review_evidence_requires_direct_independent_authorized_reviewer(
     postgres_session_factory,
@@ -735,6 +736,7 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
     mock_request,
     correct_score,
     historical,
+    certificate_changes,
 ):
     from fastapi import FastAPI
     from httpx import ASGITransport, AsyncClient
@@ -922,6 +924,7 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                         "certificate_presentation": {"managed_certificates_by_course": {course.course_uuid: {
                             "award_name": "Synthetic reviewed award", "issuer_name": "Synthetic issuer",
                             "verification": "private", "issuance": "reviewed",
+                            **({"changes": "reviewed_assessment_corrections"} if certificate_changes else {}),
                         }}},
                     },
                 }
@@ -998,8 +1001,12 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                     headers=direct,
                     json={"corrected_result_uuid": str(uuid4())},
                 )
-                assert denied_change.status_code == 404
-                assert denied_change.json()["detail"]["code"] == "MANAGED_CERTIFICATE_UNAVAILABLE"
+                if certificate_changes:
+                    assert denied_change.status_code == 409
+                    assert denied_change.json()["detail"]["code"] == "MANAGED_CERTIFICATE_CORRECTION_UNVERIFIED"
+                else:
+                    assert denied_change.status_code == 404
+                    assert denied_change.json()["detail"]["code"] == "MANAGED_CERTIFICATE_UNAVAILABLE"
                 assert await db.scalar(select(StudyBusinessEvent.id).where(
                     StudyBusinessEvent.org_id == org.id,
                     StudyBusinessEvent.resource_kind == "managed_award",
