@@ -13,6 +13,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from src.core.events.database import get_db_session
+from src.db.courses.certifications import CertificateUser, Certifications
 from src.db.courses.courses import Course
 from src.db.organizations import Organization
 from src.db.roles import Role, RoleTypeEnum
@@ -2202,6 +2203,20 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             assert claimed.starts_at is not None and claimed.ends_at - claimed.starts_at == timedelta(days=1)
         assert (await client.get(lesson_path, headers=headers)).status_code == 200
         assert (await client.get(f"{overview_path}/lessons", headers=headers)).json()["requires_first_use"] is False
+        award_uuid = f"award_{token}"
+        async with postgres_session_factory() as db:
+            certificate = Certifications(course_id=course.id, certification_uuid=f"cert_{token}")
+            db.add(certificate)
+            await db.flush()
+            db.add(CertificateUser(
+                user_id=profile.user_id, certification_id=certificate.id,
+                user_certification_uuid=award_uuid,
+            ))
+            await db.commit()
+        awards_path = "/api/v1/certifications/user/all"
+        own_awards = await client.get(awards_path, params={"org_id": org.id}, headers=headers)
+        assert own_awards.status_code == 200, own_awards.text
+        assert [entry["certificate_user"]["user_certification_uuid"] for entry in own_awards.json()] == [award_uuid]
         async with postgres_session_factory() as db:
             now = datetime.now(UTC)
             await db.execute(update(StudyCourseAccessGrant).where(
@@ -2218,6 +2233,9 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         assert expired.status_code == 200 and expired.json()["status"] == "expired"
         assert expired.json()["start_basis"] == "fixed_period"
         assert (await client.get(lesson_path, headers=headers)).status_code == 404
+        retained_awards = await client.get(awards_path, params={"org_id": org.id}, headers=headers)
+        assert retained_awards.status_code == 200, retained_awards.text
+        assert retained_awards.json() == own_awards.json()
         monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_SUPPORT_INTAKE_ENABLED", "true")
         support_path = f"{org_path}/support/cases"
         support_case = await client.post(
