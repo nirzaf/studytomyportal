@@ -40,6 +40,7 @@ from src.services.courses.certifications import (
     get_certificate_by_user_certification_uuid,
 )
 from src.services.studytomy import access_policy, assignment_adapter, grading
+from src.services.studytomy.metrics import release_completion_observations
 from src.services.studytomy.prerequisites import managed_assessed_pass_status
 from src.tests.studytomy.test_content_evidence import _seed_postgres_release_sources
 from src.tests.studytomy.test_studytomy_access import _synthetic_policy_body
@@ -195,7 +196,7 @@ async def test_issued_round_retains_exact_started_release(
             snapshot_sha256=review.revision_sha256, snapshot=snapshot, media_manifest=media_manifest,
             assessment_policy_id=policies[0].id, progression_policy_id=policies[1].id,
             retention_policy_id=policies[2].id, rights_policy_id=policies[3].id,
-            retention_category="synthetic",
+            retention_category="synthetic", policy_binding={"fixture": True},
         )
         profile = StudyLearnerProfile(org_id=org.id, user_id=user.id, created_by_user_id=user.id)
         db.add_all([release, profile])
@@ -304,6 +305,33 @@ async def test_issued_round_retains_exact_started_release(
         assert len(completion_events) == 2
         assert all(event.after_state == {"source_snapshot_digest": release.snapshot_sha256}
                    for event in completion_events)
+        completion_time = next(event.created_at for event in completion_events
+                               if event.action == "studytomy.course.completion_recorded")
+        completion_scope = {"org_id": org.id, "course_uuid": course.course_uuid, "release_uuid": release.uuid}
+        assert await release_completion_observations(
+            db, **completion_scope, start=now, end=completion_time,
+        ) == 0
+        assert await release_completion_observations(
+            db, **completion_scope, start=completion_time, end=completion_time + timedelta(seconds=1),
+        ) == 1
+        assert await release_completion_observations(
+            db, **{**completion_scope, "release_uuid": f"course_release_{uuid4()}"},
+            start=now, end=completion_time + timedelta(seconds=1),
+        ) == 0
+        late = now + timedelta(minutes=2)
+        db.add(StudyBusinessEvent(
+            org_id=org.id, actor_user_id=user.id, resource_kind="course_release",
+            resource_uuid=release.uuid, action="studytomy.course.completion_recorded",
+            after_state={"source_snapshot_digest": release.snapshot_sha256}, created_at=late,
+            policy_refs=[release.progression_policy_id],
+        ))
+        await db.flush()
+        assert await release_completion_observations(
+            db, **completion_scope, start=late, end=late + timedelta(seconds=1),
+        ) == 0
+        assert await release_completion_observations(
+            db, **completion_scope, start=completion_time, end=late + timedelta(seconds=1),
+        ) == 1
         first_stage = BytesIO(pdf)
         monkeypatch.setattr(access_policy, "_stage_release_media", AsyncMock(return_value=first_stage))
         args = (db, org, actor, course.course_uuid, release.uuid, target)

@@ -4,13 +4,17 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select, text
+from sqlalchemy import cast, func, select, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.organizations import Organization
+from src.db.studytomy.access import StudyCourseAccessGrant
 from src.db.studytomy.cases import StudyServiceCase
 from src.db.studytomy.commerce import StudyOffer, StudyOfferVersion
-from src.db.studytomy.governance import StudyOwnerFunction, StudyPolicyKey
+from src.db.studytomy.education import StudyCourseRelease, StudyCourseReview
+from src.db.studytomy.family import StudyLearnerProfile
+from src.db.studytomy.governance import StudyBusinessEvent, StudyOwnerFunction, StudyPolicyKey
 from src.db.users import PublicUser
 from src.security.studytomy_access import (
     StudytomyCapabilityName,
@@ -309,6 +313,63 @@ async def release_access_population(
         FROM learner_states
     """), {"org_id": org_id, "course_uuid": course_uuid, "release_uuid": release_uuid, "as_of": as_of})
     return dict(result.mappings().one())
+
+
+async def release_completion_observations(
+    db: AsyncSession, *, org_id: int, course_uuid: str, release_uuid: str,
+    start: datetime, end: datetime,
+) -> int:
+    """Count exact-release completions backed by access at the time of completion.
+
+    The caller authorizes the release scope. The count describes retained evidence
+    in a half-open interval. Pilot eligibility and denominator selection are separate.
+    """
+    if (
+        org_id < 1 or not course_uuid.strip() or not release_uuid.strip()
+        or start.utcoffset() is None or end.utcoffset() is None or start >= end
+    ):
+        raise ValueError("An organization, course, release and ordered timezone-aware period are required.")
+    event = StudyBusinessEvent
+    release = StudyCourseRelease
+    review = StudyCourseReview
+    profile = StudyLearnerProfile
+    grant = StudyCourseAccessGrant
+    active_grant = select(grant.id).where(
+        grant.org_id == org_id,
+        grant.course_uuid == course_uuid,
+        grant.release_id == release.id,
+        grant.learner_profile_id == profile.id,
+        grant.created_at <= event.created_at,
+        grant.starts_at <= event.created_at,
+        grant.ends_at > event.created_at,
+        (grant.revoked_at.is_(None) | (grant.revoked_at > event.created_at)),
+    ).exists()
+    count = await db.scalar(
+        select(func.count(func.distinct(profile.id)))
+        .select_from(event)
+        .join(release, event.resource_uuid == release.uuid)
+        .join(review, release.review_id == review.id)
+        .join(profile, (profile.org_id == event.org_id) & (profile.user_id == event.actor_user_id))
+        .where(
+            event.org_id == org_id,
+            event.action == "studytomy.course.completion_recorded",
+            event.resource_kind == "course_release",
+            event.created_at >= start,
+            event.created_at < end,
+            event.after_state["source_snapshot_digest"].as_string() == release.snapshot_sha256,
+            cast(event.policy_refs, JSONB) == func.jsonb_build_array(release.progression_policy_id),
+            release.org_id == org_id,
+            release.course_uuid == course_uuid,
+            release.uuid == release_uuid,
+            release.policy_binding.is_not(None),
+            review.org_id == org_id,
+            review.course_uuid == course_uuid,
+            review.decision == "approved",
+            review.revision_sha256 == release.snapshot_sha256,
+            active_grant,
+        )
+    )
+    return int(count or 0)
 
 
 async def confirmed_cash_by_currency(
