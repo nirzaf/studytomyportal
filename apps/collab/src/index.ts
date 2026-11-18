@@ -207,6 +207,10 @@ function redisYdocKey(boardUuid: string): string {
   return `collab:ydoc:${boardUuid}`
 }
 
+function redisPendingYdocKey(boardUuid: string): string {
+  return `collab:pending-ydoc:${boardUuid}`
+}
+
 // ── Debounced DB persistence ────────────────────────────────────────────────
 
 const pendingFlushes = new BoardPersistenceQueue({
@@ -217,13 +221,30 @@ const pendingFlushes = new BoardPersistenceQueue({
   maxPendingBytes: MAX_PENDING_FLUSH_BYTES,
   write: async (boardUuid, state, timeoutMs) => {
     const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`
-    await writeBoardSnapshot(state, MAX_YDOC_BYTES, (init) =>
+    const acknowledged = await writeBoardSnapshot(state, MAX_YDOC_BYTES, (init) =>
       fetchWithTimeout(
         url,
         { ...init, headers: { ...init.headers, 'X-Internal-Key': INTERNAL_KEY } },
         timeoutMs,
       ),
     )
+    try {
+      // A late acknowledgement must leave any newer pending snapshot alone.
+      await getRedis().eval(
+        `if redis.call('GET', KEYS[1]) == ARGV[1] then
+           redis.call('SETEX', KEYS[2], ARGV[3], ARGV[2])
+           redis.call('DEL', KEYS[1])
+         end`,
+        2,
+        redisPendingYdocKey(boardUuid),
+        redisYdocKey(boardUuid),
+        Buffer.from(state),
+        Buffer.from(acknowledged),
+        REDIS_YDOC_TTL,
+      )
+    } catch (error) {
+      console.warn(`[collab] Redis acknowledgement failed for ${boardUuid}:`, error)
+    }
   },
   onRetry: (boardUuid, retry, delayMs, error) => {
     console.warn(
@@ -423,7 +444,18 @@ const server = new Server({
         return loadBoardState(boardUuid, {
           readCache: async () => {
             const r = getRedis()
-            const cached = await r.getBuffer(redisYdocKey(boardUuid))
+            const [pending, cached] = await r.mgetBuffer(
+              redisPendingYdocKey(boardUuid),
+              redisYdocKey(boardUuid),
+            )
+            if (pending?.byteLength && pending.byteLength <= MAX_YDOC_BYTES) {
+              try {
+                pendingFlushes.schedule(boardUuid, pending)
+              } catch (error) {
+                console.error(`[collab] Redis snapshot remains pending for ${boardUuid}:`, error)
+              }
+              return pending
+            }
             if (cached && cached.byteLength > 0) {
               console.log(
                 `[collab] Redis hit for ${boardUuid}: ${cached.byteLength} bytes`,
@@ -442,10 +474,12 @@ const server = new Server({
           },
           warmCache: async (state) => {
             const r = getRedis()
-            await r.setex(
+            await r.set(
               redisYdocKey(boardUuid),
-              REDIS_YDOC_TTL,
               Buffer.from(state),
+              'EX',
+              REDIS_YDOC_TTL,
+              'NX',
             )
             console.log(
               `[collab] Fetched ydoc from DB for ${boardUuid}: ${state.byteLength} bytes`,
@@ -475,11 +509,14 @@ const server = new Server({
         // 1. Write to Redis immediately (fast)
         try {
           const r = getRedis()
-          await r.setex(
-            redisYdocKey(boardUuid),
-            REDIS_YDOC_TTL,
-            Buffer.from(state),
-          )
+          const snapshot = Buffer.from(state)
+          const results = await r.multi()
+            .setex(redisPendingYdocKey(boardUuid), REDIS_YDOC_TTL, snapshot)
+            .setex(redisYdocKey(boardUuid), REDIS_YDOC_TTL, snapshot)
+            .exec()
+          for (const [error] of results ?? []) {
+            if (error) throw error
+          }
         } catch (err) {
           console.error(
             `[collab] Redis store error for ${boardUuid}:`,

@@ -6,7 +6,7 @@ export async function writeBoardSnapshot(
   pending: Uint8Array,
   maxBytes: number,
   request: (init: RequestInit) => Promise<Response>,
-): Promise<void> {
+): Promise<Uint8Array> {
   const current = await request({ method: 'GET' })
   assertSuccessfulYdocWrite(current)
   const etag = current.headers.get('etag')
@@ -21,7 +21,7 @@ export async function writeBoardSnapshot(
   if (stored.length > maxBytes) throw new Error('Stored board state exceeds the size limit')
   const merged = stored.length ? mergeUpdates([stored, pending]) : pending
   if (merged.length > maxBytes) throw new Error('Merged board state exceeds the size limit')
-  if (Buffer.from(stored).equals(merged)) return
+  if (Buffer.from(stored).equals(merged)) return stored
 
   const written = await request({
     method: 'PUT',
@@ -29,4 +29,5 @@ export async function writeBoardSnapshot(
     body: Buffer.from(merged),
   })
   assertSuccessfulYdocWrite(written)
+  return merged
 }

@@ -181,6 +181,8 @@ At `fcfc821c4ef511bdd6872de97ab9f0bca829f53b`, the authorized two-client probe k
 
 This establishes cache-backed recovery for a collaboration-process failure with Redis still available. The Redis entry expires, and a cache load does not reconstruct the pending persistence queue. Durable replay of an unacknowledged edit after cache expiry, Redis loss or another process failure remains open.
 
+The subsequent pending-snapshot change passed the same abrupt restart rehearsal on disposable Redis, FastAPI and PostgreSQL. After the original process was killed before acknowledgement, an authorized reconnect requeued the pending snapshot without another edit. PostgreSQL returned the exact restored Yjs text through the board API, and acknowledgement cleared the pending key. The marker has the existing one-hour cache lifetime. Replay requires a board load before expiration and surviving Redis state.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
