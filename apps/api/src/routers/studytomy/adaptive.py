@@ -55,6 +55,7 @@ from src.services.studytomy.awards import (
     ManagedCertificateVerification,
     issue_managed_certificate,
     preview_managed_certificate_eligibility,
+    require_managed_certificate_workspace,
     review_managed_certificate_change,
     verify_my_managed_certificate,
 )
@@ -388,6 +389,15 @@ async def api_assessment_review_evidence(
     return await read_assessment_review_evidence(
         db, org, actor, course_uuid, assignment_uuid, submission_uuid, attempt_number=attempt_number,
     )
+
+
+@router.get("/orgs/{org_uuid}/courses/{course_uuid}/award-workspace")
+async def api_managed_certificate_workspace(
+    org: AdaptiveOrg, actor: AdaptiveActor, db: AdaptiveDB,
+    course_uuid: Annotated[str, Path(min_length=1, max_length=255)],
+) -> dict[str, bool]:
+    await require_managed_certificate_workspace(db, org, actor, course_uuid)
+    return {"available": True}
 
 
 @router.get("/orgs/{org_uuid}/courses/{course_uuid}/releases/{release_uuid}/learners/{learner_uuid}/award-eligibility")

@@ -33,6 +33,7 @@ const EditCourseSchedule = dynamic(() => import('@components/Dashboard/Pages/Cou
 const CourseAnalyticsTab = dynamic(() => import('@ee/components/Analytics/Dashboard/Course/CourseAnalyticsTab'))
 const AdaptiveConfiguration = dynamic(() => import('@components/Studytomy/AdaptiveConfiguration'))
 const ContentReviewPanel = dynamic(() => import('@components/Studytomy/ContentReviewPanel'))
+const StaffCertificateReview = dynamic(() => import('@components/Studytomy/StaffCertificateReview'))
 
 export type CourseOverviewParams = {
   orgslug: string
@@ -97,6 +98,23 @@ function CourseOverviewPage(props: { params: Promise<CourseOverviewParams> }) {
     })
     return () => controller.abort()
   }, [adaptiveClient, courseuuid, params.subpage])
+  const [certificateResult, setCertificateResult] = useState<{ client: typeof adaptiveClient; available: boolean }>()
+  const certificateAvailable = adaptiveClient && certificateResult?.client === adaptiveClient && certificateResult.available
+  const certificateLoading = session?.status === 'loading' || Boolean(
+    token && actor && (!orgUuid || (adaptiveClient && certificateResult?.client !== adaptiveClient)),
+  )
+  useEffect(() => {
+    if (!adaptiveClient) return
+    const controller = new AbortController()
+    adaptiveClient.request<{ available: boolean }>(
+      `courses/${encodeURIComponent(courseuuid)}/award-workspace`, 'GET', undefined, undefined, controller.signal,
+    ).then(result => {
+      if (!controller.signal.aborted) setCertificateResult({ client: adaptiveClient, available: result.available })
+    }).catch(() => {
+      if (!controller.signal.aborted) setCertificateResult({ client: adaptiveClient, available: false })
+    })
+    return () => controller.abort()
+  }, [adaptiveClient, courseuuid])
 
   // Define tab configurations with their required permissions
   const allTabs = [
@@ -181,9 +199,19 @@ function CourseOverviewPage(props: { params: Promise<CourseOverviewParams> }) {
       requiredPermission: 'update_content',
     })
   }
+  if (certificateAvailable) {
+    tabs.push({
+      key: 'managed-certificates',
+      label: t('dashboard.courses.settings.tabs.managedCertificates', 'Managed certificates'),
+      icon: Award,
+      href: `/dash/courses/course/${params.courseuuid}/managed-certificates`,
+      requiredPermission: 'update_content',
+    })
+  }
 
   // Filter tabs based on permissions
-  const visibleTabs = tabs.filter(tab => tab.key === 'adaptive' || tab.key === 'content-review' || hasPermission(tab.requiredPermission))
+  const visibleTabs = tabs.filter(tab => ['adaptive', 'content-review', 'managed-certificates'].includes(tab.key)
+    || hasPermission(tab.requiredPermission))
 
   // Check if current subpage is accessible
   const currentTab = tabs.find(tab => tab.key === params.subpage)
@@ -192,7 +220,8 @@ function CourseOverviewPage(props: { params: Promise<CourseOverviewParams> }) {
     : false
   const checkingAccess = rightsLoading ||
     (adaptiveLoading && (params.subpage === 'adaptive' || visibleTabs.length === 0)) ||
-    (reviewLoading && (params.subpage === 'content-review' || visibleTabs.length === 0))
+    (reviewLoading && (params.subpage === 'content-review' || visibleTabs.length === 0)) ||
+    (certificateLoading && (params.subpage === 'managed-certificates' || visibleTabs.length === 0))
 
   // Redirect to first available tab if current page is not accessible
   useEffect(() => {
@@ -269,6 +298,11 @@ function CourseOverviewPage(props: { params: Promise<CourseOverviewParams> }) {
             ) : null}
             {!checkingAccess && params.subpage === 'content-review' && candidate && reviewClient ? (
               <ContentReviewPanel key={workspaceIdentity} client={reviewClient} initial={candidate} />
+            ) : null}
+            {!checkingAccess && params.subpage === 'managed-certificates' && certificateAvailable && adaptiveClient ? (
+              <div className="mx-auto w-full max-w-6xl p-4 sm:p-10">
+                <StaffCertificateReview key={workspaceIdentity} client={adaptiveClient.request} courseUuid={courseuuid} />
+              </div>
             ) : null}
             {!rightsLoading && params.subpage == 'general' && hasPermission('update') ? (
               <>

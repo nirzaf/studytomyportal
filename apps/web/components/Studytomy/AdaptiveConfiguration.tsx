@@ -6,7 +6,6 @@ import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
 import StaffReportReview from '@components/Studytomy/StaffReportReview'
-import StaffCertificateReview from '@components/Studytomy/StaffCertificateReview'
 import {
   adaptiveRequest, type AdaptiveConfiguration as Catalog, type CurriculumReview, type Definition,
   type DefinitionKind, type DiagnosticReview, type ItemReview, type NativePreview, type Question,
@@ -465,6 +464,5 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
       </div>}
     </section>}
     <StaffReportReview client={client} courseUuid={courseUuid} curricula={catalog.curricula} />
-    <StaffCertificateReview client={client} courseUuid={courseUuid} />
   </section>
 }

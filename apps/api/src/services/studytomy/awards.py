@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapte
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.db.courses.courses import Course
 from src.db.organizations import Organization
 from src.db.studytomy.education import StudyCourseRelease, StudyCourseReview
 from src.db.studytomy.family import StudyLearnerProfile
@@ -120,6 +121,22 @@ class ManagedCertificateEligibility(BaseModel):
     missing_assessment_uuids: list[str]
     issuance_enabled: bool
     evidence_sha256: str
+
+
+async def require_managed_certificate_workspace(
+    db: AsyncSession, org: Organization, reviewer: PublicUser, course_uuid: str,
+) -> None:
+    """Authorize workspace discovery at course scope. Each action checks the learner as well."""
+    await authorize_studytomy_staff_action(
+        db, reviewer, org, StudytomyCapabilityName.ASSESSMENT_MODERATION,
+        target_scope_kind="course", target_resource_uuid=course_uuid,
+        hide_existence_on_denial=True,
+    )
+    course_id = await db.scalar(select(Course.id).where(
+        Course.org_id == org.id, Course.course_uuid == course_uuid, Course.studytomy_managed.is_(True),
+    ))
+    if course_id is None:
+        raise studytomy_http_error(404, "MANAGED_CERTIFICATE_UNAVAILABLE", "Certificate review unavailable.")
 
 
 async def preview_managed_certificate_eligibility(

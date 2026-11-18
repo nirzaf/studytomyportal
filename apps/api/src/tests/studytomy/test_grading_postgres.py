@@ -321,6 +321,12 @@ async def test_issued_round_retains_exact_started_release(
         certificate_reviewer = PublicUser.model_validate(await db.get(User, review.owner_user_id))
         staff_access = AsyncMock()
         monkeypatch.setattr(awards, "authorize_studytomy_staff_action", staff_access)
+        await awards.require_managed_certificate_workspace(db, org, certificate_reviewer, course.course_uuid)
+        assert staff_access.await_args.kwargs["target_scope_kind"] == "course"
+        with pytest.raises(HTTPException) as missing_course:
+            await awards.require_managed_certificate_workspace(db, org, certificate_reviewer, f"course_{uuid4()}")
+        assert missing_course.value.status_code == 404
+        staff_access.reset_mock()
         monkeypatch.setattr(releases, "load_release_policy_binding", AsyncMock(return_value=SimpleNamespace(
             model_dump=lambda **_: release.policy_binding,
             versions={StudyPolicyKey.D_16: SimpleNamespace(policy_id=policies[3].id)},
