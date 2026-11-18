@@ -337,6 +337,17 @@ async def test_startup_and_shutdown_app(monkeypatch):
     monkeypatch.setattr(events, "auto_install", fake_auto_install)
     monkeypatch.setattr(events, "_reconcile_packs", fake_reconcile_packs)
     monkeypatch.setattr(events, "run_ee_startup", lambda app_: calls.append(("ee", app_)))
+    from src.services.studytomy import report_delivery_scheduler
+
+    monkeypatch.setattr(
+        report_delivery_scheduler,
+        "start_scheduler",
+        lambda: calls.append("report-delivery-start"),
+    )
+    async def stop_report_delivery():
+        calls.append("report-delivery-stop")
+
+    monkeypatch.setattr(report_delivery_scheduler, "stop_scheduler", stop_report_delivery)
     monkeypatch.setattr(
         "src.services.courses.migration.migration_service.cleanup_old_temp_migrations",
         lambda: calls.append("cleanup"),
@@ -367,6 +378,7 @@ async def test_startup_and_shutdown_app(monkeypatch):
 
     assert app.learnhouse_config.name == "cfg"
     assert calls[:5] == [("connect", app), "logs", "content", "install", "reconcile"]
+    assert "report-delivery-start" in calls
     assert "cleanup" in calls
     assert calls[-1] == ("ee", app)
     assert created_tasks
@@ -385,6 +397,7 @@ async def test_startup_and_shutdown_app(monkeypatch):
     await close_app()
 
     assert "cancel" in calls
+    assert "report-delivery-stop" in calls
     assert "webhook-close" in calls
     assert ("db-close", app) in calls
 

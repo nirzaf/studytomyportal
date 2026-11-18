@@ -52,6 +52,11 @@ class ReportNotificationRead(BaseModel):
     deliveries: list[ReportDeliveryStatus]
 
 
+def _delivery_status_for_report(status: str) -> str:
+    """A provider acknowledgment is not proof the message was delivered."""
+    return "provider_accepted" if status == "sent" else status
+
+
 async def _approved_email(db: AsyncSession, org: Organization, now: datetime) -> bool:
     policies = await _current_policies(
         db, org, (StudyPolicyKey.D_12, StudyPolicyKey.D_13, StudyPolicyKey.D_18), now
@@ -178,7 +183,7 @@ async def request_report_notification(
                 created_by_user_id=actor.id,
                 dedupe_key=f"{row.uuid}:{row.version}:{recipient.id}:report-email",
             )
-            status = "accepted" if delivery.status == "sent" else delivery.status
+            status = _delivery_status_for_report(delivery.status)
         status_counts[status] = status_counts.get(status, 0) + 1
     receipt = ReportNotificationRead(
         uuid=row.uuid,

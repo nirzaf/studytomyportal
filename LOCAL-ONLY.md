@@ -8,6 +8,23 @@ Install dependencies with the frozen lockfiles, then run the existing component 
 
 See the [AUD-18 local verification record](docs/studytomy/LOCAL-VERIFICATION.md) for a dated command-by-command evidence snapshot and explicit skipped/unverified checks.
 
+## Optional report notifications
+
+The API lifecycle contains a bounded report-outbox poller that is **off unless**
+`LEARNHOUSE_STUDYTOMY_REPORT_DELIVERY_ENABLED=true` is explicitly set. When
+enabled, it polls every 60 seconds, claims up to 25 PostgreSQL outbox records
+per poll, rechecks current recipient/report/policy authority immediately before
+dispatch, and records provider acceptance separately from suppressed or unknown
+outcomes. A provider acceptance is not proof of delivery. Logs contain aggregate
+status counts, oldest pending age and allowlisted failure-code counts; they do
+not contain report contents or recipient details.
+
+Do not enable this flag in the current checkout. D-04, D-12, D-13, D-14 and
+D-18 approval records and dates have not been verified. Use the local mocked
+provider and disposable PostgreSQL tests for runner verification. A future
+authorized local operation must use synthetic recipients and a mocked email
+provider; do not use this opt-in as learner or guardian activation.
+
 Dockerfiles and CLI-generated Compose files remain available for local builds and local service dependencies. The LearnHouse CLI is product tooling; its non-interactive setup mode and user-facing self-hosting commands do not configure deployment or CI/CD for this repository.
 
 ## External integrations

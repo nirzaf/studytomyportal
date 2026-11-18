@@ -22,13 +22,22 @@ from src.db.studytomy.operations import (
     StudyOutboxRecord,
 )
 from src.db.studytomy.privacy import StudyConsentEvent
-from src.services.studytomy import idempotency
+from src.services.studytomy import (
+    idempotency,
+    report_delivery_scheduler,
+    report_notifications,
+)
 from src.services.studytomy.business_events import append_business_event
 from src.services.studytomy.idempotency import claim_idempotency
 from src.services.studytomy.outbox import (
     claim_due_deliveries,
     enqueue_delivery,
     release_delivery_lease,
+)
+from src.services.studytomy.worker import (
+    DeliveryAuthorization,
+    ProviderOutcomeUnknown,
+    ProviderReceipt,
 )
 
 
@@ -488,3 +497,155 @@ async def test_outbox_stale_session_cannot_finalize_a_reconciled_lease(postgres_
         assert record.status == "reconciliation_required"
         assert record.last_error_code == "LEASE_EXPIRED_OUTCOME_UNKNOWN"
         assert record.provider_message_reference is None
+
+
+@pytest.mark.studytomy_postgres
+async def test_report_delivery_batch_rechecks_authority_and_tracks_provider_outcomes(
+    postgres_test_rows, monkeypatch,
+):
+    rows = postgres_test_rows
+    deliveries = {}
+    async with rows.session_factory() as session:
+        for outcome in ("accepted", "revoked", "unknown"):
+            delivery, replay = await enqueue_delivery(
+                session,
+                org_id=rows.org_id,
+                recipient_user_id=rows.user_id,
+                purpose=StudyOutboxPurpose.PROGRESS_REPORT,
+                resource_kind="progress_report",
+                resource_uuid=f"report_{rows.token}_{outcome}",
+                resource_version=1,
+                authority_reference_uuid=f"grant_{rows.token}",
+                policy_refs=[1],
+                created_by_user_id=rows.user_id,
+                dedupe_key=f"report-{rows.token}-{outcome}",
+            )
+            assert not replay
+            deliveries[outcome] = delivery
+        await session.commit()
+
+    async def revalidate(_session, record):
+        if record.resource_uuid.endswith("_revoked"):
+            return DeliveryAuthorization(
+                False, False, False, False, None, "REPORT_RECIPIENT_NOT_AUTHORIZED",
+            )
+        return DeliveryAuthorization(True, True, True, True, record.resource_version)
+
+    async def send(_session, record, _authorization, _idempotency_key):
+        if record.resource_uuid.endswith("_unknown"):
+            raise ProviderOutcomeUnknown
+        return ProviderReceipt(accepted=True, message_reference=f"synthetic-{rows.token[:12]}")
+
+    send_calls = []
+
+    async def recording_send(*args):
+        send_calls.append(args[1].resource_uuid)
+        return await send(*args)
+
+    monkeypatch.setattr(report_notifications, "revalidate_report_delivery", revalidate)
+    monkeypatch.setattr(report_notifications, "send_report_delivery", recording_send)
+
+    async with rows.session_factory() as session:
+        before_summary = await report_delivery_scheduler._queue_summary(session)
+        tally = await report_notifications.run_report_delivery_batch(
+            session, worker_id=f"report-{rows.token[:16]}", limit=10,
+        )
+        after_summary = await report_delivery_scheduler._queue_summary(session)
+
+    async with rows.session_factory() as session:
+        persisted = {
+            outcome: await session.get(StudyOutboxRecord, record.id)
+            for outcome, record in deliveries.items()
+        }
+
+    assert tally == {
+        "claimed": 3, "sent": 1, "suppressed": 1, "retry": 0,
+        "reconciliation_required": 1, "dead_letter": 0,
+    }
+    assert persisted["accepted"].status == "sent"
+    assert persisted["accepted"].provider_message_reference == f"synthetic-{rows.token[:12]}"
+    assert persisted["revoked"].status == "suppressed"
+    assert persisted["revoked"].last_error_code == "REPORT_RECIPIENT_NOT_AUTHORIZED"
+    assert persisted["unknown"].status == "reconciliation_required"
+    assert persisted["unknown"].last_error_code == "PROVIDER_OUTCOME_UNKNOWN"
+    assert persisted["unknown"].provider_message_reference is None
+    assert len(send_calls) == 2
+    assert all(not resource.endswith("_revoked") for resource in send_calls)
+    assert after_summary["status_counts"].get("queued", 0) == before_summary["status_counts"].get("queued", 0) - 3
+    for status in ("provider_accepted", "suppressed", "provider_outcome_unknown"):
+        assert after_summary["status_counts"].get(status, 0) == before_summary["status_counts"].get(status, 0) + 1
+    assert after_summary["failure_code_counts"].get("REPORT_RECIPIENT_NOT_AUTHORIZED", 0) >= 1
+    assert after_summary["failure_code_counts"].get("PROVIDER_OUTCOME_UNKNOWN", 0) >= 1
+    assert after_summary["oldest_pending_age_seconds"] >= 0
+
+
+@pytest.mark.studytomy_postgres
+async def test_opted_in_scheduler_processes_postgres_outbox_without_manual_batch_call(
+    postgres_test_rows, monkeypatch,
+):
+    rows = postgres_test_rows
+    async with rows.session_factory() as session:
+        pending_count = (
+            await session.execute(
+                select(func.count())
+                .select_from(StudyOutboxRecord)
+                .where(
+                    StudyOutboxRecord.purpose
+                    == StudyOutboxPurpose.PROGRESS_REPORT.value,
+                    StudyOutboxRecord.status.in_(("queued", "retry", "leased")),
+                )
+            )
+        ).scalar_one()
+        assert pending_count == 0, "disposable test DB must have no preexisting pending reports"
+        delivery, replay = await enqueue_delivery(
+            session,
+            org_id=rows.org_id,
+            recipient_user_id=rows.user_id,
+            purpose=StudyOutboxPurpose.PROGRESS_REPORT,
+            resource_kind="progress_report",
+            resource_uuid=f"report_{rows.token}_scheduler",
+            resource_version=1,
+            authority_reference_uuid=f"grant_{rows.token}",
+            policy_refs=[1],
+            created_by_user_id=rows.user_id,
+            dedupe_key=f"report-{rows.token}-scheduler",
+        )
+        assert not replay
+        delivery_id = delivery.id
+        await session.commit()
+
+    from src.core.events import database as database_events
+
+    monkeypatch.setattr(database_events, "_async_session_factory", rows.session_factory)
+    monkeypatch.setattr(report_delivery_scheduler, "_task", None)
+    monkeypatch.setattr(report_delivery_scheduler, "_worker_id", None)
+    monkeypatch.setattr(report_delivery_scheduler, "_POLL_INTERVAL_SECONDS", 0.01)
+    monkeypatch.setenv(report_delivery_scheduler._ENABLE_ENV, "true")
+    send_called = asyncio.Event()
+
+    async def revalidate(_session, record):
+        assert record.id == delivery_id
+        return DeliveryAuthorization(True, True, True, True, record.resource_version)
+
+    async def send(_session, record, _authorization, _idempotency_key):
+        assert record.id == delivery_id
+        send_called.set()
+        return ProviderReceipt(accepted=True, message_reference=f"synthetic-{rows.token[:12]}")
+
+    monkeypatch.setattr(report_notifications, "revalidate_report_delivery", revalidate)
+    monkeypatch.setattr(report_notifications, "send_report_delivery", send)
+    report_delivery_scheduler.start_scheduler()
+    try:
+        await asyncio.wait_for(send_called.wait(), timeout=2)
+        current_status = None
+        for _ in range(100):
+            async with rows.session_factory() as session:
+                current = await session.get(StudyOutboxRecord, delivery_id)
+                current_status = current.status if current else None
+            if current_status == "sent":
+                break
+            await asyncio.sleep(0.01)
+    finally:
+        await report_delivery_scheduler.stop_scheduler()
+
+    assert current_status == "sent"

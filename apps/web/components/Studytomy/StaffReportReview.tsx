@@ -97,8 +97,25 @@ export default function StaffReportReview({ client, courseUuid, curricula }: {
       }
       setLoaded({ client, courseUuid, review: next })
       if (receipt?.deliveries) {
-        const statuses = receipt.deliveries.map(({ status, recipient_count }) =>
-          `${t(`adaptive.staffReport.delivery.${status}`, status)} ${recipient_count}`)
+        const statuses = receipt.deliveries.map(({ status, recipient_count }) => {
+          const labels: Record<string, [string, string]> = {
+            provider_accepted: [
+              'adaptive.staffReport.delivery.providerAccepted',
+              'Accepted by email provider; delivery unconfirmed',
+            ],
+            queued: ['adaptive.staffReport.delivery.queued', 'Queued; not yet accepted by provider'],
+            retry: ['adaptive.staffReport.delivery.retry', 'Retry scheduled after provider did not accept'],
+            suppressed: ['adaptive.staffReport.delivery.suppressed', 'Suppressed by current authorization checks'],
+            reconciliation_required: [
+              'adaptive.staffReport.delivery.outcomeUnknown',
+              'Provider outcome unknown; reconciliation is required',
+            ],
+            dead_letter: ['adaptive.staffReport.delivery.stopped', 'Stopped after repeated delivery failures'],
+          }
+          const [key, fallback] = labels[status] ?? [`adaptive.staffReport.delivery.${status}`, status]
+          const label = t(key, fallback)
+          return `${label} ${recipient_count}`
+        })
         setNotice(statuses.length
           ? t('adaptive.staffReport.deliveryOutcome', 'Email notice status — {{statuses}}', { statuses: statuses.join(', ') })
           : t('adaptive.staffReport.noNotices', 'There are no email notices for this report version.'))

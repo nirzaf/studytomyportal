@@ -1,8 +1,8 @@
 """Fail-closed delivery worker primitives for the same application runtime.
 
-This module is deliberately not registered in application startup. Decision
-gates D-04, D-12 and D-14 are still unapproved, and no provider or schedule is
-activated by adding the durable queue.
+The optional in-process scheduler is default-off. Decision gates D-04, D-12,
+D-13, D-14 and D-18 remain unapproved in this checkout; no schedule is enabled
+and dispatch still revalidates recipient, report and policy authority before any provider call.
 """
 
 import re

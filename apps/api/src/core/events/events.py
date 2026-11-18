@@ -109,6 +109,13 @@ def startup_app(app: FastAPI) -> Callable:
         # Every few hours, queue whatever the index is missing or behind on.
         from src.services.ai.rag.scheduler import start_scheduler as start_rag_backfill
         start_rag_backfill()
+        # Report notices use the shared PostgreSQL outbox and remain dormant
+        # until the explicit policy-gated local opt-in is set.
+        from src.services.studytomy.report_delivery_scheduler import (
+            start_scheduler as start_report_delivery,
+        )
+
+        start_report_delivery()
         # Every two days, re-run every content backfill (HLS, search index,
         # video chapters) for whatever slipped through.
         from src.services.backfill.scheduler import start_scheduler as start_backfill
@@ -140,6 +147,11 @@ def shutdown_app(app: FastAPI) -> Callable:
                 await _cleanup_task
             except asyncio.CancelledError:
                 pass
+        from src.services.studytomy.report_delivery_scheduler import (
+            stop_scheduler as stop_report_delivery,
+        )
+
+        await stop_report_delivery()
         # Stop the in-app HLS consumer and wait for in-flight transcodes.
         from src.services.utils.hls_jobs import stop_consumer
         await stop_consumer()
