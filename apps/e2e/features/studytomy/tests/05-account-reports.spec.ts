@@ -33,6 +33,7 @@ test('account reports revalidate a previously visible report link', async ({ pag
         evidence_cutoff: metadata.period_to,
         summary: {
           native_completions: 1,
+          reviewed_release_completions: 2,
           concepts: [{
             concept_uuid: `concept_${randomUUID()}`, title: 'Comparing units',
             independent_correct: 0, independent_incorrect: 0, supported_practice: 2,
@@ -68,6 +69,7 @@ test('account reports revalidate a previously visible report link', async ({ pag
   await expect(reports.getByText('No independent evidence in this period.')).toBeVisible()
   await expect(reports.getByText('Supported practice: 2')).toBeVisible()
   await expect(reports.getByText('Completed activities updated in this period: 1')).toBeVisible()
+  await expect(reports.getByText('Reviewed course releases completed in this period: 2', { exact: true })).toBeVisible()
   const reason = reports.getByLabel('Reason for review')
   const submit = reports.getByRole('button', { name: 'Send review request' })
   await expect(reason).toBeVisible()
@@ -89,6 +91,7 @@ test('account reports revalidate a previously visible report link', async ({ pag
   await expect(reports.getByText('This report is unavailable.')).toBeVisible({ timeout: 45_000 })
   expect(reads).toBeGreaterThan(priorReads)
   await expect(reports.getByText('Synthetic learner')).toHaveCount(0)
+  await expect(reports.getByText('Reviewed course releases completed in this period: 2', { exact: true })).toHaveCount(0)
   await reports.getByRole('link', { name: 'Back to reports' }).click()
   await expect(reports.getByText('There are no progress reports available.')).toBeVisible()
   await expect(link).toHaveCount(0)
