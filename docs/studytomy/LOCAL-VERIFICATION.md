@@ -113,6 +113,18 @@ The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 ap
 
 The audit’s older managed-diagnostic denial is no longer current: the existing integration fixture already exercises the exact reviewed-release branch. It verifies the managed course remains `public=False` and `published=False`, the granted learner resolves the exact frozen release and a diagnostic bound to it, incomplete course/release scope returns 404, a lesson outside the release returns 404, and the exact release path can issue an attempt with frozen source provenance. The fixture therefore records current behavior and the intended later integration without restoring the stale denial. Synthetic approvals do not constitute real approval or activate learners. No production migration or real service was used.
 
+## AUD-07 and AUD-08 collaboration recovery verification
+
+- **Recorded:** 2026-11-18
+- **Source revision inspected/tested:** `4cd9097d834d6b7e2c576903ac90f263a6b79d17` (the collaboration source was unchanged by subsequent verification-document commits).
+
+| Scope | Command | Result |
+|---|---|---|
+| Collaboration fault-injection and queue tests | `bun run test` from `apps/collab` | **PASS:** 43 passed, 0 failed across 9 suites. |
+| Collaboration TypeScript build | `bun run build` from `apps/collab` | **PASS:** `tsc`, exit 0. Its generated `dist` outputs were removed after verification; no build outputs remain in the worktree. |
+
+The load tests distinguish an explicitly marked empty board from Redis failure, API timeout, HTTP 503, malformed empty response and empty-present state; failed loads do not create/store a replacement document, and a later recovery loads the original content. The queue tests cover retry after non-2xx, persistence of the last edit without a further edit, per-board write ordering, retained state after bounded shutdown timeout/retry exhaustion, and aggregate memory limits. The shutdown handler was inspected: it logs unresolved board IDs and exits nonzero after its bounded flush deadline. That handler itself was not executed by the unit suite. These tests use synthetic adapters and in-memory Hocuspocus documents: live Redis/API outage recovery, deployment connector compatibility, and end-to-end multi-client recovery remain unverified. Existing authorization rechecks and read-only downgrade were left intact. No schema change or service was added.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
