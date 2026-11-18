@@ -57,7 +57,8 @@ const startBasis: Record<AccessWindow['start_basis'], string> = {
 }
 
 type View =
-  | { kind: 'loading' | 'unavailable' }
+  | { kind: 'loading' }
+  | { kind: 'unavailable'; section?: 'certificates' }
   | { kind: 'catalog'; page: Catalog; after?: string; history: boolean }
   | { kind: 'access'; window: AccessWindow }
   | { kind: 'certificates'; page: CertificatePage; after?: string }
@@ -96,7 +97,9 @@ function LearningView({
   const heading = useRef<HTMLHeadingElement>(null)
   const moveFocus = useRef(false)
 
-  async function load<T>(path: string, project: (_data: T) => View, method = 'GET') {
+  async function load<T>(
+    path: string, project: (_data: T) => View, method = 'GET', unavailableSection?: 'certificates',
+  ) {
     pending.current?.abort()
     const controller = new AbortController()
     pending.current = controller
@@ -110,7 +113,7 @@ function LearningView({
       const data = await response.json() as T
       if (!controller.signal.aborted) setView(project(data))
     } catch {
-      if (!controller.signal.aborted) setView({ kind: 'unavailable' })
+      if (!controller.signal.aborted) setView({ kind: 'unavailable', section: unavailableSection })
     }
   }
 
@@ -121,7 +124,9 @@ function LearningView({
 
   function showCertificates(after?: string) {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
-    return load<CertificatePage>(`awards${query}`, page => ({ kind: 'certificates', page, after }))
+    return load<CertificatePage>(
+      `awards${query}`, page => ({ kind: 'certificates', page, after }), 'GET', 'certificates',
+    )
   }
 
   function pathFor(release: Release) {
@@ -389,9 +394,16 @@ function LearningView({
       break
     }
     case 'unavailable':
+      if (view.section === 'certificates') title = 'My certificates'
       content = <>
-        <p role="status">Learning is unavailable for this account.</p>
-        <Button variant="outline" className="min-h-11" onClick={() => act(() => showCatalog())}>Try again</Button>
+        <p role="status">{view.section === 'certificates'
+          ? 'Certificates are unavailable for this account.' : 'Learning is unavailable for this account.'}</p>
+        <Button variant="outline" className="min-h-11"
+          onClick={() => act(() => view.section === 'certificates' ? showCertificates() : showCatalog())}>Try again</Button>
+        <Button variant="outline" className="min-h-11"
+          onClick={() => act(() => view.section === 'certificates' ? showCatalog() : showCertificates())}>
+          {view.section === 'certificates' ? 'Back to my learning' : 'My certificates'}
+        </Button>
         <p><Link href="/help" className="font-semibold underline">Contact support</Link></p>
       </>
       break
