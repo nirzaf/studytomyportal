@@ -4190,6 +4190,13 @@ async def _exercise_learner_attempt(
         assert f"/account/reports?report={report['uuid']}" in args[2]
         assert "37.42" not in args[2] and learner.first_name not in args[2]
         assert send.call_args.kwargs == {"single_attempt": True}
+        send.return_value = {"id": None, "to": recipient_user.email}
+        smtp_receipt = await send_report_delivery(db, delivery, current_auth, "fixture-key")
+        assert smtp_receipt.accepted and smtp_receipt.message_reference is None
+        for malformed in ({}, {"id": ""}, {"id": 42}, {"id": None, "to": "other@example.invalid"}):
+            send.return_value = malformed
+            uncertain = await send_report_delivery(db, delivery, current_auth, "fixture-key")
+            assert not uncertain.accepted and uncertain.message_reference is None
     review_request_path = f"{read_path}/review-requests"
     payer_detail = await client.get(read_path, headers=payer_headers)
     assert payer_detail.status_code == 404

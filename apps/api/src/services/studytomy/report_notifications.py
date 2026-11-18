@@ -273,10 +273,15 @@ async def send_report_delivery(
         f'<p><a href="{escape(href, quote=True)}">Sign in to view the progress report</a>.</p>',
         single_attempt=True,
     )
-    return ProviderReceipt(
-        accepted=isinstance(result, dict),
-        message_reference=result.get("id") if isinstance(result, dict) else None,
-    )
+    if isinstance(result, dict):
+        reference = result.get("id")
+        if isinstance(reference, str) and reference:
+            return ProviderReceipt(accepted=True, message_reference=reference)
+        # The SMTP adapter confirms acceptance for this recipient without a
+        # provider message ID. A missing ID in any other shape is ambiguous.
+        if "id" in result and reference is None and result.get("to") == user.email.strip():
+            return ProviderReceipt(accepted=True)
+    return ProviderReceipt(accepted=False)
 
 
 async def run_report_delivery_batch(
