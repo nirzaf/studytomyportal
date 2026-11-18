@@ -50,6 +50,7 @@ from src.services.studytomy.releases import (
 from src.services.utils.upload_content import open_content_stream
 
 _MAX_RELEASE_MEDIA_BYTES = 500 * 1024 * 1024
+_RELEASE_MEDIA_STAGE_TIMEOUT_SECONDS = 300
 _RELEASE_MEDIA_FILENAME = {
     "application/pdf": "lesson.pdf",
     "video/mp4": "lesson.mp4",
@@ -681,6 +682,35 @@ def _parse_media_range(range_header: str | None, size_bytes: int) -> tuple[int, 
     return start, end, 206
 
 
+def _validate_media_delivery_policy(
+    policy: StudyPolicyVersion,
+    media_type: str,
+    size_bytes: int,
+) -> None:
+    body, blockers = inspect_study_policy_body(policy.policy_key, policy.body)
+    formats = body.specified_value("supported_formats") if body else None
+    max_bytes = formats.get("max_bytes") if isinstance(formats, dict) else None
+    media_types = formats.get("media_types") if isinstance(formats, dict) else None
+    if (
+        any(blockers.values())
+        or type(max_bytes) is not int
+        or not 1 <= max_bytes <= _MAX_RELEASE_MEDIA_BYTES
+        or not isinstance(media_types, list)
+        or any(not isinstance(value, str) for value in media_types)
+    ):
+        raise studytomy_http_error(
+            409,
+            "POLICY_NOT_APPROVED",
+            "The approved accessibility policy must define supported media formats and a size limit.",
+        )
+    if media_type not in media_types or size_bytes > max_bytes:
+        raise studytomy_http_error(
+            409,
+            "RELEASE_MEDIA_UNSUPPORTED",
+            "The approved accessibility policy does not authorize this resource format or size.",
+        )
+
+
 async def _stage_release_media(org_uuid: str, media: dict) -> BinaryIO:
     # The response stream owns this spool and closes it after the final byte.
     buffer = TemporaryFile(mode="w+b")  # noqa: SIM115
@@ -688,31 +718,42 @@ async def _stage_release_media(org_uuid: str, media: dict) -> BinaryIO:
     directory, filename = reference.rsplit("/", 1)
     digest = hashlib.sha256()
     size = 0
+    staged = False
     try:
-        stream = await open_content_stream(
-            directory=directory,
-            type_of_dir="orgs",
-            uuid=org_uuid,
-            file_and_format=filename,
-        )
-        async with aclosing(stream) as chunks:
-            async for chunk in chunks:
-                size += len(chunk)
-                if size > media["size_bytes"]:
-                    raise ValueError("Retained media exceeds its approved size.")
-                digest.update(chunk)
-                await asyncio.to_thread(buffer.write, chunk)
-        if size != media["size_bytes"] or digest.hexdigest() != media["sha256"]:
-            raise ValueError("Retained media does not match its approved digest.")
-        await asyncio.to_thread(buffer.seek, 0)
+        async with asyncio.timeout(_RELEASE_MEDIA_STAGE_TIMEOUT_SECONDS):
+            stream = await open_content_stream(
+                directory=directory,
+                type_of_dir="orgs",
+                uuid=org_uuid,
+                file_and_format=filename,
+            )
+            async with aclosing(stream) as chunks:
+                async for chunk in chunks:
+                    size += len(chunk)
+                    if size > media["size_bytes"]:
+                        raise ValueError("Retained media exceeds its approved size.")
+                    digest.update(chunk)
+                    await asyncio.to_thread(buffer.write, chunk)
+            if size != media["size_bytes"] or digest.hexdigest() != media["sha256"]:
+                raise ValueError("Retained media does not match its approved digest.")
+            await asyncio.to_thread(buffer.seek, 0)
+        staged = True
         return buffer
+    except TimeoutError as error:
+        raise studytomy_http_error(
+            503,
+            "RELEASE_STORAGE_TIMEOUT",
+            "The retained course resource could not be prepared for delivery in time.",
+        ) from error
     except Exception as error:
-        await asyncio.to_thread(buffer.close)
         raise studytomy_http_error(
             503,
             "RELEASE_STORAGE_INVALID",
             "The retained course resource could not be verified for delivery.",
         ) from error
+    finally:
+        if not staged and not buffer.closed:
+            buffer.close()
 
 
 async def read_managed_activity_media(
@@ -726,7 +767,9 @@ async def read_managed_activity_media(
     range_header: str | None = None,
     start_first_use: bool = False,
 ) -> ManagedActivityMedia:
-    org = await lock_organization(db, org.id)
+    org_id = org.id
+    org_uuid = org.org_uuid
+    org = await lock_organization(db, org_id)
     release, progression, profile_id = await _authorized_release(
         db,
         org,
@@ -746,53 +789,79 @@ async def read_managed_activity_media(
     )
     if not candidates:
         raise _unavailable()
-    _source_reference, media, media_type = _project_media_activity(
+    source_reference, media, media_type = _project_media_activity(
         release, progression, activity_uuid
     )
-    policies = await _current_policies(
+    policy = (await _current_policies(
         db, org, (StudyPolicyKey.D_15,), datetime.now(UTC)
-    )
-    policy = policies[0]
-    body, blockers = inspect_study_policy_body(policy.policy_key, policy.body)
-    formats = body.specified_value("supported_formats") if body else None
-    max_bytes = formats.get("max_bytes") if isinstance(formats, dict) else None
-    media_types = formats.get("media_types") if isinstance(formats, dict) else None
-    if (
-        any(blockers.values())
-        or type(max_bytes) is not int
-        or not 1 <= max_bytes <= _MAX_RELEASE_MEDIA_BYTES
-        or not isinstance(media_types, list)
-        or any(not isinstance(value, str) for value in media_types)
-    ):
-        raise studytomy_http_error(
-            409,
-            "POLICY_NOT_APPROVED",
-            "The approved accessibility policy must define supported media formats and a size limit.",
-        )
-    if media_type not in media_types or media["size_bytes"] > max_bytes:
-        raise studytomy_http_error(
-            409,
-            "RELEASE_MEDIA_UNSUPPORTED",
-            "The approved accessibility policy does not authorize this resource format or size.",
-        )
+    ))[0]
+    _validate_media_delivery_policy(policy, media_type, media["size_bytes"])
     start, end, status_code = _parse_media_range(range_header, media["size_bytes"])
-    staged = await _stage_release_media(org.org_uuid, media)
+    release_id = release.id
+    release_digest = release.snapshot_sha256
+    progression_id = progression.id
+    policy_id = policy.id
+    media_snapshot = dict(media)
+
+    # Remote or slow storage must not hold the organization governance lock.
+    # All authority is checked again below before returning any media bytes.
+    await db.commit()
+    staged = await _stage_release_media(org_uuid, media_snapshot)
     try:
+        org = await lock_organization(db, org_id)
+        current_release, current_progression, current_profile_id = await _authorized_release(
+            db,
+            org,
+            actor,
+            course_uuid,
+            release_uuid,
+            require_active_grant=False,
+        )
+        if (
+            current_profile_id != profile_id
+            or current_release.id != release_id
+            or current_release.snapshot_sha256 != release_digest
+            or current_progression.id != progression_id
+        ):
+            raise _unavailable()
+        current_source_reference, current_media, current_media_type = _project_media_activity(
+            current_release, current_progression, activity_uuid
+        )
+        if (
+            current_source_reference != source_reference
+            or current_media_type != media_type
+            or current_media != media_snapshot
+        ):
+            raise _unavailable()
+        current_policy = (await _current_policies(
+            db, org, (StudyPolicyKey.D_15,), datetime.now(UTC)
+        ))[0]
+        if current_policy.id != policy_id:
+            raise studytomy_http_error(
+                409,
+                "POLICY_CHANGED",
+                "The current media-access policy changed while the resource was being prepared. Retry the request.",
+            )
+        _validate_media_delivery_policy(
+            current_policy, media_type, media_snapshot["size_bytes"]
+        )
+
         now = datetime.now(UTC)
         grants = await resolve_active_course_grants(
             db,
-            org_id=org.id,
+            org_id=org_id,
             learner_profile_id=profile_id,
             course_uuid=course_uuid,
-            release_id=release.id,
+            release_id=release_id,
             now=now,
             claim_first_use=start_first_use,
         )
         if not grants:
             raise _unavailable()
         await _retain_allocation_delivery(db, org, actor, grants, now)
-    except Exception:
-        await asyncio.to_thread(staged.close)
+    except BaseException:
+        if not staged.closed:
+            staged.close()
         raise
     return ManagedActivityMedia(
         file=staged,

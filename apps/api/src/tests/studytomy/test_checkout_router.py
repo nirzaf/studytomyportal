@@ -400,7 +400,11 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             decisions[StudyPolicyKey.D_05]["learner_allocation"]["free_order_offer_versions"] = {
                 offer_uuid: version_uuid,
             }
-        if correction_scenario in ("reentry", "media_delivery"):
+        if correction_scenario == "reentry":
+            decisions[StudyPolicyKey.D_15] = {
+                "supported_formats": {"max_bytes": 1024, "media_types": ["application/pdf"]},
+            }
+        elif correction_scenario == "media_delivery":
             decisions[StudyPolicyKey.D_15] = {
                 "supported_formats": {
                     "max_bytes": 1024,
@@ -1719,11 +1723,13 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 f"{overview_path}/activities/{media_activity_uuid}/media"
             )
             storage_reads = []
+            storage_bytes_read = []
 
             async def open_synthetic_media(**kwargs):
                 storage_reads.append(kwargs)
 
                 async def chunks():
+                    storage_bytes_read.append(len(release_media_bytes))
                     yield release_media_bytes
 
                 return chunks()
@@ -1779,6 +1785,15 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             assert ranged.status_code == 206
             assert ranged.content == release_media_bytes[1:5]
             assert ranged.headers["content-range"] == f"bytes 1-4/{len(release_media_bytes)}"
+            prior_reads = len(storage_reads)
+            prior_bytes_read = sum(storage_bytes_read)
+            repeated_ranges = await asyncio.gather(*[
+                client.get(media_path, headers={**headers, "Range": "bytes=1-4"})
+                for _ in range(2)
+            ])
+            assert all(response.status_code == 206 for response in repeated_ranges)
+            assert len(storage_reads) == prior_reads + 2
+            assert sum(storage_bytes_read) == prior_bytes_read + 2 * len(release_media_bytes)
 
             async def open_tampered_media(**kwargs):
                 async def chunks():
@@ -1795,10 +1810,118 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             assert tampered.json()["detail"]["code"] == "RELEASE_STORAGE_INVALID"
             assert b"tampered" not in tampered.content
 
+            from src.services.studytomy import access_policy
+
+            original_temporary_file = access_policy.TemporaryFile
+            staged_files = []
+
+            def track_temporary_file(*args, **kwargs):
+                staged_file = original_temporary_file(*args, **kwargs)
+                staged_files.append(staged_file)
+                return staged_file
+
+            monkeypatch.setattr(access_policy, "TemporaryFile", track_temporary_file)
+            original_current_policies = access_policy._current_policies
+            d15_policy_reads = 0
+
+            async def changed_d15_policy(db, organization, policy_keys, now):
+                nonlocal d15_policy_reads
+                policies = await original_current_policies(db, organization, policy_keys, now)
+                if tuple(policy_keys) == (StudyPolicyKey.D_15,):
+                    d15_policy_reads += 1
+                    if d15_policy_reads == 2:
+                        changed_policy = policies[0].model_copy(
+                            update={"id": int(policies[0].id) + 1}
+                        )
+                        return [changed_policy]
+                return policies
+
+            monkeypatch.setattr(access_policy, "_current_policies", changed_d15_policy)
+            policy_staging_paused = asyncio.Event()
+            resume_policy_staging = asyncio.Event()
+
+            async def open_policy_change_media(**kwargs):
+                async def chunks():
+                    yield release_media_bytes
+                    policy_staging_paused.set()
+                    await resume_policy_staging.wait()
+
+                return chunks()
+
+            monkeypatch.setattr(
+                "src.services.studytomy.access_policy.open_content_stream",
+                open_policy_change_media,
+            )
+            pending_policy_delivery = asyncio.create_task(client.get(media_path, headers=headers))
+            await asyncio.wait_for(policy_staging_paused.wait(), timeout=5)
+            resume_policy_staging.set()
+            changed_policy_response = await pending_policy_delivery
+            assert changed_policy_response.status_code == 409
+            assert changed_policy_response.json()["detail"]["code"] == "POLICY_CHANGED"
+            assert d15_policy_reads == 2
+            assert staged_files and staged_files[-1].closed
+            monkeypatch.setattr(access_policy, "_current_policies", original_current_policies)
+
+            async def change_grant_during_staging(change: str) -> None:
+                staging_paused = asyncio.Event()
+                resume_staging = asyncio.Event()
+
+                async def open_paused_media(**kwargs):
+                    storage_reads.append(kwargs)
+
+                    async def chunks():
+                        yield release_media_bytes
+                        storage_bytes_read.append(len(release_media_bytes))
+                        staging_paused.set()
+                        await resume_staging.wait()
+
+                    return chunks()
+
+                monkeypatch.setattr(
+                    "src.services.studytomy.access_policy.open_content_stream",
+                    open_paused_media,
+                )
+                pending_delivery = asyncio.create_task(client.get(media_path, headers=headers))
+                await asyncio.wait_for(staging_paused.wait(), timeout=5)
+                governance_lock_acquired = False
+                try:
+                    async with postgres_session_factory() as db:
+                        try:
+                            await asyncio.wait_for(
+                                db.execute(
+                                    select(Organization.id)
+                                    .where(Organization.id == org.id)
+                                    .with_for_update()
+                                ),
+                                timeout=2,
+                            )
+                            governance_lock_acquired = True
+                        except TimeoutError:
+                            await db.rollback()
+
+                        changed_grant = await db.get(StudyCourseAccessGrant, grant.id)
+                        now = datetime.now(UTC)
+                        if change == "expired":
+                            changed_grant.starts_at = now - timedelta(days=2)
+                            changed_grant.ends_at = now - timedelta(days=1)
+                        else:
+                            changed_grant.revoked_at = now
+                        await db.commit()
+                finally:
+                    resume_staging.set()
+
+                response = await pending_delivery
+                assert governance_lock_acquired, "Storage staging still held the organization governance lock."
+                assert response.status_code == 404
+                assert staged_files and all(staged_file.closed for staged_file in staged_files)
+
+            await change_grant_during_staging("expired")
             async with postgres_session_factory() as db:
-                revoked = await db.get(StudyCourseAccessGrant, grant.id)
-                revoked.revoked_at = datetime.now(UTC)
+                restored = await db.get(StudyCourseAccessGrant, grant.id)
+                restored.starts_at = datetime.now(UTC) - timedelta(seconds=1)
+                restored.ends_at = restored.starts_at + timedelta(days=1)
                 await db.commit()
+            await change_grant_during_staging("revoked")
             reads_before_revoked = len(storage_reads)
             assert (await client.get(media_path, headers=headers)).status_code == 404
             assert len(storage_reads) == reads_before_revoked
@@ -1852,7 +1975,15 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         assert lesson_index.status_code == 200
         assert lesson_index.json() == {
             "requires_first_use": False,
-            "lessons": [{"activity_uuid": activity_uuid, "name": "Reviewed lesson"}],
+            "lessons": [{
+                "activity_uuid": activity_uuid,
+                "name": "Reviewed lesson",
+                "position": 1,
+                "format": "text",
+                "media_type": None,
+                "available": True,
+                "unavailable_reason": None,
+            }],
         }
         assert (await client.get(overview_path, headers=finance_headers)).status_code == 404
         async with postgres_session_factory() as db:
