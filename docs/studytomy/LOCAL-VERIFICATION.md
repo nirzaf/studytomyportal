@@ -68,6 +68,20 @@ The atomic specification's TASK-051 requires a reporting commitment for the appl
 
 The signed report regression now verifies that a pending relationship UUID mixed with a valid independent sharing grant rejects the entire publication with `409 REPORT_RECIPIENT_NOT_AUTHORIZED` and writes no recipient. It also verifies that scoped staff cannot create a new draft after synthetic reclassification to dependent control. The draft route returns a private no-store 404. The existing exact-version independent publication and withdrawal checks still pass. Running the signed adaptive curriculum, family authority and consent-event suites returned **25 passed in 30.58 seconds**, including the real PostgreSQL report workflow. Ruff and `git diff --check` passed. Dependent guardian browser acceptance remains pending.
 
+## Mac provider-free PDF authoring (18 November 2026)
+
+At `5d92da2f5c92dcdc4fe37b7718678d8df773bd9e`, the isolated API on `localhost:1318` ran with `LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED=true`. Next.js used `localhost:3018`. The demo fixture contained two private managed courses and three unpublished text lessons. A one-page searchable PDF contained the synthetic sentence “Two quarters equal one half.” No provider key was configured.
+
+1. At 1280 × 900, Playwright Chromium signed in as the synthetic administrator, opened the real lesson editor and uploaded the file through **Lesson sources**. The live multipart request returned 201 with `Cache-Control: private, no-store`. The editor showed one readable page. The first browser harness stalled while reading the multipart response body. A rerun checked the browser response status and read the receipt from the live list endpoint. Reuploading the same bytes returned the identical receipt.
+2. The signed API returned empty source lists for the sibling lesson and the other course's lesson. Explicitly selecting the source for preview from either returned 404. Pairing the original lesson ID with the other course also returned 404.
+3. The signed API saved a hand-written draft with the exact source UUID, SHA-256, page number and quote. The browser reloaded the editor and rendered the saved citation. This was a provider-free save, with no generated response or intercepted request.
+4. The signed revoke endpoint returned 204. Preview with the revoked source returned 404, the active source list was empty and the citation endpoint returned `stale`. On reload the editor marked the citation unavailable and hid the quote. The two screenshots show the current and stale citation panels. Chromium recorded no uncaught page errors on the passing run.
+5. A direct PostgreSQL read matched the retained PDF bytes and SHA-256, exact course and lesson, extracted page and citation evidence. The native activity remained unpublished at version 2 and the source had a revocation timestamp.
+
+From `apps/api`, with the dedicated loopback test database configured, `.venv/bin/python -m pytest -q -rs --tb=short src/tests/studytomy/test_grounded_material_postgres.py src/tests/studytomy/test_grounded_retrieval_postgres.py` passed **4 tests in 2.86 seconds**.
+
+**Live provider acceptance remains open.** For OpenAI or an OpenAI-compatible gateway, configure the API process with `LEARNHOUSE_IS_AI_ENABLED=true`, `LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED=true`, `LEARNHOUSE_AI_PROVIDER=openai` (or `openai-compatible`), and `LEARNHOUSE_AI_API_KEY` from the approved secret channel. Use `LEARNHOUSE_AI_BASE_URL` for a compatible gateway. Set `LEARNHOUSE_AI_MODEL_STANDARD` to the provider's chat model ID, and `LEARNHOUSE_AI_MODEL_PRO` if the organization resolves to the Pro planning tier. The chosen model must support the structured lesson and quiz output used by the Pydantic AI adapter. The preview path also enforces rate and credit limits. Without a tier override, model resolution falls back to the code's Gemini defaults. The Mac rehearsal made no generation call.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.
