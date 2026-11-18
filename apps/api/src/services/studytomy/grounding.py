@@ -7,7 +7,7 @@ import os
 import re
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
-from typing import Annotated, Literal, TypeVar
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import HTTPException, Request, UploadFile
@@ -15,25 +15,47 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.db.courses.activities import (
+    Activity,
+    ActivitySubTypeEnum,
+    ActivityTypeEnum,
+    ActivityUpdate,
+)
+from src.db.courses.assignments import (
+    Assignment,
+    AssignmentTask,
+    AssignmentTaskCreate,
+    AssignmentTaskTypeEnum,
+)
 from src.db.courses.courses import Course
-from src.db.courses.activities import Activity, ActivitySubTypeEnum, ActivityTypeEnum, ActivityUpdate
-from src.db.courses.assignments import Assignment, AssignmentTask, AssignmentTaskCreate, AssignmentTaskTypeEnum
 from src.db.organizations import Organization
-from src.db.studytomy.grounding import StudyDraftMaterial, StudyGroundedLessonEvidence, StudyGroundedQuizEvidence
+from src.db.studytomy.grounding import (
+    StudyDraftMaterial,
+    StudyGroundedLessonEvidence,
+    StudyGroundedQuizEvidence,
+)
 from src.db.user_organizations import UserOrganization
 from src.db.users import PublicUser
-from src.security.file_validation import validate_upload
 from src.security.features_utils.usage import refund_ai_credit, reserve_ai_credit
-from src.security.rbac.resource_access import AccessAction, ResourceAccessChecker, check_resource_access
-from src.services.ai.rag.formats import GroundingPDFError, pdf_pages
+from src.security.file_validation import validate_upload
+from src.security.rbac.resource_access import (
+    AccessAction,
+    ResourceAccessChecker,
+    check_resource_access,
+)
 from src.services.ai.assignment_gen import native_quiz_contents
 from src.services.ai.llm import AINotConfiguredError, generate, resolve_model_for_org
+from src.services.ai.rag.formats import GroundingPDFError, pdf_pages
 from src.services.ai.schemas.assignment import AIQuizOption, AIQuizQuestion
 from src.services.courses.activities.activities import update_activity
 from src.services.courses.activities.assignments import create_assignment_task
 from src.services.security.rate_limiting import enforce_ai_rate_limit
 from src.services.studytomy.business_events import append_business_event
-from src.services.studytomy.idempotency import canonical_request_hash, claim_idempotency, complete_idempotency
+from src.services.studytomy.idempotency import (
+    canonical_request_hash,
+    claim_idempotency,
+    complete_idempotency,
+)
 from src.services.studytomy.policies import lock_organization
 
 _PDF_LIMIT = 4 * 1024 * 1024
@@ -281,8 +303,6 @@ async def _require_active_sources(
         raise HTTPException(404, "One or more selected draft sources are unavailable.")
 
 
-_Proposal = TypeVar("_Proposal", bound=BaseModel)
-_Preview = TypeVar("_Preview", bound=BaseModel)
 _INVALID_DRAFT = "The draft could not be verified against the selected source pages. Try a narrower topic."
 
 
@@ -296,11 +316,11 @@ def _citation(claim: _SourceClaim, pages: list[dict]) -> DraftCitation:
     )
 
 
-async def _preview_grounded_draft(
+async def _preview_grounded_draft[ProposalT: BaseModel, PreviewT: BaseModel](
     db: AsyncSession, request: Request, actor: PublicUser, org_uuid: str, course_uuid: str, lesson_uuid: str,
     command: GroundedLessonRequest,
-    *, proposal_type: type[_Proposal], instructions: str, build: Callable[[_Proposal, list[dict]], _Preview],
-) -> _Preview:
+    *, proposal_type: type[ProposalT], instructions: str, build: Callable[[ProposalT, list[dict]], PreviewT],
+) -> PreviewT:
     if os.getenv("LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED") != "true":
         raise HTTPException(404, "Grounded drafting is unavailable.")
     course, lesson = await authorize_draft_material_lesson(db, request, actor, org_uuid, course_uuid, lesson_uuid)
@@ -331,7 +351,7 @@ async def _preview_grounded_draft(
     except (ValidationError, ValueError):
         refund_ai_credit(course.org_id, 3)
         raise HTTPException(422, _INVALID_DRAFT) from None
-    except Exception:
+    except Exception:  # noqa: BLE001 - provider adapters raise SDK-specific errors
         refund_ai_credit(course.org_id, 3)
         raise HTTPException(502, "The draft provider could not complete the request. Try again.") from None
     return draft

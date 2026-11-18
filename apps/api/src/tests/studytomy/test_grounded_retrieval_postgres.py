@@ -14,6 +14,7 @@ from src.db.users import AnonymousUser
 from src.services.ai.rag import query_service
 from src.services.ai.rag.access import CourseGrant, RagAccessScope
 from src.services.ai.tools.base import make_synthetic_request
+
 # Hand-authored vectors isolate ranking behavior from provider quality and cost.
 _ROWS = (
     ("fraction-comparison", 1, True, True, "Compare two fractions by finding a common denominator.", "[0.98,0.2,0]"),
@@ -144,7 +145,8 @@ async def test_grounded_material_retrieval_comparison(postgres_session_factory):
                 to_tsvector('english', :content), CAST(:embedding AS vector)
             )
         """), [
-            dict(ref=ref, org_id=org, approved=approved, permitted=permitted, content=content, embedding=embedding)
+            {"ref": ref, "org_id": org, "approved": approved, "permitted": permitted,
+             "content": content, "embedding": embedding}
             for ref, org, approved, permitted, content, embedding in _ROWS
         ])
         allowed = {ref for ref, org, approved, permitted, _, _ in _ROWS if org == 1 and approved and permitted}
