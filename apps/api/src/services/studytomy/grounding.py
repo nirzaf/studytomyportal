@@ -236,16 +236,24 @@ async def _retrieve_pages(db: AsyncSession, course: Course, lesson: Activity, co
     candidates.sort(key=lambda item: (-len(item[0]), item[1]["source_uuid"], item[1]["page"]))
     if not candidates:
         raise HTTPException(422, "No selected source supports this topic. Choose relevant PDF sources or refine the topic.")
-    selected = candidates[:6]
-    covered = set().union(*(matched for matched, _ in selected))
     supplemental.sort(key=lambda item: (item[1]["source_uuid"], item[1]["page"]))
-    while len(selected) < 6 and supplemental:
-        candidate = max(supplemental, key=lambda item: len(item[0] - covered))
-        if not candidate[0] - covered:
+    remaining = [
+        *((matched, page, True) for matched, page in candidates),
+        *((matched, page, False) for matched, page in supplemental),
+    ]
+    selected = []
+    covered: set[str] = set()
+    while len(selected) < 6 and remaining:
+        index = max(
+            range(len(remaining)),
+            key=lambda i: (len(remaining[i][0] - covered), remaining[i][2]),
+        )
+        matched, page, primary = remaining.pop(index)
+        if not primary and not matched - covered:
             break
-        selected.append(candidate)
-        covered.update(candidate[0])
-    return [page for _, page in selected]
+        selected.append(page)
+        covered.update(matched)
+    return selected
 
 
 class DraftMaterialReceipt(BaseModel):
