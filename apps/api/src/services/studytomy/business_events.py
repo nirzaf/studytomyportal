@@ -61,6 +61,8 @@ _SAFE_STATE_KEYS = frozenset(
         "source_mapping_id",
         "source_snapshot_digest",
         "grading_contract_event_uuid",
+        "completion_event_uuid",
+        "assessment_result_event_uuids",
         "assessment_release_uuid",
         "assessment_release_sha256",
         "assistance_rule",
@@ -117,7 +119,18 @@ def _safe_state(state: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Business-event state contains an unapproved or sensitive field",
             )
-        if key in _SAFE_STATE_LIST_KEYS:
+        if key == "assessment_result_event_uuids":
+            if (
+                not isinstance(value, list)
+                or len(value) > 50
+                or any(
+                    not isinstance(item, str) or re.fullmatch(
+                        r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", item
+                    ) is None for item in value
+                )
+            ):
+                raise HTTPException(422, "Award evidence must reference bounded event identifiers")
+        elif key in _SAFE_STATE_LIST_KEYS:
             if (
                 not isinstance(value, list)
                 or len(value) > 16

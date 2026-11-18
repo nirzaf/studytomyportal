@@ -46,7 +46,13 @@ from src.services.studytomy.assessment_reviews import (
     request_assessment_appeal,
 )
 from src.services.studytomy.assessment_archive_retention import ArchiveRemovalReceipt, remove_assessment_archive
-from src.services.studytomy.awards import ManagedCertificateEligibility, preview_managed_certificate_eligibility
+from src.services.studytomy.awards import (
+    ManagedCertificateEligibility,
+    ManagedCertificateIssue,
+    ManagedCertificateIssueReceipt,
+    issue_managed_certificate,
+    preview_managed_certificate_eligibility,
+)
 from src.services.studytomy.assessment_integrity import (
     IntegrityConcern, IntegrityDismissal, IntegrityReceipt, IntegrityResponse, dismiss_integrity_concern, learner_integrity_case,
     IntegrityIntakeAvailability, IntegrityReviewReceipt, LearnerIntegrityReceipt, list_learner_integrity_cases,
@@ -389,6 +395,21 @@ async def api_managed_certificate_eligibility(
     learner_uuid: Annotated[str, Path(min_length=1, max_length=100)],
 ) -> ManagedCertificateEligibility:
     return await preview_managed_certificate_eligibility(db, org, actor, course_uuid, release_uuid, learner_uuid)
+
+
+@router.post("/orgs/{org_uuid}/courses/{course_uuid}/releases/{release_uuid}/learners/{learner_uuid}/awards")
+async def api_issue_managed_certificate(
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    course_uuid: Annotated[str, Path(min_length=1, max_length=255)],
+    release_uuid: Annotated[str, Path(min_length=1, max_length=64)],
+    learner_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    body: ManagedCertificateIssue,
+) -> ManagedCertificateIssueReceipt:
+    receipt = await issue_managed_certificate(db, org, actor, course_uuid, release_uuid, learner_uuid, body)
+    await db.commit()
+    return receipt
 
 
 @router.post("/orgs/{org_uuid}/courses/{course_uuid}/assignments/{assignment_uuid}/submissions/{submission_uuid}/appeals")

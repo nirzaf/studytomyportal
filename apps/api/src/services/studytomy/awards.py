@@ -13,6 +13,7 @@ from src.db.studytomy.family import StudyLearnerProfile
 from src.db.studytomy.governance import StudyBusinessEvent, StudyPolicyBody, StudyPolicyKey, StudyPolicyVersion, inspect_study_policy_body
 from src.db.users import PublicUser
 from src.security.studytomy_access import StudytomyCapabilityName, authorize_studytomy_staff_action
+from src.services.studytomy.business_events import append_business_event
 from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.grading_contract import retained_grading_contract_digest
 from src.services.studytomy.idempotency import canonical_request_hash
@@ -28,6 +29,7 @@ class ManagedCertificateConditions(BaseModel):
     award_name: _DisplayName
     issuer_name: _DisplayName
     verification: Literal["private"]
+    issuance: Literal["reviewed"] | None = None
     required_assessment_uuids: Annotated[list[ResourceUUID], Field(max_length=50)] = Field(default_factory=list)
 
 
@@ -88,6 +90,8 @@ class ManagedCertificateEligibility(BaseModel):
     completion_event_uuid: str | None
     assessment_result_uuids: dict[str, str]
     missing_assessment_uuids: list[str]
+    issuance_enabled: bool
+    evidence_sha256: str
 
 
 async def preview_managed_certificate_eligibility(
@@ -95,6 +99,16 @@ async def preview_managed_certificate_eligibility(
     course_uuid: str, release_uuid: str, learner_uuid: str,
 ) -> ManagedCertificateEligibility:
     """Select evidence for an authorized reviewer without issuing an award."""
+    preview, _ = await _authorized_certificate_evidence(
+        db, org, reviewer, course_uuid, release_uuid, learner_uuid,
+    )
+    return preview
+
+
+async def _authorized_certificate_evidence(
+    db: AsyncSession, org: Organization, reviewer: PublicUser,
+    course_uuid: str, release_uuid: str, learner_uuid: str,
+) -> tuple[ManagedCertificateEligibility, list[int]]:
     from src.services.studytomy.releases import load_release_policy_binding
 
     org = await lock_organization(db, org.id)
@@ -156,7 +170,64 @@ async def preview_managed_certificate_eligibility(
             missing.append(source)
         else:
             results[source] = result.event_uuid
-    return ManagedCertificateEligibility(
+    evidence_sha256 = canonical_request_hash({
+        "org_id": org.id, "learner_uuid": learner_uuid, "release_uuid": release.uuid,
+        "release_sha256": release.snapshot_sha256, "policy_binding": release.policy_binding,
+        "conditions": conditions.model_dump(mode="json"),
+        "completion_event_uuid": completion_uuid, "assessment_result_uuids": results,
+    })
+    preview = ManagedCertificateEligibility(
         course_uuid=course_uuid, release_uuid=release_uuid, eligible=completion_uuid is not None and not missing,
         completion_event_uuid=completion_uuid, assessment_result_uuids=results, missing_assessment_uuids=missing,
+        issuance_enabled=conditions.issuance == "reviewed", evidence_sha256=evidence_sha256,
+    )
+    return preview, sorted(version.policy_id for version in binding.versions.values())
+
+
+class ManagedCertificateIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class ManagedCertificateIssueReceipt(BaseModel):
+    award_uuid: str
+    release_uuid: str
+    issued_at: datetime
+
+
+async def issue_managed_certificate(
+    db: AsyncSession, org: Organization, reviewer: PublicUser,
+    course_uuid: str, release_uuid: str, learner_uuid: str, command: ManagedCertificateIssue,
+) -> ManagedCertificateIssueReceipt:
+    """Issue one immutable award from the exact evidence affirmed by the reviewer."""
+    evidence, policy_refs = await _authorized_certificate_evidence(
+        db, org, reviewer, course_uuid, release_uuid, learner_uuid,
+    )
+    if not evidence.issuance_enabled:
+        raise studytomy_http_error(409, "MANAGED_CERTIFICATE_ISSUANCE_UNAPPROVED", "Certificate issuance requires release policy approval.")
+    key = f"studytomy:certificate:{org.id}:{release_uuid}:{learner_uuid}"
+    award = await db.scalar(select(StudyBusinessEvent).where(
+        StudyBusinessEvent.org_id == org.id, StudyBusinessEvent.action == "studytomy.award.issued",
+        StudyBusinessEvent.dedupe_key == key,
+    ))
+    if award is not None:
+        if (award.after_state or {}).get("evidence_sha256") != command.evidence_sha256:
+            raise studytomy_http_error(409, "MANAGED_CERTIFICATE_ALREADY_ISSUED", "A certificate was issued from different evidence.")
+    else:
+        if not evidence.eligible or command.evidence_sha256 != evidence.evidence_sha256:
+            raise studytomy_http_error(409, "MANAGED_CERTIFICATE_EVIDENCE_CHANGED", "Review the current eligible evidence before issuing.")
+        award = await append_business_event(
+            db, org_id=org.id, actor_user_id=reviewer.id, actor_capacity="assessment_moderator",
+            action="studytomy.award.issued", reason_code="REVIEWED_CERTIFICATE_ISSUED",
+            subject_uuid=learner_uuid, resource_kind="course_release", resource_uuid=release_uuid,
+            dedupe_key=key, policy_refs=policy_refs,
+            after_state={
+                "evidence_sha256": evidence.evidence_sha256,
+                "completion_event_uuid": evidence.completion_event_uuid,
+                "assessment_result_event_uuids": sorted(evidence.assessment_result_uuids.values()),
+            },
+        )
+    return ManagedCertificateIssueReceipt(
+        award_uuid=award.event_uuid, release_uuid=release_uuid, issued_at=award.created_at,
     )

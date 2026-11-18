@@ -194,7 +194,8 @@ async def test_issued_round_retains_exact_started_release(
         policies[3].body = _synthetic_policy_body(StudyPolicyKey.D_16, {
             "certificate_presentation": {"managed_certificates_by_course": {course.course_uuid: {
                 "award_name": "Synthetic certificate", "issuer_name": "Synthetic issuer",
-                "verification": "private", "required_assessment_uuids": [assignment.assignment_uuid],
+                "verification": "private", "issuance": "reviewed",
+                "required_assessment_uuids": [assignment.assignment_uuid],
             }}},
         }).model_dump(mode="json")
         release = StudyCourseRelease(
@@ -327,6 +328,23 @@ async def test_issued_round_retains_exact_started_release(
         assert eligible.eligible and eligible.completion_event_uuid
         assert eligible.assessment_result_uuids == {assignment.assignment_uuid: result.event_uuid}
         assert [call.kwargs["target_scope_kind"] for call in staff_access.await_args_list] == ["course", "learner"]
+        assert eligible.issuance_enabled
+        issue_args = (db, org, certificate_reviewer, *award_scope)
+        with pytest.raises(HTTPException) as stale_award:
+            await awards.issue_managed_certificate(
+                *issue_args, awards.ManagedCertificateIssue(evidence_sha256="0" * 64),
+            )
+        assert stale_award.value.detail["code"] == "MANAGED_CERTIFICATE_EVIDENCE_CHANGED"
+        command = awards.ManagedCertificateIssue(evidence_sha256=eligible.evidence_sha256)
+        award = await awards.issue_managed_certificate(*issue_args, command)
+        assert await awards.issue_managed_certificate(*issue_args, command) == award
+        issued = await db.scalar(select(StudyBusinessEvent).where(StudyBusinessEvent.event_uuid == award.award_uuid))
+        assert issued.subject_uuid == profile.learner_uuid
+        assert issued.after_state == {
+            "evidence_sha256": eligible.evidence_sha256,
+            "completion_event_uuid": eligible.completion_event_uuid,
+            "assessment_result_event_uuids": [result.event_uuid],
+        }
         completion_time = next(event.created_at for event in completion_events
                                if event.action == "studytomy.course.completion_recorded")
         completion_scope = {"org_id": org.id, "course_uuid": course.course_uuid, "release_uuid": release.uuid}
