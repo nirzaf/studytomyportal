@@ -349,3 +349,9 @@ A mobile Chromium follow-up submitted the staff review form for that stored awar
 ### Grounded draft refusal in the authenticated editor
 
 The isolated Playwright run of `12-grounded-lesson-draft.spec.ts` passed in 54.9 seconds. Chromium used a real synthetic editor login and the local Next.js editor. Editor bootstrap and grounding requests were intercepted. The spec supplied the same HTTP 422 message verified in the PostgreSQL service regression at `e413bdba228c2105427170bcf84e28bb23227f57`. The editor displayed that message, hid unpublished save and issued no save request. The same run exercised a successful preview, stale-edit retention and retry with the same request ID after a lost save response. This verifies browser behavior for the specified responses. Live provider generation, real material upload and browser-to-FastAPI save still need end-to-end verification.
+
+### Real PDF intake through the local API
+
+At `ebcbe3c1075585071c1a3dcf3c7eef71eaa3a42a` the primary API source ran on loopback port 1346 against the disposable Docker PostgreSQL database `studytomy_guardian_browser_test` at Alembic revision `b91d2f6a08c3`. A separate Redis namespace and temporary API directory were used. A synthetic teacher signed in through the real API and uploaded the rehearsal's three-page fractions PDF twice. Both responses were HTTP 201 with private no-store caching and the same receipt. Its SHA-256 matched the rehearsal manifest. PostgreSQL contained exactly one version for the lesson, with the stored byte digest matching the recorded SHA-256 and all three pages retained.
+
+The linked lesson listed that version and the sibling lesson listed none. Explicitly selecting the PDF in a sibling-lesson generation request returned HTTP 404. This check used a real PDF and real HTTP requests without a provider key. It exercised upload and lesson scope. Browser upload and provider-backed generation remain separate checks.
