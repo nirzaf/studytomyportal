@@ -14,7 +14,7 @@ Session to AsyncSession in this PR:
   _block_api_tokens.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 from unittest.mock import AsyncMock, patch
@@ -2071,6 +2071,17 @@ class TestIsAssignmentPastDue:
         earlier = (datetime.now() - timedelta(hours=1)).replace(microsecond=0).isoformat()
         a = SimpleNamespace(due_date=earlier)
         assert _is_assignment_past_due(a) is True
+
+    def test_explicit_offsets_distinguish_the_repeated_dst_hour(self, monkeypatch):
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                instant = datetime(2026, 4, 4, 16, tzinfo=UTC)
+                return instant.astimezone(tz)
+
+        monkeypatch.setattr("src.services.courses.activities.assignments.datetime", Clock)
+        assert _is_assignment_past_due(SimpleNamespace(due_date="2026-04-05T02:30:00+11:00"))
+        assert not _is_assignment_past_due(SimpleNamespace(due_date="2026-04-05T02:30:00+10:00"))
 
 
 # ---------------------------------------------------------------------------

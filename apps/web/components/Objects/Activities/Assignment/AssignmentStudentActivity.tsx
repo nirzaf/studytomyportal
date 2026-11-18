@@ -17,48 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { sortTasksByOrder } from '@/lib/assignments/taskOrder'
 import { ASSIGNMENT_SUBMIT_EVENT, taskSubmissionHasAnswer } from './assignmentUI'
 
-type ParsedDueDate = { at: Date; hasTime: boolean }
-
-// Parse the assignment due date the SAME way the server does in
-// `_is_assignment_past_due` (apps/api/.../assignments.py):
-//   - the value is a free-form ISO-ish string; unparseable/empty means "no
-//     deadline" so a malformed value never locks a student out,
-//   - the server compares against a NAIVE `datetime.now()` and drops any
-//     timezone offset, so the wall-clock parts are what matter. We therefore
-//     build a LOCAL Date from those parts instead of letting `new Date(...)`
-//     treat a bare "2026-06-12" as UTC midnight; that shift alone could mark
-//     an assignment overdue a day early (or late) depending on the viewer's
-//     offset, disagreeing with the 403 the server actually enforces.
-export function parseDueDate(raw?: string | null): ParsedDueDate | null {
-  if (!raw || !String(raw).trim()) return null
-  const value = String(raw).trim()
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/)
-  if (!match) return null
-  const [, year, month, day, hours, minutes, seconds] = match
-  const hasTime = hours !== undefined
-  const at = new Date(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    Number(hours ?? 0),
-    Number(minutes ?? 0),
-    Number(seconds ?? 0)
-  )
-  if (Number.isNaN(at.getTime())) return null
-  return { at, hasTime }
-}
-
-// Exported so the "Submit for grading" affordance (rendered outside this
-// component) can gate on the exact same rule instead of re-deriving it.
-export function isAssignmentPastDue(raw?: string | null, now: number = Date.now()): boolean {
-  const parsed = parseDueDate(raw)
-  if (!parsed) return false
-  const cutoff = new Date(parsed.at)
-  // A date-only deadline means "end of that day" server-side (the cutoff is
-  // shifted to the following midnight), so the due date itself is still on time.
-  if (!parsed.hasTime) cutoff.setDate(cutoff.getDate() + 1)
-  return cutoff.getTime() < now
-}
+import { isAssignmentPastDue, parseDueDate } from '@/lib/assignments/deadline'
 
 function AssignmentStudentActivity() {
   const { t, i18n } = useTranslation()

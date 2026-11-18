@@ -212,13 +212,12 @@ async def _is_assignment_instructor(
 
 
 def _assignment_deadline(assignment: Assignment) -> datetime | None:
-    """Parse the native assignment deadline into its local-time cutoff.
+    """Parse the native assignment deadline into its cutoff.
 
     due_date is stored as a free-form string. We parse it defensively: if it
     is empty or unparseable, we treat the deadline as unset
-    so a malformed value never locks students out. Comparison is done with a
-    naive ``datetime.now()`` to match the rest of this module (all timestamps
-    here are naive local-time strings produced by ``datetime.now()``).
+    so a malformed value never locks students out. An explicit offset
+    identifies an exact instant. Dates and offset-free times stay local.
     """
     raw = getattr(assignment, "due_date", None)
     if not raw or not str(raw).strip():
@@ -228,8 +227,6 @@ def _assignment_deadline(assignment: Assignment) -> datetime | None:
         parsed = datetime.fromisoformat(raw_str)
     except (ValueError, TypeError):
         return None
-    if parsed.tzinfo is not None:
-        parsed = parsed.replace(tzinfo=None)
     # A date-only deadline (e.g. "2026-06-12", produced by an HTML
     # <input type="date">) parses to midnight. The whole due day should still
     # count as on time, so treat a value with no time component as end-of-day
@@ -241,7 +238,7 @@ def _assignment_deadline(assignment: Assignment) -> datetime | None:
 
 def _is_assignment_past_due(assignment: Assignment) -> bool:
     deadline = _assignment_deadline(assignment)
-    return deadline is not None and deadline < datetime.now()
+    return deadline is not None and deadline < datetime.now(deadline.tzinfo)
 
 
 async def _learner_assignment_past_due(

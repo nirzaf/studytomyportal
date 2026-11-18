@@ -66,7 +66,7 @@ const AssignmentStudentActivity = lazy(() => import('@components/Objects/Activit
 // server's _is_assignment_past_due) so the submit/retry affordances agree with
 // what the API will actually accept. Static import: it's a pure function, and
 // gating render on the lazy chunk would flash the wrong control.
-import { isAssignmentPastDue } from '@components/Objects/Activities/Assignment/AssignmentStudentActivity'
+import { isAssignmentPastDue } from '@/lib/assignments/deadline'
 const AIActivityAsk = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk'))
 const AdaptiveAttemptPanel = lazy(() => import('@components/Objects/Activities/AdaptiveAttemptPanel'))
 const AISidePanelContentWrapper = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk').then(mod => ({ default: mod.AISidePanelContentWrapper })))
