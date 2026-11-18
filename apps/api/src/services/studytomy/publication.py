@@ -390,6 +390,7 @@ async def record_course_review(
     snapshot = await course_candidate_snapshot(db, course)
     if command.decision == "approved":
         _require_current_grounded_evidence(snapshot)
+        validate_release_media_coverage(snapshot)
     rights, accessibility = await _resolve_course_review_evidence(
         db,
         org,
