@@ -14,7 +14,7 @@ from fastapi import (
     Response,
 )
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette.types import Receive, Scope, Send
@@ -63,6 +63,7 @@ from src.services.studytomy.collections import (
     record_manual_collection_attempt,
     resolve_manual_collection_remedy,
 )
+from src.services.studytomy.metrics import PilotCashReport, read_pilot_cash_report
 from src.services.studytomy.orders import (
     NamedOrderQuote,
     accept_named_order,
@@ -143,6 +144,20 @@ async def _member_org(org_uuid: str, actor: PublicUser, db: AsyncSession) -> Org
         raise HTTPException(404, "Organization not found")
     await require_org_membership(actor.id, org.id, db)
     return org
+
+
+@router.get("/pilot/offers/{offer_uuid}/versions/{offer_version_uuid}/confirmed-cash")
+async def get_pilot_cash_report(
+    org_uuid: str, offer_uuid: UUID, offer_version_uuid: UUID,
+    start: AwareDatetime, end: AwareDatetime, response: Response, actor: Purchaser, db: Session,
+) -> PilotCashReport:
+    org = await _member_org(org_uuid, actor, db)
+    report = await read_pilot_cash_report(
+        db, org, actor, offer_uuid=str(offer_uuid), offer_version_uuid=str(offer_version_uuid),
+        start=start, end=end,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return report
 
 
 @router.post("/checkout/quote")

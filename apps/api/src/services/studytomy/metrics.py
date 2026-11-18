@@ -2,10 +2,62 @@
 
 from datetime import UTC, datetime
 
+from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.db.organizations import Organization
 from src.db.studytomy.cases import StudyServiceCase
+from src.db.studytomy.governance import StudyPolicyKey
+from src.db.users import PublicUser
+from src.security.studytomy_access import (
+    StudytomyCapabilityName,
+    authorize_studytomy_staff_action,
+)
+from src.services.studytomy.learners import _current_policies
+from src.services.studytomy.orders import _require_pilot_offer
+
+
+class PilotCashReport(BaseModel):
+    org_uuid: str
+    offer_uuid: str
+    offer_version_uuid: str
+    period_start: datetime
+    period_end: datetime
+    observed_at: datetime
+    policy_version_ids: list[int]
+    query_version: str = "confirmed_cash_v1"
+    population: str = "Orders with all lines belonging to the selected offer version."
+    exclusions: str = "Unconfirmed movements, mixed-offer and mixed-version orders, and tax and revenue calculations."
+    confirmed_cash: list[dict[str, int | str]]
+
+
+async def read_pilot_cash_report(
+    db: AsyncSession, org: Organization, actor: PublicUser, *,
+    offer_uuid: str, offer_version_uuid: str, start: datetime, end: datetime,
+) -> PilotCashReport:
+    observed_at = datetime.now(UTC)
+    if start >= end or end > observed_at:
+        raise HTTPException(422, "Use an ordered reporting period ending at or before the current time.")
+    await authorize_studytomy_staff_action(
+        db, actor, org, StudytomyCapabilityName.FINANCIAL_RECONCILIATION,
+        target_scope_kind="offer", target_resource_uuid=offer_uuid,
+    )
+    policies = await _current_policies(
+        db, org, (StudyPolicyKey.D_15, StudyPolicyKey.D_17, StudyPolicyKey.D_19), observed_at,
+    )
+    pilot = next(policy for policy in policies if policy.policy_key == StudyPolicyKey.D_17.value)
+    _require_pilot_offer(pilot, offer_uuid, offer_version_uuid)
+    return PilotCashReport(
+        org_uuid=org.org_uuid, offer_uuid=offer_uuid, offer_version_uuid=offer_version_uuid,
+        period_start=start, period_end=end, observed_at=observed_at,
+        policy_version_ids=[policy.id for policy in policies],
+        confirmed_cash=await confirmed_cash_by_currency(
+            db, org_id=org.id, offer_uuid=offer_uuid, offer_version_uuid=offer_version_uuid,
+            start=start, end=end,
+        ),
+    )
 
 
 async def current_support_backlog(
@@ -74,6 +126,7 @@ async def assessment_evidence_breakdown(
 async def confirmed_cash_by_currency(
     db: AsyncSession, *, org_id: int, start: datetime, end: datetime,
     offer_uuid: str | None = None,
+    offer_version_uuid: str | None = None,
 ) -> list[dict[str, int | str]]:
     """Summarize amounts and ledger entry counts in the half-open period.
 
@@ -86,16 +139,23 @@ async def confirmed_cash_by_currency(
     An offer filter includes orders whose lines all belong to that offer.
     Mixed-offer orders require an allocation rule before offer attribution.
     """
-    if org_id < 1 or start.utcoffset() is None or end.utcoffset() is None or start >= end:
+    if (
+        org_id < 1 or start.utcoffset() is None or end.utcoffset() is None or start >= end
+        or (offer_version_uuid is not None and offer_uuid is None)
+    ):
         raise ValueError("An organization and an ordered, timezone-aware period are required.")
     result = await db.execute(text("""
         WITH offer_orders AS (
             SELECT l.order_id
             FROM st_order_line l
             JOIN st_offer o ON o.org_id = l.org_id AND o.id = l.offer_id
+            JOIN st_offer_version v ON v.offer_id = l.offer_id AND v.version_no = l.offer_version_no
             WHERE l.org_id = :org_id
             GROUP BY l.order_id
-            HAVING bool_and(o.offer_uuid = CAST(:offer_uuid AS text))
+            HAVING bool_and(
+                o.offer_uuid = CAST(:offer_uuid AS text)
+                AND (CAST(:offer_version_uuid AS text) IS NULL OR v.version_uuid = CAST(:offer_version_uuid AS text))
+            )
         ), cash AS (
             SELECT m.order_id, m.currency, m.amount_minor, 'collection' AS kind, e.settled_at AS effective_at
             FROM st_money_movement m
@@ -130,7 +190,10 @@ async def confirmed_cash_by_currency(
         WHERE effective_at >= :start AND effective_at < :end
           AND (CAST(:offer_uuid AS text) IS NULL OR order_id IN (SELECT order_id FROM offer_orders))
         GROUP BY currency ORDER BY currency
-    """), {"org_id": org_id, "start": start, "end": end, "offer_uuid": offer_uuid})
+    """), {
+        "org_id": org_id, "start": start, "end": end, "offer_uuid": offer_uuid,
+        "offer_version_uuid": offer_version_uuid,
+    })
     return [
         {key: value if key == "currency" else int(value) for key, value in row.items()}
         for row in result.mappings()

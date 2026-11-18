@@ -2187,6 +2187,25 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             assert await confirmed_cash_by_currency(
                 db, org_id=org.id, offer_uuid=str(uuid4()), **period,
             ) == []
+            report_path = f"{org_path}/pilot/offers/{offer_uuid}/versions/{version_uuid}/confirmed-cash"
+            report_period = {"start": period["start"].isoformat(), "end": datetime.now(UTC).isoformat()}
+            denied_report = await client.get(report_path, params=report_period, headers=finance_headers)
+            assert denied_report.status_code == 403
+            await _seed_staff_scope(
+                db, org.id, owners[StudyOwnerFunction.COMMERCIAL].id,
+                StudytomyCapabilityName.FINANCIAL_RECONCILIATION, "offer", offer_uuid, purchaser.id,
+            )
+            report = await client.get(report_path, params=report_period, headers=finance_headers)
+            assert report.status_code == 200, report.text
+            assert report.headers["cache-control"] == "private, no-store"
+            assert report.json()["confirmed_cash"] == expected_cash
+            assert report.json()["offer_version_uuid"] == version_uuid
+            assert (await client.get(report_path, params=report_period, headers=headers)).status_code == 403
+            wrong_version = await client.get(
+                report_path.replace(version_uuid, str(uuid4())), params=report_period, headers=finance_headers,
+            )
+            assert wrong_version.status_code == 409
+            assert wrong_version.json()["detail"]["code"] == "OFFER_SALES_PAUSED"
             assert await confirmed_cash_by_currency(
                 db, org_id=org.id, start=saved_reversal.effective_at, end=end,
             ) == [{
