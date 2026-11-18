@@ -3872,6 +3872,35 @@ async def _exercise_learner_attempt(
         ).status_code == 200
         await savepoint.rollback()
     report_path = f"{base}/staff/learners/{profile.learner_uuid}/reports"
+    # The report consumes reviewed historical completion independently of the
+    # live lesson provider. Reuse the existing approved fixture decisions.
+    report_course_uuid = curriculum.owner_course_uuid
+    completion_review, retained, _ = await _seed_postgres_release_sources(
+        db, org, owner.user_id, uuid4().hex,
+        snapshot={"course": {"course_uuid": report_course_uuid, "name": "Synthetic retained course"}},
+        course_uuid=report_course_uuid, policy_versions=[],
+    )
+    completion_release = StudyCourseRelease(
+        org_id=org.id, course_uuid=report_course_uuid, review_id=completion_review.id,
+        snapshot_sha256=completion_review.revision_sha256, snapshot=retained, media_manifest={},
+        assessment_policy_id=policies[StudyPolicyKey.D_08.value],
+        progression_policy_id=policies[StudyPolicyKey.D_09.value],
+        retention_policy_id=policies[StudyPolicyKey.D_13.value],
+        rights_policy_id=policies[StudyPolicyKey.D_16.value],
+        retention_category="synthetic",
+        policy_binding={"versions": {"D-09": {"policy_id": policies[StudyPolicyKey.D_09.value]}}},
+    )
+    db.add(completion_release)
+    await db.flush()
+    completion_event = StudyBusinessEvent(
+        org_id=org.id, actor_user_id=learner.id, resource_kind="course_release",
+        resource_uuid=completion_release.uuid, action="studytomy.course.completion_recorded",
+        policy_refs=[completion_release.progression_policy_id],
+        after_state={"source_snapshot_digest": completion_release.snapshot_sha256},
+        created_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    db.add(completion_event)
+    await db.commit()
     end = datetime.now(UTC)
     report_request = {
         "operation_uuid": str(uuid4()),
@@ -3910,6 +3939,8 @@ async def _exercise_learner_attempt(
     assert report["summary"]["concepts"][0]["independent_correct"] == 1
     assert report["summary"]["concepts"][1]["missing_independent_evidence"] is True
     assert report["summary"]["native_completions"] == 0
+    assert report["summary"]["reviewed_release_completions"] == 1
+    assert completion_event.event_uuid not in created.text
     assert "37.42" not in created.text and "sources" not in report
     assert (
         await client.post(report_path, json=report_request, headers=headers)
@@ -3928,6 +3959,7 @@ async def _exercise_learner_attempt(
         headers=unrelated,
     )
     assert outside.status_code == 201, outside.text
+    assert "reviewed_release_completions" not in outside.json()["summary"]
     assert (
         outside.json()["summary"]["concepts"][0]["missing_independent_evidence"] is True
     )
@@ -4200,6 +4232,8 @@ async def _exercise_learner_attempt(
         if reader == reader_headers:
             assert view.json() == preview.json() | {"version": 6}
         assert "sources" not in view.json() and "37.42" not in view.text
+        assert view.json()["summary"]["reviewed_release_completions"] == 1
+        assert completion_event.event_uuid not in view.text and completion_release.uuid not in view.text
     listing = await client.get(list_path, headers=reader_headers)
     assert listing.status_code == 200, listing.text
     assert [item["uuid"] for item in listing.json()["items"]] == [report["uuid"]]

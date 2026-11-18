@@ -1,5 +1,20 @@
 # Studytomy Family Learning Implementation Status
 
+## Reviewed learning evidence checkpoint (18 November 2026)
+
+This checkpoint reflects the primary `main` worktree at `51d08b89561799836ed64ef5ee2dbc34c21e0ccd`. Earlier sections retain their revision-specific results.
+
+| Work package | Verified scope | Remaining acceptance |
+|---|---|---|
+| TASK-039 | Reviewed releases validate prerequisite order. Text, media and adaptive entry points check the retained result against the exact release. Disposable PostgreSQL exercised a media request interrupted by an appeal. | Applicable D-08, D-09 and D-15 decisions, browser acceptance for assessed-pass learning entry points, and commercial readiness for assessed-pass offers. |
+| TASK-045 | The staff API verifies course and learner scope before issuing from a reviewed evidence digest. Corrections and withdrawals retain the original reference. The isolated browser verified that the award holder can see a stored certificate and another learner sees an empty list. | Staff browser issuance and correction, educator acceptance and actual policy approvals for award terms and presentation. |
+| TASK-051 and TASK-052 | Reviewed progress reports retain exact completion evidence and show the count of completed reviewed releases alongside native activity completion and learning evidence. Existing sharing, approval and publication checks govern the recipient view. | Browser acceptance for the new report fields and signed approval of the pilot reporting scope. |
+| TASK-065 | Internal completion observations count distinct learners for an exact release and a reporting period, with valid access at the time of completion. | The approved eligible cohort and exclusions are required before publishing a completion rate. |
+
+Release and award checks used synthetic policies and records in local environments. No pilot or real learner service was activated. See [local verification evidence](LOCAL-VERIFICATION.md) for the test boundaries.
+
+The follow-up PostgreSQL run of `test_adaptive_curriculum_api.py` passed both tests in 96.00 seconds. The reviewed report round trip showed one release completion to the authorized recipient and omitted both the release and completion event identifiers from the response. The count was absent for a report period outside the retained completion timestamp.
+
 ## Independent architecture audit checkpoint (2026-11-18; interim)
 
 **Reviewed repository HEAD:** `692fe7a471e0a63e77de789c922cb342a54ce0b1` on the primary `main` worktree. The audit attachment was originally pinned to `210cb561`. Detailed commands and revision-specific results are in [local verification evidence](LOCAL-VERIFICATION.md).
