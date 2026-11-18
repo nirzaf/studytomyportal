@@ -76,12 +76,15 @@ async def _assessed_release_binding(
             and row["activity_id"] == assignment.activity_id
             and row["published"] is True
         ]
-        published_activity = any(
-            row["id"] == assignment.activity_id and row["published"] is True
-            and row["activity_sub_type"] == "SUBTYPE_ASSIGNMENT_ANY"
-            for row in release.snapshot["activities"]
-        )
-        if not published_activity or len(retained) != 1 or retained_grading_contract_digest(
+        activities = [row for row in release.snapshot["activities"] if row["id"] == assignment.activity_id]
+        if (
+            len(activities) != 1
+            or activities[0]["published"] is not True
+            or activities[0]["activity_sub_type"] != "SUBTYPE_ASSIGNMENT_ANY"
+            or len(retained) != 1
+        ):
+            return {}
+        if retained_grading_contract_digest(
             retained[0], release.snapshot["assignment_tasks"],
         ) != digest:
             return {}

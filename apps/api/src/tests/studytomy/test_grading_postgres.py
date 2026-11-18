@@ -240,6 +240,18 @@ async def test_issued_round_retains_exact_started_release(
         assert bound.after_state["assessment_release_sha256"] == release.snapshot_sha256
         authority.assert_awaited_once()
 
+        ambiguous = SimpleNamespace(
+            uuid=release.uuid,
+            snapshot_sha256=release.snapshot_sha256,
+            assessment_policy_id=release.assessment_policy_id,
+            snapshot=snapshot | {"activities": [*snapshot["activities"], snapshot["activities"][0]]},
+        )
+        authority.return_value = SimpleNamespace(release=ambiguous)
+        assert await grading._assessed_release_binding(
+            db, assignment, actor, grading.grading_contract_digest(assignment, [task]),
+        ) == {}
+        authority.return_value = SimpleNamespace(release=release)
+
         decisions = {
             "completion_prerequisites": {"assessed_pass_by_course": {course.course_uuid: [{
                 "kind": "assessed_pass", "target_activity_uuid": item,

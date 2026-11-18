@@ -129,6 +129,14 @@ Signed negative checks found no options for a wrong course, wrong release or dif
 
 The focused command from `apps/api` was `.venv/bin/python -m pytest -q --show-capture=no --tb=short src/tests/studytomy/test_adaptive_curriculum_api.py src/tests/studytomy/test_adaptive_evidence_postgres.py`. **7 passed in 29.76 seconds**, including real PostgreSQL. The first fixture retired the item and deleted its source before freezing the release. The passing regression froze the release first and placed the explicit practice mapping on a separate text lesson so the existing prerequisite recommendation fixture retained its intended meaning. Ruff and Git whitespace checks passed.
 
+### Native managed assessment delivery and grading binding
+
+At `7fa1051e59a97ce96d74232a89448be91a8992f3`, the frozen release contains native assignment rows, task content and grading inputs. The existing grading contract can bind an issued attempt to one started release. The managed learner index explicitly excludes assignment activities. Native assignment read, answer-save and hand-in paths still use native activity access, which denies learners access to managed drafts. A pass prerequisite names a result source and does not authorize assessment delivery.
+
+Full managed assignment rendering and submission remain pending. TASK-037 and TASK-039 call for the education lead's D-08 and D-09 decisions. The decision needed for this path is which assessment activities a learner may open and submit for the offered release, and the applicable task formats, assistance, attempts, deadline and answer-reveal rules. The current release schedule covers text and media and does not express that approval. No managed assignment browser run was performed.
+
+The grading binding now requires exactly one retained activity row for the assignment. The PostgreSQL fixture verified that valid issuance retains the exact release identity and digest, and that the binding rejects a synthetic duplicate activity. This check uses a stubbed release resolver for the malformed snapshot. The focused `test_grading_postgres.py` and `test_managed_release_schedule.py` run finished with **38 passed in 5.74 seconds**. An initial test-double error was corrected by supplying the assessment policy ID. Ruff and Git whitespace checks passed.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.
