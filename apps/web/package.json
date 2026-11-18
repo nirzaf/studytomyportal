@@ -8,8 +8,8 @@
     "dev-https": "next dev --experimental-https -p 443",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . || true",
-    "lint:fix": "eslint --fix . || true",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
     "lint:strict": "eslint",
     "test": "bun test --isolate ./tests",
     "test:ee": "bun --preserve-symlinks test --isolate ./ee/tests"

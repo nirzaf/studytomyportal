@@ -1,6 +1,6 @@
 # Local-only development
 
-Studytomy Portal is currently developed and tested locally. This repository does not configure project deployment or continuous integration/continuous delivery. Do not infer that a commit, container build, or local test deploys or certifies a live service.
+Studytomy Portal is currently developed and tested locally. This repository does not configure project deployment or continuous integration/continuous delivery. A local build or test does not certify a live service. Normal source pushes may be separately authorized; a push is not permission to run a deployment command or evidence that a deployment did or did not occur.
 
 ## Local verification
 
@@ -14,4 +14,4 @@ Provider-settings observations below are historical, not rechecked at every comm
 
 Removing repository files does not uninstall GitHub Apps, remove hosting projects, revoke credentials, or disconnect external integrations. GitHub repository settings showed no configured webhooks and listed a Vercel GitHub App installation. The app's repository scope could not be inspected because GitHub required step-up authentication. The settings also list other hosting/build-provider apps; their repository scope was not verified. No external settings or projects were changed.
 
-Treat external auto-build or deployment behavior as **unverified** until the account owner checks the provider settings. Do not push a commit if that push could trigger an unauthorized deployment. This repository's current local-only status does not prove external providers are disconnected.
+Treat external auto-build or deployment behavior as **unverified** until the account owner checks the provider settings. Repository configuration cannot establish whether an external provider will build or deploy after a push, and this repository's local-only status does not prove external providers are disconnected. No external provider settings or projects were changed.
