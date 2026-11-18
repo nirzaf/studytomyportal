@@ -173,6 +173,8 @@ At `bebf3a731897a82e6a8b89bf8786a116f466c682`, the separate-process probe passed
 
 The membership response still came from the proxy fixture. The test substituted only the API database session dependency to point at the disposable database and used synthetic JWTs. Full membership authorization and abrupt-restart behavior during an unacknowledged write remain outside this probe.
 
+At `08dc6a3e811e581f273c648542df45cc39436d2f`, the follow-up forwarded membership to the real mounted FastAPI route too. The API accepted a signed synthetic session for an organization and board member and denied a signed synthetic session for a nonmember. The two editor WebSockets, injected 503, successful PostgreSQL retry, Redis cache removal and fresh-process reload all passed again. Synthetic records were scoped to the disposable database and cleaned up on exit. This verifies graceful restart after acknowledgement. Abrupt termination during an unacknowledged write was outside the run.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
