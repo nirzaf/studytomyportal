@@ -125,6 +125,8 @@ The follow-up compared counts and order-independent fingerprints of JSON-seriali
 
 At `a088b7ef66c34228117ede0dc6bf33c58a620c97`, `python -m pytest -q src/tests/studytomy/test_checkout_router.py -m studytomy_postgres -k 'free-reentry or free-release-media'` targeted only `studytomy_aud19_full_restore_test` and passed **2 tests, 10 deselected** in 29.13 seconds. The API exercised re-entry, retention replay and authenticated media delivery with newly seeded synthetic records and temporary files on the restored schema. Behavior for pre-existing restored records through the application, external object recovery and restore from a production snapshot remain unverified. The local dump and restored test database were retained for follow-up.
 
+At `0c8d16e77231c3ad888a3cd834f97fef8ffad361`, a read-only application service probe resolved one already-present synthetic grant from the source database and called `read_managed_release_overview` for the same learner, course and release in both databases. The authorized response matched exactly. This exercised current eligibility, consent, policy and grant checks using an actor resolved from the fixture. HTTP authentication and recovery of the original media objects were outside this probe.
+
 The retention/replay check covers synthetic database evidence and local test
 fixtures only. It does not verify deletion, versioning or restoration in the
 configured external object store. A production-shaped pre-migration backup,
