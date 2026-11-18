@@ -390,21 +390,37 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
                     ctx, lesson_save.model_copy(update={"lesson_uuid": sibling.activity_uuid}),
                 )
             assert wrong_lesson.value.status_code == 404
-            saved_lesson = await grounded_lesson_save(ctx, lesson_save)
-            assert saved_lesson == {
-                "lesson_uuid": lesson.activity_uuid, "current_version": 3,
-                "status": "teacher_review_required",
-            }
-            await mcp_db.commit()
+            real_commit = mcp_db.commit
+
+            async def lose_commit_acknowledgement():
+                await real_commit()
+                raise ConnectionError("Synthetic lost lesson save acknowledgement")
+
+            with monkeypatch.context() as lost_ack:
+                lost_ack.setattr(mcp_db, "commit", lose_commit_acknowledgement)
+                with pytest.raises(ConnectionError, match="lost lesson save acknowledgement"):
+                    await grounded_lesson_save(ctx, lesson_save)
         retry_lesson = lesson_save.model_dump(
             mode="json", exclude={"course_uuid", "lesson_uuid"},
         )
         retried_lesson = await client.post(save, json=retry_lesson)
         assert retried_lesson.status_code == 200, retried_lesson.text
-        assert retried_lesson.json() == saved_lesson
+        assert retried_lesson.json() == {
+            "lesson_uuid": lesson.activity_uuid, "current_version": 3,
+            "status": "teacher_review_required",
+        }
         changed_retry = await client.post(save, json={**retry_lesson, "title": "Different title"})
         assert changed_retry.status_code == 409
         assert changed_retry.json()["detail"]["code"] == "IDEMPOTENCY_CONFLICT"
+        async with postgres_session_factory() as verify_db:
+            stored = await verify_db.get(Activity, lesson.id)
+            assert stored.current_version == 3 and not stored.published
+            events = (await verify_db.exec(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_uuid == lesson.activity_uuid,
+                StudyBusinessEvent.action == "studytomy.grounding.save_lesson",
+            ))).all()
+            assert sorted(event.after_state["version"] for event in events) == [2, 3]
         provider.return_value = quiz
         quiz["questions"][0]["options"][1]["is_correct"] = True
         invalid_key = await client.post(quiz_preview, json=command)
