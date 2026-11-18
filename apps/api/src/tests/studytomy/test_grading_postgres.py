@@ -39,7 +39,7 @@ from src.services.courses.certifications import (
     get_all_user_certificates,
     get_certificate_by_user_certification_uuid,
 )
-from src.services.studytomy import access_policy, assignment_adapter, grading
+from src.services.studytomy import access_policy, assignment_adapter, awards, grading, releases
 from src.services.studytomy.metrics import release_completion_observations
 from src.services.studytomy.prerequisites import managed_assessed_pass_status
 from src.tests.studytomy.test_content_evidence import _seed_postgres_release_sources
@@ -191,6 +191,12 @@ async def test_issued_round_retains_exact_started_release(
         review, snapshot, policies = await _seed_postgres_release_sources(
             db, org, user.id, uuid4().hex, snapshot=snapshot, course_uuid=course.course_uuid,
         )
+        policies[3].body = _synthetic_policy_body(StudyPolicyKey.D_16, {
+            "certificate_presentation": {"managed_certificates_by_course": {course.course_uuid: {
+                "award_name": "Synthetic certificate", "issuer_name": "Synthetic issuer",
+                "verification": "private", "required_assessment_uuids": [assignment.assignment_uuid],
+            }}},
+        }).model_dump(mode="json")
         release = StudyCourseRelease(
             org_id=org.id, course_uuid=course.course_uuid, review_id=review.id,
             snapshot_sha256=review.revision_sha256, snapshot=snapshot, media_manifest=media_manifest,
@@ -305,6 +311,22 @@ async def test_issued_round_retains_exact_started_release(
         assert len(completion_events) == 2
         assert all(event.after_state == {"source_snapshot_digest": release.snapshot_sha256}
                    for event in completion_events)
+        certificate_reviewer = PublicUser.model_validate(await db.get(User, review.owner_user_id))
+        staff_access = AsyncMock()
+        monkeypatch.setattr(awards, "authorize_studytomy_staff_action", staff_access)
+        monkeypatch.setattr(releases, "load_release_policy_binding", AsyncMock(return_value=SimpleNamespace(
+            model_dump=lambda **_: release.policy_binding,
+            versions={StudyPolicyKey.D_16: SimpleNamespace(policy_id=policies[3].id)},
+        )))
+        award_scope = (course.course_uuid, release.uuid, profile.learner_uuid)
+        with pytest.raises(HTTPException) as own_preview:
+            await awards.preview_managed_certificate_eligibility(db, org, actor, *award_scope)
+        assert own_preview.value.status_code == 404
+        staff_access.assert_not_awaited()
+        eligible = await awards.preview_managed_certificate_eligibility(db, org, certificate_reviewer, *award_scope)
+        assert eligible.eligible and eligible.completion_event_uuid
+        assert eligible.assessment_result_uuids == {assignment.assignment_uuid: result.event_uuid}
+        assert [call.kwargs["target_scope_kind"] for call in staff_access.await_args_list] == ["course", "learner"]
         completion_time = next(event.created_at for event in completion_events
                                if event.action == "studytomy.course.completion_recorded")
         completion_scope = {"org_id": org.id, "course_uuid": course.course_uuid, "release_uuid": release.uuid}
@@ -354,6 +376,10 @@ async def test_issued_round_retains_exact_started_release(
             await access_policy.read_managed_activity_media(*args)
         assert denied.value.status_code == 404
         assert staged.closed
+        under_appeal = await awards.preview_managed_certificate_eligibility(db, org, certificate_reviewer, *award_scope)
+        assert not under_appeal.eligible
+        assert under_appeal.completion_event_uuid == eligible.completion_event_uuid
+        assert under_appeal.missing_assessment_uuids == [assignment.assignment_uuid]
         with pytest.raises(HTTPException) as locked_lesson:
             await access_policy.read_managed_text_lesson(*lesson_args, text_target)
         assert locked_lesson.value.status_code == 404
