@@ -4317,6 +4317,21 @@ async def _exercise_learner_attempt(
         )
     ).status_code == 404
     challenge = {"expected_version": 6, "reason": "evidence_error"}
+    # Moving to dependent control invalidates prior independent disclosures.
+    profile.control_mode = "dependent"
+    await db.commit()
+    for actor_headers in (headers, reader_headers, pending_guardian_headers):
+        detail = await client.get(read_path, headers=actor_headers)
+        assert detail.status_code == 404
+        assert detail.headers["Cache-Control"] == "private, no-store"
+        index = await client.get(list_path, headers=actor_headers)
+        assert index.status_code == 200 and index.json()["items"] == []
+        review_attempt = await client.post(
+            review_request_path, json=challenge, headers=actor_headers
+        )
+        assert review_attempt.status_code == 404
+    profile.control_mode = "independent"
+    await db.commit()
     assert (
         await client.post(review_request_path, json=challenge, headers=unrelated)
     ).status_code == 404
