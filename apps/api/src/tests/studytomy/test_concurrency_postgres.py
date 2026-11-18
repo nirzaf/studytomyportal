@@ -464,6 +464,37 @@ async def test_outbox_skip_locked_claim_does_not_double_lease_a_row(postgres_tes
 
 
 @pytest.mark.studytomy_postgres
+async def test_outbox_recovery_prioritizes_the_oldest_expired_lease(postgres_test_rows):
+    rows = postgres_test_rows
+    now = datetime.now(UTC)
+    async with rows.session_factory() as db, db.begin():
+        for offset in (1, 2):
+            record, _ = await enqueue_delivery(
+                db, org_id=rows.org_id, recipient_user_id=rows.user_id,
+                purpose=StudyOutboxPurpose.RECEIPT, resource_kind="postgres_test",
+                resource_uuid=f"{rows.token}-{offset}",
+                dedupe_key=f"outbox-recovery-order-{rows.token}-{offset}",
+                policy_refs=[1], available_at=now,
+            )
+            record.status = "leased"
+            record.lease_owner = "fixture-sender"
+            record.lease_expires_at = now - timedelta(days=offset + 365)
+        await db.flush()
+        assert await claim_due_deliveries(
+            db, worker_id="fixture-recovery", now=now, limit=1,
+            purpose=StudyOutboxPurpose.RECEIPT,
+        ) == []
+        statuses = dict((await db.execute(
+            select(StudyOutboxRecord.resource_uuid, StudyOutboxRecord.status)
+            .where(StudyOutboxRecord.org_id == rows.org_id)
+        )).all())
+        assert statuses == {
+            f"{rows.token}-1": "leased",
+            f"{rows.token}-2": "reconciliation_required",
+        }
+
+
+@pytest.mark.studytomy_postgres
 async def test_outbox_stale_session_cannot_finalize_a_reconciled_lease(postgres_test_rows):
     rows = postgres_test_rows
     started = datetime.now(UTC)

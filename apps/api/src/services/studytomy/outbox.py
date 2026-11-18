@@ -214,6 +214,7 @@ async def claim_due_deliveries(
             StudyOutboxRecord.status == "leased",
             StudyOutboxRecord.lease_expires_at <= claimed_at,
         )
+        .order_by(StudyOutboxRecord.lease_expires_at, StudyOutboxRecord.id)
         .with_for_update(skip_locked=True)
         .limit(limit)
         .execution_options(populate_existing=True)
