@@ -4,6 +4,8 @@ import { API_URL, BASE_URL } from '../../../core/instance'
 const learnerState = process.env.E2E_MANAGED_MEDIA_LEARNER_STATE
 const releaseName = process.env.E2E_MANAGED_MEDIA_RELEASE_NAME
 const captionCode = process.env.E2E_MANAGED_MEDIA_CAPTION_CODE
+const expiredPdf = process.env.E2E_MANAGED_MEDIA_EXPIRED_PDF_ACTIVITY
+const expiredVideo = process.env.E2E_MANAGED_MEDIA_EXPIRED_VIDEO_ACTIVITY
 
 test.use({ storageState: learnerState, viewport: { width: 390, height: 844 } })
 test.skip(
@@ -148,5 +150,40 @@ test('denies saved managed media URLs after clearing the learner session', async
   for (const url of protectedUrls) {
     const signedOut = await context.request.get(url, { headers: { Range: 'bytes=0-0' } })
     expect(signedOut.status()).toBe(401)
+  }
+})
+
+test('keeps expired access history while denying saved media URLs', async ({ page, context }) => {
+  test.skip(!expiredPdf || (Boolean(captionCode) && !expiredVideo), 'Requires an expired synthetic grant and its saved activity IDs.')
+  await page.goto('/account/learning', { waitUntil: 'domcontentloaded' })
+  const historyButton = page.getByRole('button', { name: 'Access history', exact: true })
+  await expect(historyButton).toBeVisible()
+  const course = page.getByRole('button', { name: releaseName, exact: true })
+  await expect(course).toHaveCount(0)
+  await historyButton.click()
+  await expect(course).toBeVisible()
+  const historyResponse = page.waitForResponse(response =>
+    response.request().method() === 'GET' &&
+    new URL(response.url()).origin === new URL(API_URL).origin &&
+    /\/releases\/[^/]+\/access-history$/.test(new URL(response.url()).pathname),
+  )
+  await course.click()
+  const history = await historyResponse
+  expect(history.status()).toBe(200)
+  expect(await history.json()).toMatchObject({ status: 'expired' })
+  await expect(page.getByText('Expired', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Reviewed PDF|Reviewed video/ })).toHaveCount(0)
+
+  const releaseUrl = history.url().replace(/\/access-history$/, '')
+  expect((await context.request.get(`${releaseUrl}/lessons`)).status()).toBe(404)
+  for (const activity of [expiredPdf, expiredVideo]) {
+    if (!activity) continue
+    const mediaUrl = `${releaseUrl}/activities/${encodeURIComponent(activity)}/media`
+    expect((await context.request.get(mediaUrl, { headers: { Range: 'bytes=0-0' } })).status()).toBe(404)
+  }
+  if (captionCode && expiredVideo) {
+    const videoId = encodeURIComponent(expiredVideo)
+    const captionUrl = `${releaseUrl}/activities/${videoId}/media/captions/${encodeURIComponent(captionCode)}`
+    expect((await context.request.get(captionUrl)).status()).toBe(404)
   }
 })
