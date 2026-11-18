@@ -167,6 +167,12 @@ At `25dc20b40892086de7c78c44495ac5c90f6e43f6`, a Node.js 24.19.0 probe launched 
 
 The probe signed synthetic JWTs and served membership and board storage from an in-memory HTTP fixture. SIGTERM was emitted inside each child because this was a Windows run. The first run recovered the edit but hit a Windows libuv shutdown assertion while the test IPC channel remained open. Closing the IPC channel before emitting SIGTERM produced the passing run. Real FastAPI membership and database recovery across the collaboration restart remain open.
 
+### PostgreSQL-backed collaboration restart
+
+At `bebf3a731897a82e6a8b89bf8786a116f466c682`, the separate-process probe passed with the mounted FastAPI v1 board storage route served by Uvicorn and the disposable Docker PostgreSQL database `studytomy_aud19_full_restore_test` at `127.0.0.1:60607`. The probe used two WebSocket clients, real Docker Redis, and one transient 503 injected by a loopback proxy before the write reached FastAPI. The retry was acknowledged by the real storage endpoint. After a clean collaboration shutdown and removal of the synthetic Redis cache key, a new collaboration process fetched the persisted snapshot through FastAPI and reloaded the exact final edit. The temporary board and associated synthetic rows were cleaned up by the API fixture.
+
+The membership response still came from the proxy fixture. The test substituted only the API database session dependency to point at the disposable database and used synthetic JWTs. Full membership authorization and abrupt-restart behavior during an unacknowledged write remain outside this probe.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
