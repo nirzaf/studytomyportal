@@ -49,6 +49,28 @@ describe('board persistence queue', () => {
     assert.equal(queue.pendingCount, 0)
   })
 
+  it('retries when the write adapter throws before returning a promise', async () => {
+    let attempts = 0
+    const writes: number[][] = []
+    const queue = new BoardPersistenceQueue(
+      queueOptions(
+        (_boardUuid, state) => {
+          attempts += 1
+          if (attempts === 1) throw new Error('transport setup failed')
+          writes.push([...state])
+          return Promise.resolve()
+        },
+        { retryDelaysMs: [5] },
+      ),
+    )
+
+    queue.schedule('board_sync_retry', Uint8Array.from([4, 5]))
+    assert.deepEqual(await queue.flushPending(500), [])
+    assert.equal(attempts, 2)
+    assert.deepEqual(writes, [[4, 5]])
+    assert.equal(queue.retainedBytes, 0)
+  })
+
   it('serializes writes and sends the latest state after an older acknowledgement', async () => {
     let resolveFirstWrite!: () => void
     let firstStarted!: () => void

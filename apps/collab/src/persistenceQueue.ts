@@ -167,7 +167,7 @@ export class BoardPersistenceQueue {
     entry.inFlightState = state
     let retryDelay: number | null = null
 
-    const inFlight = (async () => {
+    const inFlight = Promise.resolve().then(async () => {
       try {
         await this.options.write(boardUuid, state, requestTimeoutMs)
         if (this.pending.get(boardUuid) !== entry) return
@@ -198,7 +198,7 @@ export class BoardPersistenceQueue {
           this.scheduleFlush(boardUuid, entry, retryDelay)
         }
       }
-    })()
+    })
 
     entry.inFlight = inFlight
     await inFlight
