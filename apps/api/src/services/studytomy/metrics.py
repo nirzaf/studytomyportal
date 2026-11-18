@@ -1,9 +1,39 @@
-"""Internal projections of confirmed cash movements for pilot reconciliation."""
+"""Internal projections of retained evidence for pilot reconciliation."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from src.db.studytomy.cases import StudyServiceCase
+
+
+async def current_support_backlog(
+    db: AsyncSession, *, org_id: int,
+) -> dict[str, datetime | int | None]:
+    """Summarize unresolved support cases for an already authorized organization.
+
+    This is a current snapshot with elapsed calendar time. Service-hour targets
+    and safeguarding cases are outside the measure.
+    """
+    if org_id < 1:
+        raise ValueError("A valid organization is required.")
+    observed_at = datetime.now(UTC)
+    count, oldest = (await db.execute(
+        select(func.count(), func.min(StudyServiceCase.created_at)).where(
+            StudyServiceCase.org_id == org_id,
+            StudyServiceCase.category == "support",
+            StudyServiceCase.status.in_(("acknowledged", "assigned", "awaiting_information", "under_review")),
+            StudyServiceCase.created_at <= observed_at,
+        )
+    )).one()
+    return {
+        "observed_at": observed_at,
+        "unresolved_cases": count,
+        "oldest_unresolved_age_seconds": (
+            int((observed_at - oldest).total_seconds()) if oldest is not None else None
+        ),
+    }
 
 
 async def assessment_evidence_breakdown(

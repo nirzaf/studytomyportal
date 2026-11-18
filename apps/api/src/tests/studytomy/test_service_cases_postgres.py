@@ -31,6 +31,7 @@ from src.services.studytomy import cases, evidence_files
 from src.services.studytomy.guest_support import (
     purge_expired_guest_support_challenges, redeem_guest_support_challenge,
 )
+from src.services.studytomy.metrics import current_support_backlog
 from src.services.studytomy.policies import POLICY_REQUIRED_RESPONSIBILITIES
 from src.services.studytomy.retention import CaseEvidenceHoldCommand, CaseEvidenceHoldReleaseCommand
 from src.services.studytomy.safeguarding_retention import (
@@ -41,6 +42,56 @@ from src.services.studytomy.safeguarding_retention import (
 @pytest.fixture(autouse=True)
 def enable_synthetic_reporting(monkeypatch):
     monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_SAFEGUARDING_REPORTS_ENABLED", "true")
+
+
+@pytest.mark.studytomy_postgres
+async def test_support_backlog_excludes_closed_cases_and_other_scopes(postgres_session_factory):
+    tag = uuid4().hex
+    async with postgres_session_factory() as db:
+        orgs = [
+            Organization(
+                name="Synthetic support", slug=f"backlog-{tag}-{index}",
+                org_uuid=f"org_{uuid4()}", email=f"backlog-{tag}-{index}@example.invalid",
+            )
+            for index in range(3)
+        ]
+        reporter, owner = [
+            User(
+                username=f"support-{tag}-{role}", user_uuid=f"user_{uuid4()}",
+                email=f"support-{tag}-{role}@example.invalid",
+                first_name="Synthetic", last_name=role,
+            )
+            for role in ("reporter", "owner")
+        ]
+        db.add_all([*orgs, reporter, owner])
+        await db.flush()
+        first, other, empty = orgs
+        now = datetime.now(UTC)
+        oldest_open = now - timedelta(hours=2)
+        db.add_all([
+            StudyServiceCase(
+                org_id=org_id, reporter_user_id=reporter.id, category=category,
+                status=status, created_at=created_at,
+                owner_user_id=None if status == "acknowledged" else owner.id,
+            )
+            for org_id, category, status, created_at in (
+                (first.id, "support", "acknowledged", oldest_open),
+                (first.id, "support", "under_review", now),
+                (first.id, "support", "resolved", now - timedelta(days=3)),
+                (first.id, "support", "closed", now - timedelta(days=4)),
+                (first.id, "safeguarding", "acknowledged", now - timedelta(days=5)),
+                (other.id, "support", "acknowledged", now - timedelta(days=6)),
+            )
+        ])
+        await db.flush()
+        aggregate = await current_support_backlog(db, org_id=first.id)
+        assert aggregate["unresolved_cases"] == 2
+        assert aggregate["oldest_unresolved_age_seconds"] == int(
+            (aggregate["observed_at"] - oldest_open).total_seconds()
+        )
+        empty_aggregate = await current_support_backlog(db, org_id=empty.id)
+        assert empty_aggregate["unresolved_cases"] == 0
+        assert empty_aggregate["oldest_unresolved_age_seconds"] is None
 
 
 @pytest.mark.studytomy_postgres
