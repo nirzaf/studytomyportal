@@ -63,7 +63,12 @@ from src.services.studytomy.collections import (
     record_manual_collection_attempt,
     resolve_manual_collection_remedy,
 )
-from src.services.studytomy.metrics import PilotCashReport, read_pilot_cash_report
+from src.services.studytomy.metrics import (
+    PilotCashOffer,
+    PilotCashReport,
+    list_pilot_cash_offers,
+    read_pilot_cash_report,
+)
 from src.services.studytomy.orders import (
     NamedOrderQuote,
     accept_named_order,
@@ -144,6 +149,16 @@ async def _member_org(org_uuid: str, actor: PublicUser, db: AsyncSession) -> Org
         raise HTTPException(404, "Organization not found")
     await require_org_membership(actor.id, org.id, db)
     return org
+
+
+@router.get("/pilot/cash-report-offers")
+async def get_pilot_cash_offers(
+    org_uuid: str, response: Response, actor: Purchaser, db: Session,
+) -> list[PilotCashOffer]:
+    org = await _member_org(org_uuid, actor, db)
+    options = await list_pilot_cash_offers(db, org, actor)
+    response.headers["Cache-Control"] = "private, no-store"
+    return options
 
 
 @router.get("/pilot/offers/{offer_uuid}/versions/{offer_version_uuid}/confirmed-cash")

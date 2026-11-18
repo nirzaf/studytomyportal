@@ -66,11 +66,15 @@ class NamedOrderQuote(OrderQuote):
     confirmation_sha256: str
 
 
-def _require_pilot_offer(pilot, offer_uuid: str, offer_version_uuid: str) -> None:
+def _pilot_offer_versions(pilot) -> dict:
     body, _ = inspect_study_policy_body(StudyPolicyKey.D_17, pilot.body)
     pilot_size = body.specified_value("pilot_size") if body else None
     versions = pilot_size.get("order_acceptance_offer_versions") if isinstance(pilot_size, dict) else None
-    if not isinstance(versions, dict) or versions.get(offer_uuid) != offer_version_uuid:
+    return versions if isinstance(versions, dict) else {}
+
+
+def _require_pilot_offer(pilot, offer_uuid: str, offer_version_uuid: str) -> None:
+    if _pilot_offer_versions(pilot).get(offer_uuid) != offer_version_uuid:
         raise studytomy_http_error(409, "OFFER_SALES_PAUSED", "The exact offer version is not open to the pilot.")
 
 

@@ -9,14 +9,59 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.organizations import Organization
 from src.db.studytomy.cases import StudyServiceCase
+from src.db.studytomy.commerce import StudyOffer, StudyOfferVersion
 from src.db.studytomy.governance import StudyPolicyKey
 from src.db.users import PublicUser
 from src.security.studytomy_access import (
     StudytomyCapabilityName,
     authorize_studytomy_staff_action,
+    evaluate_studytomy_staff_access,
 )
 from src.services.studytomy.learners import _current_policies
-from src.services.studytomy.orders import _require_pilot_offer
+from src.services.studytomy.orders import _pilot_offer_versions, _require_pilot_offer
+
+_CASH_REPORT_POLICIES = (StudyPolicyKey.D_15, StudyPolicyKey.D_17, StudyPolicyKey.D_19)
+
+
+class PilotCashOffer(BaseModel):
+    offer_uuid: str
+    offer_version_uuid: str
+    title: str
+    version: int
+
+
+async def list_pilot_cash_offers(
+    db: AsyncSession, org: Organization, actor: PublicUser,
+) -> list[PilotCashOffer]:
+    now = datetime.now(UTC)
+    _, pilot, _ = await _current_policies(db, org, _CASH_REPORT_POLICIES, now)
+    versions = _pilot_offer_versions(pilot)
+    rows = (await db.execute(
+        select(StudyOffer.offer_uuid, StudyOfferVersion)
+        .join(StudyOfferVersion, StudyOfferVersion.offer_id == StudyOffer.id)
+        .where(
+            StudyOffer.org_id == org.id,
+            StudyOffer.offer_uuid.in_(versions),
+            StudyOfferVersion.version_uuid.in_([value for value in versions.values() if isinstance(value, str)]),
+        )
+        .order_by(StudyOffer.offer_uuid, StudyOfferVersion.version_no)
+    )).all()
+    options = []
+    for offer_uuid, version in rows:
+        if versions.get(offer_uuid) != version.version_uuid:
+            continue
+        access = await evaluate_studytomy_staff_access(
+            db, actor, org, StudytomyCapabilityName.FINANCIAL_RECONCILIATION,
+            target_scope_kind="offer", target_resource_uuid=offer_uuid, now=now,
+        )
+        if access.allowed:
+            title = version.terms.get("title")
+            options.append(PilotCashOffer(
+                offer_uuid=offer_uuid, offer_version_uuid=version.version_uuid,
+                title=title if isinstance(title, str) and title.strip() else "Course offer",
+                version=version.version_no,
+            ))
+    return options
 
 
 class PilotCashReport(BaseModel):
@@ -45,7 +90,7 @@ async def read_pilot_cash_report(
         target_scope_kind="offer", target_resource_uuid=offer_uuid,
     )
     policies = await _current_policies(
-        db, org, (StudyPolicyKey.D_15, StudyPolicyKey.D_17, StudyPolicyKey.D_19), observed_at,
+        db, org, _CASH_REPORT_POLICIES, observed_at,
     )
     pilot = next(policy for policy in policies if policy.policy_key == StudyPolicyKey.D_17.value)
     _require_pilot_offer(pilot, offer_uuid, offer_version_uuid)

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from '@/lib/auth/server'
 import { getOrganizationContextInfo } from '@services/organizations/orgs'
 import CommerceReviewQueue from '@components/Studytomy/CommerceReviewQueue'
+import PilotEvidenceDashboard from '@components/Studytomy/PilotEvidenceDashboard'
 import RefundReview from '@components/Studytomy/RefundReview'
 
 export const metadata = {
@@ -15,6 +16,7 @@ export default async function FinancePage({ params }: { params: Promise<{ orgslu
   const org = await getOrganizationContextInfo(orgslug, { revalidate: 120, tags: ['organizations'] })
   return <>
     <CommerceReviewQueue orgUuid={org.org_uuid} />
+    <PilotEvidenceDashboard orgUuid={org.org_uuid} />
     <RefundReview orgUuid={org.org_uuid} />
   </>
 }

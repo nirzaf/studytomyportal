@@ -230,6 +230,12 @@ The concurrent Redis checkpoint based on `55b8a11f992b4e80e61bf5ff5a0fe150b60914
 
 At `0acae70484055d1a7df0feaa8425280b92e43305`, the loopback process rehearsal passed an AUD-07 dual outage. An authorized client first used an empty synthetic board, edited it and obtained PostgreSQL acknowledgement. With the test cache key removed, the next collaboration process targeted a closed local Redis port, and the fault proxy returned HTTP 503 for the board storage GET. The client remained unsynchronized and the process sent no board write. The final process used normal Docker Redis connectivity and the mounted FastAPI storage route. It reloaded the exact saved Yjs text from disposable PostgreSQL. All three processes used the real collaboration entry point and FastAPI membership route. The fault injection left the Docker services running and affected only the synthetic board.
 
+## TASK-065 pilot cash dashboard
+
+The checkpoint based on `f1b23051e6f7e6057c62f8886527a9598926df00` passed the live Chrome finance spec (**1 passed** in 1.5 minutes) at widths of 390 and 1440 pixels. It used Next.js, FastAPI and disposable Docker PostgreSQL and Redis on loopback. The paid checkout fixture seeded the offer, exact commercial scope, synthetic policy approvals and retained ledger. Scoped staff chose the offer and UTC reporting period, viewed the confirmed cash, and received a private, no-store response. The purchaser received an empty offer list and HTTP 403 on the same report URL. The test intercepted no API responses. The targeted paid PostgreSQL seed and verification passed with **1 passed, 11 deselected**. Targeted web lint and web and Playwright type checking passed.
+
+To repeat the browser case, provide authenticated synthetic storage states with `E2E_PILOT_CASH_STAFF_STATE` and `E2E_PILOT_CASH_PURCHASER_STATE` on a ready loopback stack. Seed the paid checkout fixture within the report's prior-day window. From `apps/e2e`, run `bun run test 09-finance-review -g 'pilot cash report shows'` with the local stack configuration. This checkpoint covers confirmed ledger cash only. Broader pilot measures and their approval decisions remain open.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18

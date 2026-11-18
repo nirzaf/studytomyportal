@@ -9,6 +9,59 @@ test.skip(
   'Requires a local synthetic account.',
 )
 
+test('pilot cash report shows the authorized offer and hides it from the purchaser', async ({ browser }) => {
+  const staffState = process.env.E2E_PILOT_CASH_STAFF_STATE
+  const purchaserState = process.env.E2E_PILOT_CASH_PURCHASER_STATE
+  test.skip(!staffState || !purchaserState, 'Requires synthetic staff and purchaser sessions with settled pilot cash.')
+  const staff = await browser.newContext({ storageState: staffState, viewport: { width: 390, height: 844 } })
+  const purchaser = await browser.newContext({ storageState: purchaserState, viewport: { width: 390, height: 844 } })
+  const isApiPath = (url: string, suffix: string) =>
+    new URL(url).origin === new URL(API_URL).origin && new URL(url).pathname.endsWith(suffix)
+  try {
+    const page = await staff.newPage()
+    const optionsResponse = page.waitForResponse(response => isApiPath(response.url(), '/pilot/cash-report-offers'))
+    await page.goto(new URL('/studytomy/finance', BASE_URL).href, { waitUntil: 'domcontentloaded' })
+    const dashboard = page.getByRole('region', { name: 'Pilot cash report' })
+    await expect(dashboard).toBeVisible({ timeout: 60_000 })
+    const options = await optionsResponse
+    expect(options.status()).toBe(200)
+    const [offer] = await options.json()
+    expect(offer.offer_version_uuid).toBeTruthy()
+    await dashboard.getByLabel('Offer version').selectOption(offer.offer_version_uuid)
+    const now = new Date()
+    const yesterday = new Date(now.getTime() - 86_400_000)
+    await dashboard.getByLabel('Start (UTC)', { exact: true }).fill(yesterday.toISOString().slice(0, 19))
+    await dashboard.getByLabel('End (UTC, excluded)', { exact: true }).fill(now.toISOString().slice(0, 19))
+    const reportResponse = page.waitForResponse(response => isApiPath(response.url(), '/confirmed-cash'))
+    const load = dashboard.getByRole('button', { name: 'Load cash report' })
+    await expect(load).toBeEnabled()
+    await load.click()
+    const report = await reportResponse
+    expect(report.status()).toBe(200)
+    expect(report.headers()['cache-control']).toBe('private, no-store')
+    expect(await report.json()).toMatchObject({
+      offer_version_uuid: offer.offer_version_uuid,
+      confirmed_cash: [{ currency: 'AUD', collected_minor: 125, collection_count: 1 }],
+    })
+    await expect(dashboard.getByText('Confirmed collections (1)', { exact: true })).toBeVisible()
+    await expect(dashboard.getByText('Net cash', { exact: true })).toBeVisible()
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await expect(dashboard.getByText('Net cash', { exact: true })).toBeVisible()
+
+    const otherPage = await purchaser.newPage()
+    const otherOptions = otherPage.waitForResponse(response => isApiPath(response.url(), '/pilot/cash-report-offers'))
+    await otherPage.goto(new URL('/studytomy/finance', BASE_URL).href, { waitUntil: 'domcontentloaded' })
+    const filtered = await otherOptions
+    expect(filtered.status()).toBe(200)
+    expect(await filtered.json()).toEqual([])
+    await expect(otherPage.getByRole('region', { name: 'Pilot cash report' })).toHaveCount(0)
+    expect((await purchaser.request.get(report.url())).status()).toBe(403)
+  } finally {
+    await staff.close()
+    await purchaser.close()
+  }
+})
+
 test('finance review keeps a rejected draft and refreshes after a recorded outcome', async ({ page }) => {
   test.setTimeout(180_000)
   const review = {

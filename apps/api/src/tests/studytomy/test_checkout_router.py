@@ -2188,14 +2188,24 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 db, org_id=org.id, offer_uuid=str(uuid4()), **period,
             ) == []
             report_path = f"{org_path}/pilot/offers/{offer_uuid}/versions/{version_uuid}/confirmed-cash"
+            options_path = f"{org_path}/pilot/cash-report-offers"
             report_period = {"start": period["start"].isoformat(), "end": datetime.now(UTC).isoformat()}
             denied_report = await client.get(report_path, params=report_period, headers=finance_headers)
             assert denied_report.status_code == 403
+            assert (await client.get(options_path, headers=finance_headers)).json() == []
             await _seed_staff_scope(
                 db, org.id, owners[StudyOwnerFunction.COMMERCIAL].id,
                 StudytomyCapabilityName.FINANCIAL_RECONCILIATION, "offer", offer_uuid, purchaser.id,
             )
             report = await client.get(report_path, params=report_period, headers=finance_headers)
+            options = await client.get(options_path, headers=finance_headers)
+            assert options.status_code == 200
+            assert options.headers["cache-control"] == "private, no-store"
+            assert options.json() == [{
+                "offer_uuid": offer_uuid, "offer_version_uuid": version_uuid,
+                "title": terms.title, "version": 1,
+            }]
+            assert (await client.get(options_path, headers=headers)).json() == []
             assert report.status_code == 200, report.text
             assert report.headers["cache-control"] == "private, no-store"
             assert report.json()["confirmed_cash"] == expected_cash
