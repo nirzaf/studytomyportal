@@ -47,6 +47,23 @@ The browser run used the seeded grant and real endpoints without response interc
 
 The checks below ran against the source tree that was committed as the listed revision. This is a local verification snapshot, not a CI run, browser acceptance, live-provider evaluation, release approval, or deployment evidence. The repository has no configured CI/CD workflow. No production migration or real-learner flow was run.
 
+## Dependent guardian report acceptance checkpoint (18 November 2026)
+
+At `8cd024ecb19ae5b4aef92ca6e8a0f98b4e8fb3ba`, reviewed report creation and published report reads both require an active independent learner. Publication binds each recipient to the exact independent sharing grant and version. The separate family authority resolver checks effective guardian scope and can match a relationship UUID and authority version. Report publication and reads have no dependent guardian recipient binding. An accepted family relationship therefore cannot produce the requested browser success with the current report service.
+
+With the dedicated loopback PostgreSQL test database at `b91d2f6a08c3`, this command from `apps/api` returned **21 passed in 29.25 seconds**:
+
+```sh
+.venv/bin/python -m pytest -q -rs --tb=short \
+  src/tests/studytomy/test_adaptive_curriculum_api.py \
+  src/tests/studytomy/test_family_authority.py \
+  src/tests/studytomy/test_family_sharing.py
+```
+
+The signed mounted report flow exercised an authorized independent recipient, detail 404 and empty list for a pending guardian, and denial after learner reclassification or sharing withdrawal. The reclassification was a fixture update. Sharing withdrawal used the signed API and advanced the grant's authority version. PostgreSQL rejected mutation and deletion of retained report history. The family service tests exercised exact guardian, purpose and authority-version checks and dispute-based suppression using synthetic policy and staff-authorization fixtures.
+
+Dependent guardian browser acceptance is blocked by the missing report integration. This checkpoint used the existing automated fixtures and made no demo database changes. No browser screenshot was captured. Completing the dependent flow requires a reviewed course-specific disclosure purpose and consent path, an exact report-version recipient binding to current guardian authority, and read-time revalidation after relationship withdrawal. The synthetic decisions confer no real disclosure authority.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.
