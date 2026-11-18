@@ -1,5 +1,18 @@
 # Bounded security review: LearnHouse PR #1192
 
+## Follow-up on 2026-11-18
+
+The four candidate areas remain applicable at Studytomy `ef7e4f49fc759df955dae028a33f5faf36226c93`, inspected on clean `main`. The [upstream PR](https://github.com/learnhouse/learnhouse/pull/1192) is merged into LearnHouse `dev` at `839f3b45d17cf51f145a80bf93b9217926383654`. That commit is absent from the local object database. The assessment below compares current source behavior with the upstream change.
+
+| Finding | Priority | Current source evidence | Decision |
+|---|---|---|---|
+| 1192-01. Outbound address pinning | P1 | [Link previews](../../apps/api/src/services/utils/link_preview.py#L107) and [webhook dispatch](../../apps/api/src/services/webhooks/dispatch.py#L331) check peers after issuing requests. The [domain TLS check](../../apps/api/src/services/orgs/custom_domains.py#L730) still connects by hostname. The lockfile resolves httpx 0.28.1 and httpcore 1.0.9. | Selectively adapt connection-time address validation after approval. Transport compatibility remains unverified. |
+| 1192-02. Media input format restriction | P2 | The shared [FFmpeg input options](../../apps/api/src/services/utils/video_processing.py#L27) restrict protocols. A separate single-file input format allowlist was not found there. | Selectively adapt with supported-container regression coverage after approval. |
+| 1192-03. Internal-key configuration | P1 | The [board key check](../../apps/api/src/routers/boards/boards.py#L43) and [CSRF key exemption](../../apps/api/src/security/csrf.py#L248) consume environment values. [Collaboration startup](../../apps/collab/src/index.ts#L96) rejects known examples independently. | Align the API and collaboration rules after approval. Existing JWT and service credentials require separate operational decisions. |
+| 1192-04. Inbox-proof state | P1 | [Self-hosted signup](../../apps/api/src/services/users/users.py#L222) still sets verification status and timestamp. The [Google claim guard](../../apps/api/src/services/auth/utils.py#L250) checks account verification status and the admin-generated password case. | Review exact account-claim compatibility across Google, magic link and password reset before selectively adapting. Enterprise session implications remain unverified. |
+
+Source inspection only. Adoption remains approval pending. The existing upstream baseline is `144c843b`. The detailed 16 November review follows.
+
 **Review date:** 2026-11-16
 **Scope:** Read-only comparison of the merged PR against the current Studytomy worktree.
 **Studytomy branch / inspected HEAD:** `main`, `225537be11029c320e257102e41be94536c52aca` (matches `origin/main`; worktree is dirty).
