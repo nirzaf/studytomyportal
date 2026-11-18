@@ -1294,6 +1294,39 @@ async def _characterize_managed_course_diagnostic_conflict(
         row["purpose"] == "diagnostic" and row["uuid"] == managed_diagnostic.uuid
         for row in attempt_options.json()
     ), attempt_options.json()
+    # The reviewed text lesson and the mapped native practice assignment
+    # are distinct sources. A release grant does not make them interchangeable.
+    assert all(row["purpose"] != "practice" for row in attempt_options.json())
+    practice_source = (
+        await db.execute(
+            select(StudyConceptActivity.activity_uuid, StudyConcept.uuid)
+            .join(StudyConcept, StudyConcept.id == StudyConceptActivity.concept_id)
+            .where(
+                StudyConceptActivity.curriculum_revision_id == curriculum.id,
+                StudyConceptActivity.usage == "practice",
+                StudyConceptActivity.archived.is_(False),
+            )
+        )
+    ).one()
+    for activity_uuid in (lesson.activity_uuid, practice_source.activity_uuid):
+        unavailable_practice = await client.post(
+            f"{base}/me/practice-attempts",
+            json={
+                "source_activity_uuid": activity_uuid,
+                "concept_uuid": practice_source.uuid,
+                "mode": "supported",
+                **managed_scope,
+            },
+            headers=learner_headers | {"Idempotency-Key": f"managed-practice-denied-{uuid4()}"},
+        )
+        assert unavailable_practice.status_code == 404, unavailable_practice.text
+        assert unavailable_practice.headers["Cache-Control"] == "private, no-store"
+    assert await db.scalar(
+        select(StudyLearningAttempt.id).where(
+            StudyLearningAttempt.source_release_uuid == release.uuid,
+            StudyLearningAttempt.kind == "practice",
+        )
+    ) is None
     wrong_course_options = await client.get(
         f"{base}/me/attempts/options",
         params={"source_activity_uuid": lesson.activity_uuid, **managed_scope, "course_uuid": f"course_{uuid4()}"},

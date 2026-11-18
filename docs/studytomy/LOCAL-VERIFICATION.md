@@ -111,6 +111,14 @@ Signed requests returned no options for a wrong course, wrong release or differe
 
 The focused signed adaptive curriculum and PostgreSQL evidence suite passed **7 tests in 27.88 seconds**, including the wrong-course option regression. Web TypeScript and three existing adaptive UI tests passed. Scoped ESLint reported no errors and eight existing warnings. Ruff and Git whitespace checks passed.
 
+### Managed supported-practice boundary
+
+At `961e503e0eccf53d7f7fbdcffa3358d8b55a2685`, the isolated Mac API and web app used `localhost:1320` and `localhost:3020`. The entitlement service issued a new fixed-period synthetic grant for the same reviewed release, preserving the previous revoked grant. Chromium at 390 × 844 signed in, opened the entitled text lesson and observed a diagnostic option and no practice panel. The live option route returned 200 with no practice option for the lesson or for the mapped native assignment. The browser session made signed practice-start requests against both sources, a wrong course, a wrong release and the other signed-in account. All returned private no-store 404 responses. After a PostgreSQL fixture update revoked the new grant, the start still returned 404 and the course disappeared on browser reload. A PostgreSQL read found zero release-bound practice attempts.
+
+The native supported-practice resolver requires the item to come from an assignment task on the same activity as the practice mapping. The managed release resolver validates the exact mapped activity through the text or media projector. It excludes assignment activities. A text mapping alone cannot satisfy the item binding, and a native assignment cannot satisfy the managed delivery check. A positive managed practice path needs an explicit reviewed association between a deliverable released activity and a practice item, or a dedicated safe projection for an assignment-backed practice activity. The current contracts do not specify either release binding. No runtime authorization or rendering change was made.
+
+The signed regression now checks that neither source can start managed practice or create an attempt. The adaptive curriculum and PostgreSQL evidence suites passed **7 tests in 28.07 seconds**, including the existing ordinary supported-practice path. Ruff and Git whitespace checks passed. Managed answer submission, recovery, feedback and evidence remain unverified in browser, and full native assignment rendering remains pending. No AI provider was used.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.
