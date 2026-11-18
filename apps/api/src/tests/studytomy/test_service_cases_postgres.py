@@ -31,7 +31,7 @@ from src.services.studytomy import cases, evidence_files
 from src.services.studytomy.guest_support import (
     purge_expired_guest_support_challenges, redeem_guest_support_challenge,
 )
-from src.services.studytomy.metrics import current_support_backlog
+from src.services.studytomy.metrics import current_support_backlog, support_resolution_activity
 from src.services.studytomy.policies import POLICY_REQUIRED_RESPONSIBILITIES
 from src.services.studytomy.retention import CaseEvidenceHoldCommand, CaseEvidenceHoldReleaseCommand
 from src.services.studytomy.safeguarding_retention import (
@@ -92,6 +92,12 @@ async def test_support_backlog_excludes_closed_cases_and_other_scopes(postgres_s
         empty_aggregate = await current_support_backlog(db, org_id=empty.id)
         assert empty_aggregate["unresolved_cases"] == 0
         assert empty_aggregate["oldest_unresolved_age_seconds"] is None
+        assert await support_resolution_activity(
+            db, org_id=first.id, start=now - timedelta(days=7), end=now + timedelta(seconds=1),
+        ) == {
+            "first_resolved_cases": 0, "first_resolution_elapsed_seconds": 0,
+            "reopened_transitions": 0, "reopened_cases": 0,
+        }
 
 
 @pytest.mark.studytomy_postgres
@@ -1170,6 +1176,33 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
             assert (await client.post(
                 complaint_transition, json={"expected_version": 3, "next_status": "under_review"},
             )).status_code == 409
+            transitions = (await db.exec(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_uuid == complaint_ref,
+                StudyBusinessEvent.action == "studytomy.support.transition_case",
+            ).order_by(StudyBusinessEvent.id))).all()
+            resolution, reopening = transitions[1:]
+            assert resolution.after_state["status"] == "resolved"
+            assert reopening.before_state["status"] == "resolved"
+            until = reopening.created_at + timedelta(seconds=1)
+            assert await support_resolution_activity(
+                db, org_id=org.id, start=resolution.created_at, end=until,
+            ) == {
+                "first_resolved_cases": 1,
+                "first_resolution_elapsed_seconds": (
+                    resolution.created_at - complaint_case.created_at
+                ).total_seconds(),
+                "reopened_transitions": 1,
+                "reopened_cases": 1,
+            }
+            assert await support_resolution_activity(
+                db, org_id=org.id, start=reopening.created_at, end=until,
+            ) == {
+                "first_resolved_cases": 0,
+                "first_resolution_elapsed_seconds": 0,
+                "reopened_transitions": 1,
+                "reopened_cases": 1,
+            }
 
             guest_token = secrets.token_urlsafe(32)
             issued_at = datetime.now(UTC)

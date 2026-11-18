@@ -143,6 +143,52 @@ async def current_support_backlog(
     }
 
 
+async def support_resolution_activity(
+    db: AsyncSession, *, org_id: int, start: datetime, end: datetime,
+) -> dict[str, int | float]:
+    """Count first resolutions and reopenings in an authorized organization.
+
+    Elapsed time runs from case creation to its first recorded resolution in
+    calendar seconds. Case state without a retained transition supplies no
+    resolution time. Safeguarding and service-hour targets are outside scope.
+    """
+    if org_id < 1 or start.utcoffset() is None or end.utcoffset() is None or start >= end:
+        raise ValueError("An organization and an ordered, timezone-aware period are required.")
+    result = await db.execute(text("""
+        WITH transitions AS (
+            SELECT c.id, c.created_at AS opened_at, e.created_at AS transitioned_at,
+                   e.before_state->>'status' AS previous_status,
+                   e.after_state->>'status' AS next_status
+            FROM st_service_case c
+            JOIN st_business_event e ON e.org_id = c.org_id AND e.resource_uuid = c.case_uuid
+            WHERE c.org_id = :org_id AND c.category = 'support'
+              AND e.resource_kind = 'case' AND e.action = 'studytomy.support.transition_case'
+              AND e.created_at >= c.created_at AND e.created_at < :end
+        ), first_resolutions AS (
+            SELECT id, opened_at, min(transitioned_at) AS resolved_at
+            FROM transitions WHERE next_status = 'resolved'
+            GROUP BY id, opened_at
+        ), reopenings AS (
+            SELECT count(*) AS reopened_transitions, count(DISTINCT id) AS reopened_cases
+            FROM transitions
+            WHERE transitioned_at >= :start AND previous_status = 'resolved'
+              AND next_status = 'under_review'
+        )
+        SELECT count(first_resolutions.id) AS first_resolved_cases,
+               coalesce(sum(extract(epoch FROM resolved_at - opened_at)), 0) AS first_resolution_elapsed_seconds,
+               reopenings.reopened_transitions, reopenings.reopened_cases
+        FROM reopenings LEFT JOIN first_resolutions ON resolved_at >= :start
+        GROUP BY reopenings.reopened_transitions, reopenings.reopened_cases
+    """), {"org_id": org_id, "start": start, "end": end})
+    row = result.mappings().one()
+    return {
+        "first_resolved_cases": row["first_resolved_cases"],
+        "first_resolution_elapsed_seconds": float(row["first_resolution_elapsed_seconds"]),
+        "reopened_transitions": row["reopened_transitions"],
+        "reopened_cases": row["reopened_cases"],
+    }
+
+
 async def assessment_evidence_breakdown(
     db: AsyncSession, *, org_id: int, curriculum_revision_id: int,
     start: datetime, end: datetime,

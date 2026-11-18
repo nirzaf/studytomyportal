@@ -244,6 +244,12 @@ The internal assessment projection can filter a curriculum revision by the exact
 
 The checkpoint based on `7fd5fb8c3b8471ecf11c5f9d5ba047f95f9ded61` passed **7 tests** across `test_adaptive_evidence_postgres.py` and `test_adaptive_curriculum_api.py`. The managed release scope assertions ran in disposable Docker PostgreSQL. The SQLite workflow fixture retained its existing application assertions.
 
+### Support resolution activity
+
+The internal projection counts support cases first resolved during a half-open period, sums calendar seconds from case creation to those recorded resolutions, and counts reopening transitions and unique reopened cases separately. The source is the retained support transition journal. A case marked resolved without a retained transition contributes no timing evidence. Safeguarding data, service-hour compliance and response targets stay outside the projection.
+
+At the checkpoint based on `17e20ff5cee66fe8f1f2ec5815fa9471b9d24c20`, all **6 tests** in `test_service_cases_postgres.py` passed on disposable Docker PostgreSQL. The report-routing scenario used actual support API transitions and checked the first-resolution boundary and later reopening independently. The backlog fixture checked that a status without journal evidence supplies no first-resolution time.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
