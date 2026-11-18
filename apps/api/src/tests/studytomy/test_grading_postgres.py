@@ -461,6 +461,7 @@ async def test_issued_round_retains_exact_started_release(
         assert unverified.value.detail["code"] == "MANAGED_CERTIFICATE_CORRECTION_UNVERIFIED"
 
         previous_result = result
+        recorded_reviews = []
         for score, status, version in ((80, "corrected", 2), (40, "withdrawn", 3)):
             revision = StudyBusinessEvent(
                 org_id=org.id, actor_user_id=certificate_reviewer.id,
@@ -488,7 +489,14 @@ async def test_issued_round_retains_exact_started_release(
                 StudyBusinessEvent.event_uuid == change.review_uuid,
             ))
             assert review_event.policy_refs == sorted({policies[2].id, policies[3].id, current_rights.id})
+            assert review_event.after_state["previous_event_uuid"] == (
+                recorded_reviews[-1][1].review_uuid if recorded_reviews else award.award_uuid
+            )
+            assert review_event.after_state["assessment_result_event_uuids"] == [revision.event_uuid]
+            recorded_reviews.append((change_command, change))
             previous_result = revision
+        earlier_command, earlier_receipt = recorded_reviews[0]
+        assert await awards.review_managed_certificate_change(*review_args, earlier_command) == earlier_receipt
         assert await status_for() == "assessment_pass_required"
 
         stored.attempt_number += 1
