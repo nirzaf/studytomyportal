@@ -93,6 +93,8 @@ def test_release_media_coverage_refuses_unsupported_dependencies(activity):
     with pytest.raises(HTTPException) as refused:
         validate_release_media_coverage({"chapters": [], "activities": [activity]})
     assert refused.value.detail["code"] == "RELEASE_MEDIA_UNSUPPORTED"
+    if activity.get("extra_metadata", {}).get("captions"):
+        assert "cannot retain the video's captions" in refused.value.detail["message"]
 
 
 async def test_release_media_manifest_binds_native_file_bytes(tmp_path, monkeypatch):

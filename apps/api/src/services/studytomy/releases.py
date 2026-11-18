@@ -84,7 +84,13 @@ def validate_release_media_coverage(snapshot: dict) -> None:
         subtype = activity["activity_sub_type"]
         if subtype == "SUBTYPE_VIDEO_HOSTED":
             metadata = activity.get("extra_metadata") or {}
-            if metadata.get("captions") or metadata.get("thumbnails"):
+            if metadata.get("captions"):
+                raise studytomy_http_error(
+                    409,
+                    "RELEASE_MEDIA_UNSUPPORTED",
+                    "This release format cannot retain the video's captions. Keep this video in draft.",
+                )
+            if metadata.get("thumbnails"):
                 raise _release_media_unsupported()
         if subtype in {*_NATIVE_ACTIVITY_MEDIA, "SUBTYPE_ASSIGNMENT_ANY"}:
             continue
