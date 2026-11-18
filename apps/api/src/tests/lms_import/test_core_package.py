@@ -501,7 +501,14 @@ def _page_media(tmp_path, parts, name="pkg", **opts):
     return act, nodes, report
 
 
-def test_canonical_extensions_and_sniffing(tmp_path):
+def test_canonical_extensions_and_sniffing(tmp_path, monkeypatch):
+    monkeypatch.setattr(package, "_ffmpeg", lambda: "/usr/bin/ffmpeg")
+
+    def reject_invalid_media(args, **_kwargs):
+        assert os.path.basename(args[args.index("-i") + 1]) == "bad.wav"
+        raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(package.subprocess, "run", reject_invalid_media)
     files = Files(str(tmp_path / "src"))
     parts = [
         MediaPart(MediaKind.IMAGE, asset=files.image("a.jpeg", "JPEG")),
