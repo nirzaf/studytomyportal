@@ -12,7 +12,7 @@ from tempfile import TemporaryFile
 from typing import BinaryIO, Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import Select, and_, case, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -43,7 +43,11 @@ from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
-from src.services.studytomy.prerequisites import managed_assessed_pass_status, ungated_by_assessed_pass
+from src.services.studytomy.prerequisites import (
+    approved_pass_delivery_activities,
+    managed_assessed_pass_status,
+    ungated_by_assessed_pass,
+)
 from src.services.studytomy.releases import (
     _MAX_RELEASE_CAPTION_BYTES,
     _NATIVE_ACTIVITY_MEDIA,
@@ -537,18 +541,16 @@ async def _assessed_pass_delivery(
     body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
     if body is None or any(blockers.values()) or policy.id != release.progression_policy_id:
         return False, None
+    try:
+        approved = approved_pass_delivery_activities(body, release.course_uuid)
+    except ValidationError:
+        return False, "assessment_pass_required"
     status = await managed_assessed_pass_status(
         db, body, release, user_id, activity_uuid, lock_result=lock_result,
     )
-    schedule = body.specified_value("release_schedule")
-    approved = schedule.get("assessed_pass_delivery_activities") if isinstance(schedule, dict) else None
-    activities = approved.get(release.course_uuid) if isinstance(approved, dict) else None
-    return (
-        status == "assessment_pass_delivery_pending"
-        and isinstance(activities, list)
-        and activity_uuid in activities,
-        status,
-    )
+    if activity_uuid in approved and status is None:
+        return False, "assessment_pass_required"
+    return status == "assessment_pass_delivery_pending" and activity_uuid in approved, status
 
 
 def _project_text_lesson(

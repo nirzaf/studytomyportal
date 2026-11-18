@@ -94,11 +94,13 @@ def test_retained_schedule_values_prevent_ungated_delivery(location, rule):
 
 @pytest.mark.parametrize("scenario", [
     "forward", "self", "cross_course", "ungraded", "private", "duplicate", "zero_points", "missing_tasks",
+    "approval_without_rule", "approval_wrong_format", "malformed_approval",
 ])
 def test_release_validates_assessed_pass_edges(scenario):
     source = {"id": 1, "activity_uuid": "activity_assessment", "published": True,
               "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY"}
-    target = {"id": 2, "activity_uuid": "activity_lesson", "published": True}
+    target = {"id": 2, "activity_uuid": "activity_lesson", "published": True,
+              "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE"}
     assignment = {
         "id": 1, "assignment_uuid": "assignment_assessment", "activity_id": 1, "published": True,
         "grading_type": "NUMERIC", "pass_threshold_percentage": None, "ungraded": False,
@@ -116,10 +118,15 @@ def test_release_validates_assessed_pass_edges(scenario):
     rule = {"kind": "assessed_pass", "target_activity_uuid": target["activity_uuid"],
             "assessment_assignment_uuid": assignment["assignment_uuid"]}
     rules = [rule]
-    body = _synthetic_policy_body(StudyPolicyKey.D_09, {
+    schedule = {
+        "assessed_pass_delivery_activities": {"course_synthetic": [target["activity_uuid"]]},
+        "ungated_text_activities": {"course_synthetic": [target["activity_uuid"]]},
+    }
+    decisions = {
         "completion_prerequisites": {"assessed_pass_by_course": {"course_synthetic": rules}},
-    })
-    validate_release_pass_prerequisites(body, snapshot)
+        "release_schedule": schedule,
+    }
+    validate_release_pass_prerequisites(_synthetic_policy_body(StudyPolicyKey.D_09, decisions), snapshot)
 
     if scenario == "forward":
         snapshot["chapter_order"] = [[2, 1], [1, 2]]
@@ -135,11 +142,17 @@ def test_release_validates_assessed_pass_edges(scenario):
         task["max_grade_value"] = 0
     elif scenario == "missing_tasks":
         snapshot["assignment_tasks"] = []
+    elif scenario == "approval_without_rule":
+        del decisions["completion_prerequisites"]
+    elif scenario == "approval_wrong_format":
+        target["activity_sub_type"] = "SUBTYPE_DOCUMENT_PDF"
+    elif scenario == "malformed_approval":
+        schedule["assessed_pass_delivery_activities"]["course_synthetic"].append(42)
     else:
         rules.append(rule.copy())
-    body = _synthetic_policy_body(StudyPolicyKey.D_09, {
-        "completion_prerequisites": {"assessed_pass_by_course": {"course_synthetic": rules}},
-    })
+    body = _synthetic_policy_body(StudyPolicyKey.D_09, decisions)
+    if scenario in {"approval_without_rule", "malformed_approval"}:
+        assert not ungated_by_assessed_pass(body, "course_synthetic", target["activity_uuid"])
     with pytest.raises(HTTPException) as error:
         validate_release_pass_prerequisites(body, snapshot)
     assert error.value.detail["code"] == "RELEASE_ASSESSED_PASS_INVALID"

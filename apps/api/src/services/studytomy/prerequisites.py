@@ -26,6 +26,15 @@ class AssessedPassPrerequisite(BaseModel):
 _PASS_RULES = TypeAdapter(
     dict[ResourceUUID, Annotated[list[AssessedPassPrerequisite], Field(max_length=500)]]
 )
+_PASS_DELIVERY = TypeAdapter(dict[ResourceUUID, Annotated[list[ResourceUUID], Field(max_length=500)]])
+
+
+def approved_pass_delivery_activities(body: StudyPolicyBody, course_uuid: str) -> set[str]:
+    schedule = body.specified_value("release_schedule")
+    if not isinstance(schedule, dict) or "assessed_pass_delivery_activities" not in schedule:
+        return set()
+    approved = _PASS_DELIVERY.validate_python(schedule["assessed_pass_delivery_activities"])
+    return set(approved.get(course_uuid, []))
 
 
 def _course_pass_rules(body: StudyPolicyBody, course_uuid: str) -> list[AssessedPassPrerequisite]:
@@ -41,12 +50,11 @@ def ungated_by_assessed_pass(
     """Exclude a target, or the whole offer, until release-bound grading is supported."""
     try:
         rules = _course_pass_rules(body, course_uuid)
+        approved = approved_pass_delivery_activities(body, course_uuid)
     except ValidationError:
         return False
-    return not any(
-        activity_uuid is None or rule.target_activity_uuid == activity_uuid
-        for rule in rules
-    )
+    gated = approved | {rule.target_activity_uuid for rule in rules}
+    return not gated if activity_uuid is None else activity_uuid not in gated
 
 
 async def managed_assessed_pass_status(
@@ -146,18 +154,36 @@ def validate_release_pass_prerequisites(body: StudyPolicyBody, snapshot: dict) -
     """Require each prerequisite to point to an earlier graded activity in this release."""
     invalid = studytomy_http_error(
         409, "RELEASE_ASSESSED_PASS_INVALID",
-        "Each assessed-pass prerequisite must reference a published, graded assignment earlier in this course.",
+        "Assessed-pass delivery needs a supported activity and an earlier published, graded assignment in this course.",
     )
     try:
-        rules = _course_pass_rules(body, snapshot["course"]["course_uuid"])
+        course_uuid = snapshot["course"]["course_uuid"]
+        rules = _course_pass_rules(body, course_uuid)
+        approved = approved_pass_delivery_activities(body, course_uuid)
     except ValidationError as error:
         raise invalid from error
+    if not approved.issubset(rule.target_activity_uuid for rule in rules):
+        raise invalid
     if not rules:
         return
 
     activities = {row["activity_uuid"]: row for row in snapshot["activities"]}
     activities_by_id = {row["id"]: row for row in activities.values()}
     assignments = {row["assignment_uuid"]: row for row in snapshot["assignments"]}
+    schedule = body.specified_value("release_schedule")
+    for activity_uuid in approved:
+        target = activities.get(activity_uuid)
+        subtype = target.get("activity_sub_type") if target else None
+        if subtype == "SUBTYPE_DYNAMIC_PAGE":
+            schedule_key = "ungated_text_activities"
+        elif subtype in {"SUBTYPE_DOCUMENT_PDF", "SUBTYPE_VIDEO_HOSTED"}:
+            schedule_key = "ungated_media_activities"
+        else:
+            raise invalid
+        format_courses = schedule.get(schedule_key)
+        format_activities = format_courses.get(course_uuid) if isinstance(format_courses, dict) else None
+        if not isinstance(format_activities, list) or activity_uuid not in format_activities:
+            raise invalid
     chapter_orders = dict(snapshot["chapter_order"])
     if len(set(chapter_orders.values())) != len(chapter_orders):
         raise invalid
