@@ -1,5 +1,16 @@
 # Studytomy Family Learning Implementation Status
 
+## Award and report acceptance follow-up
+
+Reviewed primary `main` at `83f0ac8e770fbd42344d1cefdd4551d6e170d8f5`. The checks below used synthetic records. Detailed environments and earlier outcomes are in the [local verification log](LOCAL-VERIFICATION.md).
+
+| Work package | Additional verified evidence | Remaining acceptance |
+|---|---|---|
+| TASK-045, AUD-15 | Mobile Chromium issued an award through the staff dashboard using the exact evidence digest returned by the API. A separate browser run verified that an issuance-only policy denies changes. Signed PostgreSQL tests also verify that a change-enabled policy requires a finalized result correction. The service fixture verifies corrected and withdrawn award versions, exact result lineage and replay of the earlier correction after withdrawal. | Successful correction and withdrawal through the staff dashboard, educator acceptance and approved award terms and presentation. |
+| TASK-051, TASK-052, AUD-13 | A mobile browser fetched a stored reviewed report through the live API under an independent learner's sharing grant. The API and UI both showed the reviewed completion count. Expiry and a separate staff API withdrawal removed report access and cleared the count on reload. Signed tests verify that reclassification to dependent control closes prior independent disclosure. | Staff dashboard withdrawal, approved dependent guardian disclosure, approved reporting purpose and external delivery acceptance. |
+
+AUD-20 educator sign-off, AUD-21 integrated pilot acceptance and AUD-22 final status publication remain open. No synthetic fixture grants approval for real learner disclosure, award issuance or pilot launch.
+
 ## Reviewed learning evidence checkpoint (18 November 2026)
 
 This checkpoint reflects the primary `main` worktree at `51d08b89561799836ed64ef5ee2dbc34c21e0ccd`. Earlier sections retain their revision-specific results.
