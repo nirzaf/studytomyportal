@@ -29,10 +29,8 @@ import {
   recheckConnections,
 } from './accessRecheck.js'
 import { loadBoardState } from './boardState.js'
-import {
-  assertSuccessfulYdocWrite,
-  BoardPersistenceQueue,
-} from './persistenceQueue.js'
+import { writeBoardSnapshot } from './boardWrite.js'
+import { BoardPersistenceQueue } from './persistenceQueue.js'
 
 const PORT = parseInt(process.env.COLLAB_PORT || '4000', 10)
 const API_URL = process.env.LEARNHOUSE_API_URL || 'http://localhost:8000'
@@ -219,22 +217,13 @@ const pendingFlushes = new BoardPersistenceQueue({
   maxPendingBytes: MAX_PENDING_FLUSH_BYTES,
   write: async (boardUuid, state, timeoutMs) => {
     const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`
-    const response = await fetchWithTimeout(
-      url,
-      {
-        method: 'PUT',
-        headers: {
-          'X-Internal-Key': INTERNAL_KEY,
-          'Content-Type': 'application/octet-stream',
-        },
-        body: state.buffer.slice(
-          state.byteOffset,
-          state.byteOffset + state.byteLength,
-        ) as ArrayBuffer,
-      },
-      timeoutMs,
+    await writeBoardSnapshot(state, MAX_YDOC_BYTES, (init) =>
+      fetchWithTimeout(
+        url,
+        { ...init, headers: { ...init.headers, 'X-Internal-Key': INTERNAL_KEY } },
+        timeoutMs,
+      ),
     )
-    assertSuccessfulYdocWrite(response)
   },
   onRetry: (boardUuid, retry, delayMs, error) => {
     console.warn(
