@@ -253,21 +253,31 @@ async def _learner_assignment_past_due(
     return await assessment_deadline_extension(db_session, assignment, learner_id) is None
 
 
+async def effective_assignment_extension(
+    db_session: AsyncSession, assignment: Assignment, learner_id: int,
+) -> datetime | None:
+    """Resolve the caller's current reviewed extension without shortening the native deadline."""
+    from src.services.studytomy.assessment_reviews import assessment_deadline_extension
+
+    original = _assignment_deadline(assignment)
+    if original is None:
+        return None
+    deadline = await assessment_deadline_extension(db_session, assignment, learner_id)
+    return deadline if deadline is not None and deadline > original.astimezone(deadline.tzinfo) else None
+
+
 async def _project_assessment_deadline(
     db_session: AsyncSession, result: AssignmentRead, assignment: Assignment,
     managed: bool, actor: PublicUser | AnonymousUser | APITokenUser,
 ) -> None:
     if managed and isinstance(actor, PublicUser):
-        from src.services.studytomy.assessment_reviews import assessment_deadline_extension
         from src.db.studytomy.family import StudyLearnerProfile, StudyLearnerProfileStatus
 
-        original = _assignment_deadline(assignment)
-        if original is None:
-            return
-        deadline = await assessment_deadline_extension(db_session, assignment, actor.id)
-        if deadline is not None and deadline > original.astimezone(deadline.tzinfo):
+        deadline = await effective_assignment_extension(db_session, assignment, actor.id)
+        if deadline is not None:
             result.due_date = deadline.isoformat()
-        if original.tzinfo is not None or result.due_date != assignment.due_date:
+        original = _assignment_deadline(assignment)
+        if deadline is not None or (original is not None and original.tzinfo is not None):
             result.deadline_time_zone = await db_session.scalar(
                 select(StudyLearnerProfile.time_zone).where(
                     StudyLearnerProfile.org_id == assignment.org_id,

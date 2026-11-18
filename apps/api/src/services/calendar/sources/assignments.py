@@ -32,7 +32,7 @@ from src.services.calendar.types import (
     iso_utc,
 )
 from src.services.courses.activities.access import verify_activity_reader_access
-from src.services.courses.activities.assignments import _is_assignment_past_due
+from src.services.courses.activities.assignments import _is_assignment_past_due, effective_assignment_extension
 
 
 def parse_due_date(raw: Optional[str]) -> tuple[Optional[date | datetime], bool]:
@@ -97,18 +97,16 @@ async def assignment_due_dates(ctx: CalendarContext) -> list[CalendarEvent]:
         )
     )).all()
 
-    # Window first: the access checks below cost queries, the date parse does not.
+    # Managed learner extensions can move an otherwise out-of-range assignment into the window.
     in_range = []
     for assignment, activity, course in rows:
         due, all_day = parse_due_date(assignment.due_date)
         if due is None:
             continue
-        if all_day:
-            if not ctx.overlaps_day(due):  # type: ignore[arg-type]
-                continue
-        elif not ctx.overlaps(due):  # type: ignore[arg-type]
+        overlaps = ctx.overlaps(due) if isinstance(due, datetime) else ctx.overlaps_day(due)
+        if not overlaps and not (course.studytomy_managed and assignment.published):
             continue
-        in_range.append((assignment, activity, course, due, all_day))
+        in_range.append((assignment, activity, course, due, all_day, overlaps))
     if not in_range:
         return []
 
@@ -123,10 +121,11 @@ async def assignment_due_dates(ctx: CalendarContext) -> list[CalendarEvent]:
     }
 
     events: list[CalendarEvent] = []
-    for assignment, activity, course, due, all_day in in_range:
+    for assignment, activity, course, due, all_day, overlaps in in_range:
         if not await ctx.can_read_course(course):
             continue
         editor = await ctx.can_edit_course(course)
+        extension = None
         submission = submissions.get(assignment.id)
         if editor and submission is None:
             if not assignment.published:
@@ -141,7 +140,14 @@ async def assignment_due_dates(ctx: CalendarContext) -> list[CalendarEvent]:
                     await verify_activity_reader_access(ctx.request, activity, course, ctx.current_user, db)
                 except HTTPException:
                     continue
-            status = _learner_status(assignment, submission)
+                if course.studytomy_managed:
+                    extension = await effective_assignment_extension(db, assignment, ctx.user_id)
+            status = "open" if extension is not None else _learner_status(assignment, submission)
+
+        if extension is not None:
+            due, all_day, overlaps = extension, False, ctx.overlaps(extension)
+        if not overlaps:
+            continue
 
         events.append(CalendarEvent(
             id=f"assignment:{assignment.assignment_uuid}",

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from src.db.courses.certifications import CertificateUser, Certifications
 from src.db.courses.chapters import Chapter
@@ -208,16 +209,41 @@ async def test_sources_respect_the_feature_toggle(db, org, course, chapter, regu
     )
     db.add(activity)
     await db.flush()
-    db.add(Assignment(
+    assignment = Assignment(
         title="Due", description="", published=True, grading_type=GradingTypeEnum.NUMERIC,
         due_date=(NOW + timedelta(days=3)).date().isoformat(), org_id=org.id, course_id=course.id,
         chapter_id=chapter.id, activity_id=activity.id, assignment_uuid="assignment_a", creation_date="", update_date="",
-    ))
+    )
+    db.add(assignment)
     await db.commit()
     await _enroll(db, org, course, regular_user)
     assert len(await _events(mock_request, org, regular_user, db)) == 1
     with patch("src.services.calendar.types.resolve_feature", return_value={"enabled": False}):
         assert await _events(mock_request, org, regular_user, db) == []
+
+    course.studytomy_managed = True
+    course.public = False
+    course.published = False
+    course.open_to_contributors = False
+    assignment.due_date = (START - timedelta(days=2)).date().isoformat()
+    await db.commit()
+    extension = NOW + timedelta(days=4)
+    with (
+        patch("src.services.calendar.types.CalendarContext.can_read_course", new=AsyncMock(return_value=True)),
+        patch("src.services.calendar.types.CalendarContext.can_edit_course", new=AsyncMock(return_value=False)),
+        patch("src.services.calendar.sources.assignments.verify_activity_reader_access", new=AsyncMock()) as access,
+        patch("src.services.calendar.sources.assignments.effective_assignment_extension", new=AsyncMock(return_value=extension)) as reviewed,
+    ):
+        events = await _events(mock_request, org, regular_user, db)
+        assert len(events) == 1
+        assert datetime.fromisoformat(events[0].starts_at) == extension
+        assert events[0].status == "open" and not events[0].all_day
+        reviewed.assert_awaited_once_with(db, assignment, regular_user.id)
+
+        access.side_effect = HTTPException(403)
+        reviewed.reset_mock()
+        assert await _events(mock_request, org, regular_user, db) == []
+        reviewed.assert_not_awaited()
 
 
 def test_all_built_in_sources_are_registered():
