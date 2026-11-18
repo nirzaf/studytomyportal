@@ -149,6 +149,21 @@ The implementation snapshots the reviewed release/media/policy, commits before o
 
 The audit’s older managed-diagnostic denial is no longer current: the existing integration fixture already exercises the exact reviewed-release branch. It verifies the managed course remains `public=False` and `published=False`, the granted learner resolves the exact frozen release and a diagnostic bound to it, incomplete course/release scope returns 404, a lesson outside the release returns 404, and the exact release path can issue an attempt with frozen source provenance. The fixture therefore records current behavior and the intended later integration without restoring the stale denial. Synthetic approvals do not constitute real approval or activate learners. No production migration or real service was used.
 
+### Assignment reconciliation at `7def49a02115f26d198c6311c99e326b017d5eef`
+
+Reviewed the 164,334-byte independent audit with SHA-256 `2e5b37a45491c2f572dc4a22ee88e81214fae7483d138a25b93fea956530c801` and baseline `210cb561`. The only worktree was the primary `main`, with a clean index and working tree. Reused the existing AUD-01 fixture and current lockfiles (`apps/api/uv.lock`, `apps/collab/bun.lock`, `apps/web/bun.lock` and `apps/e2e/bun.lock`).
+
+| Scope | Local command | Result |
+|---|---|---|
+| AUD-01, AUD-03, AUD-04 and dependent evidence and outbox checks | From `apps/api`, `python -m pytest -q --tb=short src/tests/studytomy/test_adaptive_curriculum_api.py src/tests/studytomy/test_adaptive_evidence_postgres.py src/tests/studytomy/test_concurrency_postgres.py` | 21 passed, 0 failed, 0 skipped in 137.41 seconds. Covers the managed-private database guard, authorized release-scoped adaptive work, immutable evidence, concurrent requests, fixture target validation, and outbox claims. |
+| AUD-06 staging cleanup | From `apps/api`, `python -m pytest -q --tb=short src/tests/studytomy/test_managed_media_staging.py` | 6 passed, 0 failed, 0 skipped in 5.55 seconds. Uses synthetic storage and failure injection. |
+| AUD-05 and AUD-06 checkout, media and organization lock | From `apps/api`, `python -m pytest -q --tb=short src/tests/studytomy/test_checkout_router.py -m studytomy_postgres -k signed_checkout_accepts_only_retained_approved_terms` | 11 passed, 0 failed, 0 skipped, 1 deselected in 79.70 seconds. Covers storage staging concurrent with a same-organization governance transaction, grant revocation and expiry during staging, policy change and media ranges. |
+| AUD-07 and AUD-08 collaboration regression | From `apps/collab`, `bun run test` | 46 passed, 0 failed, 0 skipped across 9 suites. Uses synthetic adapters and local collaboration connections. |
+
+The API suite used the existing disposable Docker database `studytomy_aud19_full_restore_test` at `127.0.0.1:60607`. A read-only probe confirmed PostgreSQL 16.16, pgvector 0.8.7 and database revision `b91d2f6a08c3`, matching the sole source Alembic head.
+
+The [interim task matrix](IMPLEMENTATION-STATUS.md#independent-architecture-audit-checkpoint-2026-11-18-interim) tracks the remaining acceptance work. AUD-02 still needs named, dated decisions on cohort, credentials and recovery, commercial terms and safeguarding. AUD-20 still needs educator sign-off on the exact course, rubrics, accessibility alternatives and AI teaching samples. These runs did not exercise the full browser-to-API pilot journey or a live AI or email provider.
+
 ## AUD-07 and AUD-08 collaboration recovery verification
 
 - **Recorded:** 2026-11-18
