@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import AwareDatetime
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -11,6 +12,7 @@ from src.core.events.database import get_db_session
 from src.db.organizations import Organization
 from src.db.users import PublicUser
 from src.security.api_token_utils import get_authenticated_non_api_token_user
+from src.services.studytomy.metrics import SupportOperatingReport, read_support_operating_report
 from src.services.studytomy.support import (
     PublicSupportGuidance, StaffSupportCase, StaffSupportQueue, SupportCaseCommand, SupportCaseReceipt, SupportHandoff, SupportTransition,
     handoff_support_case, list_staff_support_cases, open_support_case, own_support_case, public_support_guidance, read_staff_support_case, recover_support_case, transition_support_case,
@@ -60,6 +62,19 @@ async def read_support_case(
     receipt = await own_support_case(db, await _case_org(org_uuid, db), actor, case_uuid)
     response.headers["Cache-Control"] = "private, no-store"
     return receipt
+
+
+@router.get("/orgs/{org_uuid}/support/staff/operating-report")
+async def staff_support_operating_report(
+    org_uuid: str, start: AwareDatetime, end: AwareDatetime, response: Response,
+    actor: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> SupportOperatingReport:
+    report = await read_support_operating_report(
+        db, await _case_org(org_uuid, db), actor, start=start, end=end,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return report
 
 
 @router.get("/orgs/{org_uuid}/support/staff/cases")

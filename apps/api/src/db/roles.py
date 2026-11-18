@@ -58,6 +58,7 @@ class StudytomyCapabilities(BaseModel):
     assessment_moderation: bool = False
     progress_report_review: bool = False
     privacy_retention_review: bool = False
+    support_operating_report: bool = False
 
     def __getitem__(self, item):
         return getattr(self, item)

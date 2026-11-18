@@ -58,6 +58,7 @@ class StudytomyCapabilityName(str, Enum):
     ASSESSMENT_MODERATION = "assessment_moderation"
     PROGRESS_REPORT_REVIEW = "progress_report_review"
     PRIVACY_RETENTION_REVIEW = "privacy_retention_review"
+    SUPPORT_OPERATING_REPORT = "support_operating_report"
 
 
 _REQUIRED_RESPONSIBILITY: dict[StudytomyCapabilityName, StudyOwnerFunction] = {
@@ -73,6 +74,7 @@ _REQUIRED_RESPONSIBILITY: dict[StudytomyCapabilityName, StudyOwnerFunction] = {
     StudytomyCapabilityName.ASSESSMENT_MODERATION: StudyOwnerFunction.EDUCATION,
     StudytomyCapabilityName.PROGRESS_REPORT_REVIEW: StudyOwnerFunction.EDUCATION,
     StudytomyCapabilityName.PRIVACY_RETENTION_REVIEW: StudyOwnerFunction.PRIVACY,
+    StudytomyCapabilityName.SUPPORT_OPERATING_REPORT: StudyOwnerFunction.SUPPORT,
 }
 
 
@@ -182,6 +184,8 @@ def _required_policy_keys(capability: StudytomyCapabilityName) -> tuple[str, ...
         return ("D-19",)
     if capability == StudytomyCapabilityName.PRIVACY_RETENTION_REVIEW:
         return ("D-12", "D-13", "D-15")
+    if capability == StudytomyCapabilityName.SUPPORT_OPERATING_REPORT:
+        return ("D-04", "D-15", "D-17")
     if capability == StudytomyCapabilityName.CONTENT_RELEASE_REVIEW:
         return ("D-02", "D-10", "D-15", "D-16")
     return ()
@@ -435,6 +439,7 @@ async def evaluate_studytomy_staff_access(
         StudytomyCapabilityName.ASSESSMENT_MODERATION: "course",
         StudytomyCapabilityName.PROGRESS_REPORT_REVIEW: "learner",
         StudytomyCapabilityName.PRIVACY_RETENTION_REVIEW: "case",
+        StudytomyCapabilityName.SUPPORT_OPERATING_REPORT: "function",
     }[capability]
     if not target_resource_uuid:
         return StudytomyAccessDecision(

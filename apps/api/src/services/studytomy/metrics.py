@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.organizations import Organization
 from src.db.studytomy.cases import StudyServiceCase
 from src.db.studytomy.commerce import StudyOffer, StudyOfferVersion
-from src.db.studytomy.governance import StudyPolicyKey
+from src.db.studytomy.governance import StudyOwnerFunction, StudyPolicyKey
 from src.db.users import PublicUser
 from src.security.studytomy_access import (
     StudytomyCapabilityName,
@@ -141,6 +141,44 @@ async def current_support_backlog(
             int((observed_at - oldest).total_seconds()) if oldest is not None else None
         ),
     }
+
+
+class SupportOperatingReport(BaseModel):
+    org_uuid: str
+    period_start: datetime
+    period_end: datetime
+    observed_at: datetime
+    policy_version_ids: list[int]
+    query_version: str = "support_operating_v1"
+    population: str = "Organization support cases. Resolution and reopening counts use retained transitions."
+    exclusions: str = "Safeguarding and service-hour targets. Missing resolution timestamps are excluded from elapsed time."
+    unresolved_cases: int
+    oldest_unresolved_age_seconds: int | None
+    first_resolved_cases: int
+    first_resolution_elapsed_seconds: float
+    reopened_transitions: int
+    reopened_cases: int
+
+
+async def read_support_operating_report(
+    db: AsyncSession, org: Organization, actor: PublicUser, *, start: datetime, end: datetime,
+) -> SupportOperatingReport:
+    now = datetime.now(UTC)
+    if start.utcoffset() is None or end.utcoffset() is None or start >= end or end > now:
+        raise HTTPException(422, "Use an ordered, timezone-aware reporting period ending at or before now.")
+    await authorize_studytomy_staff_action(
+        db, actor, org, StudytomyCapabilityName.SUPPORT_OPERATING_REPORT,
+        target_scope_kind="function", target_resource_uuid=StudyOwnerFunction.SUPPORT.value, now=now,
+    )
+    policies = await _current_policies(
+        db, org, (StudyPolicyKey.D_04, StudyPolicyKey.D_15, StudyPolicyKey.D_17), now,
+    )
+    backlog = await current_support_backlog(db, org_id=org.id)
+    activity = await support_resolution_activity(db, org_id=org.id, start=start, end=end)
+    return SupportOperatingReport(
+        org_uuid=org.org_uuid, period_start=start, period_end=end,
+        policy_version_ids=[policy.id for policy in policies], **backlog, **activity,
+    )
 
 
 async def support_resolution_activity(

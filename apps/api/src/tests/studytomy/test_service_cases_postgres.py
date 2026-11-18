@@ -900,7 +900,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
         reviewer = Role(
             id=role_seed + 1, name="Synthetic reviewer", org_id=org.id,
             role_uuid=f"role_reviewer_{tag}", role_type=RoleTypeEnum.TYPE_ORGANIZATION,
-            rights={"studytomy": {"safeguarding_case_review": True}},
+            rights={"studytomy": {"safeguarding_case_review": True, "support_operating_report": True}},
         )
         privacy = Role(
             id=role_seed + 2, name="Synthetic retention reviewer", org_id=org.id,
@@ -925,7 +925,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
 
         needed = (
             StudyPolicyKey.D_04, StudyPolicyKey.D_11, StudyPolicyKey.D_12, StudyPolicyKey.D_13, StudyPolicyKey.D_15,
-            StudyPolicyKey.D_18,
+            StudyPolicyKey.D_17, StudyPolicyKey.D_18,
         )
         responsibilities = set().union(*(POLICY_REQUIRED_RESPONSIBILITIES[key] for key in needed))
         approvers = {function: owner(approver, function.value) for function in responsibilities}
@@ -1203,6 +1203,24 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                 "reopened_transitions": 1,
                 "reopened_cases": 1,
             }
+            report_path = staff_path.removesuffix("/cases") + "/operating-report"
+            report_period = {"start": resolution.created_at.isoformat(), "end": datetime.now(UTC).isoformat()}
+            assert (await client.get(report_path, params=report_period)).status_code == 403
+            db.add(StudyStaffScope(
+                org_id=org.id, assignment_id=support_backup.id, capability="support_operating_report",
+                scope_kind="function", scope_uuid="support",
+                evidence_reference="synthetic-support-report-scope", created_by_user_id=approver.id,
+            ))
+            await db.commit()
+            report = await client.get(report_path, params=report_period)
+            assert report.status_code == 200, report.text
+            assert report.headers["cache-control"] == "private, no-store"
+            assert report.json()["first_resolved_cases"] == 1
+            assert report.json()["reopened_cases"] == 1
+            assert complaint_ref not in report.text
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_reporter)
+            assert (await client.get(report_path, params=report_period)).status_code == 403
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_support_backup)
 
             guest_token = secrets.token_urlsafe(32)
             issued_at = datetime.now(UTC)

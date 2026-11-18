@@ -570,7 +570,7 @@ class StudyStaffScopeCreate(BaseModel):
             "|learner_eligibility_review"
             "|financial_reconciliation|refund_approval|offer_publication"
             "|adaptive_curriculum_author|content_release_review|assessment_moderation|progress_report_review"
-            "|privacy_retention_review)$"
+            "|privacy_retention_review|support_operating_report)$"
         )
     )
     scope_kind: StudyStaffScopeKind

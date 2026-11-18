@@ -11,7 +11,7 @@ from src.security.org_auth import require_org_role_permission, get_user_org_role
 from src.security.superadmin import is_user_superadmin
 from src.db.users import AnonymousUser, APITokenUser, PublicUser
 from src.security.auth import resolve_acting_user_id
-from src.db.roles import Rights, Role, RoleCreate, RoleRead, RoleUpdate, RoleTypeEnum
+from src.db.roles import Rights, Role, RoleCreate, RoleRead, RoleUpdate, RoleTypeEnum, StudytomyCapabilities
 from src.db.organizations import Organization
 from src.db.user_organizations import UserOrganization
 from fastapi import HTTPException, Request
@@ -320,11 +320,10 @@ async def update_role(
             role.rights.model_dump() if role.rights is not None else {}
         )
         existing_studytomy = existing_rights.get("studytomy")
-        if not isinstance(existing_studytomy, dict):
-            from src.db.roles import StudytomyCapabilities
-
-            existing_studytomy = StudytomyCapabilities().model_dump()
-        new_rights = {**new_rights, "studytomy": dict(existing_studytomy)}
+        preserved = StudytomyCapabilities().model_dump()
+        if isinstance(existing_studytomy, dict):
+            preserved.update(existing_studytomy)
+        new_rights = {**new_rights, "studytomy": preserved}
         update_data["rights"] = new_rights
 
     # Every check runs on the new rights BEFORE the row changes: with

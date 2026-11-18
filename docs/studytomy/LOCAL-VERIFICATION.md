@@ -250,6 +250,10 @@ The internal projection counts support cases first resolved during a half-open p
 
 At the checkpoint based on `17e20ff5cee66fe8f1f2ec5815fa9471b9d24c20`, all **6 tests** in `test_service_cases_postgres.py` passed on disposable Docker PostgreSQL. The report-routing scenario used actual support API transitions and checked the first-resolution boundary and later reopening independently. The backlog fixture checked that a status without journal evidence supplies no first-resolution time.
 
+The operating report endpoint is `GET /studytomy/orgs/{org_uuid}/support/staff/operating-report`. It requires a direct staff session, the default-deny `support_operating_report` capability, an active support owner assignment with an exact `function` scope for `support`, and current D-04, D-15 and D-17 approvals. It returns period activity and the current backlog as aggregates, with no case IDs or narrative. The workspace UI and service-hour compliance measures remain open.
+
+The endpoint checkpoint based on `af0abe17822706b71c1a6f960217c044ee82f48b` passed **115 API tests** across the support, staff-access, generic role-tool, setup role and role-service suites. Disposable Docker PostgreSQL exercised real support transitions and verified that a case assignment alone is insufficient, an exact support report grant returns private aggregates, and the reporter is denied. The role-tool regression also verified that editing a legacy role keeps prior grants and defaults the new permission to false.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18

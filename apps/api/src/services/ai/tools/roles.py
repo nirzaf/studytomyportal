@@ -110,7 +110,10 @@ def _full_rights(
     # capabilities. Preserve the server-side value when updating an existing role.
     studytomy_rights = base.get(_STUDYTOMY_BUCKET)
     if preserve_studytomy and isinstance(studytomy_rights, dict):
-        out[_STUDYTOMY_BUCKET] = dict(studytomy_rights)
+        out[_STUDYTOMY_BUCKET] = {
+            **dict.fromkeys(_perms_of(_STUDYTOMY_BUCKET), False),
+            **studytomy_rights,
+        }
     return out
 
 

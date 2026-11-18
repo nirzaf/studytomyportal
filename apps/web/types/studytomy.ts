@@ -62,6 +62,7 @@ export type StudytomyCapabilityName =
   | 'assessment_moderation'
   | 'progress_report_review'
   | 'privacy_retention_review'
+  | 'support_operating_report'
 
 export interface StudytomyCapabilities {
   family_authority_review: boolean
@@ -75,6 +76,7 @@ export interface StudytomyCapabilities {
   assessment_moderation: boolean
   progress_report_review: boolean
   privacy_retention_review: boolean
+  support_operating_report: boolean
 }
 
 export const DEFAULT_DENY_STUDYTOMY_CAPABILITIES: Readonly<StudytomyCapabilities> = {
@@ -89,6 +91,7 @@ export const DEFAULT_DENY_STUDYTOMY_CAPABILITIES: Readonly<StudytomyCapabilities
   assessment_moderation: false,
   progress_report_review: false,
   privacy_retention_review: false,
+  support_operating_report: false,
 }
 
 export interface StudytomyAccessDecision {

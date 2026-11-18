@@ -807,6 +807,7 @@ async def test_generic_role_tools_hide_and_preserve_studytomy_capabilities(
     ))
     persisted = (await db.execute(select(Role).where(Role.role_uuid == "role_reviewer"))).scalars().first()
     assert persisted.rights["studytomy"]["family_authority_review"] is True
+    assert persisted.rights["studytomy"]["support_operating_report"] is False
     assert updated["rights"] is not None and "studytomy" not in updated["rights"]
 
     created = ok(await call(
