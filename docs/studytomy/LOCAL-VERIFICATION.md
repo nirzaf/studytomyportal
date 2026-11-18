@@ -100,6 +100,19 @@ The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 ap
 - **Current behavior and deviation:** Full extracted pages are examined through bounded overlapping windows and at most six excerpts are sent to the model. A different-vocabulary request without lexical support returns an actionable insufficient-evidence error and skips the provider; synonym recall is not established. Citation UUID/hash/page/quote checks and access revalidation remain in place. Hybrid RRF is evaluation-only, and the exact small-course runtime option remains off by default; no vector model or runtime retrieval mode was changed in this slice.
 - **Limits:** Prompt-like source text is passed as quoted data with a system instruction to ignore embedded instructions, but provider behavior is mocked. No OCR, real-provider factual support, representative educator judgments, browser acceptance, production recall/latency, learner activation, or launch approval was verified. See [the detailed synthetic evaluation](GROUNDED-RETRIEVAL-EVALUATION.md) for fixtures and measured limits.
 
+## AUD-01 current-code managed-course characterization
+
+- **Recorded:** 2026-11-18
+- **Source revision tested:** `8649e57e9291ab1bc48aa7b89cf7299c8b2a913e`.
+- **Database isolation:** Dedicated Docker PostgreSQL 16.16 / pgvector 0.8.7 at loopback `127.0.0.1:60607`, database `studytomy_aud03_test`; `STUDYTOMY_TEST_DATABASE_URL` pointed only to this `_test` database. The fixture guard rejects runtime URL fallback, remote hosts, non-test databases and routing parameters.
+
+| Scope | Command | Result |
+|---|---|---|
+| PostgreSQL fixture target guards | `python -m pytest -q apps/api/src/tests/studytomy/test_concurrency_postgres.py -k 'runtime_database_variables_are_not_used_as_test_fallbacks or postgres_test_url_rejects_nonlocal_or_non_test_targets'` | **PASS:** 5 passed, 8 deselected. |
+| Managed curriculum integration characterization | `python -m pytest -q apps/api/src/tests/studytomy/test_adaptive_curriculum_api.py -m studytomy_postgres -k drafts_round_trip_on_postgres` | **PASS:** 1 passed, 1 deselected in 63.54 seconds. Uses synthetic staff, learner, payer, guardian, policies, private managed course, reviewed frozen release, grant and curriculum/diagnostic data. |
+
+The audit’s older managed-diagnostic denial is no longer current: the existing integration fixture already exercises the exact reviewed-release branch. It verifies the managed course remains `public=False` and `published=False`, the granted learner resolves the exact frozen release and a diagnostic bound to it, incomplete course/release scope returns 404, a lesson outside the release returns 404, and the exact release path can issue an attempt with frozen source provenance. The fixture therefore records current behavior and the intended later integration without restoring the stale denial. Synthetic approvals do not constitute real approval or activate learners. No production migration or real service was used.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
