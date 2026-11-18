@@ -154,3 +154,7 @@ The load tests distinguish an explicitly marked empty board from Redis failure, 
 | Full strict web lint | `bun run lint:strict` from `apps/web` at `cc3d884` | **FAIL:** 6 errors and 976 warnings in untouched files: React `no-undef` in admin layouts, `GeneralWrapper.tsx` and `ClientComp.tsx`, plus two `no-useless-escape` findings in `PasswordStrengthIndicator.tsx`. The lint findings were not changed in this test-only checkpoint. |
 
 The API full-suite failure classification is environment-specific for the twelve symlink cases and expectation drift for the other two. The focused rerun verifies the two corrected assertions only; the full API suite was not rerun after the test-only edits. The 22 skipped cases are reported as skipped; this record does not infer their acceptance. Browser acceptance, live AI/provider quality, real learner activation and educator acceptance remain unverified. No CI/CD, deployment, production migration or external service was run.
+
+### Web lint follow-up
+
+At `c5d920eabee7b8a3eca21a2baf7ab3eb46566e27`, `bun run lint:strict --format stylish` from `apps/web` exited 0 with **0 errors and 976 warnings**. The change resolved the six errors in the previous checkpoint. `node node_modules/typescript/bin/tsc --noEmit` also exited 0 on the source that was committed at this revision.
