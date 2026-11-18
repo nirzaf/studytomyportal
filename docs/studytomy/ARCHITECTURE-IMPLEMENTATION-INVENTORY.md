@@ -12,6 +12,12 @@ Reviewed primary `main` at `fa404b6abd4f5128c8306bf03ac51f298b135ead`. The [loca
 
 A focused run of `test_family_authority.py` and `test_adaptive_curriculum_api.py` passed all 12 tests in 188.01 seconds. The PostgreSQL case used the disposable loopback Docker database at revision `b91d2f6a08c3`. This verifies existing authority and report boundaries without exercising dependent recipient disclosure.
 
+### AUD-11 evidence dependency
+
+The [family review workspace](../../apps/web/components/Studytomy/FamilyWorkspace.tsx) displays the assigned request's evidence reference and current relationship status. It has no decision controls. The [relationship service](../../apps/api/src/services/studytomy/authority.py) checks the reviewer, current policy versions, expected authority version and idempotency key before recording a decision. Its evidence field is a reference string. It does not resolve that reference to stored bytes or a case record.
+
+The [private evidence service](../../apps/api/src/services/studytomy/evidence_files.py) already verifies bytes, policy bounds and purpose-specific scope for eligibility and record-request attachments. Those purpose records do not establish which relationship request a reviewer examined. Once the approved intake and retention path is supplied, bind the exact evidence revision to the organization, learner, relationship and review purpose, then resolve it before a staff decision. Verify wrong-purpose and unrelated-relationship denial, exact decision replay after a lost response, changed-policy denial and current state after reload before enabling the workspace controls.
+
 Reviewed 2026-11-17 in `studytomyportal` on primary `main`, at `dc661329e30c0b2f61b008b6519cc81f93f2fc7b` with a dirty worktree. This inventory follows TASK-01 through TASK-11 in the supplied *Studytomy — Complete Architecture Improvement Implementation* specification. The [agent architecture guide](AGENT-ARCHITECTURE-GUIDE.md) describes the system and its boundaries.
 
 Status describes the inspected engineering evidence. Local builds, database fixtures, and mocked model or browser checks do not establish operational or real-learner acceptance.
