@@ -53,9 +53,13 @@ export default function ContentReviewPanel({ client, initial }: {
     } catch (failure) {
       if (!controller.signal.aborted) {
         const code = failure instanceof CourseReviewError ? failure.code : undefined
-        setError(code === 'STALE_VERSION' || code === 'GROUNDED_SOURCE_REVIEW_REQUIRED'
-          ? t('contentReview.stale', 'The candidate changed. Reload it before making a decision.')
-          : t('contentReview.error', 'The request failed. Check your review access and attachment selection, then retry.'))
+        if (code === 'RELEASE_MEDIA_UNSUPPORTED') {
+          setError(t('contentReview.unsupportedMedia', 'This release cannot retain one or more lesson formats or media dependencies. Keep this version in draft and review the affected lessons.'))
+        } else if (code === 'STALE_VERSION' || code === 'GROUNDED_SOURCE_REVIEW_REQUIRED') {
+          setError(t('contentReview.stale', 'The candidate changed. Reload it before making a decision.'))
+        } else {
+          setError(t('contentReview.error', 'The request failed. Check your review access and attachment selection, then retry.'))
+        }
       }
     } finally {
       if (active.current === controller) {
