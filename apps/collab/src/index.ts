@@ -29,7 +29,7 @@ import {
   recheckConnections,
 } from './accessRecheck.js'
 import { loadBoardState } from './boardState.js'
-import { writeBoardSnapshot } from './boardWrite.js'
+import { cachePendingBoardSnapshot, writeBoardSnapshot } from './boardWrite.js'
 import { BoardPersistenceQueue } from './persistenceQueue.js'
 
 const PORT = parseInt(process.env.COLLAB_PORT || '4000', 10)
@@ -506,17 +506,16 @@ const server = new Server({
           return
         }
 
-        // 1. Write to Redis immediately (fast)
+        let pending: Uint8Array = state
         try {
-          const r = getRedis()
-          const snapshot = Buffer.from(state)
-          const results = await r.multi()
-            .setex(redisPendingYdocKey(boardUuid), REDIS_YDOC_TTL, snapshot)
-            .setex(redisYdocKey(boardUuid), REDIS_YDOC_TTL, snapshot)
-            .exec()
-          for (const [error] of results ?? []) {
-            if (error) throw error
-          }
+          pending = await cachePendingBoardSnapshot(
+            getRedis(),
+            redisPendingYdocKey(boardUuid),
+            redisYdocKey(boardUuid),
+            state,
+            MAX_YDOC_BYTES,
+            REDIS_YDOC_TTL,
+          )
         } catch (err) {
           console.error(
             `[collab] Redis store error for ${boardUuid}:`,
@@ -525,7 +524,7 @@ const server = new Server({
         }
 
         // 2. Debounced write to database (slow, batched)
-        pendingFlushes.schedule(boardUuid, state)
+        pendingFlushes.schedule(boardUuid, pending)
       },
     }),
   ],

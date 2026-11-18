@@ -1,7 +1,40 @@
 import assert from 'node:assert/strict'
 import { it } from 'node:test'
 import * as Y from 'yjs'
-import { writeBoardSnapshot } from '../src/boardWrite.ts'
+import { preservePendingBoardSnapshot, writeBoardSnapshot } from '../src/boardWrite.ts'
+
+it('retains both unacknowledged edits when Redis replacements race', async () => {
+  const first = new Y.Doc()
+  const second = new Y.Doc()
+  const restored = new Y.Doc()
+  let cached: Uint8Array | null = null
+  let conflicts = 0
+  try {
+    first.getText('first').insert(0, 'unsaved first edit')
+    second.getText('second').insert(0, 'unsaved second edit')
+    async function replace(previous: Uint8Array | null, next: Uint8Array) {
+      if (previous !== cached) {
+        conflicts++
+        return false
+      }
+      cached = next
+      return true
+    }
+    const writes = [first, second].map(doc =>
+      preservePendingBoardSnapshot(Y.encodeStateAsUpdate(doc), 1024, async () => cached, replace),
+    )
+    const [, latest] = await Promise.all(writes)
+    assert.equal(conflicts, 1)
+    assert.equal(cached, latest)
+    Y.applyUpdate(restored, latest)
+    assert.equal(restored.getText('first').toString(), 'unsaved first edit')
+    assert.equal(restored.getText('second').toString(), 'unsaved second edit')
+  } finally {
+    first.destroy()
+    second.destroy()
+    restored.destroy()
+  }
+})
 
 it('rereads after a stale precondition and preserves both writers’ edits', async () => {
   const local = new Y.Doc()
