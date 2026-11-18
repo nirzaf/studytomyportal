@@ -11,3 +11,9 @@ The next poll moves the expired lease to `reconciliation_required` with `LEASE_E
 3. Before any authorized replacement notification, recheck the current report version, recipient authority, and purpose. The current scheduler has no operator reconciliation command for resolving an unknown provider outcome. Follow the approved incident workflow when available; changing the database row or restarting the scheduler cannot establish delivery.
 
 The disposable PostgreSQL recovery test at `64cc4e5015dccde985ebe2a139efc944d9c2772d` passed all 13 concurrency tests. A fresh process handled an expired lease and the stale sender was refused. The lease deadline was simulated and no external provider was used. [Backup and restore evidence](MIGRATION-AND-ROLLBACK.md) covers the separate synthetic database rehearsal.
+
+## Pilot cash reconciliation
+
+The internal TASK-065 projection groups supported confirmed movements by organization and currency. Use the half-open period from the start timestamp up to, but excluding, the end timestamp. Collections and refunds use retained settlement dates. Chargebacks and reversals use their effective dates, including when they fall in a later period than the collection. Cash amounts are in minor units. Collections lacking manual settlement evidence are outside the projection, and tax and revenue figures are unavailable. An empty result means no supported confirmed movements in that scope.
+
+The paid checkout regression on disposable PostgreSQL covers duplicate requests, a complete refund, a later chargeback reversal at the exact period boundary, and an empty ledger in a separate organization. The projection has no operator endpoint. Finance authorization, approved reporting scope, and production acceptance are required before showing pilot figures.

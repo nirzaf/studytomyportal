@@ -2138,6 +2138,21 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 "currency": "AUD", "collected_minor": 0, "refunded_minor": 0,
                 "chargeback_minor": 0, "reversed_chargeback_minor": 20, "net_minor": 20,
             }]
+            assert await confirmed_cash_by_currency(
+                db, org_id=org.id, start=end - timedelta(days=30), end=saved_reversal.effective_at,
+            ) == [{
+                "currency": "AUD", "collected_minor": 125, "refunded_minor": 125,
+                "chargeback_minor": 20, "reversed_chargeback_minor": 0, "net_minor": -20,
+            }]
+            empty_org = Organization(
+                name="Synthetic empty ledger", slug=f"empty-{token}",
+                org_uuid=f"org_empty_{token}", email=f"empty-{token}@example.invalid",
+            )
+            db.add(empty_org)
+            await db.flush()
+            assert await confirmed_cash_by_currency(
+                db, org_id=empty_org.id, start=end - timedelta(days=30), end=end,
+            ) == []
             assert (await db.get(StudyCourseAccessGrant, grant.id)).revoked_at is not None
             retained = await db.get(StudyCourseAccessGrant, other_grant.id)
             assert retained.revoked_at is None
