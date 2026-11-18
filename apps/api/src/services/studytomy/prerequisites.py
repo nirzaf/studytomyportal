@@ -3,8 +3,12 @@
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.db.studytomy.governance import StudyPolicyBody
+from src.db.courses.assignments import Assignment, AssignmentUserSubmission, AssignmentUserSubmissionStatus
+from src.db.studytomy.education import StudyCourseRelease
+from src.db.studytomy.governance import StudyBusinessEvent, StudyPolicyBody
 from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.grading_contract import retained_grading_contract_digest
 
@@ -43,6 +47,94 @@ def ungated_by_assessed_pass(
         activity_uuid is None or rule.target_activity_uuid == activity_uuid
         for rule in rules
     )
+
+
+async def managed_assessed_pass_status(
+    db: AsyncSession,
+    body: StudyPolicyBody,
+    release: StudyCourseRelease,
+    user_id: int,
+    activity_uuid: str,
+) -> Literal["assessment_pass_required", "assessment_pass_delivery_pending"] | None:
+    """Project evidence status for an already authorized release without opening delivery."""
+    from src.services.studytomy.assessment_reviews import _appeal_receipt
+    from src.services.studytomy.grading import (
+        CONTRACT_FROZEN_ACTION,
+        NATIVE_GRADING_CONTRACT_VERSION,
+        latest_assessment_result,
+    )
+
+    try:
+        sources = {
+            rule.assessment_assignment_uuid
+            for rule in _course_pass_rules(body, release.course_uuid)
+            if rule.target_activity_uuid == activity_uuid
+        }
+    except ValidationError:
+        return "assessment_pass_required"
+    if not sources:
+        return None
+    for source in sorted(sources):
+        retained = [
+            row for row in release.snapshot.get("assignments", [])
+            if row.get("assignment_uuid") == source
+        ]
+        try:
+            if len(retained) != 1 or retained[0].get("published") is not True:
+                return "assessment_pass_required"
+            digest = retained_grading_contract_digest(retained[0], release.snapshot["assignment_tasks"])
+        except (KeyError, TypeError, ValueError):
+            return "assessment_pass_required"
+        row = (await db.execute(
+            select(Assignment, AssignmentUserSubmission)
+            .join(AssignmentUserSubmission, AssignmentUserSubmission.assignment_id == Assignment.id)
+            .where(
+                Assignment.org_id == release.org_id,
+                Assignment.course_id == release.snapshot["course"]["id"],
+                Assignment.id == retained[0]["id"],
+                Assignment.assignment_uuid == source,
+                AssignmentUserSubmission.user_id == user_id,
+                AssignmentUserSubmission.submission_status == AssignmentUserSubmissionStatus.GRADED,
+            )
+        )).one_or_none()
+        if row is None:
+            return "assessment_pass_required"
+        result = await latest_assessment_result(db, *row)
+        state = result.after_state if result is not None else None
+        if (
+            not isinstance(state, dict)
+            or state.get("passed") is not True
+            or state.get("source_snapshot_digest") != digest
+            or state.get("evaluator_version") != NATIVE_GRADING_CONTRACT_VERSION
+            or not state.get("grading_contract_event_uuid")
+        ):
+            return "assessment_pass_required"
+        contract = await db.scalar(select(StudyBusinessEvent).where(
+            StudyBusinessEvent.org_id == release.org_id,
+            StudyBusinessEvent.event_uuid == state["grading_contract_event_uuid"],
+            StudyBusinessEvent.action == CONTRACT_FROZEN_ACTION,
+            StudyBusinessEvent.resource_kind == "assignment_round",
+            StudyBusinessEvent.resource_uuid == result.resource_uuid,
+            StudyBusinessEvent.actor_user_id == user_id,
+            StudyBusinessEvent.reason == "ASSESSMENT_ISSUED",
+        ))
+        if contract is None or contract.after_state != {
+            "source_snapshot_digest": digest,
+            "evaluator_version": NATIVE_GRADING_CONTRACT_VERSION,
+            "assessment_release_uuid": release.uuid,
+            "assessment_release_sha256": release.snapshot_sha256,
+        }:
+            return "assessment_pass_required"
+        appeals = (await db.execute(select(StudyBusinessEvent).where(
+            StudyBusinessEvent.org_id == release.org_id,
+            StudyBusinessEvent.actor_user_id == user_id,
+            StudyBusinessEvent.action == "studytomy.assessment.appeal_requested",
+            StudyBusinessEvent.operation_uuid == result.resource_uuid,
+        ))).scalars()
+        for appeal in appeals:
+            if (await _appeal_receipt(db, appeal)).status not in {"result_confirmed", "result_corrected"}:
+                return "assessment_pass_required"
+    return "assessment_pass_delivery_pending"
 
 
 def validate_release_pass_prerequisites(body: StudyPolicyBody, snapshot: dict) -> None:

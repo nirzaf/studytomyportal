@@ -272,7 +272,11 @@ function LearningView({
                           ? 'This activity format is not supported in the managed lesson player.'
                           : lesson.unavailable_reason === 'release_format_conflict'
                             ? 'This activity has conflicting release-format metadata.'
-                            : 'This released resource is not currently available.'}
+                            : lesson.unavailable_reason === 'assessment_pass_required'
+                              ? 'A verified assessment pass is required for this activity.'
+                              : lesson.unavailable_reason === 'assessment_pass_delivery_pending'
+                                ? 'Your assessment pass is recorded. This activity is still locked.'
+                                : 'This released resource is not currently available.'}
               </p>}
             </div>
           </li>)}

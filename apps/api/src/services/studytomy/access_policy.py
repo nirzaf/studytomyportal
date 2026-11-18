@@ -43,7 +43,7 @@ from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
-from src.services.studytomy.prerequisites import ungated_by_assessed_pass
+from src.services.studytomy.prerequisites import managed_assessed_pass_status, ungated_by_assessed_pass
 from src.services.studytomy.releases import (
     _MAX_RELEASE_CAPTION_BYTES,
     _NATIVE_ACTIVITY_MEDIA,
@@ -134,6 +134,8 @@ class ManagedLessonSummary(BaseModel):
         "release_media_unavailable",
         "unsupported_release_format",
         "release_format_conflict",
+        "assessment_pass_required",
+        "assessment_pass_delivery_pending",
         "accessibility_policy_required",
         "accessibility_policy_incomplete",
         "media_format_not_approved",
@@ -1174,7 +1176,10 @@ async def list_managed_text_lessons(
                     format="text",
                     media_type=None,
                     available=False,
-                    unavailable_reason="release_content_unavailable",
+                    unavailable_reason=(
+                        await managed_assessed_pass_status(db, schedule_body, release, actor.id, activity_uuid)
+                        if schedule_body else None
+                    ) or "release_content_unavailable",
                 ))
                 continue
             lessons.append(ManagedLessonSummary(
@@ -1209,7 +1214,8 @@ async def list_managed_text_lessons(
                 media_type=None,
                 available=False,
                 unavailable_reason=(
-                    "release_media_unavailable"
+                    (await managed_assessed_pass_status(db, schedule_body, release, actor.id, activity_uuid)
+                     if schedule_body else None) or "release_media_unavailable"
                     if media_format != "unsupported"
                     else "unsupported_release_format"
                 ),

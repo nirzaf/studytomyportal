@@ -29,7 +29,7 @@ from src.db.organizations import Organization
 from src.db.studytomy.access import StudyCourseAccessGrant
 from src.db.studytomy.education import StudyCourseRelease
 from src.db.studytomy.family import StudyLearnerProfile
-from src.db.studytomy.governance import StudyBusinessEvent
+from src.db.studytomy.governance import StudyBusinessEvent, StudyPolicyKey
 from src.db.trails import Trail
 from src.db.users import PublicUser, User
 from src.services.courses.activities import assignments
@@ -38,7 +38,9 @@ from src.services.courses.certifications import (
     get_certificate_by_user_certification_uuid,
 )
 from src.services.studytomy import access_policy, assignment_adapter, grading
+from src.services.studytomy.prerequisites import managed_assessed_pass_status
 from src.tests.studytomy.test_content_evidence import _seed_postgres_release_sources
+from src.tests.studytomy.test_studytomy_access import _synthetic_policy_body
 
 
 @pytest.fixture
@@ -200,7 +202,55 @@ async def test_issued_round_retains_exact_started_release(
         assert bound.after_state["assessment_release_sha256"] == release.snapshot_sha256
         authority.assert_awaited_once()
 
+        target = "activity_pass_gated"
+        policy_body = _synthetic_policy_body(StudyPolicyKey.D_09, {
+            "completion_prerequisites": {"assessed_pass_by_course": {course.course_uuid: [{
+                "kind": "assessed_pass", "target_activity_uuid": target,
+                "assessment_assignment_uuid": assignment.assignment_uuid,
+            }]}},
+        })
+
+        async def status_for(user_id=user.id):
+            return await managed_assessed_pass_status(db, policy_body, release, user_id, target)
+
+        assert await status_for() == "assessment_pass_required"
+        stored.submission_status = AssignmentUserSubmissionStatus.GRADED
+        computed = {"grade": 90, "max_grade": 100, "passing_threshold": 50, "passed": True, "tasks": []}
+        await grading.record_assessment_result(db, assignment, stored, bound, computed, actor)
+        await db.flush()
+        assert await status_for() == "assessment_pass_delivery_pending"
+        assert await status_for(user.id + 1_000_000) == "assessment_pass_required"
+
+        result = await grading.latest_assessment_result(db, assignment, stored)
+        appeal = StudyBusinessEvent(
+            org_id=org.id, actor_user_id=user.id, action="studytomy.assessment.appeal_requested",
+            operation_uuid=result.resource_uuid, resource_uuid=result.event_uuid,
+            resource_kind="assignment_result",
+        )
+        db.add(appeal)
+        await db.flush()
+        assert await status_for() == "assessment_pass_required"
+        for status, action, expected in (
+            ("result_confirmed", "appeal_confirmed", "assessment_pass_delivery_pending"),
+            ("reopened", "appeal_reopened", "assessment_pass_required"),
+            ("result_confirmed", "appeal_confirmed", "assessment_pass_delivery_pending"),
+        ):
+            db.add(StudyBusinessEvent(
+                org_id=org.id, action=f"studytomy.assessment.{action}",
+                operation_uuid=result.resource_uuid, resource_uuid=appeal.event_uuid,
+                resource_kind="assessment_appeal",
+                after_state={"status": status, "result_uuid": result.event_uuid},
+            ))
+            await db.flush()
+            assert await status_for() == expected
+        await grading.record_assessment_result(
+            db, assignment, stored, bound, {**computed, "grade": 40, "passed": False}, actor,
+        )
+        await db.flush()
+        assert await status_for() == "assessment_pass_required"
+
         stored.attempt_number += 1
+        stored.submission_status = AssignmentUserSubmissionStatus.PENDING
         task.max_grade_value += 1
         await db.flush()
         assert await grading.issue_native_grading_contract(db, assignment, actor)
