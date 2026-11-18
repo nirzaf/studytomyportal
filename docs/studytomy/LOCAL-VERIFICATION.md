@@ -100,6 +100,12 @@ The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 ap
 - **Current behavior and deviation:** Full extracted pages are examined through bounded overlapping windows and at most six excerpts are sent to the model. A different-vocabulary request without lexical support returns an actionable insufficient-evidence error and skips the provider; synonym recall is not established. Citation UUID/hash/page/quote checks and access revalidation remain in place. Hybrid RRF is evaluation-only, and the exact small-course runtime option remains off by default; no vector model or runtime retrieval mode was changed in this slice.
 - **Limits:** Prompt-like source text is passed as quoted data with a system instruction to ignore embedded instructions, but provider behavior is mocked. No OCR, real-provider factual support, representative educator judgments, browser acceptance, production recall/latency, learner activation, or launch approval was verified. See [the detailed synthetic evaluation](GROUNDED-RETRIEVAL-EVALUATION.md) for fixtures and measured limits.
 
+## AUD-05 managed media browser and filesystem checks
+
+- At `d9f57753f8d79d98f407e29378dc7348d1bc93aa`, Playwright type checking and the mobile Chromium spec `13-managed-release-media.spec.ts` passed (**1 passed** in 36.3 seconds). The isolated frontend used real synthetic sign-in against a loopback API with disposable PostgreSQL and Redis. The spec intercepted the release list, lesson index and first-use media response. It verified the mixed-format list, unavailable video and audio states, PDF frame URL without a token, and return to the activated lesson list. Two earlier runs found incorrect fixture assumptions about the organization UUID and the post-activation label.
+- At `2e77df3b67a70a47d8981b7bddce4cc364695c0f`, the PostgreSQL `free-release-media` test passed (**1 passed, 11 deselected** in 18.28 seconds). It exercised authenticated PDF delivery and byte ranges using the filesystem adapter with a temporary content root. The delayed and corrupted streams used for fault injection were simulated.
+- A combined browser journey through real release and media endpoints is still required to verify actual PDF rendering, video playback and accessibility.
+
 ## AUD-06 managed-media lock and staging verification
 
 - **Recorded:** 2026-11-18
