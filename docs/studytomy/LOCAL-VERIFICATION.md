@@ -61,6 +61,8 @@ The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 ap
 
 At `d83ac01282dd0f527f8a9c40cabcd7771762b4ee`, a disposable SMTP sink bound to an ephemeral loopback port accepted one synthetic report notification from the existing SMTP adapter in single-attempt mode. The adapter returned the intended recipient and no provider message ID. The sink decoded the message and verified its recipient, subject and sign-in link text. The probe used unauthenticated local SMTP and neither relayed mail nor exercised TLS, an external provider, or an actual outbox dispatch.
 
+At `c60238a865921425a3b31daa95db164394e68354`, the authorized report fixture used the actual scheduler, report revalidation, PostgreSQL outbox and SMTP adapter. With the scheduler explicitly opted in for that process, one queued synthetic report reached `sent` after one loopback SMTP handoff. The sink verified the authenticated report link and the absence of the synthetic learner's name and score in the message body. The probe used the disposable `studytomy_aud03_test` database, a synthetic HTTPS link origin, and a loopback SMTP sink with no external relay. The fixture passed **1 test, 1 deselected** in 77.34 seconds. Two preceding probe attempts failed on a missing import and a fixture-held organization lock. The passing run committed the fixture's direct revalidation transaction before starting the independent scheduler session. Live provider, TLS and approved-pilot delivery remain outside this rehearsal.
+
 ## AUD-14 discovery-to-checkout trace
 
 - **Recorded:** 2026-11-18
