@@ -118,6 +118,7 @@ class GroundedLessonPreview(BaseModel):
     status: Literal["teacher_review_required"] = "teacher_review_required"
     title: str
     blocks: list[GroundedLessonBlock]
+    matching_pages_omitted: int = 0
 
 
 class GroundedQuizPreview(BaseModel):
@@ -125,6 +126,7 @@ class GroundedQuizPreview(BaseModel):
     title: str
     contents: dict
     citations: dict[str, DraftCitation]
+    matching_pages_omitted: int = 0
 
 
 class _SavedCitationInput(BaseModel):
@@ -202,7 +204,9 @@ def _active_source_scope(course: Course, lesson: Activity, identifiers: set[str]
     )
 
 
-async def _retrieve_pages(db: AsyncSession, course: Course, lesson: Activity, command: GroundedLessonRequest) -> list[dict]:
+async def _retrieve_pages(
+    db: AsyncSession, course: Course, lesson: Activity, command: GroundedLessonRequest,
+) -> tuple[list[dict], int]:
     material = StudyDraftMaterial
     identifiers = {str(source_uuid) for source_uuid in command.source_uuids}
     rows = (await db.exec(select(material.source_uuid, material.sha256, material.label, material.pages)
@@ -253,7 +257,8 @@ async def _retrieve_pages(db: AsyncSession, course: Course, lesson: Activity, co
             break
         selected.append(page)
         covered.update(matched)
-    return selected
+    included_pages = {(page["source_uuid"], page["page"]) for page in selected}
+    return selected, len(candidates) - len(included_pages)
 
 
 class DraftMaterialReceipt(BaseModel):
@@ -343,12 +348,12 @@ def _citation(claim: _SourceClaim, pages: list[dict]) -> DraftCitation:
 async def _preview_grounded_draft[ProposalT: BaseModel, PreviewT: BaseModel](
     db: AsyncSession, request: Request, actor: PublicUser, org_uuid: str, course_uuid: str, lesson_uuid: str,
     command: GroundedLessonRequest,
-    *, proposal_type: type[ProposalT], instructions: str, build: Callable[[ProposalT, list[dict]], PreviewT],
+    *, proposal_type: type[ProposalT], instructions: str, build: Callable[[ProposalT, list[dict], int], PreviewT],
 ) -> PreviewT:
     if os.getenv("LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED") != "true":
         raise HTTPException(404, "Grounded drafting is unavailable.")
     course, lesson = await authorize_draft_material_lesson(db, request, actor, org_uuid, course_uuid, lesson_uuid)
-    pages = await _retrieve_pages(db, course, lesson, command)
+    pages, matching_pages_omitted = await _retrieve_pages(db, course, lesson, command)
     context = [{"reference": index, "text": page["text"]} for index, page in enumerate(pages, 1)]
     model = await resolve_model_for_org(course.org_id, db, purpose="planning")
     enforce_ai_rate_limit(actor.id, course.org_id)
@@ -364,7 +369,7 @@ async def _preview_grounded_draft[ProposalT: BaseModel, PreviewT: BaseModel](
             ),
             user_prompt=json.dumps({"topic": command.topic, "authorized_excerpts": context}, ensure_ascii=False),
         )
-        draft = build(proposal_type.model_validate(proposal), pages)
+        draft = build(proposal_type.model_validate(proposal), pages, matching_pages_omitted)
         await _require_active_sources(db, request, actor, org_uuid, course_uuid, lesson_uuid, command.source_uuids)
     except AINotConfiguredError:
         refund_ai_credit(course.org_id, 3)
@@ -381,17 +386,19 @@ async def _preview_grounded_draft[ProposalT: BaseModel, PreviewT: BaseModel](
     return draft
 
 
-def _lesson_preview(draft: _LessonProposal, pages: list[dict]) -> GroundedLessonPreview:
+def _lesson_preview(draft: _LessonProposal, pages: list[dict], matching_pages_omitted: int) -> GroundedLessonPreview:
     return GroundedLessonPreview(
         title=draft.title,
         blocks=[GroundedLessonBlock(text=block.text, citation=_citation(block, pages)) for block in draft.blocks],
+        matching_pages_omitted=matching_pages_omitted,
     )
 
 
-def _quiz_preview(draft: _QuizProposal, pages: list[dict]) -> GroundedQuizPreview:
+def _quiz_preview(draft: _QuizProposal, pages: list[dict], matching_pages_omitted: int) -> GroundedQuizPreview:
     contents = _validated_quiz_contents(draft.questions)
     return GroundedQuizPreview(
         title=draft.title, contents=contents,
+        matching_pages_omitted=matching_pages_omitted,
         citations={
             question["questionUUID"]: _citation(claim, pages)
             for question, claim in zip(contents["questions"], draft.questions, strict=True)

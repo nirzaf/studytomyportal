@@ -233,6 +233,7 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
             **command, "topic": "Aurora solar particles atmosphere magnetosphere",
         })
         assert combined.status_code == 200, combined.text
+        assert combined.json()["matching_pages_omitted"] == 0
         assert [
             (block["citation"]["page"], block["citation"]["quote"])
             for block in combined.json()["blocks"]
@@ -250,6 +251,7 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
             **command, "topic": "Quartz crystals hexagonal fluorite",
         })
         assert diversified.status_code == 200, diversified.text
+        assert diversified.json()["matching_pages_omitted"] == 2
         assert [
             (block["citation"]["page"], block["citation"]["quote"])
             for block in diversified.json()["blocks"]

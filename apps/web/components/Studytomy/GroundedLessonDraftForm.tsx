@@ -6,7 +6,11 @@ import { getAPIUrl } from '@services/config/config'
 import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/requests'
 
 type Citation = { source_uuid: string; sha256: string; label: string; page: number; quote: string }
-type Draft = { title: string; blocks: { text: string; citation: Citation }[] }
+type Draft = {
+  title: string
+  blocks: { text: string; citation: Citation }[]
+  matching_pages_omitted?: number
+}
 type Props = { route: string; token: string; version: number; selected: string[] }
 
 export default function GroundedLessonDraftForm({ route, token, version, selected }: Props) {
@@ -89,6 +93,11 @@ export default function GroundedLessonDraftForm({ route, token, version, selecte
       {draft && (
         <form className="space-y-3" onSubmit={(event) => submit(event, 'draft')}>
           <p className="text-sm">Check that the quoted text supports each paragraph. Saving replaces the current lesson text and keeps it unpublished.</p>
+          {(draft.matching_pages_omitted ?? 0) > 0 && (
+            <p role="status" className="text-sm">
+              Some pages matched the topic but were left out of this draft preview. Narrow the topic or select fewer sources to review them.
+            </p>
+          )}
           <label className="block space-y-1 text-sm font-medium">
             <span className="block">Draft title</span>
             <input className="block w-full rounded-md border p-2" value={draft.title} required maxLength={160}
