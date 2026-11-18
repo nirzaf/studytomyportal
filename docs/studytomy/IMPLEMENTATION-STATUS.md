@@ -2,14 +2,14 @@
 
 ## Independent architecture audit checkpoint (2026-11-18; interim)
 
-**Reviewed repository HEAD:** `8dcf7fa4838a53053b32de81f0cdb49b6ad5ff7e` on the sole primary `main` worktree. The audit attachment's `210cb561` baseline is historical; current source, migrations and tests control this assessment. Detailed commands and results are in [local verification evidence](LOCAL-VERIFICATION.md).
+**Reviewed repository HEAD:** `692fe7a471e0a63e77de789c922cb342a54ce0b1` on the primary `main` worktree. The audit attachment was originally pinned to `210cb561`. Detailed commands and revision-specific results are in [local verification evidence](LOCAL-VERIFICATION.md).
 
 This checkpoint records existing current-code equivalents and focused verification. It is **not** integrated pilot acceptance: AUD-21 has not passed and AUD-22 remains open until that gate can be completed.
 
 | Audit task | Current evidence/status |
 |---|---|
 | AUD-01, AUD-03, AUD-04 | Reused the PostgreSQL fixture with synthetic staff, learner, payer, guardian, private managed course, reviewed frozen release and grant. It exercises exact-release access, server-scored evidence, mastery and permitted recommendations. Partial scope and an out-of-release lesson deny. The managed course stays private, so the audit baseline's denial no longer characterizes current code. See the rerun below. |
-| AUD-05 | Mobile Chromium covered mixed-format navigation with intercepted release responses. PostgreSQL API tests separately verified authenticated PDF ranges from local storage. Video delivery fails closed pending retained captions or a reviewed alternative. Successful browser playback through the actual media endpoint and accessibility acceptance remain open. |
+| AUD-05 | Mobile Chromium covered mixed-format navigation with intercepted release responses. Headed Chrome displayed both pages of a retained PDF through the real FastAPI endpoint in an authenticated HTML fixture. The full Next.js journey still needs a real-release browser run. Managed hosted video blocks approval until the release can retain captions or a reviewed alternative. Accessible video playback remains open. |
 | AUD-06 | Media staging occurs outside the organization lock and rechecks release, policy and grant before delivery. Focused PostgreSQL lock/revocation and storage failure tests pass. Repeated ranges reread the full staged object; representative workload evidence does not justify a cache yet. |
 | AUD-07, AUD-08 | Ambiguous loads fail closed. Persistence bounds retries and reports unresolved shutdown writes. The graceful restart and abrupt restart before database acknowledgement both passed with Docker Redis, mounted FastAPI and disposable PostgreSQL. An authorized reconnect replayed the surviving pending snapshot into PostgreSQL without another edit. Recovery after Redis loss or expiration remains open. |
 | AUD-13, AUD-15 | Existing report runner, grading, evidence, mastery, retry and award mechanisms have focused synthetic/local evidence. Report delivery remains opt-in and no end-to-end approved offer/report notification was accepted. Integrated learner/browser acceptance remains open. |
@@ -29,7 +29,7 @@ The audit attachment is pinned to `210cb56192f60b3140679d81a84927dd1efee95b`. Th
 - From `apps/api`, `python -m pytest -q --tb=short src/tests/studytomy/test_adaptive_curriculum_api.py src/tests/studytomy/test_adaptive_evidence_postgres.py` passed all 7 tests in 106.14 seconds. PostgreSQL tests targeted the disposable Docker database `studytomy_aud19_full_restore_test` at `127.0.0.1:60607`. This rerun includes managed curriculum characterization and append-only evidence integrity.
 - From `apps/collab`, `bun run test` passed all 43 tests across 9 suites. These exercise fault handling and persistence with synthetic adapters. Live Redis/API and multi-client recovery still require acceptance.
 
-The next independent verification is live local collaboration recovery against disposable Redis and API state. AUD-21 remains gated on the selected offer and educator sign-off, and AUD-22 follows that acceptance gate.
+Subsequent local collaboration rehearsals exercised the mounted API and disposable Redis/PostgreSQL, including denied loads during a dual outage and replay after an abrupt process exit while Redis survived. AUD-21 remains gated on the selected offer and educator sign-off, and AUD-22 follows that acceptance gate.
 
 **Updated:** 2026-11-18
 

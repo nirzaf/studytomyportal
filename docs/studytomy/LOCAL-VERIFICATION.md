@@ -210,6 +210,8 @@ The API full-suite failure classification is environment-specific for the twelve
 
 ### Web lint follow-up
 
+At `692fe7a471e0a63e77de789c922cb342a54ce0b1`, the local integration selection passed **53 tests in 72.82 seconds**, with no failures or skips. It included `test_content_evidence.py`, `test_checkout_router.py`, `test_board_persistence_postgres.py`, `test_boards_router.py`, and `test_boards_service.py`. PostgreSQL-marked cases used `studytomy_aud19_full_restore_test` on the disposable loopback Docker instance. This included the corrected free-release media path and the review candidate's unsupported-media warning field. The collaboration suite passed **46 tests across 9 suites**, and `tsc --noEmit` passed for collaboration. This selection did not exercise the Next.js review warning in a browser or the complete learner journey.
+
 At `c5d920eabee7b8a3eca21a2baf7ab3eb46566e27`, `bun run lint:strict --format stylish` from `apps/web` exited 0 with **0 errors and 976 warnings**. The change resolved the six errors in the previous checkpoint. `node node_modules/typescript/bin/tsc --noEmit` also exited 0 on the source that was committed at this revision.
 
 ### API symlink follow-up
