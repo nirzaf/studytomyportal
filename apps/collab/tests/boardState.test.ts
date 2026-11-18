@@ -70,12 +70,22 @@ describe('authoritative board state loading', () => {
     assert.equal(cached.server.documents.has('board_test'), false)
     assert.equal(cached.storeCalls(), 0)
 
+    let cancelled = false
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(oversized)
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
     const stored = runtime(dependencies(
-      async () => apiResponse(oversized, YDOC_STATE_PRESENT),
+      async () => new Response(body, { headers: { [YDOC_STATE_HEADER]: YDOC_STATE_PRESENT } }),
       async () => null,
       async () => assert.fail('An oversized stored snapshot must not warm Redis'),
     ))
     await assert.rejects(loadDocument(stored.server), BoardStateLoadError)
+    assert.equal(cancelled, true)
     assert.equal(stored.server.documents.has('board_test'), false)
     assert.equal(stored.storeCalls(), 0)
   })
