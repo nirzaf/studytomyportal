@@ -321,6 +321,16 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
         refund.assert_called_once_with(org.id, 3)
 
         quiz_preview = path.replace("/draft-sources", "/grounded-quiz-preview")
+        for endpoint, field in ((preview, "blocks"), (quiz_preview, "questions")):
+            refund.reset_mock()
+            provider.return_value = {"title": "Unsupported topic", field: []}
+            unsupported = await client.post(endpoint, json=command)
+            assert unsupported.status_code == 422
+            assert unsupported.json() == {
+                "detail": "The selected source pages do not support the requested draft. "
+                "Choose a narrower topic or link a source that explains it."
+            }
+            refund.assert_called_once_with(org.id, 3)
         quiz = {
             "title": "Photosynthesis",
             "questions": [{
