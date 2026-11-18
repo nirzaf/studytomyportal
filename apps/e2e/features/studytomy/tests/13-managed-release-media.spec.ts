@@ -58,12 +58,21 @@ test('my learning lists mixed release formats and activates first use before ope
   await expect(page.getByText(/Video is unavailable until captions or an approved accessible alternative/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Unsupported audio Unsupported/ })).toBeDisabled()
 
+  const mediaPath = `/studytomy/orgs/${orgUuid}/learning/courses/${courseUuid}/releases/${releaseUuid}/activities/${pdfUuid}/media`
+  const mediaResponse = page.waitForResponse(response =>
+    response.request().method() === 'GET' && new URL(response.url()).pathname.endsWith(mediaPath),
+  )
   await page.getByRole('button', { name: /Open Reviewed PDF PDF/ }).click()
   await expect(page.getByTitle('Reviewed PDF')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Refresh document access' })).toBeVisible()
   const frameUrl = await page.getByTitle('Reviewed PDF').getAttribute('src')
-  expect(frameUrl).toContain(`/studytomy/orgs/${orgUuid}/learning/courses/${courseUuid}/releases/${releaseUuid}/activities/${pdfUuid}/media`)
+  expect(frameUrl).toContain(mediaPath)
   expect(frameUrl).not.toContain('token=')
+  // The release list is intercepted, but this frame request reaches the API.
+  // The signed-in learner gets 404 because the fixture release is not stored.
+  const missingRelease = await mediaResponse
+  expect(missingRelease.status()).toBe(404)
+  expect(await missingRelease.json()).toMatchObject({ detail: 'Course release unavailable.' })
 
   await page.getByRole('button', { name: 'Back to lessons' }).click()
   await expect(page.getByRole('button', { name: 'Reviewed PDF PDF', exact: true })).toBeEnabled()
