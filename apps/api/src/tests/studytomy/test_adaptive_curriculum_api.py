@@ -4058,6 +4058,15 @@ async def _exercise_learner_attempt(
     )
     db.add(pending_guardian)
     await db.flush()
+    pending_relationship = StudyRelationship(
+        org_id=org.id,
+        learner_profile_id=profile.id,
+        adult_user_id=pending_guardian.id,
+        requested_by_user_id=pending_guardian.id,
+        requested_scopes=["adaptive_report_summary"],
+        request_evidence_reference="synthetic-pending-request",
+        request_policy_version_ids=[policies[key] for key in ("D-01", "D-03", "D-12")],
+    )
     db.add_all(
         [
             UserOrganization(
@@ -4067,17 +4076,7 @@ async def _exercise_learner_attempt(
                 creation_date="",
                 update_date="",
             ),
-            StudyRelationship(
-                org_id=org.id,
-                learner_profile_id=profile.id,
-                adult_user_id=pending_guardian.id,
-                requested_by_user_id=pending_guardian.id,
-                requested_scopes=["adaptive_report_summary"],
-                request_evidence_reference="synthetic-pending-request",
-                request_policy_version_ids=[
-                    policies[key] for key in ("D-01", "D-03", "D-12")
-                ],
-            ),
+            pending_relationship,
         ]
     )
     await db.commit()
@@ -4201,6 +4200,15 @@ async def _exercise_learner_attempt(
     denied_publish = await client.post(publish_path, json=mixed, headers=unrelated)
     assert denied_publish.status_code == 409, denied_publish.text
     assert denied_publish.json()["detail"]["code"] == "REPORT_RECIPIENT_NOT_AUTHORIZED"
+    relationship_publish = await client.post(
+        publish_path,
+        json=command | {
+            "recipient_grant_uuids": [valid_grant.grant_uuid, pending_relationship.relationship_uuid],
+        },
+        headers=unrelated,
+    )
+    assert relationship_publish.status_code == 409, relationship_publish.text
+    assert relationship_publish.json()["detail"]["code"] == "REPORT_RECIPIENT_NOT_AUTHORIZED"
     recipient_query = select(StudyReportRecipient).where(
         StudyReportRecipient.org_id == org.id
     )
@@ -4320,6 +4328,13 @@ async def _exercise_learner_attempt(
     # Moving to dependent control invalidates prior independent disclosures.
     profile.control_mode = "dependent"
     await db.commit()
+    dependent_draft = await client.post(
+        report_path,
+        json=report_request | {"operation_uuid": str(uuid4())},
+        headers=unrelated,
+    )
+    assert dependent_draft.status_code == 404
+    assert dependent_draft.headers["Cache-Control"] == "private, no-store"
     for actor_headers in (headers, reader_headers, pending_guardian_headers):
         detail = await client.get(read_path, headers=actor_headers)
         assert detail.status_code == 404
