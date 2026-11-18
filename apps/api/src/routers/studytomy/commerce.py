@@ -53,6 +53,7 @@ from src.services.studytomy.allocations import (
     correct_unstarted_allocation,
     read_allocation_correction_review,
 )
+from src.services.studytomy.awards import ManagedCertificatePage, list_my_managed_certificates
 from src.services.studytomy.collections import (
     FinanceReviewPage,
     ManualBankEvidence,
@@ -324,6 +325,15 @@ async def get_managed_access_history(
     history = await read_managed_access_history(db, org, actor, course_uuid, release_uuid)
     response.headers["Cache-Control"] = "private, no-store"
     return history
+
+
+@router.get("/learning/awards")
+async def get_my_managed_certificates(
+    org_uuid: str, response: Response, actor: Purchaser, db: Session, after: UUID | None = None,
+) -> ManagedCertificatePage:
+    org = await _member_org(org_uuid, actor, db)
+    response.headers["Cache-Control"] = "private, no-store"
+    return await list_my_managed_certificates(db, org, actor, after)
 
 
 @router.get("/learning/courses/{course_uuid}/releases/{release_uuid}/lessons")

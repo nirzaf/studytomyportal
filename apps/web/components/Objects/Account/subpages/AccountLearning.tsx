@@ -28,6 +28,17 @@ type Catalog = { releases: Release[]; next_cursor: string | null }
 type Index = { lessons: Lesson[]; requires_first_use: boolean }
 type Completion = { activity_uuid: string; activity_completed: boolean; course_completed: boolean }
 type TextLesson = Lesson & { paragraphs: string[]; completion?: Completion }
+type CertificatePage = {
+  awards: {
+    award_uuid: string
+    award_name: string
+    issuer_name: string
+    course_name: string
+    issued_at: string
+    status: 'issued' | 'corrected' | 'withdrawn'
+  }[]
+  next_cursor: string | null
+}
 type AccessWindow = Release & {
   status: 'active' | 'first_use_pending' | 'scheduled' | 'expired' | 'revoked'
   start_basis: 'after_purchase' | 'after_first_access' | 'fixed_period'
@@ -49,6 +60,7 @@ type View =
   | { kind: 'loading' | 'unavailable' }
   | { kind: 'catalog'; page: Catalog; after?: string; history: boolean }
   | { kind: 'access'; window: AccessWindow }
+  | { kind: 'certificates'; page: CertificatePage; after?: string }
   | { kind: 'lessons'; release: Release; index: Index }
   | { kind: 'lesson'; release: Release; lesson: TextLesson; completionRequest?: 'saving' | 'failed' }
   | { kind: 'media'; release: Release; lesson: Lesson }
@@ -105,6 +117,11 @@ function LearningView({
   function showCatalog(after?: string, history = false) {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
     return load<Catalog>(`${history ? 'access-history' : 'releases'}${query}`, page => ({ kind: 'catalog', page, after, history }))
+  }
+
+  function showCertificates(after?: string) {
+    const query = after ? `?${new URLSearchParams({ after })}` : ''
+    return load<CertificatePage>(`awards${query}`, page => ({ kind: 'certificates', page, after }))
   }
 
   function pathFor(release: Release) {
@@ -224,6 +241,8 @@ function LearningView({
           onClick={() => act(() => showCatalog(undefined, !view.history))}>
           {view.history ? 'Back to my learning' : 'Access history'}
         </Button>
+        {!view.history && <Button variant="outline" className="min-h-11"
+          onClick={() => act(() => showCertificates())}>My certificates</Button>}
         {view.page.releases.length === 0 && <p>{view.history ? 'No access history is available.' : 'No reviewed courses are available.'}</p>}
         <ul className="space-y-2">
           {view.page.releases.map(release => <li key={release.release_uuid}>
@@ -236,6 +255,32 @@ function LearningView({
             onClick={() => act(() => showCatalog(undefined, view.history))}>First page</Button>}
           {view.page.next_cursor && <Button variant="outline" className="min-h-11"
             onClick={() => act(() => showCatalog(view.page.next_cursor ?? undefined, view.history))}>Next page</Button>}
+        </div>}
+      </>
+      break
+    case 'certificates':
+      title = 'My certificates'
+      content = <>
+        <Button variant="outline" className="min-h-11"
+          onClick={() => act(() => showCatalog())}>Back to my learning</Button>
+        {view.page.awards.length === 0 && <p>No certificates are available on this page.</p>}
+        <ul className="space-y-2">
+          {view.page.awards.map(award => <li key={award.award_uuid} className="space-y-1 rounded-lg border p-4">
+            <h3 className="font-semibold">{award.award_name}</h3>
+            <p>{award.course_name} · {award.issuer_name}</p>
+            <p>{award.status === 'withdrawn' ? 'Withdrawn' : award.status === 'corrected' ? 'Corrected' : 'Issued'}
+              {' · '}<time dateTime={award.issued_at}>
+                {formatDateTime(award.issued_at, i18n.language, { timeZone: 'UTC' })} UTC
+              </time>
+            </p>
+            <p className="break-words text-sm text-muted-foreground">Award reference {award.award_uuid}</p>
+          </li>)}
+        </ul>
+        {(view.after || view.page.next_cursor) && <div className="flex flex-wrap gap-2">
+          {view.after && <Button variant="outline" className="min-h-11"
+            onClick={() => act(() => showCertificates())}>First page</Button>}
+          {view.page.next_cursor && <Button variant="outline" className="min-h-11"
+            onClick={() => act(() => showCertificates(view.page.next_cursor ?? undefined))}>Next page</Button>}
         </div>}
       </>
       break

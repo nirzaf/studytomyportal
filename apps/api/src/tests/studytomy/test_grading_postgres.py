@@ -500,6 +500,13 @@ async def test_issued_round_retains_exact_started_release(
                 "award_name": "Synthetic certificate", "issuer_name": "Synthetic issuer",
                 "course_name": course.name, "status": "withdrawn", "version": 3,
             }
+            listing = await awards.list_my_managed_certificates(db, org, actor)
+            assert listing.awards == [verified] and listing.next_cursor is None
+            assert not (await awards.list_my_managed_certificates(db, org, actor, UUID(award.award_uuid))).awards
+            assert not (await awards.list_my_managed_certificates(db, org, certificate_reviewer)).awards
+            with pytest.raises(HTTPException) as other_cursor:
+                await awards.list_my_managed_certificates(db, org, certificate_reviewer, UUID(award.award_uuid))
+            assert other_cursor.value.status_code == 404
             with pytest.raises(HTTPException) as other_profile:
                 await awards.verify_my_managed_certificate(db, org, certificate_reviewer, UUID(award.award_uuid))
             assert other_profile.value.status_code == 404

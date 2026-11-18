@@ -420,43 +420,87 @@ async def verify_my_managed_certificate(
     """Read the learner's own immutable award, independent of course access."""
     profile = await _self_profile(db, org, actor)
     unavailable = studytomy_http_error(404, "MANAGED_CERTIFICATE_UNAVAILABLE", "Certificate unavailable.")
-    row = (await db.execute(
+    row = (await db.execute(_owned_award_query(org.id, profile.learner_uuid).where(
+        StudyBusinessEvent.event_uuid == str(award_uuid),
+    ))).one_or_none()
+    verified = await _project_certificate_verification(db, *row) if row is not None else None
+    if verified is None:
+        raise unavailable
+    return verified
+
+
+def _owned_award_query(org_id: int, learner_uuid: str):
+    return (
         select(StudyBusinessEvent, StudyCourseRelease, StudyPolicyVersion)
         .select_from(StudyBusinessEvent)
         .join(StudyCourseRelease, StudyCourseRelease.uuid == StudyBusinessEvent.resource_uuid)
         .join(StudyCourseReview, StudyCourseReview.id == StudyCourseRelease.review_id)
         .join(StudyPolicyVersion, StudyPolicyVersion.id == StudyCourseRelease.rights_policy_id)
         .where(
-            StudyBusinessEvent.org_id == org.id,
-            StudyBusinessEvent.event_uuid == str(award_uuid),
-            StudyBusinessEvent.subject_uuid == profile.learner_uuid,
+            StudyBusinessEvent.org_id == org_id,
+            StudyBusinessEvent.subject_uuid == learner_uuid,
             StudyBusinessEvent.resource_kind == "course_release",
             StudyBusinessEvent.action == "studytomy.award.issued",
-            StudyCourseRelease.org_id == org.id,
-            StudyCourseReview.org_id == org.id,
+            StudyCourseRelease.org_id == org_id,
+            StudyCourseReview.org_id == org_id,
             StudyCourseReview.course_uuid == StudyCourseRelease.course_uuid,
             StudyCourseReview.decision == "approved",
             StudyCourseReview.revision_sha256 == StudyCourseRelease.snapshot_sha256,
-            StudyPolicyVersion.org_id == org.id,
+            StudyPolicyVersion.org_id == org_id,
             StudyPolicyVersion.policy_key == StudyPolicyKey.D_16.value,
         )
-    )).one_or_none()
-    if row is None:
-        raise unavailable
-    award, release, rights = row
+    )
+
+
+async def _project_certificate_verification(
+    db: AsyncSession, award: StudyBusinessEvent, release: StudyCourseRelease, rights: StudyPolicyVersion,
+) -> ManagedCertificateVerification | None:
     if canonical_request_hash(release.snapshot) != release.snapshot_sha256:
-        raise unavailable
+        return None
     if rights.id not in (award.policy_refs or []):
-        raise unavailable
+        return None
     conditions = _retained_certificate_conditions(release, rights)
     course = release.snapshot.get("course")
     course_name = course.get("name") if isinstance(course, dict) else None
     if conditions is None or conditions.issuance != "reviewed" or not isinstance(course_name, str) or not course_name.strip():
-        raise unavailable
+        return None
     change = await _latest_award_change(db, award)
     return ManagedCertificateVerification(
         award_uuid=award.event_uuid, release_uuid=release.uuid, issued_at=award.created_at,
         award_name=conditions.award_name, issuer_name=conditions.issuer_name, course_name=course_name,
         status=change.after_state["status"] if change else "issued",
         version=change.after_state["version"] if change else 1,
+    )
+
+
+class ManagedCertificatePage(BaseModel):
+    awards: list[ManagedCertificateVerification]
+    next_cursor: str | None
+
+
+async def list_my_managed_certificates(
+    db: AsyncSession, org: Organization, actor: PublicUser, after: UUID | None = None,
+) -> ManagedCertificatePage:
+    profile = await _self_profile(db, org, actor)
+    query = _owned_award_query(org.id, profile.learner_uuid)
+    if after is not None:
+        cursor = await db.scalar(select(StudyBusinessEvent.id).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.subject_uuid == profile.learner_uuid,
+            StudyBusinessEvent.action == "studytomy.award.issued",
+            StudyBusinessEvent.event_uuid == str(after),
+        ))
+        if cursor is None:
+            raise studytomy_http_error(404, "MANAGED_CERTIFICATE_UNAVAILABLE", "Certificate page unavailable.")
+        query = query.where(StudyBusinessEvent.id < cursor)
+    page_size = 20
+    rows = (await db.execute(query.order_by(StudyBusinessEvent.id.desc()).limit(page_size + 1))).all()
+    awards = []
+    for row in rows[:page_size]:
+        verified = await _project_certificate_verification(db, *row)
+        if verified is not None:
+            awards.append(verified)
+    return ManagedCertificatePage(
+        awards=awards,
+        next_cursor=rows[page_size - 1][0].event_uuid if len(rows) > page_size else None,
     )
