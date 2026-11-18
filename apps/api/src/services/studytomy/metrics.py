@@ -6,6 +6,41 @@ from sqlalchemy import text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
+async def assessment_evidence_breakdown(
+    db: AsyncSession, *, org_id: int, curriculum_revision_id: int,
+    start: datetime, end: datetime,
+) -> list[dict[str, int | str]]:
+    """Count current evidence heads by assistance and outcome for one revision.
+
+    The caller must authorize access to the requested scope. Entries count
+    logical observations, not learners, comparable pairs, or mastery gains.
+    """
+    if (
+        org_id < 1 or curriculum_revision_id < 1
+        or start.utcoffset() is None or end.utcoffset() is None or start >= end
+    ):
+        raise ValueError("An organization, curriculum revision and ordered, timezone-aware period are required.")
+    result = await db.execute(text("""
+        WITH ranked AS (
+            SELECT observed_at, independence, outcome, is_retraction,
+                   row_number() OVER (
+                       PARTITION BY learner_profile_id, concept_id, logical_source_uuid
+                       ORDER BY result_revision DESC, evidence_sequence DESC
+                   ) AS position
+            FROM st_learning_evidence
+            WHERE org_id = :org_id AND curriculum_revision_id = :revision
+        )
+        SELECT independence,
+               CASE WHEN is_retraction THEN 'retracted' ELSE outcome END AS evidence_outcome,
+               count(*) AS observations
+        FROM ranked
+        WHERE position = 1 AND observed_at >= :start AND observed_at < :end
+        GROUP BY independence, evidence_outcome
+        ORDER BY independence, evidence_outcome
+    """), {"org_id": org_id, "revision": curriculum_revision_id, "start": start, "end": end})
+    return [dict(row) for row in result.mappings()]
+
+
 async def confirmed_cash_by_currency(
     db: AsyncSession, *, org_id: int, start: datetime, end: datetime,
 ) -> list[dict[str, int | str]]:

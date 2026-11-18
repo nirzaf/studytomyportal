@@ -363,6 +363,18 @@ async def test_append_only_corrections_and_projection_watermark(
         db.add(correction)
         await db.flush()
         assert correction.evidence_sequence == 2 and original.score == 1
+        from src.services.studytomy.metrics import assessment_evidence_breakdown
+
+        period = {
+            "start": correction.observed_at - timedelta(seconds=1),
+            "end": correction.observed_at + timedelta(seconds=1),
+        }
+        assert await assessment_evidence_breakdown(
+            db, org_id=rows.org_id, curriculum_revision_id=rows.curriculum_id, **period,
+        ) == [{"independence": "independent", "evidence_outcome": "incorrect", "observations": 1}]
+        assert await assessment_evidence_breakdown(
+            db, org_id=rows.org_id, curriculum_revision_id=rows.curriculum_id + 1, **period,
+        ) == []
         with pytest.raises(IntegrityError, match="append-only"):
             async with db.begin_nested():
                 await db.execute(
