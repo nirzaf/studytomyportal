@@ -11,6 +11,7 @@ import { API_URL, ORG_SLUG } from './instance'
 export interface Org {
   id: number
   slug: string
+  org_uuid: string
 }
 
 /** Low-level request wrapper. JSON by default; pass asForm for urlencoded bodies. */

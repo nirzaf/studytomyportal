@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { getOrg } from '../../../core/client'
 import { test, expect } from '../../../core/fixtures'
 import { API_URL, BASE_URL } from '../../../core/instance'
 import { STUDENT_STATE } from '../../../core/sharedAuth'
@@ -10,7 +11,7 @@ test.skip(
 )
 
 test('my learning lists mixed release formats and activates first use before opening a PDF', async ({ page }) => {
-  const orgUuid = `org_${randomUUID()}`
+  const { org_uuid: orgUuid } = await getOrg()
   const courseUuid = `course_${randomUUID()}`
   const releaseUuid = randomUUID()
   const textUuid = `activity_${randomUUID()}`
@@ -65,5 +66,6 @@ test('my learning lists mixed release formats and activates first use before ope
   expect(frameUrl).not.toContain('token=')
 
   await page.getByRole('button', { name: 'Back to lessons' }).click()
-  await expect(page.getByRole('button', { name: /Open Reviewed PDF PDF/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Reviewed PDF PDF', exact: true })).toBeEnabled()
+  await expect(page.getByText('Opening a lesson starts your access period.')).toHaveCount(0)
 })
