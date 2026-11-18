@@ -963,6 +963,305 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 headers={**headers, "Idempotency-Key": "synthetic-free-course-consent"},
             )
             assert consent.status_code == 201, consent.text
+            if correction_scenario == "media_delivery":
+                overview_path = release_path
+                finance_headers = {
+                    "Authorization": f"Bearer {mint_session_tokens(verifier.email, amr='mfa', org_id=org.id).access_token}"
+                }
+                async with postgres_session_factory() as db:
+                    grant = (await db.execute(select(StudyCourseAccessGrant).where(
+                        StudyCourseAccessGrant.org_id == org.id,
+                    ))).scalar_one()
+                index = await client.get(f"{overview_path}/lessons", headers=headers)
+                assert index.status_code == 200, index.text
+                assert index.headers["cache-control"] == "private, no-store"
+                assert index.json() == {
+                    "requires_first_use": True,
+                    "lessons": [
+                        {
+                            "activity_uuid": activity_uuid,
+                            "name": "Reviewed lesson",
+                            "position": 1,
+                            "format": "text",
+                            "media_type": None,
+                            "available": True,
+                            "unavailable_reason": None,
+                        },
+                        {
+                            "activity_uuid": media_activity_uuid,
+                            "name": "Reviewed PDF",
+                            "position": 2,
+                            "format": "pdf",
+                            "media_type": "application/pdf",
+                            "available": True,
+                            "unavailable_reason": None,
+                        },
+                        {
+                            "activity_uuid": video_activity_uuid,
+                            "name": "Reviewed video",
+                            "position": 3,
+                            "format": "video",
+                            "media_type": "video/mp4",
+                            "available": False,
+                            "unavailable_reason": "captions_or_text_alternative_not_retained",
+                        },
+                        {
+                            "activity_uuid": unsupported_media_uuid,
+                            "name": "Unsupported audio",
+                            "position": 4,
+                            "format": "unsupported",
+                            "media_type": None,
+                            "available": False,
+                            "unavailable_reason": "unsupported_release_format",
+                        },
+                    ],
+                }
+                assert (await client.get(f"{overview_path}/lessons", headers=finance_headers)).status_code == 404
+                media_path = (
+                    f"{overview_path}/activities/{media_activity_uuid}/media"
+                )
+                storage_reads = []
+                storage_bytes_read = []
+
+                content_root = tmp_path / "content"
+                retained_pdf = content_root / "orgs" / org.org_uuid / media_storage_reference
+                retained_pdf.parent.mkdir(parents=True)
+                retained_pdf.write_bytes(release_media_bytes)
+                config = SimpleNamespace(hosting_config=SimpleNamespace(
+                    content_delivery=SimpleNamespace(type="filesystem"),
+                ))
+                monkeypatch.setattr(upload_content, "_CONTENT_ROOT", str(content_root))
+                monkeypatch.setattr(upload_content, "get_learnhouse_config", lambda: config)
+
+                async def open_fixture_media(**kwargs):
+                    storage_reads.append(kwargs)
+                    stream = await upload_content.open_content_stream(**kwargs)
+
+                    async def chunks():
+                        try:
+                            async for chunk in stream:
+                                storage_bytes_read.append(len(chunk))
+                                yield chunk
+                        finally:
+                            await stream.aclose()
+
+                    return chunks()
+
+                monkeypatch.setattr(
+                    "src.services.studytomy.access_policy.open_content_stream",
+                    open_fixture_media,
+                )
+                assert (await client.get(media_path, headers=finance_headers)).status_code == 404
+                assert (await client.get(
+                    media_path.replace(course.course_uuid, f"{course.course_uuid}-other"),
+                )).status_code == 404
+                assert (await client.get(
+                    media_path.replace(media_activity_uuid, f"activity_{uuid4()}"),
+                )).status_code == 404
+                assert (await client.get(
+                    media_path.replace(org.org_uuid, f"org_{uuid4()}"),
+                )).status_code == 404
+                video_path = media_path.replace(media_activity_uuid, video_activity_uuid)
+                for blocked_video in (
+                    await client.get(video_path, headers=headers),
+                    await client.post(f"{video_path}/open", headers=headers),
+                ):
+                    assert blocked_video.status_code == 409
+                    assert blocked_video.json()["detail"]["code"] == "RELEASE_MEDIA_UNSUPPORTED"
+                assert storage_reads == []
+
+                invalid_range = await client.post(
+                    f"{media_path}/open", headers={**headers, "Range": f"bytes={len(release_media_bytes)}-"},
+                )
+                assert invalid_range.status_code == 416
+                assert invalid_range.headers["content-range"] == f"bytes */{len(release_media_bytes)}"
+                assert storage_reads == []
+                async with postgres_session_factory() as db:
+                    unstarted = await db.get(StudyCourseAccessGrant, grant.id)
+                    assert unstarted.starts_at is None and unstarted.ends_at is None
+
+                # A real missing filesystem object must not consume first use.
+                retained_pdf.unlink()
+                missing_pdf = await client.post(f"{media_path}/open", headers=headers)
+                assert missing_pdf.status_code == 503
+                assert missing_pdf.json()["detail"]["code"] == "RELEASE_STORAGE_INVALID"
+                async with postgres_session_factory() as db:
+                    unstarted = await db.get(StudyCourseAccessGrant, grant.id)
+                    assert unstarted.starts_at is None and unstarted.ends_at is None
+                retained_pdf.write_bytes(release_media_bytes)
+                prior_reads = len(storage_reads)
+
+                opened, replayed_open = await asyncio.gather(*[
+                    client.post(f"{media_path}/open", headers=headers) for _ in range(2)
+                ])
+                for response in (opened, replayed_open):
+                    assert response.status_code == 200, response.text
+                    assert response.content == release_media_bytes
+                    assert response.headers["content-type"] == "application/pdf"
+                    assert response.headers["cache-control"] == "private, no-store"
+                    assert response.headers["x-content-type-options"] == "nosniff"
+                    assert response.headers["accept-ranges"] == "bytes"
+                assert len(storage_reads) == prior_reads + 2
+                with BytesIO(opened.content) as pdf:
+                    pages = PdfReader(pdf, strict=True).pages
+                    assert [tuple(page.mediabox)[2:] for page in pages] == [(300, 420), (420, 300)]
+                async with postgres_session_factory() as db:
+                    started = await db.get(StudyCourseAccessGrant, grant.id)
+                    assert started.starts_at is not None and started.ends_at is not None
+                    delivered = (await db.execute(select(StudyBusinessEvent).where(
+                        StudyBusinessEvent.org_id == org.id,
+                        StudyBusinessEvent.resource_uuid == str(grant.id),
+                        StudyBusinessEvent.action == "studytomy.course_grant.content_delivered",
+                    ))).scalars().all()
+                    assert len(delivered) == 1
+
+                ranged = await client.get(media_path, headers={**headers, "Range": "bytes=1-4"})
+                assert ranged.status_code == 206
+                assert ranged.content == release_media_bytes[1:5]
+                assert ranged.headers["content-range"] == f"bytes 1-4/{len(release_media_bytes)}"
+                prior_reads = len(storage_reads)
+                prior_bytes_read = sum(storage_bytes_read)
+                repeated_ranges = await asyncio.gather(*[
+                    client.get(media_path, headers={**headers, "Range": "bytes=1-4"})
+                    for _ in range(2)
+                ])
+                assert all(response.status_code == 206 for response in repeated_ranges)
+                assert len(storage_reads) == prior_reads + 2
+                assert sum(storage_bytes_read) == prior_bytes_read + 2 * len(release_media_bytes)
+
+                async def open_tampered_media(**kwargs):
+                    async def chunks():
+                        yield b"tampered" * 6
+
+                    return chunks()
+
+                monkeypatch.setattr(
+                    "src.services.studytomy.access_policy.open_content_stream",
+                    open_tampered_media,
+                )
+                tampered = await client.get(media_path, headers=headers)
+                assert tampered.status_code == 503
+                assert tampered.json()["detail"]["code"] == "RELEASE_STORAGE_INVALID"
+                assert b"tampered" not in tampered.content
+
+                from src.services.studytomy import access_policy
+
+                original_temporary_file = access_policy.TemporaryFile
+                staged_files = []
+
+                def track_temporary_file(*args, **kwargs):
+                    staged_file = original_temporary_file(*args, **kwargs)
+                    staged_files.append(staged_file)
+                    return staged_file
+
+                monkeypatch.setattr(access_policy, "TemporaryFile", track_temporary_file)
+                original_current_policies = access_policy._current_policies
+                d15_policy_reads = 0
+
+                async def changed_d15_policy(db, organization, policy_keys, now):
+                    nonlocal d15_policy_reads
+                    policies = await original_current_policies(db, organization, policy_keys, now)
+                    if tuple(policy_keys) == (StudyPolicyKey.D_15,):
+                        d15_policy_reads += 1
+                        if d15_policy_reads == 2:
+                            changed_policy = policies[0].model_copy(
+                                update={"id": int(policies[0].id) + 1}
+                            )
+                            return [changed_policy]
+                    return policies
+
+                monkeypatch.setattr(access_policy, "_current_policies", changed_d15_policy)
+                policy_staging_paused = asyncio.Event()
+                resume_policy_staging = asyncio.Event()
+
+                async def open_policy_change_media(**kwargs):
+                    async def chunks():
+                        yield release_media_bytes
+                        policy_staging_paused.set()
+                        await resume_policy_staging.wait()
+
+                    return chunks()
+
+                monkeypatch.setattr(
+                    "src.services.studytomy.access_policy.open_content_stream",
+                    open_policy_change_media,
+                )
+                pending_policy_delivery = asyncio.create_task(client.get(media_path, headers=headers))
+                await asyncio.wait_for(policy_staging_paused.wait(), timeout=5)
+                resume_policy_staging.set()
+                changed_policy_response = await pending_policy_delivery
+                assert changed_policy_response.status_code == 409
+                assert changed_policy_response.json()["detail"]["code"] == "POLICY_CHANGED"
+                assert d15_policy_reads == 2
+                assert staged_files and staged_files[-1].closed
+                monkeypatch.setattr(access_policy, "_current_policies", original_current_policies)
+
+                async def change_grant_during_staging(change: str) -> None:
+                    staging_paused = asyncio.Event()
+                    resume_staging = asyncio.Event()
+
+                    async def open_paused_media(**kwargs):
+                        storage_reads.append(kwargs)
+
+                        async def chunks():
+                            yield release_media_bytes
+                            storage_bytes_read.append(len(release_media_bytes))
+                            staging_paused.set()
+                            await resume_staging.wait()
+
+                        return chunks()
+
+                    monkeypatch.setattr(
+                        "src.services.studytomy.access_policy.open_content_stream",
+                        open_paused_media,
+                    )
+                    pending_delivery = asyncio.create_task(client.get(media_path, headers=headers))
+                    await asyncio.wait_for(staging_paused.wait(), timeout=5)
+                    governance_lock_acquired = False
+                    try:
+                        async with postgres_session_factory() as db:
+                            try:
+                                await asyncio.wait_for(
+                                    db.execute(
+                                        select(Organization.id)
+                                        .where(Organization.id == org.id)
+                                        .with_for_update()
+                                    ),
+                                    timeout=2,
+                                )
+                                governance_lock_acquired = True
+                            except TimeoutError:
+                                await db.rollback()
+
+                            changed_grant = await db.get(StudyCourseAccessGrant, grant.id)
+                            now = datetime.now(UTC)
+                            if change == "expired":
+                                expires_at = changed_grant.ends_at
+
+                                class ExpiredClock(datetime):
+                                    @classmethod
+                                    def now(cls, tz=None):
+                                        return expires_at + timedelta(milliseconds=1)
+
+                                monkeypatch.setattr(access_policy, "datetime", ExpiredClock)
+                            else:
+                                changed_grant.revoked_at = now
+                                await db.commit()
+                    finally:
+                        resume_staging.set()
+
+                    response = await pending_delivery
+                    assert governance_lock_acquired, "Storage staging still held the organization governance lock."
+                    assert response.status_code == 404
+                    assert staged_files and all(staged_file.closed for staged_file in staged_files)
+
+                await change_grant_during_staging("expired")
+                monkeypatch.setattr(access_policy, "datetime", datetime)
+                await change_grant_during_staging("revoked")
+                reads_before_revoked = len(storage_reads)
+                assert (await client.get(media_path, headers=headers)).status_code == 404
+                assert len(storage_reads) == reads_before_revoked
+                return
             if correct_before_first_use:
                 async with postgres_session_factory() as db:
                     replacement = StudyLearnerProfile(
@@ -1680,295 +1979,6 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         after = await client.get(catalog_path, headers=headers, params={"after": release.uuid, "limit": 1})
         assert after.json() == {"releases": [], "next_cursor": None}
         assert (await client.get(catalog_path, headers=finance_headers)).status_code == 404
-        if correction_scenario == "media_delivery":
-            index = await client.get(f"{overview_path}/lessons", headers=headers)
-            assert index.status_code == 200, index.text
-            assert index.headers["cache-control"] == "private, no-store"
-            assert index.json() == {
-                "requires_first_use": True,
-                "lessons": [
-                    {
-                        "activity_uuid": activity_uuid,
-                        "name": "Reviewed lesson",
-                        "position": 1,
-                        "format": "text",
-                        "media_type": None,
-                        "available": True,
-                        "unavailable_reason": None,
-                    },
-                    {
-                        "activity_uuid": media_activity_uuid,
-                        "name": "Reviewed PDF",
-                        "position": 2,
-                        "format": "pdf",
-                        "media_type": "application/pdf",
-                        "available": True,
-                        "unavailable_reason": None,
-                    },
-                    {
-                        "activity_uuid": video_activity_uuid,
-                        "name": "Reviewed video",
-                        "position": 3,
-                        "format": "video",
-                        "media_type": "video/mp4",
-                        "available": False,
-                        "unavailable_reason": "captions_or_text_alternative_not_retained",
-                    },
-                    {
-                        "activity_uuid": unsupported_media_uuid,
-                        "name": "Unsupported audio",
-                        "position": 4,
-                        "format": "unsupported",
-                        "media_type": None,
-                        "available": False,
-                        "unavailable_reason": "unsupported_release_format",
-                    },
-                ],
-            }
-            assert (await client.get(f"{overview_path}/lessons", headers=finance_headers)).status_code == 404
-            media_path = (
-                f"{overview_path}/activities/{media_activity_uuid}/media"
-            )
-            storage_reads = []
-            storage_bytes_read = []
-
-            content_root = tmp_path / "content"
-            retained_pdf = content_root / "orgs" / org.org_uuid / media_storage_reference
-            retained_pdf.parent.mkdir(parents=True)
-            retained_pdf.write_bytes(release_media_bytes)
-            config = SimpleNamespace(hosting_config=SimpleNamespace(
-                content_delivery=SimpleNamespace(type="filesystem"),
-            ))
-            monkeypatch.setattr(upload_content, "_CONTENT_ROOT", str(content_root))
-            monkeypatch.setattr(upload_content, "get_learnhouse_config", lambda: config)
-
-            async def open_fixture_media(**kwargs):
-                storage_reads.append(kwargs)
-                stream = await upload_content.open_content_stream(**kwargs)
-
-                async def chunks():
-                    try:
-                        async for chunk in stream:
-                            storage_bytes_read.append(len(chunk))
-                            yield chunk
-                    finally:
-                        await stream.aclose()
-
-                return chunks()
-
-            monkeypatch.setattr(
-                "src.services.studytomy.access_policy.open_content_stream",
-                open_fixture_media,
-            )
-            assert (await client.get(media_path, headers=finance_headers)).status_code == 404
-            assert (await client.get(
-                media_path.replace(course.course_uuid, f"{course.course_uuid}-other"),
-            )).status_code == 404
-            assert (await client.get(
-                media_path.replace(media_activity_uuid, f"activity_{uuid4()}"),
-            )).status_code == 404
-            assert (await client.get(
-                media_path.replace(org.org_uuid, f"org_{uuid4()}"),
-            )).status_code == 404
-            video_path = media_path.replace(media_activity_uuid, video_activity_uuid)
-            for blocked_video in (
-                await client.get(video_path, headers=headers),
-                await client.post(f"{video_path}/open", headers=headers),
-            ):
-                assert blocked_video.status_code == 409
-                assert blocked_video.json()["detail"]["code"] == "RELEASE_MEDIA_UNSUPPORTED"
-            assert storage_reads == []
-
-            invalid_range = await client.post(
-                f"{media_path}/open", headers={**headers, "Range": f"bytes={len(release_media_bytes)}-"},
-            )
-            assert invalid_range.status_code == 416
-            assert invalid_range.headers["content-range"] == f"bytes */{len(release_media_bytes)}"
-            assert storage_reads == []
-            async with postgres_session_factory() as db:
-                unstarted = await db.get(StudyCourseAccessGrant, grant.id)
-                assert unstarted.starts_at is None and unstarted.ends_at is None
-
-            # A real missing filesystem object must not consume first use.
-            retained_pdf.unlink()
-            missing_pdf = await client.post(f"{media_path}/open", headers=headers)
-            assert missing_pdf.status_code == 503
-            assert missing_pdf.json()["detail"]["code"] == "RELEASE_STORAGE_INVALID"
-            async with postgres_session_factory() as db:
-                unstarted = await db.get(StudyCourseAccessGrant, grant.id)
-                assert unstarted.starts_at is None and unstarted.ends_at is None
-            retained_pdf.write_bytes(release_media_bytes)
-            prior_reads = len(storage_reads)
-
-            opened, replayed_open = await asyncio.gather(*[
-                client.post(f"{media_path}/open", headers=headers) for _ in range(2)
-            ])
-            for response in (opened, replayed_open):
-                assert response.status_code == 200, response.text
-                assert response.content == release_media_bytes
-                assert response.headers["content-type"] == "application/pdf"
-                assert response.headers["cache-control"] == "private, no-store"
-                assert response.headers["x-content-type-options"] == "nosniff"
-                assert response.headers["accept-ranges"] == "bytes"
-            assert len(storage_reads) == prior_reads + 2
-            with BytesIO(opened.content) as pdf:
-                pages = PdfReader(pdf, strict=True).pages
-                assert [tuple(page.mediabox)[2:] for page in pages] == [(300, 420), (420, 300)]
-            async with postgres_session_factory() as db:
-                started = await db.get(StudyCourseAccessGrant, grant.id)
-                assert started.starts_at is not None and started.ends_at is not None
-                delivered = (await db.execute(select(StudyBusinessEvent).where(
-                    StudyBusinessEvent.org_id == org.id,
-                    StudyBusinessEvent.resource_uuid == str(grant.id),
-                    StudyBusinessEvent.action == "studytomy.course_grant.content_delivered",
-                ))).scalars().all()
-                assert len(delivered) == 1
-
-            ranged = await client.get(media_path, headers={**headers, "Range": "bytes=1-4"})
-            assert ranged.status_code == 206
-            assert ranged.content == release_media_bytes[1:5]
-            assert ranged.headers["content-range"] == f"bytes 1-4/{len(release_media_bytes)}"
-            prior_reads = len(storage_reads)
-            prior_bytes_read = sum(storage_bytes_read)
-            repeated_ranges = await asyncio.gather(*[
-                client.get(media_path, headers={**headers, "Range": "bytes=1-4"})
-                for _ in range(2)
-            ])
-            assert all(response.status_code == 206 for response in repeated_ranges)
-            assert len(storage_reads) == prior_reads + 2
-            assert sum(storage_bytes_read) == prior_bytes_read + 2 * len(release_media_bytes)
-
-            async def open_tampered_media(**kwargs):
-                async def chunks():
-                    yield b"tampered" * 6
-
-                return chunks()
-
-            monkeypatch.setattr(
-                "src.services.studytomy.access_policy.open_content_stream",
-                open_tampered_media,
-            )
-            tampered = await client.get(media_path, headers=headers)
-            assert tampered.status_code == 503
-            assert tampered.json()["detail"]["code"] == "RELEASE_STORAGE_INVALID"
-            assert b"tampered" not in tampered.content
-
-            from src.services.studytomy import access_policy
-
-            original_temporary_file = access_policy.TemporaryFile
-            staged_files = []
-
-            def track_temporary_file(*args, **kwargs):
-                staged_file = original_temporary_file(*args, **kwargs)
-                staged_files.append(staged_file)
-                return staged_file
-
-            monkeypatch.setattr(access_policy, "TemporaryFile", track_temporary_file)
-            original_current_policies = access_policy._current_policies
-            d15_policy_reads = 0
-
-            async def changed_d15_policy(db, organization, policy_keys, now):
-                nonlocal d15_policy_reads
-                policies = await original_current_policies(db, organization, policy_keys, now)
-                if tuple(policy_keys) == (StudyPolicyKey.D_15,):
-                    d15_policy_reads += 1
-                    if d15_policy_reads == 2:
-                        changed_policy = policies[0].model_copy(
-                            update={"id": int(policies[0].id) + 1}
-                        )
-                        return [changed_policy]
-                return policies
-
-            monkeypatch.setattr(access_policy, "_current_policies", changed_d15_policy)
-            policy_staging_paused = asyncio.Event()
-            resume_policy_staging = asyncio.Event()
-
-            async def open_policy_change_media(**kwargs):
-                async def chunks():
-                    yield release_media_bytes
-                    policy_staging_paused.set()
-                    await resume_policy_staging.wait()
-
-                return chunks()
-
-            monkeypatch.setattr(
-                "src.services.studytomy.access_policy.open_content_stream",
-                open_policy_change_media,
-            )
-            pending_policy_delivery = asyncio.create_task(client.get(media_path, headers=headers))
-            await asyncio.wait_for(policy_staging_paused.wait(), timeout=5)
-            resume_policy_staging.set()
-            changed_policy_response = await pending_policy_delivery
-            assert changed_policy_response.status_code == 409
-            assert changed_policy_response.json()["detail"]["code"] == "POLICY_CHANGED"
-            assert d15_policy_reads == 2
-            assert staged_files and staged_files[-1].closed
-            monkeypatch.setattr(access_policy, "_current_policies", original_current_policies)
-
-            async def change_grant_during_staging(change: str) -> None:
-                staging_paused = asyncio.Event()
-                resume_staging = asyncio.Event()
-
-                async def open_paused_media(**kwargs):
-                    storage_reads.append(kwargs)
-
-                    async def chunks():
-                        yield release_media_bytes
-                        storage_bytes_read.append(len(release_media_bytes))
-                        staging_paused.set()
-                        await resume_staging.wait()
-
-                    return chunks()
-
-                monkeypatch.setattr(
-                    "src.services.studytomy.access_policy.open_content_stream",
-                    open_paused_media,
-                )
-                pending_delivery = asyncio.create_task(client.get(media_path, headers=headers))
-                await asyncio.wait_for(staging_paused.wait(), timeout=5)
-                governance_lock_acquired = False
-                try:
-                    async with postgres_session_factory() as db:
-                        try:
-                            await asyncio.wait_for(
-                                db.execute(
-                                    select(Organization.id)
-                                    .where(Organization.id == org.id)
-                                    .with_for_update()
-                                ),
-                                timeout=2,
-                            )
-                            governance_lock_acquired = True
-                        except TimeoutError:
-                            await db.rollback()
-
-                        changed_grant = await db.get(StudyCourseAccessGrant, grant.id)
-                        now = datetime.now(UTC)
-                        if change == "expired":
-                            changed_grant.starts_at = now - timedelta(days=2)
-                            changed_grant.ends_at = now - timedelta(days=1)
-                        else:
-                            changed_grant.revoked_at = now
-                        await db.commit()
-                finally:
-                    resume_staging.set()
-
-                response = await pending_delivery
-                assert governance_lock_acquired, "Storage staging still held the organization governance lock."
-                assert response.status_code == 404
-                assert staged_files and all(staged_file.closed for staged_file in staged_files)
-
-            await change_grant_during_staging("expired")
-            async with postgres_session_factory() as db:
-                restored = await db.get(StudyCourseAccessGrant, grant.id)
-                restored.starts_at = datetime.now(UTC) - timedelta(seconds=1)
-                restored.ends_at = restored.starts_at + timedelta(days=1)
-                await db.commit()
-            await change_grant_during_staging("revoked")
-            reads_before_revoked = len(storage_reads)
-            assert (await client.get(media_path, headers=headers)).status_code == 404
-            assert len(storage_reads) == reads_before_revoked
-            return
         lesson_path = f"{overview_path}/lessons/{activity_uuid}"
         correction_review = f"{org_path}/learners/{profile.learner_uuid}/allocations/{ref}/correction-review"
         before_use = await client.get(correction_review, headers=finance_headers)
