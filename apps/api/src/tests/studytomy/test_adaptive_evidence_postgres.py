@@ -412,6 +412,35 @@ async def test_append_only_corrections_and_projection_watermark(
                     )
 
 
+        attempt.next_ordinal += 1
+        attempt.version += 1
+        await db.flush()
+        assisted_item = rows.issue(attempt, index=1)
+        db.add(assisted_item)
+        await db.flush()
+        await _answer(db, assisted_item)
+        db.add_all([
+            rows.observation(
+                assisted_item, independence="assisted", eligible=False,
+                eligibility_reason="assisted",
+            ),
+            rows.observation(
+                issued, result_revision=3, supersedes_id=correction.id,
+                correction_reason="invalidated", is_retraction=True,
+                outcome="not_scored", score=None, eligible=False,
+                eligibility_reason="retracted",
+            ),
+        ])
+        await db.flush()
+        period["end"] = assisted_item.responded_at + timedelta(seconds=1)
+        assert await assessment_evidence_breakdown(
+            db, org_id=rows.org_id, curriculum_revision_id=rows.curriculum_id, **period,
+        ) == [
+            {"independence": "assisted", "evidence_outcome": "correct", "observations": 1},
+            {"independence": "independent", "evidence_outcome": "retracted", "observations": 1},
+        ]
+
+
 async def test_concurrent_diagnostic_start_uses_one_active_round(
     postgres_session_factory,
 ):
