@@ -27,11 +27,14 @@ from src.db.studytomy.governance import (
 from src.db.users import APITokenUser, PublicUser
 from src.services.studytomy.assignment_adapter import native_round_uuid
 from src.services.studytomy.business_events import append_business_event
+from src.services.studytomy.grading_contract import (
+    NATIVE_GRADING_CONTRACT_VERSION,
+    native_grading_digest,
+)
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
 
-NATIVE_GRADING_CONTRACT_VERSION = "native-assessment-v1"
 CONTRACT_FROZEN_ACTION = "studytomy.assessment.contract_frozen"
 RESULT_RECORDED_ACTION = "studytomy.assessment.result_recorded"
 APPEAL_CORRECTION_REASON = "ASSESSMENT_APPEAL_SCORE_CORRECTED"
@@ -41,23 +44,11 @@ RESPONSES_FROZEN_ACTION = "studytomy.assessment.responses_frozen"
 def grading_contract_digest(
     assignment: Assignment, tasks: Sequence[AssignmentTask]
 ) -> str:
-    return canonical_request_hash(
-        {
-            "version": NATIVE_GRADING_CONTRACT_VERSION,
-            "assignment": assignment.assignment_uuid,
-            "grading_type": assignment.grading_type,
-            "pass_threshold_percentage": assignment.pass_threshold_percentage,
-            "ungraded": bool(assignment.ungraded),
-            "tasks": [
-                [
-                    task.assignment_task_uuid,
-                    task.assignment_type,
-                    task.max_grade_value,
-                    task.contents,
-                ]
-                for task in sorted(tasks, key=lambda task: task.assignment_task_uuid)
-            ],
-        }
+    return native_grading_digest(
+        assignment.assignment_uuid, assignment.grading_type,
+        assignment.pass_threshold_percentage, bool(assignment.ungraded),
+        ((task.assignment_task_uuid, task.assignment_type, task.max_grade_value, task.contents)
+         for task in tasks),
     )
 
 

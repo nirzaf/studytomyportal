@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from src.db.studytomy.governance import StudyPolicyBody
 from src.services.studytomy.errors import studytomy_http_error
+from src.services.studytomy.grading_contract import retained_grading_contract_digest
 
 ResourceUUID = Annotated[str, Field(strict=True, min_length=1, max_length=100, pattern=r"^\S+$")]
 
@@ -90,3 +91,7 @@ def validate_release_pass_prerequisites(body: StudyPolicyBody, snapshot: dict) -
             or positions[source_id] >= positions[target["id"]]
         ):
             raise invalid
+        try:
+            retained_grading_contract_digest(assignment, snapshot["assignment_tasks"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise invalid from error

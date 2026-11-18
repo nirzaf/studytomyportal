@@ -5,6 +5,9 @@ from fastapi import HTTPException
 
 from src.db.studytomy.governance import StudyPolicyKey
 from src.services.studytomy.access_policy import _project_media_activity, _project_text_lesson
+from src.services.studytomy.grading import grading_contract_digest
+from src.services.studytomy.grading_contract import retained_grading_contract_digest
+from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.prerequisites import (
     ungated_by_assessed_pass,
     validate_release_pass_prerequisites,
@@ -87,16 +90,24 @@ def test_retained_schedule_values_prevent_ungated_delivery(location, rule):
         assert error.value.status_code == 404
 
 
-@pytest.mark.parametrize("scenario", ["forward", "self", "cross_course", "ungraded", "private", "duplicate"])
+@pytest.mark.parametrize("scenario", [
+    "forward", "self", "cross_course", "ungraded", "private", "duplicate", "zero_points", "missing_tasks",
+])
 def test_release_validates_assessed_pass_edges(scenario):
     source = {"id": 1, "activity_uuid": "activity_assessment", "published": True,
               "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY"}
     target = {"id": 2, "activity_uuid": "activity_lesson", "published": True}
-    assignment = {"assignment_uuid": "assignment_assessment", "activity_id": 1, "published": True}
+    assignment = {
+        "id": 1, "assignment_uuid": "assignment_assessment", "activity_id": 1, "published": True,
+        "grading_type": "NUMERIC", "pass_threshold_percentage": None, "ungraded": False,
+    }
+    task = {"assignment_id": 1, "assignment_task_uuid": "task_1", "assignment_type": "QUIZ",
+            "max_grade_value": 10, "contents": {}}
     snapshot = {
         "course": {"course_uuid": "course_synthetic"},
         "activities": [source, target],
         "assignments": [assignment],
+        "assignment_tasks": [task],
         "chapter_order": [[1, 1], [2, 2]],
         "activity_order": [[1, 1, 10], [2, 2, 1]],
     }
@@ -118,6 +129,10 @@ def test_release_validates_assessed_pass_edges(scenario):
         assignment["ungraded"] = True
     elif scenario == "private":
         source["published"] = False
+    elif scenario == "zero_points":
+        task["max_grade_value"] = 0
+    elif scenario == "missing_tasks":
+        snapshot["assignment_tasks"] = []
     else:
         rules.append(rule.copy())
     body = _synthetic_policy_body(StudyPolicyKey.D_09, {
@@ -126,3 +141,21 @@ def test_release_validates_assessed_pass_edges(scenario):
     with pytest.raises(HTTPException) as error:
         validate_release_pass_prerequisites(body, snapshot)
     assert error.value.detail["code"] == "RELEASE_ASSESSED_PASS_INVALID"
+
+
+def test_retained_grading_contract_matches_existing_native_digest():
+    assignment = {
+        "id": 1, "assignment_uuid": "assignment_1", "grading_type": "PERCENTAGE",
+        "pass_threshold_percentage": 65.5, "ungraded": False,
+    }
+    task = {"assignment_id": 1, "assignment_task_uuid": "task_1", "assignment_type": "QUIZ",
+            "max_grade_value": 10, "contents": {"question": "Synthetic"}}
+    previous_format = {
+        "version": "native-assessment-v1", "assignment": "assignment_1",
+        "grading_type": "PERCENTAGE", "pass_threshold_percentage": 65.5, "ungraded": False,
+        "tasks": [["task_1", "QUIZ", 10, {"question": "Synthetic"}]],
+    }
+    live_digest = grading_contract_digest(SimpleNamespace(**assignment), [SimpleNamespace(**task)])
+    assert retained_grading_contract_digest(assignment, [task]) == live_digest
+    assert live_digest == canonical_request_hash(previous_format)
+    assert retained_grading_contract_digest(assignment, [{**task, "max_grade_value": 11}]) != live_digest
