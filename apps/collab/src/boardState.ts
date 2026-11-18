@@ -15,6 +15,7 @@ export class BoardStateLoadError extends Error {
 }
 
 export interface BoardStateLoaderDependencies {
+  maxBytes: number
   readCache: () => Promise<Uint8Array | null>
   fetchDatabase: () => Promise<YdocApiResponse>
   warmCache: (state: Uint8Array) => Promise<void>
@@ -37,11 +38,19 @@ export async function loadBoardState(
     throw new BoardStateLoadError('Cannot load board state without a board identifier')
   }
 
+  let cached: Uint8Array | null = null
   try {
-    const cached = await dependencies.readCache()
-    if (cached && cached.byteLength > 0) return new Uint8Array(cached)
+    cached = await dependencies.readCache()
   } catch (error) {
     dependencies.reportError('redis-read', error)
+  }
+  if (cached?.byteLength) {
+    if (cached.byteLength > dependencies.maxBytes) {
+      const error = new BoardStateLoadError('Cached board state exceeds the size limit')
+      dependencies.reportError('redis-read', error)
+      throw error
+    }
+    return new Uint8Array(cached)
   }
 
   let response: YdocApiResponse
@@ -67,6 +76,11 @@ export async function loadBoardState(
   }
 
   const stateKind = response.headers.get(YDOC_STATE_HEADER)
+  if (state.byteLength > dependencies.maxBytes) {
+    const error = new BoardStateLoadError('Stored board state exceeds the size limit')
+    dependencies.reportError('database-read', error)
+    throw error
+  }
   if (stateKind === YDOC_STATE_EMPTY && state.byteLength === 0) return null
   if (stateKind !== YDOC_STATE_PRESENT || state.byteLength === 0) {
     const error = new Error('Board state API returned an invalid state marker or body')

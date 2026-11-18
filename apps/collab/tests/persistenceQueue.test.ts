@@ -79,6 +79,7 @@ describe('board persistence queue', () => {
       assert.equal(queue.pendingCount, 0)
       assert.deepEqual(received, [Buffer.from(original), Buffer.from(original)])
       const snapshot = await loadBoardState('board_http_retry', {
+        maxBytes: 1024,
         readCache: async () => null,
         fetchDatabase: () => fetch(url, { signal: AbortSignal.timeout(2000) }),
         warmCache: async () => {},

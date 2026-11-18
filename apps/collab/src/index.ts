@@ -442,17 +442,20 @@ const server = new Server({
         if (!boardUuid) throw new Error('Invalid board document name')
 
         return loadBoardState(boardUuid, {
+          maxBytes: MAX_YDOC_BYTES,
           readCache: async () => {
             const r = getRedis()
             const [pending, cached] = await r.mgetBuffer(
               redisPendingYdocKey(boardUuid),
               redisYdocKey(boardUuid),
             )
-            if (pending?.byteLength && pending.byteLength <= MAX_YDOC_BYTES) {
-              try {
-                pendingFlushes.schedule(boardUuid, pending)
-              } catch (error) {
-                console.error(`[collab] Redis snapshot remains pending for ${boardUuid}:`, error)
+            if (pending?.byteLength) {
+              if (pending.byteLength <= MAX_YDOC_BYTES) {
+                try {
+                  pendingFlushes.schedule(boardUuid, pending)
+                } catch (error) {
+                  console.error(`[collab] Redis snapshot remains pending for ${boardUuid}:`, error)
+                }
               }
               return pending
             }

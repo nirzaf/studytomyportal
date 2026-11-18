@@ -17,7 +17,7 @@ function dependencies(
   readCache: BoardStateLoaderDependencies['readCache'] = async () => null,
   warmCache: BoardStateLoaderDependencies['warmCache'] = async () => {},
 ): BoardStateLoaderDependencies {
-  return { fetchDatabase, readCache, warmCache, reportError: () => {} }
+  return { maxBytes: 1024, fetchDatabase, readCache, warmCache, reportError: () => {} }
 }
 
 function apiResponse(
@@ -60,6 +60,26 @@ async function loadDocument(server: Hocuspocus, documentName = 'board_test') {
 }
 
 describe('authoritative board state loading', () => {
+  it('rejects oversized snapshots from either storage path without creating a document', async () => {
+    const oversized = new Uint8Array(1025)
+    const cached = runtime(dependencies(
+      async () => assert.fail('An oversized pending snapshot must not fall through to PostgreSQL'),
+      async () => oversized,
+    ))
+    await assert.rejects(loadDocument(cached.server), BoardStateLoadError)
+    assert.equal(cached.server.documents.has('board_test'), false)
+    assert.equal(cached.storeCalls(), 0)
+
+    const stored = runtime(dependencies(
+      async () => apiResponse(oversized, YDOC_STATE_PRESENT),
+      async () => null,
+      async () => assert.fail('An oversized stored snapshot must not warm Redis'),
+    ))
+    await assert.rejects(loadDocument(stored.server), BoardStateLoadError)
+    assert.equal(stored.server.documents.has('board_test'), false)
+    assert.equal(stored.storeCalls(), 0)
+  })
+
   it('does not initialize or persist an empty replacement after Redis and API failures, then recovers the original state', async () => {
     const original = new Y.Doc()
     original.getText('content').insert(0, 'saved board content')
