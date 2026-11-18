@@ -1,12 +1,14 @@
 import asyncio
 import hashlib
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
+from pypdf import PdfReader, PdfWriter
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
@@ -165,7 +167,12 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         media_activity_uuid = f"activity_{uuid4()}"
         video_activity_uuid = f"activity_{uuid4()}"
         unsupported_media_uuid = f"activity_{uuid4()}"
-        release_media_bytes = b"%PDF-1.4\nSynthetic approved lesson resource.\n%%EOF"
+        writer = PdfWriter()
+        writer.add_blank_page(width=300, height=420)
+        writer.add_blank_page(width=420, height=300)
+        with BytesIO() as pdf:
+            writer.write(pdf)
+            release_media_bytes = pdf.getvalue()
         release_video_bytes = b"synthetic approved video bytes"
         media_source_reference = (
             f"courses/course_synthetic/activities/{media_activity_uuid}/documentpdf/lesson.pdf"
@@ -1804,6 +1811,9 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 assert response.headers["x-content-type-options"] == "nosniff"
                 assert response.headers["accept-ranges"] == "bytes"
             assert len(storage_reads) == prior_reads + 2
+            with BytesIO(opened.content) as pdf:
+                pages = PdfReader(pdf, strict=True).pages
+                assert [tuple(page.mediabox)[2:] for page in pages] == [(300, 420), (420, 300)]
             async with postgres_session_factory() as db:
                 started = await db.get(StudyCourseAccessGrant, grant.id)
                 assert started.starts_at is not None and started.ends_at is not None
