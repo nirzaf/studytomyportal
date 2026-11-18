@@ -1725,8 +1725,6 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             storage_reads = []
             storage_bytes_read = []
 
-            from src.services.utils import upload_content
-
             content_root = tmp_path / "content"
             retained_pdf = content_root / "orgs" / org.org_uuid / media_storage_reference
             retained_pdf.parent.mkdir(parents=True)
