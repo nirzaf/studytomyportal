@@ -90,8 +90,11 @@ def validate_release_media_coverage(snapshot: dict) -> None:
                     "RELEASE_MEDIA_UNSUPPORTED",
                     "This release format cannot retain the video's captions. Keep this video in draft.",
                 )
-            if metadata.get("thumbnails"):
-                raise _release_media_unsupported()
+            raise studytomy_http_error(
+                409,
+                "RELEASE_MEDIA_UNSUPPORTED",
+                "This release format cannot retain captions or an approved accessible alternative. Keep this video in draft.",
+            )
         if subtype in {*_NATIVE_ACTIVITY_MEDIA, "SUBTYPE_ASSIGNMENT_ANY"}:
             continue
         if subtype != "SUBTYPE_DYNAMIC_PAGE":
