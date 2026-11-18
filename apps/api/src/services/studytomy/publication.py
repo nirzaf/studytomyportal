@@ -180,7 +180,9 @@ async def _checked_course_release(
             "CURRENT_COURSE_REVIEW_REQUIRED",
             "The candidate requires a current approved review.",
         )
-    binding = await load_release_policy_binding(db, org, datetime.now(UTC))
+    binding = await load_release_policy_binding(
+        db, org, datetime.now(UTC), candidate_snapshot=snapshot,
+    )
     rights = await db.get(StudyEvidenceFile, review.rights_evidence_id)
     accessibility = await db.get(StudyEvidenceFile, review.accessibility_evidence_id)
     if rights is None or accessibility is None:

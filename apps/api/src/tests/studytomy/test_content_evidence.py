@@ -78,6 +78,7 @@ from src.tests.studytomy.test_studytomy_access import (
     _seed_active_owner,
     _seed_approved_policy,
     _seed_staff_scope,
+    _synthetic_policy_body,
 )
 
 PDF = b"%PDF-1.4\n%%EOF\n"
@@ -293,6 +294,22 @@ async def test_release_policy_binding_requires_current_approved_retention(
         assert pinned.policy_id == policies[key].id
         assert pinned.version == policies[key].version
         assert pinned.body_sha256 == canonical_request_hash(policies[key].body)
+    progression = policies[StudyPolicyKey.D_09]
+    progression.body = _synthetic_policy_body(StudyPolicyKey.D_09, {
+        "completion_prerequisites": {"assessed_pass_by_course": {"course_synthetic": [{
+            "kind": "assessed_pass",
+            "target_activity_uuid": "activity_synthetic",
+            "assessment_assignment_uuid": "assignment_other_course",
+        }]}},
+    }).model_dump(mode="json")
+    await db.commit()
+    with pytest.raises(HTTPException) as bad_rule:
+        await load_release_policy_binding(db, org, datetime.now(UTC), candidate_snapshot={
+            "course": {"course_uuid": "course_synthetic"},
+            "activities": [{"id": 1, "activity_uuid": "activity_synthetic", "published": True}],
+            "assignments": [], "chapter_order": [[1, 1]], "activity_order": [[1, 1, 1]],
+        })
+    assert bad_rule.value.detail["code"] == "RELEASE_ASSESSED_PASS_INVALID"
 
 
 async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(

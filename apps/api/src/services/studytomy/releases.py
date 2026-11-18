@@ -32,6 +32,7 @@ from src.services.courses.transfer.storage_utils import delete_storage_file
 from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
+from src.services.studytomy.prerequisites import validate_release_pass_prerequisites
 from src.services.utils.upload_content import open_content_stream, upload_content
 
 _RELEASE_POLICIES = (
@@ -250,9 +251,19 @@ async def load_release_policy_binding(
     db: AsyncSession,
     org: Organization,
     now: datetime,
+    *,
+    candidate_snapshot: dict | None = None,
 ) -> ReleasePolicyBinding:
-    """Pin currently approved decisions without interpreting their course applicability."""
+    """Pin currently approved decisions and check prerequisite references for new releases."""
     policies = await _current_policies(db, org, _RELEASE_POLICIES, now)
+    if candidate_snapshot is not None:
+        progression = next(
+            policy for policy in policies if policy.policy_key == StudyPolicyKey.D_09.value
+        )
+        progression_body, _ = inspect_study_policy_body(StudyPolicyKey.D_09, progression.body)
+        if progression_body is None:
+            raise studytomy_http_error(409, "POLICY_BODY_INVALID", "The approved progression policy is invalid.")
+        validate_release_pass_prerequisites(progression_body, candidate_snapshot)
     retention = next(
         policy for policy in policies if policy.policy_key == StudyPolicyKey.D_13.value
     )

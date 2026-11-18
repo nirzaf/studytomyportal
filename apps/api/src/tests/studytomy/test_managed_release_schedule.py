@@ -5,7 +5,10 @@ from fastapi import HTTPException
 
 from src.db.studytomy.governance import StudyPolicyKey
 from src.services.studytomy.access_policy import _project_media_activity, _project_text_lesson
-from src.services.studytomy.prerequisites import ungated_by_assessed_pass
+from src.services.studytomy.prerequisites import (
+    ungated_by_assessed_pass,
+    validate_release_pass_prerequisites,
+)
 from src.tests.studytomy.test_studytomy_access import _synthetic_policy_body
 
 
@@ -82,3 +85,44 @@ def test_retained_schedule_values_prevent_ungated_delivery(location, rule):
         with pytest.raises(HTTPException) as error:
             project(release, policy, activity_uuid)
         assert error.value.status_code == 404
+
+
+@pytest.mark.parametrize("scenario", ["forward", "self", "cross_course", "ungraded", "private", "duplicate"])
+def test_release_validates_assessed_pass_edges(scenario):
+    source = {"id": 1, "activity_uuid": "activity_assessment", "published": True,
+              "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY"}
+    target = {"id": 2, "activity_uuid": "activity_lesson", "published": True}
+    assignment = {"assignment_uuid": "assignment_assessment", "activity_id": 1, "published": True}
+    snapshot = {
+        "course": {"course_uuid": "course_synthetic"},
+        "activities": [source, target],
+        "assignments": [assignment],
+        "chapter_order": [[1, 1], [2, 2]],
+        "activity_order": [[1, 1, 10], [2, 2, 1]],
+    }
+    rule = {"kind": "assessed_pass", "target_activity_uuid": target["activity_uuid"],
+            "assessment_assignment_uuid": assignment["assignment_uuid"]}
+    rules = [rule]
+    body = _synthetic_policy_body(StudyPolicyKey.D_09, {
+        "completion_prerequisites": {"assessed_pass_by_course": {"course_synthetic": rules}},
+    })
+    validate_release_pass_prerequisites(body, snapshot)
+
+    if scenario == "forward":
+        snapshot["chapter_order"] = [[2, 1], [1, 2]]
+    elif scenario == "self":
+        rule["target_activity_uuid"] = source["activity_uuid"]
+    elif scenario == "cross_course":
+        rule["assessment_assignment_uuid"] = "assignment_other_course"
+    elif scenario == "ungraded":
+        assignment["ungraded"] = True
+    elif scenario == "private":
+        source["published"] = False
+    else:
+        rules.append(rule.copy())
+    body = _synthetic_policy_body(StudyPolicyKey.D_09, {
+        "completion_prerequisites": {"assessed_pass_by_course": {"course_synthetic": rules}},
+    })
+    with pytest.raises(HTTPException) as error:
+        validate_release_pass_prerequisites(body, snapshot)
+    assert error.value.detail["code"] == "RELEASE_ASSESSED_PASS_INVALID"
