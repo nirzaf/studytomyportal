@@ -1765,6 +1765,13 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             assert (await client.get(
                 media_path.replace(org.org_uuid, f"org_{uuid4()}"),
             )).status_code == 404
+            video_path = media_path.replace(media_activity_uuid, video_activity_uuid)
+            for blocked_video in (
+                await client.get(video_path, headers=headers),
+                await client.post(f"{video_path}/open", headers=headers),
+            ):
+                assert blocked_video.status_code == 409
+                assert blocked_video.json()["detail"]["code"] == "RELEASE_MEDIA_UNSUPPORTED"
             assert storage_reads == []
 
             invalid_range = await client.post(

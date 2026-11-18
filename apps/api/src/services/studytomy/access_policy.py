@@ -709,6 +709,12 @@ def _validate_media_delivery_policy(
             "RELEASE_MEDIA_UNSUPPORTED",
             "The approved accessibility policy does not authorize this resource format or size.",
         )
+    if media_type.startswith("video/"):
+        raise studytomy_http_error(
+            409,
+            "RELEASE_MEDIA_UNSUPPORTED",
+            "The release does not retain captions or an approved accessible alternative.",
+        )
 
 
 async def _stage_release_media(org_uuid: str, media: dict) -> BinaryIO:
