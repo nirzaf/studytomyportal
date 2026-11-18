@@ -5,6 +5,7 @@ import type { FormEvent } from 'react'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { Button } from '@components/ui/button'
+import SupportOperatingReport from '@components/Studytomy/SupportOperatingReport'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
 import { getAPIUrl } from '@services/config/config'
 import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/requests'
@@ -37,7 +38,10 @@ export default function SupportStaffWorkspace() {
   }
   const identity = getAuthenticatedSessionIdentity(user?.id ?? user?.user_uuid, session.data)
   const url = `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(org.org_uuid)}/support/staff/cases`
-  return <StaffQueue key={JSON.stringify([org.org_uuid, identity])} url={url} token={token} />
+  return <div key={JSON.stringify([org.org_uuid, identity])} className="space-y-5">
+    <StaffQueue url={url} token={token} />
+    <SupportOperatingReport orgUuid={org.org_uuid} token={token} />
+  </div>
 }
 
 function StaffQueue({ url, token }: { url: string; token: string }) {

@@ -13,6 +13,47 @@ test.skip(
   'Requires a loopback instance with synthetic approved support guidance and staffed intake.',
 )
 
+test('support operating report is available only to scoped staff', async ({ browser }) => {
+  const staffState = process.env.E2E_STUDYTOMY_SUPPORT_REPORT_STAFF_STATE
+  const reporterState = process.env.E2E_STUDYTOMY_SUPPORT_REPORT_REPORTER_STATE
+  test.skip(!staffState || !reporterState, 'Requires synthetic support report staff and reporter sessions.')
+  const staff = await browser.newContext({ storageState: staffState, viewport: { width: 390, height: 844 } })
+  const reporter = await browser.newContext({ storageState: reporterState, viewport: { width: 390, height: 844 } })
+  const url = new URL('/studytomy/support-cases', BASE_URL).href
+  const isReport = (value: string) =>
+    new URL(value).origin === new URL(API_URL).origin &&
+    new URL(value).pathname.endsWith('/support/staff/operating-report')
+  try {
+    const page = await staff.newPage()
+    const initial = page.waitForResponse(response => isReport(response.url()))
+    await page.goto(url, { waitUntil: 'domcontentloaded' })
+    const dashboard = page.getByRole('region', { name: 'Support operating report' })
+    await expect(dashboard).toBeVisible({ timeout: 60_000 })
+    const report = await initial
+    expect(report.status()).toBe(200)
+    expect(report.headers()['cache-control']).toBe('private, no-store')
+    expect(await report.json()).toMatchObject({ first_resolved_cases: 1, reopened_cases: 1 })
+    await expect(dashboard.getByText('First resolutions in period', { exact: true })).toBeVisible()
+    await expect(dashboard.getByText('Reopened cases in period', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Assigned to me' })).toBeVisible()
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await expect(dashboard).toBeVisible()
+    const refreshed = page.waitForResponse(response => isReport(response.url()))
+    await dashboard.getByRole('button', { name: 'Load report', exact: true }).click()
+    expect((await refreshed).status()).toBe(200)
+    await expect(dashboard.getByText('Reopened cases in period', { exact: true })).toBeVisible()
+
+    const otherPage = await reporter.newPage()
+    const denied = otherPage.waitForResponse(response => isReport(response.url()))
+    await otherPage.goto(url, { waitUntil: 'domcontentloaded' })
+    expect((await denied).status()).toBe(403)
+    await expect(otherPage.getByRole('region', { name: 'Support operating report' })).toHaveCount(0)
+  } finally {
+    await staff.close()
+    await reporter.close()
+  }
+})
+
 test('reach support after learning access is denied and retry a missing acknowledgement', async ({ page }) => {
   const caseUuid = randomUUID()
   const release = { course_uuid: `course_${randomUUID()}`, release_uuid: randomUUID(), name: 'Synthetic course' }
