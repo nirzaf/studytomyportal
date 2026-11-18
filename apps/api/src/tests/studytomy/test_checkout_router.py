@@ -1784,6 +1784,17 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 unstarted = await db.get(StudyCourseAccessGrant, grant.id)
                 assert unstarted.starts_at is None and unstarted.ends_at is None
 
+            # A real missing filesystem object must not consume first use.
+            retained_pdf.unlink()
+            missing_pdf = await client.post(f"{media_path}/open", headers=headers)
+            assert missing_pdf.status_code == 503
+            assert missing_pdf.json()["detail"]["code"] == "RELEASE_STORAGE_INVALID"
+            async with postgres_session_factory() as db:
+                unstarted = await db.get(StudyCourseAccessGrant, grant.id)
+                assert unstarted.starts_at is None and unstarted.ends_at is None
+            retained_pdf.write_bytes(release_media_bytes)
+            prior_reads = len(storage_reads)
+
             opened, replayed_open = await asyncio.gather(*[
                 client.post(f"{media_path}/open", headers=headers) for _ in range(2)
             ])
@@ -1794,7 +1805,7 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 assert response.headers["cache-control"] == "private, no-store"
                 assert response.headers["x-content-type-options"] == "nosniff"
                 assert response.headers["accept-ranges"] == "bytes"
-            assert len(storage_reads) == 2
+            assert len(storage_reads) == prior_reads + 2
             async with postgres_session_factory() as db:
                 started = await db.get(StudyCourseAccessGrant, grant.id)
                 assert started.starts_at is not None and started.ends_at is not None
