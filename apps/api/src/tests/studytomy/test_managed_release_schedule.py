@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from src.db.studytomy.governance import StudyPolicyKey
 from src.services.studytomy.access_policy import _project_media_activity, _project_text_lesson
+from src.services.studytomy.awards import validate_release_certificate_conditions
 from src.services.studytomy.grading import grading_contract_digest
 from src.services.studytomy.grading_contract import retained_grading_contract_digest
 from src.services.studytomy.idempotency import canonical_request_hash
@@ -174,3 +175,45 @@ def test_retained_grading_contract_matches_existing_native_digest():
     assert retained_grading_contract_digest(assignment, [task]) == live_digest
     assert live_digest == canonical_request_hash(previous_format)
     assert retained_grading_contract_digest(assignment, [{**task, "max_grade_value": 11}]) != live_digest
+
+
+@pytest.mark.parametrize("scenario", ["no_completion", "unpublished", "foreign_assessment", "public_verification"])
+def test_reviewed_certificate_conditions_require_retained_completion_and_assessments(scenario):
+    course_uuid = "course_synthetic"
+    assessment_uuid = "assignment_synthetic"
+    assignment = {
+        "id": 1, "assignment_uuid": assessment_uuid, "activity_id": 1, "published": True,
+        "grading_type": "NUMERIC", "pass_threshold_percentage": None, "ungraded": False,
+    }
+    snapshot = {
+        "course": {"course_uuid": course_uuid},
+        "assignments": [assignment],
+        "activities": [{"id": 1, "published": True, "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY"}],
+        "assignment_tasks": [{"assignment_id": 1, "assignment_task_uuid": "task_synthetic",
+                              "assignment_type": "QUIZ", "max_grade_value": 100, "contents": {}}],
+    }
+    progression = _synthetic_policy_body(StudyPolicyKey.D_09, {
+        "completion_prerequisites": {"course_completion_text_activities": {course_uuid: ["activity_synthetic"]}},
+    })
+    certificate = {
+        "award_name": "Synthetic certificate", "issuer_name": "Synthetic issuer", "verification": "private",
+        "required_assessment_uuids": [assessment_uuid],
+    }
+
+    def presentation():
+        return _synthetic_policy_body(StudyPolicyKey.D_16, {
+            "certificate_presentation": {"managed_certificates_by_course": {course_uuid: certificate}},
+        })
+
+    validate_release_certificate_conditions(presentation(), progression, snapshot)
+    if scenario == "no_completion":
+        progression = _synthetic_policy_body(StudyPolicyKey.D_09)
+    elif scenario == "unpublished":
+        assignment["published"] = False
+    elif scenario == "foreign_assessment":
+        certificate["required_assessment_uuids"] = ["assignment_other_course"]
+    else:
+        certificate["verification"] = "public"
+    with pytest.raises(HTTPException) as invalid:
+        validate_release_certificate_conditions(presentation(), progression, snapshot)
+    assert invalid.value.detail["code"] == "RELEASE_CERTIFICATE_CONDITIONS_INVALID"

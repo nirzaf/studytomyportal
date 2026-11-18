@@ -29,6 +29,7 @@ from src.services.courses.activities.video import (
     MAX_CAPTION_LANGUAGES,
 )
 from src.services.courses.transfer.storage_utils import delete_storage_file
+from src.services.studytomy.awards import validate_release_certificate_conditions
 from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
@@ -260,14 +261,16 @@ async def load_release_policy_binding(
     """Pin currently approved decisions and check prerequisite references for new releases."""
     policies = await _current_policies(db, org, _RELEASE_POLICIES, now)
     if candidate_snapshot is not None:
-        progression = next(
-            policy for policy in policies if policy.policy_key == StudyPolicyKey.D_09.value
-        )
+        by_key = {policy.policy_key: policy for policy in policies}
+        progression = by_key[StudyPolicyKey.D_09.value]
+        rights = by_key[StudyPolicyKey.D_16.value]
         progression_body, _ = inspect_study_policy_body(StudyPolicyKey.D_09, progression.body)
-        if progression_body is None:
-            raise studytomy_http_error(409, "POLICY_BODY_INVALID", "The approved progression policy is invalid.")
+        rights_body, _ = inspect_study_policy_body(StudyPolicyKey.D_16, rights.body)
+        if progression_body is None or rights_body is None:
+            raise studytomy_http_error(409, "POLICY_BODY_INVALID", "The approved release policies are invalid.")
         validate_release_pass_prerequisites(progression_body, candidate_snapshot)
         validate_release_completion_requirements(progression_body, candidate_snapshot)
+        validate_release_certificate_conditions(rights_body, progression_body, candidate_snapshot)
     retention = next(
         policy for policy in policies if policy.policy_key == StudyPolicyKey.D_13.value
     )
