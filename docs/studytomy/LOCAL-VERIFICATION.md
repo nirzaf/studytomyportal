@@ -58,3 +58,12 @@ A preliminary PostgreSQL test invocation used the wrong relative path and ran ze
 | Report-review UI checks | `node node_modules/eslint/bin/eslint.js components/Studytomy/StaffReportReview.tsx`; `node node_modules/typescript/bin/tsc --noEmit` from `apps/web` | **PASS:** both exited 0. |
 
 The report scheduler remains default-off, and D-04, D-12, D-13, D-14 and D-18 approval records/dates remain unverified. No email provider call, browser acceptance, full suite, production migration or real-learner activation was run. This focused evidence does not substitute for AUD-21's integrated acceptance gate.
+
+## AUD-14 discovery-to-checkout trace
+
+- **Recorded:** 2026-11-18
+- **Source revision inspected/tested:** `d49838fa3584f0510112a90e606bddda12d1f8b0`
+- **Scope result:** API quote, draft, accept, purchase-list and receipt contracts exist in `apps/api/src/routers/studytomy/commerce.py:146-207`. The OSS `/store` and offer routes re-export Enterprise `StorePage`/`OfferPage`; OSS `OfferCard` and Enterprise purchase stubs render `null`. The custom `StudyTomyPurchases` component reads only the purchaser's order list or receipt; it does not call the quote, draft or accept APIs. No OSS path currently connects a catalog selection to these checkout APIs.
+- **Server gates:** `orders.py` requires an exact D-17 pilot offer version, D-18 approved customer terms, and current D-01/D-03/D-05/D-17/D-18/D-20 policy versions at acceptance. Server quotes calculate prices, bind named learners and overlap acknowledgment, and are rechecked before acceptance. Nonzero orders use the staff-led manual collection path; receipt status is `awaiting_collection` or `pending_collection` until confirmed. The checkout API test uses synthetic policy fixtures only.
+- **Check:** `uv run --no-sync python -m pytest -q src/tests/studytomy/test_checkout_router.py` from `apps/api` with the dedicated loopback PostgreSQL URL — **PASS:** 12 passed, including the fail-closed missing-approval/client-price case and 11 PostgreSQL checkout/collection scenarios.
+- **Boundary:** No checkout UI or catalog endpoint was added. AUD-14 remains approval-gated until the named decision-makers approve the exact offer/version, claims, price/access/allocation, customer terms, discount/sample handling and chosen staff-led or self-service path. The draft course-only guidance is not approval. No browser purchase, actual payment, external provider or learner activation was tested.
