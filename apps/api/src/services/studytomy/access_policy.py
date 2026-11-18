@@ -487,15 +487,24 @@ def _plain_paragraphs(content: object) -> list[str]:
 def _project_text_lesson(
     release: StudyCourseRelease, policy: StudyPolicyVersion, activity_uuid: str,
 ) -> ManagedTextLesson:
-    body, _ = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
     schedule = body.specified_value("release_schedule") if body else None
     allowed = schedule.get("ungated_text_activities") if isinstance(schedule, dict) else None
     activities = allowed.get(release.course_uuid) if isinstance(allowed, dict) else None
-    if policy.id != release.progression_policy_id or not isinstance(activities, list) or activity_uuid not in activities:
+    if (
+        policy.id != release.progression_policy_id
+        or any(blockers.values())
+        or not isinstance(activities, list)
+        or activity_uuid not in activities
+    ):
         raise _unavailable()
     snapshot = release.snapshot
     course = snapshot.get("course")
-    if not isinstance(course, dict) or course.get("drip_settings") or snapshot.get("schema") != "course_content_evidence_v4":
+    if (
+        not isinstance(course, dict)
+        or course.get("drip_settings") is not None
+        or snapshot.get("schema") != "course_content_evidence_v4"
+    ):
         raise _unavailable()
     matches = [row for row in snapshot.get("activities", [])
                if isinstance(row, dict) and row.get("activity_uuid") == activity_uuid]
@@ -517,7 +526,7 @@ def _project_text_lesson(
                 if isinstance(row, dict) and row.get("id") == parents[0]]
     if (
         len(chapters) != 1 or chapters[0].get("lock_type") not in ("public", "authenticated")
-        or chapters[0].get("drip_rule")
+        or chapters[0].get("drip_rule") is not None
     ):
         raise _unavailable()
     return ManagedTextLesson(
@@ -537,7 +546,7 @@ def _project_media_activity(
     course = snapshot.get("course")
     if (
         not isinstance(course, dict)
-        or course.get("drip_settings")
+        or course.get("drip_settings") is not None
         or snapshot.get("schema") != "course_content_evidence_v4"
     ):
         raise _unavailable()
@@ -582,7 +591,7 @@ def _project_media_activity(
     if (
         len(chapters) != 1
         or chapters[0].get("lock_type") not in ("public", "authenticated")
-        or chapters[0].get("drip_rule")
+        or chapters[0].get("drip_rule") is not None
     ):
         raise _unavailable()
     body, blockers = inspect_study_policy_body(
