@@ -81,6 +81,11 @@ def test_grounded_mcp_save_tools_are_scoped_and_approval_gated():
         "blocks": [{"text": "Edited lesson text.", "citation": citation}],
     })
     assert lesson.expected_current_version == 1
+    assert lesson.request_id is None
+    keyed_lesson = GroundedLessonSaveInput.model_validate(lesson.model_dump() | {"request_id": ID})
+    assert str(keyed_lesson.request_id) == ID
+    with pytest.raises(ValidationError):
+        GroundedLessonSaveInput.model_validate(lesson.model_dump() | {"request_id": "invalid"})
     quiz = GroundedQuizSaveInput.model_validate({
         "course_uuid": f"course_{ID}", "lesson_uuid": f"activity_{ID}",
         "request_id": ID, "assignment_uuid": f"assignment_{ID}", "title": "Reviewed quiz",

@@ -270,7 +270,10 @@ SPECS = (
     ),
     ToolSpec(
         name="studytomy_save_grounded_lesson_draft",
-        description="Save an edited, source-cited lesson draft through the native unpublished lesson service.",
+        description=(
+            "Save an edited, source-cited lesson draft through the native unpublished lesson service. "
+            "Supply a request ID and reuse it with the same payload to recover an uncertain save."
+        ),
         params_model=GroundedLessonSaveInput, tier=ActionTier.EDIT, rights_bucket="courses",
         access_action=AccessAction.UPDATE, target_param="course_uuid", target_kind="course",
         execute=grounded_lesson_save, approval=True, api_tokens=False, audit_arguments=False,

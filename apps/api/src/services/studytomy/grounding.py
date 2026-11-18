@@ -151,7 +151,10 @@ class SaveGroundedLessonRequest(BaseModel):
     expected_current_version: Annotated[int, Field(strict=True, ge=1)]
     title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
     blocks: Annotated[list[_EditableGroundedBlock], Field(min_length=1, max_length=6)]
-    request_id: UUID | None = None
+    request_id: UUID | None = Field(
+        default=None,
+        description="UUID for this save. Reuse it only with the same lesson, expected version and edited content after an uncertain response.",
+    )
 
 
 class GroundedLessonSave(BaseModel):
