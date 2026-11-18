@@ -6,6 +6,8 @@ Studytomy Portal is currently developed and tested locally. This repository does
 
 Install dependencies with the frozen lockfiles, then run the existing component scripts from their component directories. The root README lists the web, API, collaboration, CLI, browser, and SDK commands. The `scripts/lockfiles.sh --check` command verifies lockfile consistency locally. Run applicable tests before committing; no hosted test workflow is configured here.
 
+See the [AUD-18 local verification record](docs/studytomy/LOCAL-VERIFICATION.md) for a dated command-by-command evidence snapshot and explicit skipped/unverified checks.
+
 Dockerfiles and CLI-generated Compose files remain available for local builds and local service dependencies. The LearnHouse CLI is product tooling; its non-interactive setup mode and user-facing self-hosting commands do not configure deployment or CI/CD for this repository.
 
 ## External integrations
