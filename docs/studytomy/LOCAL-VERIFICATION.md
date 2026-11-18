@@ -244,6 +244,12 @@ The internal assessment projection can filter a curriculum revision by the exact
 
 The checkpoint based on `7fd5fb8c3b8471ecf11c5f9d5ba047f95f9ded61` passed **7 tests** across `test_adaptive_evidence_postgres.py` and `test_adaptive_curriculum_api.py`. The managed release scope assertions ran in disposable Docker PostgreSQL. The SQLite workflow fixture retained its existing application assertions.
 
+### Release access population
+
+The internal projection counts distinct learner profiles with retained grants for the exact course and frozen release at a specified time. Overlapping grants count once. A current grant takes precedence over pending, scheduled, expired and revoked sources. These figures describe access records. Required-work completion still needs a published requirements version and an approved eligible cohort. The earlier course-level completion records do not identify the release requirements a learner met.
+
+At the checkpoint based on `f6c951dd429c428b040dcea48260678a79922108`, all **19 tests** in `test_content_evidence.py` passed. The access population assertions used disposable Docker PostgreSQL and covered pending first use, deduplication across active grants, expiry and an unmatched release.
+
 ### Support resolution activity
 
 The internal projection counts support cases first resolved during a half-open period, sums calendar seconds from case creation to those recorded resolutions, and counts reopening transitions and unique reopened cases separately. The source is the retained support transition journal. A case marked resolved without a retained transition contributes no timing evidence. Safeguarding data, service-hour compliance and response targets stay outside the projection.

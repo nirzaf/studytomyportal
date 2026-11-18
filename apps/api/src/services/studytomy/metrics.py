@@ -274,6 +274,43 @@ async def assessment_evidence_breakdown(
     return [dict(row) for row in result.mappings()]
 
 
+async def release_access_population(
+    db: AsyncSession, *, org_id: int, course_uuid: str, release_uuid: str, as_of: datetime,
+) -> dict[str, int]:
+    """Count distinct learner profiles with retained grants for one release.
+
+    The caller authorizes the exact scope. These counts describe recorded
+    access windows and do not evaluate consent or pilot cohort eligibility.
+    """
+    if org_id < 1 or not course_uuid.strip() or not release_uuid.strip() or as_of.utcoffset() is None:
+        raise ValueError("An organization, course, release and timezone-aware observation time are required.")
+    result = await db.execute(text("""
+        WITH learner_states AS (
+            SELECT g.learner_profile_id, min(CASE
+                WHEN g.revoked_at <= :as_of THEN 5
+                WHEN g.starts_at <= :as_of AND g.ends_at > :as_of THEN 1
+                WHEN g.start_basis = 'after_first_access'
+                    AND (g.starts_at IS NULL OR g.starts_at > :as_of) THEN 2
+                WHEN g.starts_at > :as_of THEN 3
+                ELSE 4
+            END) AS priority
+            FROM st_course_access_grant g
+            JOIN st_course_release r
+              ON r.org_id = g.org_id AND r.course_uuid = g.course_uuid AND r.id = g.release_id
+            WHERE g.org_id = :org_id AND g.course_uuid = :course_uuid AND r.uuid = :release_uuid
+              AND g.created_at <= :as_of
+            GROUP BY g.learner_profile_id
+        )
+        SELECT count(*) FILTER (WHERE priority = 1) AS active,
+               count(*) FILTER (WHERE priority = 2) AS first_use_pending,
+               count(*) FILTER (WHERE priority = 3) AS scheduled,
+               count(*) FILTER (WHERE priority = 4) AS expired,
+               count(*) FILTER (WHERE priority = 5) AS revoked
+        FROM learner_states
+    """), {"org_id": org_id, "course_uuid": course_uuid, "release_uuid": release_uuid, "as_of": as_of})
+    return dict(result.mappings().one())
+
+
 async def confirmed_cash_by_currency(
     db: AsyncSession, *, org_id: int, start: datetime, end: datetime,
     offer_uuid: str | None = None,

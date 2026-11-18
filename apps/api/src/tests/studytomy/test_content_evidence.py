@@ -60,6 +60,7 @@ from src.services.studytomy.entitlements import (
     resolve_active_course_grants,
 )
 from src.services.studytomy.idempotency import canonical_request_hash
+from src.services.studytomy.metrics import release_access_population
 from src.services.studytomy.offers import _snapshot_resource_titles, _terms_snapshot
 from src.services.studytomy.policies import POLICY_REQUIRED_RESPONSIBILITIES
 from src.services.studytomy.releases import (
@@ -861,6 +862,11 @@ async def test_postgres_grant_first_use_serializes_and_preserves_independent_sou
         await db.commit()
 
     async with postgres_session_factory() as first, postgres_session_factory() as second:
+        report_scope = {"org_id": org.id, "course_uuid": release.course_uuid, "release_uuid": release.uuid}
+        empty = {"active": 0, "first_use_pending": 0, "scheduled": 0, "expired": 0, "revoked": 0}
+        assert await release_access_population(first, **report_scope, as_of=now) == empty | {
+            "first_use_pending": 1,
+        }
         assert await resolve_active_course_grants(first, **scope, now=now) == []
         grants = await resolve_active_course_grants(first, **scope, now=now, claim_first_use=True)
         assert [grant.id for grant in grants] == [pending.id]
@@ -911,6 +917,9 @@ async def test_postgres_grant_first_use_serializes_and_preserves_independent_sou
         assert [grant.id for grant in await resolve_active_course_grants(
             second, **scope, now=now+timedelta(minutes=1),
         )] == [pending.id, free.id]
+        assert await release_access_population(
+            second, **report_scope, as_of=now + timedelta(minutes=1),
+        ) == empty | {"active": 1}
         await second.execute(
             update(StudyCourseAccessGrant).where(StudyCourseAccessGrant.id == pending.id)
             .values(revoked_at=now+timedelta(minutes=2))
@@ -920,6 +929,13 @@ async def test_postgres_grant_first_use_serializes_and_preserves_independent_sou
             first, **scope, now=now+timedelta(minutes=3),
         )] == [free.id]
         assert await resolve_active_course_grants(first, **scope, now=now+timedelta(hours=1)) == []
+        assert await release_access_population(
+            first, **report_scope, as_of=now + timedelta(hours=1),
+        ) == empty | {"expired": 1}
+        assert await release_access_population(
+            first, org_id=org.id, course_uuid=release.course_uuid,
+            release_uuid=f"course_release_{uuid4()}", as_of=now,
+        ) == empty
         with pytest.raises(DBAPIError, match="revocation cannot be rewritten"):
             async with second.begin_nested():
                 await second.execute(
