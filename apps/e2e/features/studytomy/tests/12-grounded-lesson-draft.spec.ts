@@ -54,7 +54,12 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
     route.fulfill({ json: { status: saved ? 'current' : 'none', current_version: version, citations: saved ? [citation] : [] } }),
   )
   await page.route(`${path}/grounded-lesson-preview`, route => {
-    expect(route.request().postDataJSON()).toEqual({ source_uuids: [source.source_uuid], topic: 'Photosynthesis' })
+    const body = route.request().postDataJSON()
+    expect(body.source_uuids).toEqual([source.source_uuid])
+    if (body.topic === 'Quadratic equations') {
+      return route.fulfill({ status: 422, json: { detail: 'No selected source supports this topic.' } })
+    }
+    expect(body.topic).toBe('Photosynthesis')
     return route.fulfill({
       json: { title: 'Photosynthesis', blocks: [{ text: 'Initial draft.', citation }], matching_pages_omitted: 2 },
     })
@@ -99,7 +104,14 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   await dialog.getByRole('button', { name: 'Generate lesson draft' }).click()
   await expect(dialog.getByText(citation.quote)).toBeVisible()
   await expect(dialog.getByRole('status').filter({ hasText: 'Some pages matched the topic' })).toBeVisible()
+  await topic.fill('Quadratic equations')
+  await dialog.getByRole('button', { name: 'Generate lesson draft' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('No selected source supports this topic.')
+  await expect(dialog.getByRole('button', { name: 'Save unpublished lesson' })).toHaveCount(0)
+  await topic.fill('Photosynthesis')
+  await dialog.getByRole('button', { name: 'Generate lesson draft' }).click()
   const draft = dialog.getByRole('textbox', { name: 'Draft paragraph 1' })
+  await expect(draft).toHaveValue('Initial draft.')
   await draft.fill('Teacher-edited paragraph.')
   await expect(draft).toHaveValue('Teacher-edited paragraph.')
   await dialog.getByRole('button', { name: 'Save unpublished lesson' }).click()

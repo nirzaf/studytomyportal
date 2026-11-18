@@ -38,6 +38,7 @@ export default function GroundedLessonDraftForm({ route, token, version, selecte
     request.current = controller
     setPendingState({ token, action })
     setMessageState(undefined)
+    if (action === 'preview') setDraftState(undefined)
     try {
       const payload = action === 'preview' ? { source_uuids: selected, topic: topic.trim() } : draft && {
         expected_current_version: version,
