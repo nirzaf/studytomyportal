@@ -175,6 +175,12 @@ The membership response still came from the proxy fixture. The test substituted 
 
 At `08dc6a3e811e581f273c648542df45cc39436d2f`, the follow-up forwarded membership to the real mounted FastAPI route too. The API accepted a signed synthetic session for an organization and board member and denied a signed synthetic session for a nonmember. The two editor WebSockets, injected 503, successful PostgreSQL retry, Redis cache removal and fresh-process reload all passed again. Synthetic records were scoped to the disposable database and cleaned up on exit. This verifies graceful restart after acknowledgement. Abrupt termination during an unacknowledged write was outside the run.
 
+### Abrupt collaboration restart before acknowledgement
+
+At `fcfc821c4ef511bdd6872de97ab9f0bca829f53b`, the authorized two-client probe killed only the disposable collaboration child after Redis cached the edit and the loopback proxy rejected its first PostgreSQL-bound write with 503. No write was acknowledged. A replacement process admitted an authorized client and reloaded the exact edit from the surviving Redis key without a board storage GET. Over the next 6.5 seconds, exceeding the configured five-second flush debounce, the replacement process sent no database write. No further edit occurred. The probe cleaned up the synthetic database rows and Redis key.
+
+This establishes cache-backed recovery for a collaboration-process failure with Redis still available. The Redis entry expires, and a cache load does not reconstruct the pending persistence queue. Durable replay of an unacknowledged edit after cache expiry, Redis loss or another process failure remains open.
+
 ## AUD-18 integrated local verification checkpoint
 
 - **Recorded:** 2026-11-18
