@@ -22,6 +22,7 @@ from src.db.courses.assignments import (
     GradingTypeEnum,
 )
 from src.db.courses.chapters import Chapter
+from src.db.courses.certifications import Certifications, CertificateUser
 from src.db.courses.courses import Course
 from src.db.organizations import Organization
 from src.db.studytomy.governance import StudyBusinessEvent
@@ -929,7 +930,21 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                         db,
                     )
                 assert "reviewed_retry_expires_at" not in staff_grade
-                monkeypatch.setattr(assignments, "revoke_user_certificate", AsyncMock())
+                issued_at = datetime.now(UTC).isoformat()
+                certificate = Certifications(
+                    course_id=course.id, config={"title": "Synthetic retained award"},
+                    certification_uuid=f"cert_{uuid4()}", creation_date=issued_at,
+                    update_date=issued_at,
+                )
+                db.add(certificate)
+                await db.flush()
+                award = CertificateUser(
+                    certification_id=certificate.id, user_id=learner.id,
+                    user_certification_uuid=f"award_{uuid4()}", created_at=issued_at,
+                    updated_at=issued_at,
+                )
+                db.add(award)
+                await db.commit()
                 monkeypatch.setattr(assignments, "sync_trailrun_status", AsyncMock())
                 retried = await assignments.retry_assignment_submission(
                     mock_request,
@@ -979,6 +994,12 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 assert (
                     previous.after_state["previous_event_uuid"] == result["result_uuid"]
                 )
+                async with postgres_session_factory() as verify_db:
+                    retained_award = await verify_db.get(CertificateUser, award.id)
+                    assert retained_award is not None
+                    assert retained_award.user_certification_uuid == award.user_certification_uuid
+                    retained_template = await verify_db.get(Certifications, certificate.id)
+                    assert retained_template.config == {"title": "Synthetic retained award"}
                 return
             assert (
                 await client.get(status_path, headers=learner_headers)
