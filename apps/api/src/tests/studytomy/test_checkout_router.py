@@ -1725,18 +1725,35 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             storage_reads = []
             storage_bytes_read = []
 
-            async def open_synthetic_media(**kwargs):
+            from src.services.utils import upload_content
+
+            content_root = tmp_path / "content"
+            retained_pdf = content_root / "orgs" / org.org_uuid / media_storage_reference
+            retained_pdf.parent.mkdir(parents=True)
+            retained_pdf.write_bytes(release_media_bytes)
+            config = SimpleNamespace(hosting_config=SimpleNamespace(
+                content_delivery=SimpleNamespace(type="filesystem"),
+            ))
+            monkeypatch.setattr(upload_content, "_CONTENT_ROOT", str(content_root))
+            monkeypatch.setattr(upload_content, "get_learnhouse_config", lambda: config)
+
+            async def open_fixture_media(**kwargs):
                 storage_reads.append(kwargs)
+                stream = await upload_content.open_content_stream(**kwargs)
 
                 async def chunks():
-                    storage_bytes_read.append(len(release_media_bytes))
-                    yield release_media_bytes
+                    try:
+                        async for chunk in stream:
+                            storage_bytes_read.append(len(chunk))
+                            yield chunk
+                    finally:
+                        await stream.aclose()
 
                 return chunks()
 
             monkeypatch.setattr(
                 "src.services.studytomy.access_policy.open_content_stream",
-                open_synthetic_media,
+                open_fixture_media,
             )
             assert (await client.get(media_path, headers=finance_headers)).status_code == 404
             assert (await client.get(
