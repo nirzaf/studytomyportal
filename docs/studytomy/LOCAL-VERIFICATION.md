@@ -119,6 +119,16 @@ The native supported-practice resolver requires the item to come from an assignm
 
 The signed regression now checks that neither source can start managed practice or create an attempt. The adaptive curriculum and PostgreSQL evidence suites passed **7 tests in 28.07 seconds**, including the existing ordinary supported-practice path. Ruff and Git whitespace checks passed. Managed answer submission, recovery, feedback and evidence remain unverified in browser, and full native assignment rendering remains pending. No AI provider was used.
 
+### Live managed supported practice
+
+The managed practice resolver now starts from an explicit `practice` mapping on a deliverable, reviewed lesson. It selects a current D-16-approved practice-only item for the same curriculum concept and reconstructs the item source from the exact frozen release. The retained published assignment, activity and task must agree on organization, course and parent identifiers. The reconstructed source digest and answer must match the reviewed item. Missing or mismatched records leave practice unavailable. The native practice branch still checks the current native source. No migration or new business policy fields were required.
+
+At the working tree based on `349ea047290dcace4b189da8070e7bf8a028b6d6`, a clone of the synthetic PostgreSQL fixture ran through the local API at `localhost:1320` and web at `localhost:3020`. At 390 × 844, Chromium opened the entitled released practice lesson, started the existing practice panel (201), recovered the same question after reload (200), and submitted the numeric answer (200). The server summary showed practice completion without a numeric grade or answer key. PostgreSQL confirmed the exact course, release and lesson, a correct assisted observation excluded from independent mastery, and a matching mastery watermark. No AI provider was used.
+
+Signed negative checks found no options for a wrong course, wrong release or different account. Starting against the wrong release and reading the summary from the other account returned 404. A targeted fixture update revoked the grant. Afterward the summary returned 404, options were empty and the course disappeared on browser reload. PostgreSQL retained the completed attempt and evidence. Full native assignment rendering remains pending.
+
+The focused command from `apps/api` was `.venv/bin/python -m pytest -q --show-capture=no --tb=short src/tests/studytomy/test_adaptive_curriculum_api.py src/tests/studytomy/test_adaptive_evidence_postgres.py`. **7 passed in 29.76 seconds**, including real PostgreSQL. The first fixture retired the item and deleted its source before freezing the release. The passing regression froze the release first and placed the explicit practice mapping on a separate text lesson so the existing prerequisite recommendation fixture retained its intended meaning. Ruff and Git whitespace checks passed.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.

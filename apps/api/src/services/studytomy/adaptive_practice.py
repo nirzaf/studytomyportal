@@ -28,6 +28,7 @@ from src.services.studytomy.adaptive_item_review import (
     _require_current_native_source,
     _require_item_and_curriculum_approval,
 )
+from src.services.studytomy.adaptive_item_source import retained_native_item_source
 from src.services.studytomy.adaptive_mastery import (
     MasteryPolicy,
     PolicyUUID,
@@ -171,7 +172,6 @@ async def require_practice_access(
             now,
             for_practice=True,
         )
-        activity_id = int(release_source.activity_snapshot["id"])
     policies = await _current_policies(db, org, _ATTEMPT_POLICIES, now)
     d08 = _policy_body(policies, StudyPolicyKey.D_08).specified_value("assistance")
     try:
@@ -203,20 +203,20 @@ async def require_practice_access(
     )
     items = (
         select(StudyItemRevision)
-        .join(
-            Assignment, Assignment.assignment_uuid == StudyItemRevision.assignment_uuid
-        )
         .where(
             StudyItemRevision.org_id == org.id,
             StudyItemRevision.curriculum_revision_id == curriculum.id,
             StudyItemRevision.concept_id == concept.id,
             StudyItemRevision.course_uuid == curriculum.owner_course_uuid,
-            Assignment.org_id == org.id,
-            Assignment.activity_id == activity_id,
+            StudyItemRevision.assignment_uuid.is_not(None),
         )
         .with_for_update(read=True, of=StudyItemRevision)
         .execution_options(populate_existing=True)
     )
+    if release_source is None:
+        items = items.join(
+            Assignment, Assignment.assignment_uuid == StudyItemRevision.assignment_uuid
+        ).where(Assignment.org_id == org.id, Assignment.activity_id == activity_id)
     if item_id is None:
         items = items.where(
             StudyItemRevision.status == "published",
@@ -235,8 +235,20 @@ async def require_practice_access(
                 review_evidence=evidence,
             )
             _require_item_and_curriculum_approval(policies, item, curriculum, command)
-            if await _require_current_native_source(db, org, item) != activity_uuid:
-                continue
+            if release_source is None:
+                if await _require_current_native_source(db, org, item) != activity_uuid:
+                    continue
+            else:
+                retained = retained_native_item_source(
+                    release_source.authorization.release.snapshot, org.id,
+                    curriculum.owner_course_uuid, item.assignment_uuid,
+                    item.source_task_uuid, item.source_question_uuid,
+                )
+                if retained is None or (
+                    retained[0].source_digest != item.source_digest
+                    or retained[1] != item.private_answer
+                ):
+                    continue
         except ValidationError:
             continue
         except HTTPException as error:

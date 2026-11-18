@@ -485,7 +485,14 @@ async def _exercise_authoring(
             activity_sub_type=ActivitySubTypeEnum.SUBTYPE_DYNAMIC_PAGE,
             content={"type": "doc", "content": []},
         )
-        db.add_all([lesson, next_lesson, unlinked_lesson])
+        practice_lesson = Activity(
+            org_id=org.id, course_id=owned.id, activity_uuid=f"activity_{uuid4()}",
+            name="Reviewed practice exercise", published=True,
+            activity_type=ActivityTypeEnum.TYPE_DYNAMIC,
+            activity_sub_type=ActivitySubTypeEnum.SUBTYPE_DYNAMIC_PAGE,
+            content=next_lesson.content,
+        )
+        db.add_all([lesson, next_lesson, unlinked_lesson, practice_lesson])
         await db.commit()
         concept = saved.json()["concepts"][0]
         prerequisite_concept = saved.json()["concepts"][1]
@@ -517,6 +524,12 @@ async def _exercise_authoring(
             "activity_version": next_lesson.current_version,
             "usage": "teach",
         }
+        released_practice_mapping = {
+            **next_lesson_mapping,
+            "activity_uuid": practice_lesson.activity_uuid,
+            "activity_version": practice_lesson.current_version,
+            "usage": "practice",
+        }
         for wrong, status in (
             ({"course_uuid": unassigned.course_uuid}, 404),
             ({"activity_uuid": "activity_missing"}, 404),
@@ -532,7 +545,7 @@ async def _exercise_authoring(
             mappings_path,
             json={
                 "expected_version": 3,
-                "mappings": [mapping, practice_mapping],
+                "mappings": [mapping, practice_mapping, released_practice_mapping],
             },
             headers=direct,
         )
@@ -541,7 +554,7 @@ async def _exercise_authoring(
         assert sorted(
             mapped.json()["mappings"], key=lambda m: (m["usage"], m["activity_uuid"])
         ) == sorted(
-            [practice_mapping, mapping],
+            [practice_mapping, mapping, released_practice_mapping],
             key=lambda m: (m["usage"], m["activity_uuid"]),
         )
         mapped_prerequisite = await client.put(
@@ -610,6 +623,7 @@ async def _exercise_authoring(
             draft["uuid"],
             lesson,
             next_lesson,
+            practice_lesson,
             owner,
             native_item,
             native_task,
@@ -633,6 +647,7 @@ async def _characterize_managed_course_diagnostic_conflict(
     course,
     lesson,
     next_lesson,
+    practice_lesson,
     curriculum_uuid,
     staff,
     learner,
@@ -983,7 +998,7 @@ async def _characterize_managed_course_diagnostic_conflict(
                 creation_date="",
                 update_date="",
             )
-            for index, activity in enumerate((next_lesson, unmapped_lesson), start=2)
+            for index, activity in enumerate((next_lesson, unmapped_lesson, practice_lesson), start=2)
         ]
     )
     await db.commit()
@@ -1013,6 +1028,8 @@ async def _characterize_managed_course_diagnostic_conflict(
     course.public = False
     course.published = False
     course.studytomy_managed = True
+    assignment = (await db.execute(select(Assignment).where(Assignment.course_id == course.id))).scalar_one()
+    assignment.published = True
     await db.commit()
     snapshot = await course_candidate_snapshot(db, course)
     review, snapshot, policies = await _seed_postgres_release_sources(
@@ -1304,6 +1321,7 @@ async def _characterize_managed_course_diagnostic_conflict(
             .where(
                 StudyConceptActivity.curriculum_revision_id == curriculum.id,
                 StudyConceptActivity.usage == "practice",
+                StudyConceptActivity.activity_uuid != practice_lesson.activity_uuid,
                 StudyConceptActivity.archived.is_(False),
             )
         )
@@ -1482,6 +1500,34 @@ async def _characterize_managed_course_diagnostic_conflict(
         and row.get("course_release_uuid") == release.uuid
         for row in recommendations.json()
     ), recommendations.json()
+
+    practice_body = {
+        "source_activity_uuid": practice_lesson.activity_uuid,
+        "concept_uuid": practice_source.uuid,
+        "mode": "supported",
+        **managed_scope,
+    }
+    managed_practice = await client.post(
+        f"{base}/me/practice-attempts", json=practice_body,
+        headers=learner_headers | {"Idempotency-Key": f"managed-practice-start-{uuid4()}"},
+    )
+    assert managed_practice.status_code == 201, managed_practice.text
+    practice = managed_practice.json()
+    assert practice["course_release_uuid"] == release.uuid
+    assert "correct_value" not in managed_practice.text and "Private worked answer" not in managed_practice.text
+    practice_answer = await client.post(
+        f"{base}/me/attempts/{practice['uuid']}/responses",
+        json={"item_uuid": practice["current_item"]["uuid"], "expected_version": practice["version"],
+              "response": {"kind": "number", "value": "19.25"}, "declared_external_help": False},
+        headers=learner_headers | {"Idempotency-Key": f"managed-practice-answer-{uuid4()}"},
+    )
+    assert practice_answer.status_code == 200, practice_answer.text
+    assert practice_answer.json()["status"] == "completed"
+    practice_evidence = (await db.execute(select(StudyLearningEvidence).where(
+        StudyLearningEvidence.logical_source_uuid == practice["current_item"]["uuid"],
+    ))).scalar_one()
+    assert practice_evidence.outcome == "correct" and not practice_evidence.eligible
+    assert practice_evidence.independence == "assisted"
 
     tutor_options = await client.get(
         f"{base}/me/tutor-options",
@@ -1982,6 +2028,7 @@ async def _exercise_publication(
     revision_uuid,
     lesson,
     next_lesson,
+    practice_lesson,
     education_owner,
     native_item,
     native_task,
@@ -1996,6 +2043,7 @@ async def _exercise_publication(
     assert {mapping["activity_uuid"] for mapping in snapshot["mappings"]} == {
         lesson.activity_uuid,
         next_lesson.activity_uuid,
+        practice_lesson.activity_uuid,
         native_activity.activity_uuid,
     }
     owning_course = snapshot["curriculum"]["owner_course_uuid"]
@@ -2086,7 +2134,7 @@ async def _exercise_publication(
         StudyPolicyKey.D_09: {
             "release_schedule": {
                 "ungated_text_activities": {
-                    owning_course: [lesson.activity_uuid, next_lesson.activity_uuid],
+                    owning_course: [lesson.activity_uuid, next_lesson.activity_uuid, practice_lesson.activity_uuid],
                 },
             },
             "mastery_gate": {
@@ -2382,6 +2430,31 @@ async def _exercise_publication(
         native_task,
         concurrent_posts,
     )
+    course = (
+        await db.execute(
+            select(Course).where(
+                Course.org_id == org.id,
+                Course.course_uuid == owning_course,
+            )
+        )
+    ).scalar_one()
+    staff = await db.get(User, education_owner.user_id)
+    await _characterize_managed_course_diagnostic_conflict(
+        client,
+        db,
+        org,
+        other_org,
+        course,
+        lesson,
+        next_lesson,
+        practice_lesson,
+        revision_uuid,
+        staff,
+        learner,
+        base,
+        author_headers,
+        reviewer_headers,
+    )
     retired_item = await client.post(
         f"{item_endpoint}/retire",
         json={"expected_version": item.json()["version"], "reason": "SUPERSEDED"},
@@ -2413,30 +2486,6 @@ async def _exercise_publication(
     )
     assert deleted.status_code == 200, deleted.text
     assert set((await db.execute(history_query)).scalars()) == retained_before
-    course = (
-        await db.execute(
-            select(Course).where(
-                Course.org_id == org.id,
-                Course.course_uuid == owning_course,
-            )
-        )
-    ).scalar_one()
-    staff = await db.get(User, education_owner.user_id)
-    await _characterize_managed_course_diagnostic_conflict(
-        client,
-        db,
-        org,
-        other_org,
-        course,
-        lesson,
-        next_lesson,
-        revision_uuid,
-        staff,
-        learner,
-        base,
-        author_headers,
-        reviewer_headers,
-    )
     retirement = await client.post(
         f"{endpoint}/retire",
         json={"expected_version": published.json()["version"], "reason": "SUPERSEDED"},

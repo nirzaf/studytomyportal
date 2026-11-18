@@ -288,3 +288,35 @@ def _project_native_item_source(
         source_exposure=exposure,
         question=question,
     ), answer
+
+
+def retained_native_item_source(
+    snapshot: dict, org_id: int, course_uuid: str, assignment_uuid: str,
+    task_uuid: str, question_uuid: str | None,
+) -> tuple[NativeItemSourceRead, dict] | None:
+    """Rebuild the reviewed item source from one exact frozen course release."""
+    try:
+        if snapshot.get("schema") != "course_content_evidence_v4":
+            return None
+        course = Course.model_validate(snapshot["course"])
+        if course.org_id != org_id or course.course_uuid != course_uuid or course.id is None:
+            return None
+        assignment_data, = [row for row in snapshot["assignments"] if row["assignment_uuid"] == assignment_uuid]
+        task_data, = [row for row in snapshot["assignment_tasks"] if row["assignment_task_uuid"] == task_uuid]
+        activity_data, = [row for row in snapshot["activities"] if row["id"] == assignment_data["activity_id"]]
+        assignment = Assignment.model_validate(assignment_data)
+        # Release snapshots omit volatile timestamps.
+        task = AssignmentTask.model_validate(task_data | {"creation_date": "", "update_date": ""})
+        activity = Activity.model_validate(activity_data)
+        if (
+            assignment.id is None or activity.id is None or task.id is None or not activity.activity_uuid
+            or assignment.published is not True or activity.published is not True
+            or activity.activity_type != ActivityTypeEnum.TYPE_ASSIGNMENT
+            or task.assignment_id != assignment.id or task.activity_id != activity.id
+            or task.chapter_id != assignment.chapter_id
+            or any(row.org_id != org_id or row.course_id != course.id for row in (task, activity, assignment))
+        ):
+            return None
+        return _project_native_item_source(task, assignment, course, activity, question_uuid)
+    except (KeyError, TypeError, ValueError, HTTPException):
+        return None
