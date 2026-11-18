@@ -93,11 +93,11 @@ def _bind_audit_session_factory(request, monkeypatch):
 
 
 class TestMigrationAndMetadataBaseline:
-    """Pins the baseline Alembic head and recursive model registration."""
+    """Pins the current Alembic head and recursive model registration."""
 
     def test_alembic_head_revision_is_pinned(self):
         heads = head_revisions()
-        assert heads == ["a78f2c9d1e64"]
+        assert heads == ["b91d2f6a08c3"]
 
     def test_core_models_registered_in_metadata(self):
         metadata = load_models()

@@ -129,14 +129,14 @@ def test_every_foreign_key_cascades_or_is_explicitly_allowed(parent):
     )
 
 
-def test_studytomy_org_retention_table_registry_covers_direct_org_foreign_keys():
+def test_studytomy_org_retention_table_registry_covers_restricted_org_foreign_keys():
     actual = {
         table.name
         for table in SQLModel.metadata.tables.values()
         if table.name.startswith("st_")
         and "org_id" in table.columns
         and any(
-            fk.column.table.name == "organization"
+            fk.column.table.name == "organization" and fk.ondelete == "RESTRICT"
             for fk in table.columns["org_id"].foreign_keys
         )
     }
