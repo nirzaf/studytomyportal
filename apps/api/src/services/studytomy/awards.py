@@ -112,6 +112,8 @@ def validate_release_certificate_conditions(
 class ManagedCertificateEligibility(BaseModel):
     course_uuid: str
     release_uuid: str
+    award_name: str
+    issuer_name: str
     eligible: bool
     completion_event_uuid: str | None
     assessment_result_uuids: dict[str, str]
@@ -220,6 +222,7 @@ async def _authorized_certificate_evidence(
     })
     preview = ManagedCertificateEligibility(
         course_uuid=course_uuid, release_uuid=release_uuid, eligible=completion_uuid is not None and not missing,
+        award_name=conditions.award_name, issuer_name=conditions.issuer_name,
         completion_event_uuid=completion_uuid, assessment_result_uuids=results, missing_assessment_uuids=missing,
         issuance_enabled=conditions.issuance == "reviewed", evidence_sha256=evidence_sha256,
     )
