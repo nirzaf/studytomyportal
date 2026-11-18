@@ -102,3 +102,51 @@ test('activates and opens a reviewed PDF through the real managed release API', 
     )).toBe(true)
   }
 })
+
+test('denies saved managed media URLs after clearing the learner session', async ({ page, context }) => {
+  await page.goto('/account/learning', { waitUntil: 'domcontentloaded' })
+  const course = page.getByRole('button', { name: releaseName, exact: true })
+  await expect(course).toBeVisible()
+  const indexResponse = page.waitForResponse(response =>
+    response.request().method() === 'GET' && new URL(response.url()).pathname.endsWith('/lessons'),
+  )
+  await course.click()
+  const index = await indexResponse
+  expect(index.status()).toBe(200)
+  const lessons = (await index.json()).lessons as {
+    activity_uuid: string
+    format: string
+    available: boolean
+    caption_codes?: string[]
+  }[]
+  const pdf = page.getByRole('button', { name: 'Reviewed PDF PDF', exact: true })
+  await expect(pdf).toBeEnabled()
+  await pdf.click()
+  const frame = page.getByTitle('Reviewed PDF')
+  await expect(frame).toBeVisible()
+  const pdfUrl = await frame.getAttribute('src')
+  expect(pdfUrl).toBeTruthy()
+  const protectedUrls = [pdfUrl!]
+
+  if (captionCode) {
+    const video = lessons.find(lesson => lesson.format === 'video' && lesson.available)
+    expect(video?.caption_codes).toContain(captionCode)
+    const root = index.url().replace(/\/lessons$/, '')
+    const videoUrl = `${root}/activities/${encodeURIComponent(video!.activity_uuid)}/media`
+    protectedUrls.push(videoUrl, `${videoUrl}/captions/${encodeURIComponent(captionCode)}`)
+  }
+
+  for (const url of protectedUrls) {
+    const authenticated = await context.request.get(url, { headers: { Range: 'bytes=0-0' } })
+    expect(authenticated.status()).toBe(206)
+  }
+
+  await context.clearCookies()
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(frame).toHaveCount(0)
+  await expect(course).toHaveCount(0)
+  for (const url of protectedUrls) {
+    const signedOut = await context.request.get(url, { headers: { Range: 'bytes=0-0' } })
+    expect(signedOut.status()).toBe(401)
+  }
+})
