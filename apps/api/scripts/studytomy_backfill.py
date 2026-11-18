@@ -1,11 +1,39 @@
-"""Inventory legacy course and learner mappings on a disposable PostgreSQL copy."""
+"""Inventory legacy mappings and assessment evidence on disposable PostgreSQL."""
 
 import json
 import os
+import sys
+from pathlib import Path
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
+
+def managed_submission_counts(connection) -> dict[str, int]:
+    from src.services.studytomy.assignment_adapter import native_round_uuid
+    from src.services.studytomy.grading import RESPONSES_FROZEN_ACTION
+
+    total = missing = 0
+    with connection.execute(text("""
+        SELECT a.org_id, s.assignmentusersubmission_uuid, s.attempt_number
+        FROM assignmentusersubmission s
+        JOIN assignment a ON a.id = s.assignment_id
+        JOIN course c ON c.id = a.course_id AND c.org_id = a.org_id
+        WHERE c.studytomy_managed AND s.submission_status IN ('SUBMITTED', 'GRADED', 'LATE')
+    """).execution_options(yield_per=256)) as rows:
+        for batch in rows.partitions(256):
+            expected = [
+                (org_id, f"assessment_responses:{native_round_uuid(org_id, uuid, attempt)}")
+                for org_id, uuid, attempt in batch
+            ]
+            stored = set(connection.execute(text("""
+                SELECT org_id, dedupe_key FROM st_business_event
+                WHERE action = :action AND dedupe_key = ANY(:keys)
+                  AND nullif(after_state ->> 'submission_content_digest', '') IS NOT NULL
+            """), {"action": RESPONSES_FROZEN_ACTION, "keys": [key for _, key in expected]}))
+            total += len(batch)
+            missing += sum(identity not in stored for identity in expected)
+    return {"managed_finalized_submissions": total, "managed_submissions_without_frozen_response_evidence": missing}
 
 
 def main() -> None:
@@ -30,7 +58,7 @@ def main() -> None:
         with engine.begin() as connection:
             connection.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
             revision = connection.execute(text("SELECT version_num FROM alembic_version ORDER BY 1")).scalars().all()
-            counts = connection.execute(text("""
+            counts = dict(connection.execute(text("""
                 SELECT
                     (SELECT count(*) FROM course WHERE studytomy_managed) AS managed_courses,
                     (SELECT count(*) FROM course WHERE NOT studytomy_managed) AS native_courses,
@@ -44,11 +72,13 @@ def main() -> None:
                               AND profile.user_id = membership.user_id
                         )
                     ) AS unmapped) AS memberships_without_profile
-            """)).mappings().one()
+            """)).mappings().one())
+            counts.update(managed_submission_counts(connection))
     finally:
         engine.dispose()
     print(json.dumps({"mode": "inventory_only", "alembic_heads": revision, **counts}, sort_keys=True))
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     main()
