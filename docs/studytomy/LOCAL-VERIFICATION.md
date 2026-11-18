@@ -158,3 +158,7 @@ The API full-suite failure classification is environment-specific for the twelve
 ### Web lint follow-up
 
 At `c5d920eabee7b8a3eca21a2baf7ab3eb46566e27`, `bun run lint:strict --format stylish` from `apps/web` exited 0 with **0 errors and 976 warnings**. The change resolved the six errors in the previous checkpoint. `node node_modules/typescript/bin/tsc --noEmit` also exited 0 on the source that was committed at this revision.
+
+### API symlink follow-up
+
+At `33b40c36d58a786c4121b273d6a7e8571a73fb72`, Python 3.14.7 under Ubuntu 24.04 on WSL ran `python -m pytest -q -rs src/tests -k 'symlink or trimmed_archive'` from the primary checkout's `apps/api` directory. The run exited 0 with **13 passed, 9 skipped during collection and 10,486 deselected** in 56.58 seconds. The collection skips required unavailable Enterprise modules: seven SCORM modules, one Stripe idempotency module and one superadmin API token module. A native Windows symlink probe still failed with error 1314. The WSL run used Linux temporary directories and covers the selected symlink cases. Full API revalidation remains open.
