@@ -992,6 +992,19 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 command = {"evidence_sha256": preview.json()["evidence_sha256"]}
                 issuance = await client.post(f"{award_path}/awards", headers=direct, json=command)
                 assert issuance.status_code == 200, issuance.text
+                award_uuid = issuance.json()["award_uuid"]
+                denied_change = await client.post(
+                    f"{award_path}/awards/{award_uuid}/review",
+                    headers=direct,
+                    json={"corrected_result_uuid": str(uuid4())},
+                )
+                assert denied_change.status_code == 404
+                assert denied_change.json()["detail"]["code"] == "MANAGED_CERTIFICATE_UNAVAILABLE"
+                assert await db.scalar(select(StudyBusinessEvent.id).where(
+                    StudyBusinessEvent.org_id == org.id,
+                    StudyBusinessEvent.resource_kind == "managed_award",
+                    StudyBusinessEvent.resource_uuid == award_uuid,
+                )) is None
                 replay = await client.post(f"{award_path}/awards", headers=direct, json=command)
                 assert replay.status_code == 200 and replay.json() == issuance.json()
 
