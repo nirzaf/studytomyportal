@@ -30,6 +30,7 @@ from src.services.studytomy.business_events import append_business_event
 from src.services.studytomy.grading_contract import (
     NATIVE_GRADING_CONTRACT_VERSION,
     native_grading_digest,
+    retained_grading_contract_digest,
 )
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
@@ -50,6 +51,47 @@ def grading_contract_digest(
         ((task.assignment_task_uuid, task.assignment_type, task.max_grade_value, task.contents)
          for task in tasks),
     )
+
+
+async def _assessed_release_binding(
+    db: AsyncSession, assignment: Assignment, actor: PublicUser, digest: str,
+) -> dict[str, str]:
+    from src.services.studytomy.access_policy import resolve_single_started_assessment_release
+
+    org = await db.get(Organization, assignment.org_id)
+    if org is None:
+        return {}
+    now = datetime.now(UTC)
+    release = await resolve_single_started_assessment_release(db, org, actor, assignment.course_id, now)
+    if release is None:
+        return {}
+    try:
+        (assessment_policy,) = await _current_policies(db, org, (StudyPolicyKey.D_08,), now)
+        if assessment_policy.id != release.assessment_policy_id:
+            return {}
+        retained = [
+            row for row in release.snapshot["assignments"]
+            if row["assignment_uuid"] == assignment.assignment_uuid
+            and row["id"] == assignment.id
+            and row["activity_id"] == assignment.activity_id
+            and row["published"] is True
+        ]
+        published_activity = any(
+            row["id"] == assignment.activity_id and row["published"] is True
+            and row["activity_sub_type"] == "SUBTYPE_ASSIGNMENT_ANY"
+            for row in release.snapshot["activities"]
+        )
+        if not published_activity or len(retained) != 1 or retained_grading_contract_digest(
+            retained[0], release.snapshot["assignment_tasks"],
+        ) != digest:
+            return {}
+    except HTTPException as error:
+        if error.status_code != 409:
+            raise
+        return {}
+    except (KeyError, TypeError, ValueError):
+        return {}
+    return {"assessment_release_uuid": release.uuid, "assessment_release_sha256": release.snapshot_sha256}
 
 
 async def record_grading_contract(
@@ -86,6 +128,12 @@ async def record_grading_contract(
         .all()
     )
     token = isinstance(actor, APITokenUser)
+    digest = grading_contract_digest(assignment, tasks)
+    release_binding = (
+        await _assessed_release_binding(db, assignment, actor, digest)
+        if issued and isinstance(actor, PublicUser) and actor.id == submission.user_id
+        else {}
+    )
     await append_business_event(
         db,
         org_id=assignment.org_id,
@@ -98,8 +146,9 @@ async def record_grading_contract(
         resource_uuid=round_uuid,
         dedupe_key=dedupe_key,
         after_state={
-            "source_snapshot_digest": grading_contract_digest(assignment, tasks),
+            "source_snapshot_digest": digest,
             "evaluator_version": NATIVE_GRADING_CONTRACT_VERSION,
+            **release_binding,
         },
     )
     return True
@@ -191,10 +240,12 @@ async def matching_grading_contract(
             )
         )
     ).scalar_one_or_none()
-    if contract is not None and contract.after_state == {
-        "source_snapshot_digest": grading_contract_digest(assignment, tasks),
-        "evaluator_version": NATIVE_GRADING_CONTRACT_VERSION,
-    }:
+    if (
+        contract is not None
+        and isinstance(contract.after_state, dict)
+        and contract.after_state.get("source_snapshot_digest") == grading_contract_digest(assignment, tasks)
+        and contract.after_state.get("evaluator_version") == NATIVE_GRADING_CONTRACT_VERSION
+    ):
         return contract
     return None
 

@@ -287,6 +287,49 @@ async def resolve_managed_release_authority(
     )
 
 
+async def resolve_single_started_assessment_release(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_id: int,
+    now: datetime,
+) -> StudyCourseRelease | None:
+    """Resolve an unambiguous active release without consuming a first-use grant."""
+    candidates = (
+        await db.execute(
+            select(StudyCourseRelease.course_uuid, StudyCourseRelease.uuid)
+            .join(StudyCourseAccessGrant, StudyCourseAccessGrant.release_id == StudyCourseRelease.id)
+            .join(StudyLearnerProfile, StudyLearnerProfile.id == StudyCourseAccessGrant.learner_profile_id)
+            .join(Course, Course.course_uuid == StudyCourseRelease.course_uuid)
+            .where(
+                Course.id == course_id, Course.org_id == org.id,
+                StudyCourseRelease.org_id == org.id,
+                StudyCourseAccessGrant.org_id == org.id,
+                StudyLearnerProfile.org_id == org.id,
+                StudyLearnerProfile.user_id == actor.id,
+                StudyCourseAccessGrant.revoked_at.is_(None),
+                StudyCourseAccessGrant.created_at <= now,
+                StudyCourseAccessGrant.starts_at <= now,
+                StudyCourseAccessGrant.ends_at > now,
+            )
+            .distinct()
+            .limit(2)
+        )
+    ).all()
+    if len(candidates) != 1:
+        return None
+    course_uuid, release_uuid = candidates[0]
+    try:
+        authority = await resolve_managed_release_authority(
+            db, org, actor, course_uuid, release_uuid, now=now,
+        )
+    except HTTPException as error:
+        if error.status_code == 404:
+            return None
+        raise
+    return authority.release
+
+
 async def _authorized_release(
     db: AsyncSession, org: Organization, actor: PublicUser, course_uuid: str, release_uuid: str,
     *, require_active_grant: bool = True,

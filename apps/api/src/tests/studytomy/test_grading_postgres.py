@@ -2,6 +2,7 @@
 
 from asyncio import Barrier, Event, TaskGroup, sleep, timeout
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -25,6 +26,9 @@ from src.db.courses.chapters import Chapter
 from src.db.courses.certifications import Certifications, CertificateUser
 from src.db.courses.courses import Course
 from src.db.organizations import Organization
+from src.db.studytomy.access import StudyCourseAccessGrant
+from src.db.studytomy.education import StudyCourseRelease
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.studytomy.governance import StudyBusinessEvent
 from src.db.trails import Trail
 from src.db.users import PublicUser, User
@@ -33,7 +37,8 @@ from src.services.courses.certifications import (
     get_all_user_certificates,
     get_certificate_by_user_certification_uuid,
 )
-from src.services.studytomy import assignment_adapter, grading
+from src.services.studytomy import access_policy, assignment_adapter, grading
+from src.tests.studytomy.test_content_evidence import _seed_postgres_release_sources
 
 
 @pytest.fixture
@@ -138,6 +143,69 @@ async def managed_round(postgres_session_factory):
         )
         await db.commit()
         return org, user, course, assignment, task, attempt, reviewer
+
+
+@pytest.mark.studytomy_postgres
+async def test_issued_round_retains_exact_started_release(
+    postgres_session_factory, monkeypatch, managed_round,
+):
+    org, user, course, assignment, task, attempt, actor = managed_round
+    async with postgres_session_factory() as db:
+        stored = await db.get(AssignmentUserSubmission, attempt.id)
+        assignment = await db.get(Assignment, assignment.id)
+        task = await db.get(AssignmentTask, task.id)
+        assignment.published = True
+        snapshot = {
+            "course": course.model_dump(mode="json"),
+            "assignments": [assignment.model_dump(mode="json")],
+            "assignment_tasks": [task.model_dump(mode="json")],
+            "activities": [{"id": assignment.activity_id, "published": True,
+                            "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY"}],
+        }
+        review, snapshot, policies = await _seed_postgres_release_sources(
+            db, org, user.id, uuid4().hex, snapshot=snapshot, course_uuid=course.course_uuid,
+        )
+        release = StudyCourseRelease(
+            org_id=org.id, course_uuid=course.course_uuid, review_id=review.id,
+            snapshot_sha256=review.revision_sha256, snapshot=snapshot, media_manifest={},
+            assessment_policy_id=policies[0].id, progression_policy_id=policies[1].id,
+            retention_policy_id=policies[2].id, rights_policy_id=policies[3].id,
+            retention_category="synthetic",
+        )
+        profile = StudyLearnerProfile(org_id=org.id, user_id=user.id, created_by_user_id=user.id)
+        db.add_all([release, profile])
+        await db.flush()
+        now = datetime.now(UTC)
+        db.add(StudyCourseAccessGrant(
+            org_id=org.id, learner_profile_id=profile.id, course_uuid=course.course_uuid,
+            release_id=release.id, source_kind="free", source_uuid=f"synthetic_{uuid4()}",
+            start_basis="fixed_period", starts_at=now - timedelta(minutes=1),
+            ends_at=now + timedelta(minutes=1), created_at=now,
+        ))
+        await db.flush()
+        authority = AsyncMock(return_value=SimpleNamespace(release=release))
+        monkeypatch.setattr(access_policy, "resolve_managed_release_authority", authority)
+        monkeypatch.setattr(grading, "_current_policies", AsyncMock(return_value=(policies[0],)))
+
+        original = await grading.matching_grading_contract(db, assignment, stored, [task])
+        assert "assessment_release_uuid" not in original.after_state
+        assert not await grading.issue_native_grading_contract(db, assignment, actor)
+        authority.assert_not_awaited()
+
+        stored.attempt_number += 1
+        await db.flush()
+        assert await grading.issue_native_grading_contract(db, assignment, actor)
+        bound = await grading.matching_grading_contract(db, assignment, stored, [task])
+        assert bound.after_state["assessment_release_uuid"] == release.uuid
+        assert bound.after_state["assessment_release_sha256"] == release.snapshot_sha256
+        authority.assert_awaited_once()
+
+        stored.attempt_number += 1
+        task.max_grade_value += 1
+        await db.flush()
+        assert await grading.issue_native_grading_contract(db, assignment, actor)
+        changed = await grading.matching_grading_contract(db, assignment, stored, [task])
+        assert "assessment_release_uuid" not in changed.after_state
 
 
 @pytest.mark.studytomy_postgres
