@@ -34,12 +34,16 @@ test('staff attaches evidence and reviews the current course candidate', async (
   let attached = false
   let groundingReviewRequired = false
   let decisions = 0
+  const reviewUuid = `course_review_${randomUUID()}`
+  const releaseUuid = `course_release_${randomUUID()}`
+  let preflightPassed = false
   const attachment = (id: string, purpose: string) => ({
     evidence_uuid: id, purpose, revision_sha256: revision, verified_at: '2026-11-01T00:00:00Z',
   })
   await page.route(`${api}/content-review-candidate`, route => route.fulfill({ json: {
     revision_sha256: revision,
     grounding_review_required: groundingReviewRequired,
+    current_review: decisions === 3 ? { uuid: reviewUuid, revision_sha256: revision, decision: 'approved' } : null,
     evidence: [
       attachment(rights, 'content_rights'),
       ...(attached ? [attachment(accessibility, 'content_accessibility')] : []),
@@ -79,8 +83,18 @@ test('staff attaches evidence and reviews the current course candidate', async (
       return route.fulfill({ status: 409, json: { detail: { code: 'RELEASE_MEDIA_UNSUPPORTED' } } })
     }
     return route.fulfill({ status: 201, json: {
-      uuid: `course_review_${randomUUID()}`, revision_sha256: revision, decision: 'approved',
+      uuid: reviewUuid, revision_sha256: revision, decision: 'approved',
     } })
+  })
+  await page.route(`${api}/content-review-decisions/${reviewUuid}/release-preflight`, route => {
+    expect(route.request().method()).toBe('POST')
+    preflightPassed = true
+    return route.fulfill({ json: { review_uuid: reviewUuid, revision_sha256: revision } })
+  })
+  await page.route(`${api}/content-review-decisions/${reviewUuid}/release`, route => {
+    expect(route.request().method()).toBe('POST')
+    expect(preflightPassed).toBe(true)
+    return route.fulfill({ status: 201, json: { uuid: releaseUuid, review_uuid: reviewUuid, revision_sha256: revision } })
   })
 
   const routePath = `/dash/courses/course/${course_uuid.replace(/^course_/, '')}/content-review`
@@ -145,4 +159,7 @@ test('staff attaches evidence and reviews the current course candidate', async (
   await approve.click()
   await expect(panel.getByRole('status')).toHaveText('Review decision recorded.')
   expect(decisions).toBe(3)
+  await panel.getByRole('button', { name: 'Record reviewed release' }).click()
+  await expect(panel.getByRole('status')).toHaveText('Reviewed release recorded.')
+  await expect(panel.getByText(`Release reference ${releaseUuid}`)).toBeVisible()
 })

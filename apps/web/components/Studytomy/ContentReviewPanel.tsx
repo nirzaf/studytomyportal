@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   CourseReviewError,
+  type CourseReleaseReceipt,
   type CourseReviewCandidate,
   type CourseReviewClient,
   type CourseEvidence,
@@ -26,6 +27,7 @@ export default function ContentReviewPanel({ client, initial }: {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
+  const [release, setRelease] = useState<CourseReleaseReceipt | null>(null)
   const errorRef = useRef<HTMLDivElement>(null)
   const active = useRef<AbortController | null>(null)
   const attempt = useRef<{ body: string; id: string } | null>(null)
@@ -55,7 +57,7 @@ export default function ContentReviewPanel({ client, initial }: {
         const code = failure instanceof CourseReviewError ? failure.code : undefined
         if (code === 'RELEASE_MEDIA_UNSUPPORTED') {
           setError(t('contentReview.unsupportedMedia', 'This release cannot retain one or more lesson formats or media dependencies. Keep this version in draft and review the affected lessons.'))
-        } else if (code === 'STALE_VERSION' || code === 'GROUNDED_SOURCE_REVIEW_REQUIRED') {
+        } else if (code === 'STALE_VERSION' || code === 'GROUNDED_SOURCE_REVIEW_REQUIRED' || code === 'CURRENT_COURSE_REVIEW_REQUIRED') {
           setError(t('contentReview.stale', 'The candidate changed. Reload it before making a decision.'))
         } else {
           setError(t('contentReview.error', 'The request failed. Check your review access and attachment selection, then retry.'))
@@ -80,6 +82,7 @@ export default function ContentReviewPanel({ client, initial }: {
       if (more) page = await client.candidate(signal)
       if (signal.aborted) return
       setCandidate(page)
+      setRelease(null)
       setRights('')
       setAccessibility('')
       setAccessible(false)
@@ -159,7 +162,28 @@ export default function ContentReviewPanel({ client, initial }: {
         grounding_review_required: latest.grounding_review_required,
         media_review_blocked: latest.media_review_blocked,
       }))
+      setRelease(null)
       setStatus(t('contentReview.saved', 'Review decision recorded.'))
+    })
+  }
+
+  const review = candidate.current_review
+  const canRecordRelease = review?.decision === 'approved' && review.revision_sha256 === candidate.revision_sha256
+    && !candidate.grounding_review_required && !candidate.media_review_blocked
+
+  function recordRelease() {
+    if (!canRecordRelease || !review) return
+    const matchesReview = (receipt: { review_uuid: string; revision_sha256: string }) =>
+      receipt.review_uuid === review.uuid && receipt.revision_sha256 === review.revision_sha256
+    return run(async signal => {
+      const preflight = await client.verifyRelease(review.uuid, signal)
+      if (signal.aborted) return
+      if (!matchesReview(preflight)) throw new CourseReviewError('CURRENT_COURSE_REVIEW_REQUIRED')
+      const receipt = await client.recordRelease(review.uuid, signal)
+      if (signal.aborted) return
+      if (!matchesReview(receipt)) throw new CourseReviewError('CURRENT_COURSE_REVIEW_REQUIRED')
+      setRelease(receipt)
+      setStatus(t('contentReview.releaseRecorded', 'Reviewed release recorded.'))
     })
   }
 
@@ -182,6 +206,10 @@ export default function ContentReviewPanel({ client, initial }: {
       <button type="button" className={control} disabled={busy} onClick={() => void load(false)}>
         {t('contentReview.reload', 'Reload candidate')}
       </button>
+      {canRecordRelease && !release && <button type="button" className={control} disabled={busy} onClick={() => void recordRelease()}>
+        {t('contentReview.recordRelease', 'Record reviewed release')}
+      </button>}
+      {release && <p className="break-all text-sm">{t('contentReview.releaseReference', 'Release reference {{reference}}', { reference: release.uuid })}</p>}
       {error && <div ref={errorRef} tabIndex={-1} role="alert" className="text-red-800">{error}</div>}
       {status && <p role="status">{status}</p>}
       {busy && <p role="status">{t('contentReview.pending', 'Working…')}</p>}

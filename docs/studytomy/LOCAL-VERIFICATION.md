@@ -151,6 +151,16 @@ Use a disposable PostgreSQL/pgvector database and a separate Redis namespace. St
 
 The browser evidence covers the released PDF-authored text and concept progress. The synthetic review does not establish staff approval UI acceptance. Dependent guardian disclosure, full managed native assignment delivery, and provider-backed drafting remain outside this rehearsal. For separately authorized provider testing, use the API environment contract in the Mac provider-free PDF authoring section and supply credentials through the approved secret channel.
 
+### Connected demo staff review and release follow-up
+
+The **Content review** workspace now offers **Record reviewed release** for the exact approved candidate. It runs the existing server preflight, then records the release and displays its returned reference. The server rechecks current authority, review, evidence and policy before retaining the snapshot.
+
+On the working tree based on `f174cdd5`, a separate loopback database cloned the connected demo course and PDF lineage. The fixture supplied separate synthetic author and reviewer identities, exact course review scopes, and synthetic D-13 retention and D-15 PDF evidence settings. At 390 × 844, Chromium signed both in against `localhost:3020` and `localhost:1320`, then dismissed the reviewer's first-run welcome modal. The reviewer uploaded separate rights and accessibility PDF attachments in **Content review**, each returning 201. The signed course-author approval request returned 403. The reviewer selected the two attachments, confirmed both findings, recorded approval (201), and used the release control. Preflight returned 200, release returned 201 and the UI showed the receipt. Retrying the record endpoint returned the same receipt. No browser responses were intercepted in this rehearsal and no uncaught page errors were observed.
+
+PostgreSQL confirmed one release for the new review, an exact snapshot digest, distinct author and reviewer, the correct attachment purposes, and the original PDF's UUID, digest and page in the retained citation lineage. The native course stayed private and unpublished. The connected learner rehearsal above used a separate fixture grant. The new staff-recorded release did not receive a learner grant during this check.
+
+The focused content-evidence suite passed **19 tests in 4.71 seconds** with the local PostgreSQL cases enabled. The web review unit test, TypeScript, scoped ESLint and Git whitespace checks passed. The intercepted content-review Chromium regression separately passed in **4.7 seconds**, including the preflight-before-record sequence. Real approval decisions and live provider generation remain outside the demo.
+
 ## Environment
 
 - Windows `10.0.26300.0`; PowerShell `7.6.9`; Bash used for the repository shell script.
