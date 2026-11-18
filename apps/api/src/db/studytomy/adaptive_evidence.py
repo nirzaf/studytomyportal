@@ -37,6 +37,12 @@ class StudyLearningAttempt(CurriculumRecord, table=True):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ("org_id", "source_course_uuid", "source_release_uuid"),
+            ("st_course_release.org_id", "st_course_release.course_uuid", "st_course_release.uuid"),
+            name="fk_st_attempt_release_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             (
                 "org_id",
                 "curriculum_revision_id",
@@ -104,6 +110,12 @@ class StudyLearningAttempt(CurriculumRecord, table=True):
             "(actor_capacity IN ('delegated', 'system') AND actor_reference IS NOT NULL)",
             name="ck_st_attempt_actor",
         ),
+        CheckConstraint(
+            "(source_release_uuid IS NULL AND source_binding_digest IS NULL) OR "
+            "(source_release_uuid IS NOT NULL AND source_binding_digest IS NOT NULL "
+            "AND length(source_binding_digest) = 64)",
+            name="ck_st_attempt_release_binding",
+        ),
     )
 
     uuid: str = Field(default_factory=lambda: f"attempt_{uuid4()}", max_length=64)
@@ -122,6 +134,8 @@ class StudyLearningAttempt(CurriculumRecord, table=True):
     next_ordinal: int = 1
     source_course_uuid: str = Field(max_length=255)
     source_activity_uuid: str | None = Field(default=None, max_length=89)
+    source_release_uuid: str | None = Field(default=None, max_length=64)
+    source_binding_digest: str | None = Field(default=None, max_length=64)
     source_round_uuid: str | None = Field(default=None, max_length=64)
     source_assignment_uuid: str | None = Field(default=None, max_length=100)
     source_submission_uuid: str | None = Field(default=None, max_length=100)

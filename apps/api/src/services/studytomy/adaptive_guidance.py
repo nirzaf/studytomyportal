@@ -5,12 +5,13 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.courses.activities import ActivityTypeEnum
 from src.db.organizations import Organization
+from src.db.studytomy.adaptive import StudyConcept
 from src.db.studytomy.adaptive_evidence import StudyAttemptItem, StudyLearningAttempt
 from src.db.studytomy.adaptive_guidance import StudyTutorSession
 from src.db.studytomy.family import StudyLearnerProfile
@@ -18,7 +19,11 @@ from src.db.studytomy.governance import StudyPolicyKey
 from src.db.studytomy.privacy import StudyConsentPurpose
 from src.db.users import PublicUser
 from src.services.courses.activities.dynamic_content import strip_dynamic_content
-from src.services.studytomy.adaptive_attempt_access import lock_attempt_learner
+from src.services.studytomy.adaptive_attempt_access import (
+    ResolvedManagedReleaseSource,
+    lock_attempt_learner,
+    resolve_managed_release_lesson_source,
+)
 from src.services.studytomy.adaptive_curriculum import curriculum_activity_digest
 from src.services.studytomy.adaptive_curriculum_review import _REVIEW_POLICIES
 from src.services.studytomy.adaptive_diagnostics import _policy_body
@@ -54,10 +59,20 @@ class TutorStart(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     activity_uuid: Annotated[str, Field(min_length=1, max_length=89)]
+    course_uuid: Annotated[str, Field(min_length=1, max_length=255)] | None = None
+    course_release_uuid: Annotated[
+        str, Field(pattern=r"^course_release_[0-9a-f-]{36}$")
+    ] | None = None
     concept_uuid: Annotated[str, Field(min_length=1, max_length=64)] | None = None
     practice_attempt_uuid: Annotated[str, Field(min_length=1, max_length=64)] | None = (
         None
     )
+
+    @model_validator(mode="after")
+    def require_release_scope_pair(self):
+        if (self.course_uuid is None) != (self.course_release_uuid is None):
+            raise ValueError("Course and release identifiers must be provided together.")
+        return self
 
 
 class TutorOptions(BaseModel):
@@ -75,7 +90,12 @@ async def read_tutor_options(
     org: Organization,
     actor: PublicUser,
     activity_uuid: str,
+    *,
+    course_uuid: str | None = None,
+    course_release_uuid: str | None = None,
 ) -> TutorOptions:
+    if (course_uuid is None) != (course_release_uuid is None):
+        raise HTTPException(404, "Guidance source not found.")
     await lock_organization(db, org.id)
     now = datetime.now(UTC)
     attempt = StudyLearningAttempt
@@ -91,6 +111,12 @@ async def read_tutor_options(
                 StudyLearnerProfile.org_id == org.id,
                 StudyLearnerProfile.user_id == actor.id,
                 attempt.source_activity_uuid == activity_uuid,
+                attempt.source_release_uuid == course_release_uuid,
+                *(
+                    (attempt.source_course_uuid == course_uuid,)
+                    if course_uuid is not None
+                    else ()
+                ),
                 attempt.kind == "practice",
                 attempt.status == "active",
                 attempt.expires_at > now,
@@ -106,7 +132,10 @@ async def read_tutor_options(
             org,
             actor,
             TutorStart(
-                activity_uuid=activity_uuid, practice_attempt_uuid=practice_uuid
+                activity_uuid=activity_uuid,
+                course_uuid=course_uuid,
+                course_release_uuid=course_release_uuid,
+                practice_attempt_uuid=practice_uuid,
             ),
             now,
         )
@@ -160,6 +189,8 @@ class GuidanceBinding:
     curriculum_id: int
     concept_id: int
     course_uuid: str
+    course_release_uuid: str | None
+    source_binding_digest: str | None
     activity_digest: str
     practice_id: int | None
     eligibility_id: int
@@ -210,24 +241,75 @@ async def _binding(
         raise studytomy_http_error(
             403, POLICY_NOT_APPROVED, "Current guidance consent is required."
         )
-    mappings = await _read_lesson_source(request, db, org, actor, body.activity_uuid)
-    selected = [
-        row
-        for row in mappings
-        if (body.concept_uuid is None or row[1].uuid == body.concept_uuid)
-        and (concept_id is None or row[1].id == concept_id)
-    ]
-    if not selected or len({row[4].id for row in selected}) != 1:
-        raise HTTPException(404, "Guidance source not found.")
-    _, concept, activity, course, curriculum = selected[0]
+    release_source: ResolvedManagedReleaseSource | None = None
+    if body.course_uuid is not None and body.course_release_uuid is not None:
+        release_source = await resolve_managed_release_lesson_source(
+            db,
+            org,
+            actor,
+            body.course_uuid,
+            body.course_release_uuid,
+            body.activity_uuid,
+            now,
+        )
+        snapshot = release_source.activity_snapshot
+        if snapshot.get("activity_sub_type") != "SUBTYPE_DYNAMIC_PAGE":
+            raise HTTPException(404, "Guidance source not found.")
+        concept_rows = (
+            await db.execute(
+                select(StudyConcept).where(
+                    StudyConcept.org_id == org.id,
+                    StudyConcept.curriculum_revision_id
+                    == release_source.curriculum.id,
+                    StudyConcept.uuid.in_(release_source.concept_uuids),
+                    StudyConcept.archived.is_(False),
+                )
+            )
+        ).scalars().all()
+        selected_concepts = [
+            row
+            for row in concept_rows
+            if (body.concept_uuid is None or row.uuid == body.concept_uuid)
+            and (concept_id is None or row.id == concept_id)
+        ]
+        if not selected_concepts:
+            raise HTTPException(404, "Guidance source not found.")
+        curriculum = release_source.curriculum
+        course_uuid = body.course_uuid
+        lesson_title = snapshot.get("name")
+        lesson_content = snapshot.get("content")
+        if not isinstance(lesson_title, str) or not isinstance(lesson_content, dict):
+            raise HTTPException(404, "Guidance source not found.")
+        activity_type = ActivityTypeEnum.TYPE_DYNAMIC
+        activity_digest = release_source.activity_digest
+        concept = selected_concepts[0]
+    else:
+        mappings = await _read_lesson_source(
+            request, db, org, actor, body.activity_uuid
+        )
+        selected = [
+            row
+            for row in mappings
+            if (body.concept_uuid is None or row[1].uuid == body.concept_uuid)
+            and (concept_id is None or row[1].id == concept_id)
+        ]
+        if not selected or len({row[4].id for row in selected}) != 1:
+            raise HTTPException(404, "Guidance source not found.")
+        _, concept, activity, course, curriculum = selected[0]
+        course_uuid = course.course_uuid
+        lesson_title = activity.name
+        lesson_content = activity.content
+        activity_type = activity.activity_type
+        activity_digest = curriculum_activity_digest(activity)
+        selected_concepts = [row[1] for row in selected]
     practice_requested = (
         body.practice_attempt_uuid is not None or practice_id is not None
     )
-    if course.course_uuid != curriculum.owner_course_uuid or (
-        activity.activity_type != ActivityTypeEnum.TYPE_DYNAMIC
+    if course_uuid != curriculum.owner_course_uuid or (
+        activity_type != ActivityTypeEnum.TYPE_DYNAMIC
         and not (
             practice_requested
-            and activity.activity_type == ActivityTypeEnum.TYPE_ASSIGNMENT
+            and activity_type == ActivityTypeEnum.TYPE_ASSIGNMENT
         )
     ):
         raise HTTPException(404, "Guidance source not found.")
@@ -241,7 +323,7 @@ async def _binding(
                 or_(
                     attempt.kind == "diagnostic",
                     (attempt.kind == "assignment")
-                    & (attempt.source_activity_uuid == activity.activity_uuid),
+                    & (attempt.source_activity_uuid == body.activity_uuid),
                 ),
                 attempt.status == "active",
                 attempt.expires_at > now,
@@ -278,13 +360,20 @@ async def _binding(
                     identifier,
                     StudyAttemptItem.org_id == org.id,
                     StudyAttemptItem.concept_id.in_(
-                        {mapping[1].id for mapping in selected}
+                        {mapped_concept.id for mapped_concept in selected_concepts}
                     ),
                     attempt.org_id == org.id,
                     attempt.learner_profile_id == profile.id,
                     attempt.curriculum_revision_id == curriculum.id,
-                    attempt.source_course_uuid == course.course_uuid,
-                    attempt.source_activity_uuid == activity.activity_uuid,
+                    attempt.source_course_uuid == course_uuid,
+                    attempt.source_activity_uuid == body.activity_uuid,
+                    attempt.source_release_uuid == body.course_release_uuid,
+                    attempt.source_binding_digest
+                    == (
+                        release_source.source_binding_digest
+                        if release_source is not None
+                        else None
+                    ),
                     attempt.kind == "practice",
                     attempt.status == "active",
                     attempt.expires_at > now,
@@ -295,7 +384,7 @@ async def _binding(
             raise HTTPException(404, "Practice attempt not found.")
         practice_id = practice_rows[0][0]
         issued_concepts = {row[1] for row in practice_rows}
-        concept = next(row[1] for row in selected if row[1].id in issued_concepts)
+        concept = next(row for row in selected_concepts if row.id in issued_concepts)
     policies = await _current_policies(
         db,
         org,
@@ -328,27 +417,33 @@ async def _binding(
         db, org.id, profile.id, concept.id, policy, watermark, now
     )
     prose, limited = (
-        _lesson_prose(activity.content)
-        if activity.activity_type == ActivityTypeEnum.TYPE_DYNAMIC
+        _lesson_prose(lesson_content)
+        if activity_type == ActivityTypeEnum.TYPE_DYNAMIC
         else ("", False)
     )
     return GuidanceBinding(
-        profile.id,
-        curriculum.id,
-        concept.id,
-        course.course_uuid,
-        curriculum_activity_digest(activity),
-        practice_id,
-        eligibility.id,
-        sorted(int(row.id) for row in policies),
-        GuidanceContext(
-            activity.name[:200],
+        profile_id=profile.id,
+        curriculum_id=curriculum.id,
+        concept_id=concept.id,
+        course_uuid=course_uuid,
+        course_release_uuid=body.course_release_uuid,
+        source_binding_digest=(
+            release_source.source_binding_digest
+            if release_source is not None
+            else None
+        ),
+        activity_digest=activity_digest,
+        practice_id=practice_id,
+        eligibility_id=eligibility.id,
+        policy_ids=sorted(int(row.id) for row in policies),
+        context=GuidanceContext(
+            lesson_title[:200],
             prose,
             concept.title,
             concept.objective,
             mastery.state,
             mastery.eligible_count,
-            limited or len(activity.name) > 200,
+            limited or len(lesson_title) > 200,
             practice_id is not None,
         ),
     )
@@ -371,6 +466,8 @@ async def start_tutor_session(
         concept_id=bound.concept_id,
         activity_uuid=body.activity_uuid,
         course_uuid=bound.course_uuid,
+        source_release_uuid=bound.course_release_uuid,
+        source_binding_digest=bound.source_binding_digest,
         activity_digest=bound.activity_digest,
         practice_attempt_id=bound.practice_id,
         eligibility_decision_id=bound.eligibility_id,
@@ -428,7 +525,11 @@ async def load_guidance_context(
         db,
         org,
         actor,
-        TutorStart(activity_uuid=row.activity_uuid),
+        TutorStart(
+            activity_uuid=row.activity_uuid,
+            course_uuid=row.course_uuid if row.source_release_uuid is not None else None,
+            course_release_uuid=row.source_release_uuid,
+        ),
         datetime.now(UTC),
         concept_id=row.concept_id,
         practice_id=row.practice_attempt_id,
@@ -436,6 +537,8 @@ async def load_guidance_context(
     if (
         row.curriculum_revision_id != bound.curriculum_id
         or row.course_uuid != bound.course_uuid
+        or row.source_release_uuid != bound.course_release_uuid
+        or row.source_binding_digest != bound.source_binding_digest
         or row.activity_digest != bound.activity_digest
         or row.policy_version_ids != bound.policy_ids
         or row.eligibility_decision_id != bound.eligibility_id

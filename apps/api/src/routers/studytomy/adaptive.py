@@ -523,12 +523,24 @@ async def api_read_tutor_options(
     actor: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
     db: AdaptiveDB,
     activity_uuid: Annotated[str, Query(min_length=1, max_length=89)],
+    course_uuid: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+    course_release_uuid: Annotated[
+        str | None, Query(pattern=r"^course_release_[0-9a-f-]{36}$")
+    ] = None,
 ) -> TutorOptions:
     org = await adaptive_organization(org_uuid, response, actor, db)
     if not await is_protected_studytomy_learner(db, actor.id):
         return TutorOptions(mode="legacy")
     await adaptive_session_actor(actor)
-    return await read_tutor_options(request, db, org, actor, activity_uuid)
+    return await read_tutor_options(
+        request,
+        db,
+        org,
+        actor,
+        activity_uuid,
+        course_uuid=course_uuid,
+        course_release_uuid=course_release_uuid,
+    )
 
 
 @router.post("/orgs/{org_uuid}/me/tutor-sessions", status_code=201)
@@ -817,9 +829,22 @@ async def api_read_lesson_mastery(
     db: AdaptiveDB,
     activity_uuid: Annotated[str, Query(min_length=1, max_length=89)],
     offset: Annotated[int, Query(ge=0, le=100)] = 0,
+    course_uuid: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+    course_release_uuid: Annotated[
+        str | None, Query(pattern=r"^course_release_[0-9a-f-]{36}$")
+    ] = None,
 ) -> MasteryPage:
     return await read_learner_mastery(
-        request, db, org, actor, None, offset, 20, activity_uuid=activity_uuid
+        request,
+        db,
+        org,
+        actor,
+        None,
+        offset,
+        20,
+        activity_uuid=activity_uuid,
+        course_uuid=course_uuid,
+        course_release_uuid=course_release_uuid,
     )
 
 
@@ -830,8 +855,20 @@ async def api_read_learner_recommendations(
     actor: AdaptiveActor,
     db: AdaptiveDB,
     activity_uuid: Annotated[str, Query(min_length=1, max_length=89)],
+    course_uuid: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+    course_release_uuid: Annotated[
+        str | None, Query(pattern=r"^course_release_[0-9a-f-]{36}$")
+    ] = None,
 ) -> list[Recommendation | NoRecommendation]:
-    return await read_learner_recommendations(request, db, org, actor, activity_uuid)
+    return await read_learner_recommendations(
+        request,
+        db,
+        org,
+        actor,
+        activity_uuid,
+        course_uuid=course_uuid,
+        course_release_uuid=course_release_uuid,
+    )
 
 
 @router.get("/orgs/{org_uuid}/me/attempts/options")
@@ -841,8 +878,20 @@ async def api_lesson_attempt_options(
     actor: AdaptiveActor,
     db: AdaptiveDB,
     source_activity_uuid: Annotated[str, Query(min_length=1, max_length=89)],
+    course_uuid: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+    course_release_uuid: Annotated[
+        str | None, Query(pattern=r"^course_release_[0-9a-f-]{36}$")
+    ] = None,
 ) -> list[LessonAttemptOption]:
-    return await lesson_attempt_options(request, db, org, actor, source_activity_uuid)
+    return await lesson_attempt_options(
+        request,
+        db,
+        org,
+        actor,
+        source_activity_uuid,
+        course_uuid=course_uuid,
+        course_release_uuid=course_release_uuid,
+    )
 
 
 @router.get("/orgs/{org_uuid}/me/attempts/current")
@@ -853,9 +902,18 @@ async def api_read_current_attempt(
     db: AdaptiveDB,
     source_activity_uuid: Annotated[str, Query(min_length=1, max_length=89)],
     purpose: Literal["diagnostic", "practice"],
+    course_release_uuid: Annotated[
+        str | None, Query(pattern=r"^course_release_[0-9a-f-]{36}$")
+    ] = None,
 ) -> AttemptRead | None:
     return await read_current_attempt(
-        request, db, org, actor, source_activity_uuid, purpose
+        request,
+        db,
+        org,
+        actor,
+        source_activity_uuid,
+        purpose,
+        course_release_uuid,
     )
 
 

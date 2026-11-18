@@ -15,8 +15,11 @@ from src.db.studytomy.adaptive import StudyConcept, StudyCurriculumRevision
 from src.db.studytomy.adaptive_items import StudyItemRevision
 from src.db.studytomy.governance import StudyPolicyKey
 from src.db.users import PublicUser
+from src.services.studytomy.access_policy import resolve_managed_release_authority
 from src.services.studytomy.adaptive_attempt_access import (
     _ATTEMPT_POLICIES,
+    ResolvedManagedReleaseSource,
+    require_mapped_release_source,
     require_mapped_source,
 )
 from src.services.studytomy.adaptive_curriculum_review import CurriculumPublish
@@ -55,6 +58,7 @@ class PracticeAccess:
     policy: MasteryPolicy
     policy_ids: list[int]
     activity_uuid: str
+    release_source: ResolvedManagedReleaseSource | None = None
 
     @property
     def available(self) -> bool:
@@ -62,16 +66,19 @@ class PracticeAccess:
 
     @property
     def manifest_digest(self) -> str:
-        return canonical_request_hash(
-            {
-                "item_uuid": self.item.uuid,
-                "item_digest": self.item.content_digest,
-                "curriculum_digest": self.curriculum.content_digest,
-                "activity_uuid": self.activity_uuid,
-                "rules": self.rules.model_dump(mode="json"),
-                "mastery_digest": self.policy.digest,
-            }
-        )
+        projection = {
+            "item_uuid": self.item.uuid,
+            "item_digest": self.item.content_digest,
+            "curriculum_digest": self.curriculum.content_digest,
+            "activity_uuid": self.activity_uuid,
+            "rules": self.rules.model_dump(mode="json"),
+            "mastery_digest": self.policy.digest,
+        }
+        if self.release_source is not None:
+            projection["source_binding_digest"] = (
+                self.release_source.source_binding_digest
+            )
+        return canonical_request_hash(projection)
 
 
 async def require_practice_access(
@@ -84,7 +91,21 @@ async def require_practice_access(
     *,
     concept_uuid: str | None = None,
     item_id: int | None = None,
+    course_uuid: str | None = None,
+    course_release_uuid: str | None = None,
 ) -> PracticeAccess:
+    release_authority = None
+    if course_release_uuid is not None:
+        if not course_uuid:
+            raise HTTPException(404, "Practice source not found.")
+        release_authority = await resolve_managed_release_authority(
+            db,
+            org,
+            actor,
+            course_uuid,
+            course_release_uuid,
+            now=now,
+        )
     query = (
         select(StudyConcept, StudyCurriculumRevision)
         .join(
@@ -117,16 +138,40 @@ async def require_practice_access(
     if row is None:
         raise HTTPException(404, "Practice source not found.")
     concept, curriculum = row
-    activity = await require_mapped_source(
-        request,
-        db,
-        org,
-        actor,
-        curriculum,
-        (concept.uuid,),
-        activity_uuid,
-        for_practice=True,
-    )
+    release_source = None
+    if course_release_uuid is None:
+        activity = await require_mapped_source(
+            request,
+            db,
+            org,
+            actor,
+            curriculum,
+            (concept.uuid,),
+            activity_uuid,
+            for_practice=True,
+        )
+        activity_id = activity.id
+    else:
+        if (
+            release_authority is None
+            or curriculum.owner_course_uuid != course_uuid
+            or curriculum.org_id != org.id
+        ):
+            raise HTTPException(404, "Practice source not found.")
+        release_source = await require_mapped_release_source(
+            db,
+            org,
+            actor,
+            release_authority.profile,
+            curriculum,
+            (concept.uuid,),
+            course_uuid,
+            course_release_uuid,
+            activity_uuid,
+            now,
+            for_practice=True,
+        )
+        activity_id = int(release_source.activity_snapshot["id"])
     policies = await _current_policies(db, org, _ATTEMPT_POLICIES, now)
     d08 = _policy_body(policies, StudyPolicyKey.D_08).specified_value("assistance")
     try:
@@ -167,7 +212,7 @@ async def require_practice_access(
             StudyItemRevision.concept_id == concept.id,
             StudyItemRevision.course_uuid == curriculum.owner_course_uuid,
             Assignment.org_id == org.id,
-            Assignment.activity_id == activity.id,
+            Assignment.activity_id == activity_id,
         )
         .with_for_update(read=True, of=StudyItemRevision)
         .execution_options(populate_existing=True)
@@ -205,6 +250,7 @@ async def require_practice_access(
             policy,
             [int(p.id) for p in policies],
             activity_uuid,
+            release_source,
         )
     if item_id is not None:
         raise studytomy_http_error(

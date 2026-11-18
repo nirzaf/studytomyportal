@@ -1,5 +1,7 @@
 """Resolve current learner and source authority for diagnostic attempts."""
 
+from __future__ import annotations
+
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -63,6 +65,7 @@ from src.services.studytomy.errors import (
     STALE_VERSION,
     studytomy_http_error,
 )
+from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization
 
@@ -90,6 +93,7 @@ class DiagnosticAccess:
     policy: MasteryPolicy
     policy_ids: list[int]
     activity_uuid: str
+    release_source: ResolvedManagedReleaseSource | None = None
 
     @property
     def available(self) -> bool:
@@ -109,6 +113,9 @@ class ResolvedManagedReleaseSource:
     activity_version: int
     activity_digest: str
     activity_snapshot: dict[str, object]
+    mapping_uuids: tuple[str, ...]
+    concept_uuids: tuple[str, ...]
+    source_binding_digest: str
 
 
 async def lock_attempt_learner(
@@ -235,7 +242,13 @@ async def require_mapped_release_source(
         raise _unavailable() from None
 
     mapping_query = (
-        select(StudyConceptActivity.id)
+        select(
+            StudyConceptActivity.uuid,
+            StudyConcept.uuid,
+            StudyConceptActivity.usage,
+            StudyConceptActivity.activity_version,
+            StudyConceptActivity.activity_digest,
+        )
         .join(StudyConcept, StudyConcept.id == StudyConceptActivity.concept_id)
         .where(
             StudyConceptActivity.org_id == org.id,
@@ -253,7 +266,8 @@ async def require_mapped_release_source(
     )
     if for_practice:
         mapping_query = mapping_query.where(StudyConceptActivity.usage == "practice")
-    if await db.scalar(mapping_query.limit(1)) is None:
+    mapping_rows = (await db.execute(mapping_query.order_by(StudyConceptActivity.uuid))).all()
+    if not mapping_rows:
         raise _unavailable()
 
     # The current release projector is the authority for what this learner can
@@ -279,6 +293,39 @@ async def require_mapped_release_source(
             raise _unavailable() from error
         raise
 
+    mapping_bindings = tuple(
+        sorted(
+            (
+                str(row[0]),
+                str(row[1]),
+                str(row[2]),
+                int(row[3]),
+                str(row[4]),
+            )
+            for row in mapping_rows
+        )
+    )
+    selected_concepts = tuple(sorted({binding[1] for binding in mapping_bindings}))
+    source_binding_digest = canonical_request_hash(
+        {
+            "schema": "adaptive_managed_release_binding_v1",
+            "org_id": org.id,
+            "course_uuid": course_uuid,
+            "release_uuid": authorization.release.uuid,
+            "release_sha256": authorization.release.snapshot_sha256,
+            "curriculum_uuid": curriculum.uuid,
+            "curriculum_digest": curriculum.content_digest,
+            "activity_uuid": activity_uuid,
+            "activity_version": activity_version,
+            "activity_digest": activity_digest,
+            "concept_uuids": selected_concepts,
+            "mapping_bindings": mapping_bindings,
+            "policy_version_ids": tuple(
+                sorted(authorization.current_policy_version_ids)
+            ),
+        }
+    )
+
     if claim_first_use:
         grants = tuple(
             await resolve_active_course_grants(
@@ -302,6 +349,95 @@ async def require_mapped_release_source(
         activity_version=activity_version,
         activity_digest=activity_digest,
         activity_snapshot=deepcopy(activity),
+        mapping_uuids=tuple(binding[0] for binding in mapping_bindings),
+        concept_uuids=selected_concepts,
+        source_binding_digest=source_binding_digest,
+    )
+
+
+async def resolve_managed_release_lesson_source(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    now: datetime,
+) -> ResolvedManagedReleaseSource:
+    """Resolve the one current published curriculum binding for a release lesson."""
+    await lock_organization(db, org.id)
+    authorization = await resolve_managed_release_authority(
+        db, org, actor, course_uuid, release_uuid, now=now
+    )
+    if authorization.release.snapshot.get("schema") != "course_content_evidence_v4":
+        raise _unavailable()
+    activity_rows = authorization.release.snapshot.get("activities")
+    matches = (
+        [
+            row
+            for row in activity_rows
+            if isinstance(row, dict) and row.get("activity_uuid") == activity_uuid
+        ]
+        if isinstance(activity_rows, list)
+        else []
+    )
+    if len(matches) != 1:
+        raise _unavailable()
+    activity = matches[0]
+    activity_id = activity.get("id")
+    activity_version = activity.get("current_version")
+    if (
+        type(activity_id) is not int
+        or type(activity_version) is not int
+        or activity.get("published") is not True
+    ):
+        raise _unavailable()
+    try:
+        digest = curriculum_activity_snapshot_digest(activity)
+    except (TypeError, ValueError):
+        raise _unavailable() from None
+
+    rows = (
+        await db.execute(
+            select(StudyCurriculumRevision, StudyConcept.uuid)
+            .join(
+                StudyConceptActivity,
+                StudyConceptActivity.curriculum_revision_id
+                == StudyCurriculumRevision.id,
+            )
+            .join(StudyConcept, StudyConcept.id == StudyConceptActivity.concept_id)
+            .where(
+                StudyCurriculumRevision.org_id == org.id,
+                StudyCurriculumRevision.owner_course_uuid == course_uuid,
+                StudyCurriculumRevision.status.in_(("published", "retired")),
+                StudyConceptActivity.org_id == org.id,
+                StudyConceptActivity.course_id == authorization.course_id,
+                StudyConceptActivity.course_uuid == course_uuid,
+                StudyConceptActivity.activity_id == activity_id,
+                StudyConceptActivity.activity_uuid == activity_uuid,
+                StudyConceptActivity.activity_version == activity_version,
+                StudyConceptActivity.activity_digest == digest,
+                StudyConceptActivity.archived.is_(False),
+                StudyConcept.archived.is_(False),
+            )
+        )
+    ).all()
+    revision_ids = {row[0].id for row in rows}
+    if len(revision_ids) != 1:
+        raise _unavailable()
+    curriculum = rows[0][0]
+    concept_uuids = tuple(sorted({row[1] for row in rows}))
+    return await require_mapped_release_source(
+        db,
+        org,
+        actor,
+        authorization.profile,
+        curriculum,
+        concept_uuids,
+        course_uuid,
+        release_uuid,
+        activity_uuid,
+        now,
     )
 
 
@@ -386,6 +522,7 @@ async def require_diagnostic_access(
     now: datetime,
     *,
     validate_pool: bool,
+    course_release_uuid: str | None = None,
 ) -> DiagnosticAccess:
     pair = (
         await db.execute(
@@ -408,9 +545,30 @@ async def require_diagnostic_access(
         raise HTTPException(404, "Diagnostic not found.")
     definition, curriculum = pair
     manifest = DiagnosticManifest.model_validate(definition.manifest)
-    await require_mapped_source(
-        request, db, org, actor, curriculum, manifest.required_concepts, activity_uuid
-    )
+    release_source = None
+    if course_release_uuid is None:
+        await require_mapped_source(
+            request,
+            db,
+            org,
+            actor,
+            curriculum,
+            manifest.required_concepts,
+            activity_uuid,
+        )
+    else:
+        release_source = await require_mapped_release_source(
+            db,
+            org,
+            actor,
+            profile,
+            curriculum,
+            manifest.required_concepts,
+            curriculum.owner_course_uuid,
+            course_release_uuid,
+            activity_uuid,
+            now,
+        )
     policies = await _current_policies(db, org, _ATTEMPT_POLICIES, now)
     d16 = _policy_body(policies, StudyPolicyKey.D_16).specified_value(
         "review_approvals"
@@ -459,6 +617,7 @@ async def require_diagnostic_access(
         policy,
         [int(p.id) for p in policies],
         activity_uuid,
+        release_source,
     )
     if validate_pool and access.available:
         current = await _manifest(

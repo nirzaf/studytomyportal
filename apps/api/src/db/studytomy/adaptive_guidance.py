@@ -48,12 +48,24 @@ class StudyTutorSession(CurriculumRecord, table=True):
             name="fk_st_tutor_practice",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ("org_id", "course_uuid", "source_release_uuid"),
+            ("st_course_release.org_id", "st_course_release.course_uuid", "st_course_release.uuid"),
+            name="fk_st_tutor_release_source",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("uuid", name="uq_st_tutor_session_uuid"),
         UniqueConstraint("org_id", "id", name="uq_st_tutor_session_org_id"),
         CheckConstraint(
             "version >= 1 AND step >= 0 AND length(activity_digest) = 64 AND mode = 'guided' AND "
             "(closed_at IS NULL OR closed_at >= created_at)",
             name="ck_st_tutor_state",
+        ),
+        CheckConstraint(
+            "(source_release_uuid IS NULL AND source_binding_digest IS NULL) OR "
+            "(source_release_uuid IS NOT NULL AND source_binding_digest IS NOT NULL "
+            "AND length(source_binding_digest) = 64)",
+            name="ck_st_tutor_release_binding",
         ),
     )
 
@@ -64,6 +76,8 @@ class StudyTutorSession(CurriculumRecord, table=True):
     activity_uuid: str = Field(max_length=89)
     activity_digest: str = Field(max_length=64)
     course_uuid: str = Field(max_length=255)
+    source_release_uuid: str | None = Field(default=None, max_length=64)
+    source_binding_digest: str | None = Field(default=None, max_length=64)
     practice_attempt_id: int | None = Field(default=None, sa_type=BigInteger)
     eligibility_decision_id: int = Field(sa_type=BigInteger)
     policy_version_ids: list[int] = Field(sa_type=JSON)

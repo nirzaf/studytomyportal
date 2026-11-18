@@ -32,8 +32,16 @@ from src.services.studytomy.adaptive_access import (
     _is_learning_eligible,
     adaptive_enabled,
 )
-from src.services.studytomy.adaptive_attempt_access import lock_attempt_learner
-from src.services.studytomy.adaptive_curriculum import curriculum_activity_digest
+from src.services.studytomy.adaptive_attempt_access import (
+    ResolvedManagedReleaseSource,
+    lock_attempt_learner,
+    require_mapped_release_source,
+    resolve_managed_release_lesson_source,
+)
+from src.services.studytomy.adaptive_curriculum import (
+    curriculum_activity_digest,
+    curriculum_activity_snapshot_digest,
+)
 from src.services.studytomy.adaptive_curriculum_review import (
     _REVIEW_POLICIES,
     CurriculumPublish,
@@ -153,29 +161,64 @@ async def read_learner_mastery(
     limit: int,
     *,
     activity_uuid: str | None = None,
+    course_uuid: str | None = None,
+    course_release_uuid: str | None = None,
 ) -> MasteryPage:
     await lock_organization(db, org.id)
     now = datetime.now(UTC)
     profile = await lock_attempt_learner(db, org, actor, now, "adaptive_mastery")
     lesson_concepts = None
-    if activity_uuid is not None:
+    managed_source = None
+    if course_release_uuid is not None:
+        if not course_uuid or activity_uuid is None:
+            raise HTTPException(404, "Learning source not found.")
+        managed_source = await resolve_managed_release_lesson_source(
+            db,
+            org,
+            actor,
+            course_uuid,
+            course_release_uuid,
+            activity_uuid,
+            now,
+        )
+        curriculum = managed_source.curriculum
+        concept_rows = (
+            await db.execute(
+                select(StudyConcept.id, StudyConcept.uuid).where(
+                    StudyConcept.org_id == org.id,
+                    StudyConcept.curriculum_revision_id == curriculum.id,
+                    StudyConcept.uuid.in_(managed_source.concept_uuids),
+                    StudyConcept.archived.is_(False),
+                )
+            )
+        ).all()
+        if {row.uuid for row in concept_rows} != set(managed_source.concept_uuids):
+            raise HTTPException(404, "Learning source not found.")
+        lesson_concepts = {row.id for row in concept_rows}
+    elif course_uuid is not None:
+        raise HTTPException(404, "Learning source not found.")
+    elif activity_uuid is not None:
         source = await _read_lesson_source(request, db, org, actor, activity_uuid)
         if len({row[4].id for row in source}) != 1:
             raise HTTPException(404, "Learning source not found.")
         revision_uuid = source[0][4].uuid
         lesson_concepts = {row[1].id for row in source}
-    curriculum, course = await _published_curriculum(db, org, revision_uuid)
-    permission = await check_resource_access(
-        request,
-        db,
-        actor,
-        course.course_uuid,
-        AccessAction.READ,
-        context=AccessContext.DASHBOARD,
-        raise_on_deny=False,
-    )
-    if not permission.allowed:
-        raise HTTPException(404, "Curriculum not found.")
+    else:
+        curriculum = None
+    if managed_source is None:
+        curriculum, course = await _published_curriculum(db, org, revision_uuid)
+        permission = await check_resource_access(
+            request,
+            db,
+            actor,
+            course.course_uuid,
+            AccessAction.READ,
+            context=AccessContext.DASHBOARD,
+            raise_on_deny=False,
+        )
+        if not permission.allowed:
+            raise HTTPException(404, "Curriculum not found.")
+    assert curriculum is not None
     return await _mastery_page(
         db,
         org,
@@ -375,6 +418,7 @@ class Recommendation(BaseModel):
     activity_title: str
     concept_uuid: str
     reason: RecommendationReason
+    course_release_uuid: str | None = None
 
 
 class NoRecommendation(BaseModel):
@@ -459,22 +503,133 @@ async def _read_lesson_source(
     return source
 
 
+async def _managed_release_mappings(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    source: ResolvedManagedReleaseSource,
+    now: datetime,
+):
+    released = source.authorization.release.snapshot.get("activities")
+    activities = (
+        {
+            row.get("activity_uuid"): row
+            for row in released
+            if isinstance(row, dict) and isinstance(row.get("activity_uuid"), str)
+        }
+        if isinstance(released, list)
+        else {}
+    )
+    mapping = StudyConceptActivity
+    rows = (
+        await db.execute(
+            select(mapping, StudyConcept)
+            .join(StudyConcept, StudyConcept.id == mapping.concept_id)
+            .where(
+                mapping.org_id == org.id,
+                mapping.curriculum_revision_id == source.curriculum.id,
+                mapping.course_id == source.authorization.course_id,
+                mapping.course_uuid == source.authorization.release.course_uuid,
+                mapping.archived.is_(False),
+                StudyConcept.org_id == org.id,
+                StudyConcept.archived.is_(False),
+            )
+            .order_by(StudyConcept.sequence, StudyConcept.id, mapping.id)
+        )
+    ).all()
+    result = []
+    seen: set[str] = set()
+    for mapped, concept in rows:
+        activity = activities.get(mapped.activity_uuid)
+        if (
+            mapped.activity_uuid == source.activity_uuid
+            or mapped.activity_uuid in seen
+            or not isinstance(activity, dict)
+            or activity.get("published") is not True
+            or activity.get("activity_sub_type") != "SUBTYPE_DYNAMIC_PAGE"
+            or activity.get("current_version") != mapped.activity_version
+            or curriculum_activity_snapshot_digest(activity) != mapped.activity_digest
+        ):
+            continue
+        try:
+            await require_mapped_release_source(
+                db,
+                org,
+                actor,
+                source.authorization.profile,
+                source.curriculum,
+                (concept.uuid,),
+                source.authorization.release.course_uuid,
+                source.authorization.release.uuid,
+                mapped.activity_uuid,
+                now,
+            )
+        except HTTPException as error:
+            if error.status_code in {404, 409}:
+                continue
+            raise
+        seen.add(mapped.activity_uuid)
+        result.append(
+            (
+                mapped,
+                concept,
+                activity,
+                source.authorization.release.course_uuid,
+                source.curriculum,
+            )
+        )
+    return result
+
+
 async def read_learner_recommendations(
     request: Request,
     db: AsyncSession,
     org: Organization,
     actor: PublicUser,
     activity_uuid: str,
+    *,
+    course_uuid: str | None = None,
+    course_release_uuid: str | None = None,
 ) -> list[Recommendation | NoRecommendation]:
     await lock_organization(db, org.id)
     now = datetime.now(UTC)
     profile = await lock_attempt_learner(db, org, actor, now, "adaptive_mastery")
-    source = await _read_lesson_source(request, db, org, actor, activity_uuid)
-    _, _, activity, _, curriculum = source[0]
-    if len({row[4].id for row in source}) != 1:
-        return [NoRecommendation()]
+    managed_source = None
+    if course_release_uuid is not None:
+        if not course_uuid:
+            raise HTTPException(404, "Learning source not found.")
+        managed_source = await resolve_managed_release_lesson_source(
+            db,
+            org,
+            actor,
+            course_uuid,
+            course_release_uuid,
+            activity_uuid,
+            now,
+        )
+        curriculum = managed_source.curriculum
+        activity = managed_source.activity_snapshot
+        source_concepts = set(managed_source.concept_uuids)
+    elif course_uuid is not None:
+        raise HTTPException(404, "Learning source not found.")
+    else:
+        source = await _read_lesson_source(request, db, org, actor, activity_uuid)
+        if len({row[4].id for row in source}) != 1:
+            return [NoRecommendation()]
+        _, _, activity, _, curriculum = source[0]
+        source_concepts = {row[1].id for row in source}
     policy, _, support = await _read_policy(db, org, curriculum, now)
-    source_concepts = {row[1].id for row in source}
+    source_concept_rows = (
+        await db.execute(
+            select(StudyConcept.id).where(
+                StudyConcept.org_id == org.id,
+                StudyConcept.curriculum_revision_id == curriculum.id,
+                StudyConcept.uuid.in_(source_concepts)
+                if managed_source is not None
+                else StudyConcept.id.in_(source_concepts),
+            )
+        )
+    ).scalars().all()
     edge = StudyConceptPrerequisite
     prerequisites = set(
         (
@@ -482,16 +637,21 @@ async def read_learner_recommendations(
                 select(edge.prerequisite_id).where(
                     edge.org_id == org.id,
                     edge.curriculum_revision_id == curriculum.id,
-                    edge.concept_id.in_(source_concepts),
+                    edge.concept_id.in_(source_concept_rows),
                 )
             )
         ).scalars()
     )
-    candidates = [
-        row
-        for row in await _lesson_mappings(db, org.id, revision_id=curriculum.id)
-        if row[2].id != activity.id
-    ]
+    if managed_source is not None:
+        candidates = await _managed_release_mappings(
+            db, org, actor, managed_source, now
+        )
+    else:
+        candidates = [
+            row
+            for row in await _lesson_mappings(db, org.id, revision_id=curriculum.id)
+            if row[2].id != activity.id
+        ]
     watermark = await _watermark(db, org.id, profile.id)
     ranked: dict[int, tuple[int, RecommendationReason]] = {}
     for concept in {row[1].id: row[1] for row in candidates}.values():
@@ -516,18 +676,33 @@ async def read_learner_recommendations(
     checked: set[int] = set()
     recommended_concepts: set[int] = set()
     for _, concept, candidate, candidate_course, _ in eligible:
-        if candidate.id in checked or concept.id in recommended_concepts:
+        candidate_uuid = (
+            candidate.activity_uuid
+            if isinstance(candidate, Activity)
+            else candidate.get("activity_uuid")
+        )
+        candidate_id = candidate.id if isinstance(candidate, Activity) else candidate.get("id")
+        if candidate_uuid in checked or concept.id in recommended_concepts:
             continue
-        checked.add(candidate.id)
-        if not await _can_recommend(request, db, actor, candidate_course, candidate.id):
+        checked.add(candidate_uuid)
+        if managed_source is None and not await _can_recommend(
+            request, db, actor, candidate_course, candidate_id
+        ):
             continue
         results.append(
             Recommendation(
-                activity_uuid=candidate.activity_uuid,
-                course_uuid=candidate_course.course_uuid,
-                activity_title=candidate.name,
+                activity_uuid=candidate_uuid,
+                course_uuid=candidate_course
+                if isinstance(candidate_course, str)
+                else candidate_course.course_uuid,
+                activity_title=candidate.get("name")
+                if isinstance(candidate, dict)
+                else candidate.name,
                 concept_uuid=concept.uuid,
                 reason=ranked[concept.id][1],
+                course_release_uuid=managed_source.authorization.release.uuid
+                if managed_source is not None
+                else None,
             )
         )
         recommended_concepts.add(concept.id)

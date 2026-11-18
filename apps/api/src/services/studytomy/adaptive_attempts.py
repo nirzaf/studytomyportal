@@ -5,7 +5,14 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+    model_validator,
+)
 from sqlalchemy import case, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -83,6 +90,9 @@ class DiagnosticStart(BaseModel):
         str, StringConstraints(pattern=r"^diagnostic_[0-9a-f-]{36}$")
     ]
     source_activity_uuid: Annotated[str, StringConstraints(min_length=1, max_length=89)]
+    course_release_uuid: Annotated[
+        str, StringConstraints(pattern=r"^course_release_[0-9a-f-]{36}$")
+    ] | None = None
 
 
 class PracticeStart(BaseModel):
@@ -90,7 +100,17 @@ class PracticeStart(BaseModel):
 
     concept_uuid: Annotated[str, StringConstraints(min_length=1, max_length=64)]
     source_activity_uuid: Annotated[str, StringConstraints(min_length=1, max_length=89)]
+    course_uuid: Annotated[str, StringConstraints(min_length=1, max_length=255)] | None = None
+    course_release_uuid: Annotated[
+        str, StringConstraints(pattern=r"^course_release_[0-9a-f-]{36}$")
+    ] | None = None
     mode: Literal["supported"]
+
+    @model_validator(mode="after")
+    def require_release_scope_pair(self):
+        if (self.course_uuid is None) != (self.course_release_uuid is None):
+            raise ValueError("Course and release identifiers must be provided together.")
+        return self
 
 
 class DiagnosticAbandon(BaseModel):
@@ -130,6 +150,7 @@ class AttemptRead(BaseModel):
     status: AttemptStatus
     version: int
     curriculum_uuid: str
+    course_release_uuid: str | None = None
     diagnostic_revision_uuid: str | None
     started_at: datetime
     expires_at: datetime
@@ -231,8 +252,18 @@ async def _own_attempt(
             attempt.source_activity_uuid,
             now,
             item_id=issued.item_revision_id,
+            course_uuid=attempt.source_course_uuid,
+            course_release_uuid=attempt.source_release_uuid,
         )
-        if attempt.manifest_digest != practice.manifest_digest:
+        if (
+            attempt.manifest_digest != practice.manifest_digest
+            or (
+                practice.release_source.source_binding_digest
+                if practice.release_source is not None
+                else None
+            )
+            != attempt.source_binding_digest
+        ):
             raise studytomy_http_error(
                 409, STALE_VERSION, "The approved practice rules have changed."
             )
@@ -249,10 +280,17 @@ async def _own_attempt(
         validate_pool=validate_pool
         and attempt.status == "active"
         and now < _utc(attempt.expires_at),
+        course_release_uuid=attempt.source_release_uuid,
     )
     if (
         attempt.manifest_digest != access.definition.content_digest
         or attempt.source_course_uuid != access.curriculum.owner_course_uuid
+        or (
+            access.release_source.source_binding_digest
+            if access.release_source is not None
+            else None
+        )
+        != attempt.source_binding_digest
     ):
         raise HTTPException(404, "Diagnostic attempt not found.")
     return attempt, access, now
@@ -345,6 +383,7 @@ async def _public_attempt(
         diagnostic_revision_uuid=access.definition.uuid
         if isinstance(access, DiagnosticAccess)
         else None,
+        course_release_uuid=attempt.source_release_uuid,
         started_at=_utc(attempt.started_at),
         expires_at=_utc(attempt.expires_at),
         answered_count=sum(entry.response_state == "answered" for entry in issued),
@@ -563,6 +602,7 @@ async def start_diagnostic(
         body.source_activity_uuid,
         now,
         validate_pool=True,
+        course_release_uuid=body.course_release_uuid,
     )
     if not access.available:
         raise studytomy_http_error(
@@ -574,7 +614,7 @@ async def start_diagnostic(
         actor_user_id=actor.id,
         operation=_START,
         idempotency_key=key,
-        request_payload=body.model_dump(mode="json"),
+        request_payload=body.model_dump(mode="json", exclude_none=True),
     )
     if replay is not None:
         attempt = (
@@ -586,6 +626,8 @@ async def start_diagnostic(
                     StudyLearningAttempt.diagnostic_revision_id == access.definition.id,
                     StudyLearningAttempt.source_activity_uuid
                     == body.source_activity_uuid,
+                    StudyLearningAttempt.source_release_uuid
+                    == body.course_release_uuid,
                 )
             )
         ).scalar_one_or_none()
@@ -649,6 +691,10 @@ async def start_diagnostic(
         kind="diagnostic",
         source_course_uuid=access.curriculum.owner_course_uuid,
         source_activity_uuid=body.source_activity_uuid,
+        source_release_uuid=body.course_release_uuid,
+        source_binding_digest=access.release_source.source_binding_digest
+        if access.release_source is not None
+        else None,
         manifest_digest=access.definition.content_digest,
         policy_version_ids=access.policy_ids,
         started_at=now,
@@ -675,7 +721,12 @@ async def lesson_attempt_options(
     org: Organization,
     actor: PublicUser,
     activity_uuid: str,
+    *,
+    course_uuid: str | None = None,
+    course_release_uuid: str | None = None,
 ) -> list[LessonAttemptOption]:
+    if (course_uuid is None) != (course_release_uuid is None):
+        raise HTTPException(404, "Learning source not found.")
     await lock_organization(db, org.id)
     now = datetime.now(UTC)
     mapped = select(StudyConceptActivity.curriculum_revision_id).where(
@@ -740,6 +791,7 @@ async def lesson_attempt_options(
                         activity_uuid,
                         now,
                         validate_pool=True,
+                        course_release_uuid=course_release_uuid,
                     )
                 else:
                     await require_practice_access(
@@ -750,6 +802,8 @@ async def lesson_attempt_options(
                         activity_uuid,
                         now,
                         concept_uuid=uuid,
+                        course_uuid=course_uuid,
+                        course_release_uuid=course_release_uuid,
                     )
             except HTTPException as error:
                 if error.status_code not in {403, 404, 409, 422}:
@@ -766,6 +820,7 @@ async def read_current_attempt(
     actor: PublicUser,
     source_activity_uuid: str,
     purpose: Literal["diagnostic", "practice"],
+    course_release_uuid: str | None = None,
 ) -> AttemptRead | None:
     await lock_organization(db, org.id)
     now = datetime.now(UTC)
@@ -779,6 +834,7 @@ async def read_current_attempt(
                 StudyLearningAttempt.learner_profile_id == profile.id,
                 StudyLearningAttempt.actor_user_id == actor.id,
                 StudyLearningAttempt.source_activity_uuid == source_activity_uuid,
+                StudyLearningAttempt.source_release_uuid == course_release_uuid,
                 StudyLearningAttempt.kind == purpose,
                 StudyLearningAttempt.status == "active",
                 StudyLearningAttempt.expires_at > now,
@@ -829,7 +885,7 @@ async def start_practice(
         actor_user_id=actor.id,
         operation=_PRACTICE_START,
         idempotency_key=key,
-        request_payload=body.model_dump(mode="json"),
+        request_payload=body.model_dump(mode="json", exclude_none=True),
     )
     if replay is not None:
         return await read_diagnostic_attempt(
@@ -843,6 +899,8 @@ async def start_practice(
         body.source_activity_uuid,
         now,
         concept_uuid=body.concept_uuid,
+        course_uuid=body.course_uuid,
+        course_release_uuid=body.course_release_uuid,
     )
     attempt = StudyLearningAttempt(
         org_id=org.id,
@@ -853,6 +911,10 @@ async def start_practice(
         kind="practice",
         source_course_uuid=access.curriculum.owner_course_uuid,
         source_activity_uuid=access.activity_uuid,
+        source_release_uuid=body.course_release_uuid,
+        source_binding_digest=access.release_source.source_binding_digest
+        if access.release_source is not None
+        else None,
         manifest_digest=access.manifest_digest,
         policy_version_ids=access.policy_ids,
         started_at=now,

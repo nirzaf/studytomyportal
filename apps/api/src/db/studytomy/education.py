@@ -81,6 +81,9 @@ class StudyCourseRelease(SQLModel, table=True):
     __tablename__ = "st_course_release"
     __table_args__ = (
         UniqueConstraint("uuid", name="uq_st_course_release_uuid"),
+        UniqueConstraint(
+            "org_id", "course_uuid", "uuid", name="uq_st_course_release_course_uuid"
+        ),
         UniqueConstraint("review_id", name="uq_st_course_release_review"),
         UniqueConstraint("org_id", "course_uuid", "id", name="uq_st_course_release_scope"),
         Index("ix_st_course_release_course", "org_id", "course_uuid", "id"),

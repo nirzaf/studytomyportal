@@ -41,7 +41,7 @@ from src.db.studytomy.adaptive_evidence import (
     StudyLearningAttempt,
     StudyLearningEvidence,
 )
-from src.db.studytomy.adaptive_guidance import StudyTutorTurn
+from src.db.studytomy.adaptive_guidance import StudyTutorSession, StudyTutorTurn
 from src.db.studytomy.adaptive_items import StudyItemRevision
 from src.db.studytomy.adaptive_reports import (
     StudyProgressReport,
@@ -453,9 +453,40 @@ async def _exercise_authoring(
                 ],
             },
         )
-        db.add(lesson)
+        next_lesson = Activity(
+            org_id=org.id,
+            course_id=owned.id,
+            activity_uuid=f"activity_{uuid4()}",
+            name="Fractions practice",
+            published=True,
+            activity_type=ActivityTypeEnum.TYPE_DYNAMIC,
+            activity_sub_type=ActivitySubTypeEnum.SUBTYPE_DYNAMIC_PAGE,
+            content={
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Synthetic practice lesson."}
+                        ],
+                    }
+                ],
+            },
+        )
+        unlinked_lesson = Activity(
+            org_id=org.id,
+            course_id=owned.id,
+            activity_uuid=f"activity_{uuid4()}",
+            name="Unmapped synthetic lesson",
+            published=True,
+            activity_type=ActivityTypeEnum.TYPE_DYNAMIC,
+            activity_sub_type=ActivitySubTypeEnum.SUBTYPE_DYNAMIC_PAGE,
+            content={"type": "doc", "content": []},
+        )
+        db.add_all([lesson, next_lesson, unlinked_lesson])
         await db.commit()
         concept = saved.json()["concepts"][0]
+        prerequisite_concept = saved.json()["concepts"][1]
         native_item, native_task, native_activity = await _exercise_native_items(
             client,
             db,
@@ -478,6 +509,12 @@ async def _exercise_authoring(
             "activity_version": native_activity.current_version,
             "usage": "practice",
         }
+        next_lesson_mapping = {
+            "course_uuid": owned.course_uuid,
+            "activity_uuid": next_lesson.activity_uuid,
+            "activity_version": next_lesson.current_version,
+            "usage": "teach",
+        }
         for wrong, status in (
             ({"course_uuid": unassigned.course_uuid}, 404),
             ({"activity_uuid": "activity_missing"}, 404),
@@ -491,19 +528,31 @@ async def _exercise_authoring(
             assert denied.status_code == status
         mapped = await client.put(
             mappings_path,
-            json={"expected_version": 3, "mappings": [mapping, practice_mapping]},
+            json={
+                "expected_version": 3,
+                "mappings": [mapping, practice_mapping],
+            },
             headers=direct,
         )
         assert mapped.status_code == 200, mapped.text
         assert mapped.json()["curriculum"]["version"] == 4
-        assert sorted(mapped.json()["mappings"], key=lambda m: m["usage"]) == [
-            practice_mapping,
-            mapping,
-        ]
+        assert sorted(
+            mapped.json()["mappings"], key=lambda m: (m["usage"], m["activity_uuid"])
+        ) == sorted(
+            [practice_mapping, mapping],
+            key=lambda m: (m["usage"], m["activity_uuid"]),
+        )
+        mapped_prerequisite = await client.put(
+            f"{base}/concepts/{prerequisite_concept['uuid']}/activities",
+            json={"expected_version": 4, "mappings": [next_lesson_mapping]},
+            headers=direct,
+        )
+        assert mapped_prerequisite.status_code == 200, mapped_prerequisite.text
+        assert mapped_prerequisite.json()["curriculum"]["version"] == 5
         remove_mapped_concept = await client.put(
             graph_path,
             json={
-                "expected_version": 4,
+                "expected_version": 5,
                 "concepts": graph["concepts"][1:],
                 "prerequisites": [],
             },
@@ -551,12 +600,14 @@ async def _exercise_authoring(
             client,
             db,
             org,
+            other_org,
             base,
             detail_path,
             direct,
             unprivileged,
             draft["uuid"],
             lesson,
+            next_lesson,
             owner,
             native_item,
             native_task,
@@ -570,21 +621,22 @@ async def _exercise_authoring(
         await db.commit()
         assert (await client.post(path, json=body, headers=direct)).status_code == 404
         assert (await client.get(configuration, headers=direct)).status_code == 404
-        if session_factory is not None:
-            await _characterize_managed_course_diagnostic_conflict(
-                db,
-                org,
-                other_org,
-                owned,
-                lesson,
-                draft["uuid"],
-                admin_user,
-                regular_user,
-            )
 
 
 async def _characterize_managed_course_diagnostic_conflict(
-    db, org, other_org, course, lesson, curriculum_uuid, staff, learner
+    client,
+    db,
+    org,
+    other_org,
+    course,
+    lesson,
+    next_lesson,
+    curriculum_uuid,
+    staff,
+    learner,
+    base,
+    author_headers,
+    reviewer_headers,
 ):
     """AUD-01/AUD-03: characterize managed private access and exact release sources.
 
@@ -657,6 +709,193 @@ async def _characterize_managed_course_diagnostic_conflict(
     )
     assert concept_uuids
 
+    async def update_d16_reviews(*, item_review=None, diagnostic_review=None):
+        current = (
+            await db.execute(
+                select(StudyPolicyVersion)
+                .where(
+                    StudyPolicyVersion.org_id == org.id,
+                    StudyPolicyVersion.policy_key == StudyPolicyKey.D_16.value,
+                    StudyPolicyVersion.status == StudyPolicyStatus.APPROVED.value,
+                )
+                .order_by(StudyPolicyVersion.version.desc())
+                .limit(1)
+            )
+        ).scalar_one()
+        specified = {
+            area: decision["value"]
+            for area, decision in current.body["decision_items"].items()
+            if decision["state"] == "specified"
+        }
+        review_approvals = dict(specified["review_approvals"])
+        if item_review is not None:
+            content_rights = dict(specified["content_rights"])
+            content_rights["adaptive_original_item_rights"] = [
+                *content_rights.get("adaptive_original_item_rights", []),
+                item_review["rights_reference"],
+            ]
+            specified["content_rights"] = content_rights
+            review_approvals["adaptive_item_reviews"] = [
+                *review_approvals.get("adaptive_item_reviews", []),
+                item_review,
+            ]
+        if diagnostic_review is not None:
+            review_approvals["adaptive_diagnostic_reviews"] = [
+                *review_approvals.get("adaptive_diagnostic_reviews", []),
+                diagnostic_review,
+            ]
+        specified["review_approvals"] = review_approvals
+        current.status = StudyPolicyStatus.SUPERSEDED.value
+        await db.flush()
+        updated = await _seed_approved_policy(
+            db,
+            org,
+            staff.id,
+            StudyPolicyKey.D_16,
+            specified=specified,
+            version=current.version + 1,
+        )
+        for responsibility in POLICY_REQUIRED_RESPONSIBILITIES[StudyPolicyKey.D_16]:
+            assignment = await _seed_active_owner(
+                db,
+                org,
+                staff.id,
+                staff.id,
+                responsibility,
+            )
+            db.add(
+                StudyPolicyApproval(
+                    org_id=org.id,
+                    policy_version_id=updated.id,
+                    responsibility=responsibility.value,
+                    owner_assignment_id=assignment.id,
+                    approver_user_id=staff.id,
+                    evidence_reference="synthetic-aud04-review",
+                    rationale="Synthetic managed-release test fixture",
+                    approved_at=now,
+                )
+            )
+        await db.commit()
+        return updated
+
+    # Use a new reviewed item family so the learner's previously exposed
+    # native diagnostic item remains excluded by family-level exposure rules.
+    item_path = f"{base}/item-revisions"
+    managed_item_draft = await client.post(
+        item_path,
+        json={
+            "concept_uuid": concept_uuids[0],
+            "difficulty": 2,
+            "original_rights_reference": "synthetic-aud04-rights",
+            "original_question": {
+                "kind": "number",
+                "prompt": "Synthetic managed-release measurement.",
+            },
+            "original_answer": {
+                "kind": "number",
+                "expected": "42",
+                "tolerance": "0.01",
+            },
+        },
+        headers=author_headers | {"Idempotency-Key": f"aud04-item-{uuid4()}"},
+    )
+    assert managed_item_draft.status_code == 201, managed_item_draft.text
+    managed_item = managed_item_draft.json()
+    item_preview = await client.get(
+        f"{item_path}/{managed_item['uuid']}/review", headers=author_headers
+    )
+    assert item_preview.status_code == 200, item_preview.text
+    item_snapshot = item_preview.json()
+    item_evidence = "synthetic-aud04-item-review"
+    await update_d16_reviews(
+        item_review={
+            "revision_uuid": managed_item["uuid"],
+            "digest": item_snapshot["content_digest"],
+            "rights_reference": item_snapshot["rights_reference"],
+            "evidence_reference": item_evidence,
+            "allowed_use": "independent_diagnostic",
+            "exposure_evidence_reference": "synthetic-aud04-exposure-review",
+        }
+    )
+    managed_item_publish = await client.post(
+        f"{base}/definitions/item/{managed_item['uuid']}/publish",
+        json={
+            "expected_version": managed_item["version"],
+            "expected_digest": item_snapshot["content_digest"],
+            "review_evidence": item_evidence,
+        },
+        headers=reviewer_headers | {"Idempotency-Key": f"aud04-item-review-{uuid4()}"},
+    )
+    assert managed_item_publish.status_code == 200, managed_item_publish.text
+
+    # Use a distinct reviewed diagnostic revision so this managed-release
+    # journey does not bypass the native attempt/retake limits exercised above.
+    managed_diagnostic_draft = await client.post(
+        f"{base}/diagnostic-revisions",
+        json={
+            "name": "Synthetic managed-release diagnostic",
+            "curriculum_uuid": curriculum.uuid,
+            "required_concepts": [concept_uuids[0]],
+            "item_uuids": [managed_item["uuid"]],
+            "selector_version": diagnostic.selector_version,
+            "mastery_policy_uuid": diagnostic.mastery_policy_uuid,
+            "limits": diagnostic.manifest["limits"],
+            "rules": diagnostic.manifest["rules"],
+        },
+        headers=author_headers | {"Idempotency-Key": f"aud04-diagnostic-{uuid4()}"},
+    )
+    assert managed_diagnostic_draft.status_code == 201, managed_diagnostic_draft.text
+    managed_diagnostic_projection = managed_diagnostic_draft.json()
+    diagnostic_evidence = "synthetic-aud04-diagnostic-review"
+    await update_d16_reviews(
+        diagnostic_review={
+            "revision_uuid": managed_diagnostic_projection["uuid"],
+            "digest": managed_diagnostic_projection["content_digest"],
+            "evidence_reference": diagnostic_evidence,
+        }
+    )
+    managed_diagnostic_response = await client.post(
+        f"{base}/definitions/diagnostic/{managed_diagnostic_projection['uuid']}/publish",
+        json={
+            "expected_version": managed_diagnostic_projection["version"],
+            "expected_digest": managed_diagnostic_projection["content_digest"],
+            "review_evidence": diagnostic_evidence,
+        },
+        headers=reviewer_headers | {"Idempotency-Key": f"aud04-publish-{uuid4()}"},
+    )
+    assert managed_diagnostic_response.status_code == 200, managed_diagnostic_response.text
+    managed_diagnostic = (
+        await db.execute(
+            select(StudyDiagnosticRevision).where(
+                StudyDiagnosticRevision.org_id == org.id,
+                StudyDiagnosticRevision.uuid == managed_diagnostic_projection["uuid"],
+            )
+        )
+    ).scalar_one()
+
+    concept_uuids = tuple(
+        (
+            await db.execute(
+                select(StudyConcept.uuid)
+                .join(
+                    StudyConceptActivity,
+                    StudyConceptActivity.concept_id == StudyConcept.id,
+                )
+                .where(
+                    StudyConcept.org_id == org.id,
+                    StudyConcept.curriculum_revision_id == curriculum.id,
+                    StudyConceptActivity.activity_uuid == lesson.activity_uuid,
+                    StudyConceptActivity.usage == "teach",
+                    StudyConceptActivity.archived.is_(False),
+                    StudyConcept.archived.is_(False),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert concept_uuids
+
     # Verify the current native source path with normal authorization first.
     request = make_synthetic_request()
     native_source = await require_mapped_source(
@@ -680,6 +919,46 @@ async def _characterize_managed_course_diagnostic_conflict(
             )
         )
     ).scalar_one()
+    next_lesson = (
+        await db.execute(
+            select(Activity)
+            .join(
+                StudyConceptActivity,
+                StudyConceptActivity.activity_uuid == Activity.activity_uuid,
+            )
+            .where(
+                Activity.org_id == org.id,
+                Activity.course_id == course.id,
+                Activity.activity_uuid != lesson.activity_uuid,
+                Activity.activity_type == ActivityTypeEnum.TYPE_DYNAMIC,
+                Activity.published.is_(True),
+                StudyConceptActivity.org_id == org.id,
+                StudyConceptActivity.curriculum_revision_id == curriculum.id,
+                StudyConceptActivity.course_id == course.id,
+                StudyConceptActivity.usage == "teach",
+                StudyConceptActivity.archived.is_(False),
+            )
+            .limit(1)
+        )
+    ).scalar_one()
+    unmapped_lesson = (
+        await db.execute(
+            select(Activity)
+            .where(
+                Activity.org_id == org.id,
+                Activity.course_id == course.id,
+                Activity.activity_uuid.not_in(
+                    select(StudyConceptActivity.activity_uuid).where(
+                        StudyConceptActivity.org_id == org.id,
+                        StudyConceptActivity.curriculum_revision_id == curriculum.id,
+                    )
+                ),
+                Activity.activity_type == ActivityTypeEnum.TYPE_DYNAMIC,
+                Activity.published.is_(True),
+            )
+            .limit(1)
+        )
+    ).scalar_one()
     db.add(
         ChapterActivity(
             org_id=org.id,
@@ -690,6 +969,20 @@ async def _characterize_managed_course_diagnostic_conflict(
             creation_date="",
             update_date="",
         )
+    )
+    db.add_all(
+        [
+            ChapterActivity(
+                org_id=org.id,
+                course_id=course.id,
+                chapter_id=chapter.id,
+                activity_id=activity.id,
+                order=index,
+                creation_date="",
+                update_date="",
+            )
+            for index, activity in enumerate((next_lesson, unmapped_lesson), start=2)
+        ]
     )
     await db.commit()
 
@@ -861,6 +1154,297 @@ async def _characterize_managed_course_diagnostic_conflict(
         source.authorization.progression_policy.id
         in source.authorization.current_policy_version_ids
     )
+    assert len(source.source_binding_digest) == 64
+    from src.services.studytomy.adaptive_progress import _managed_release_mappings
+
+    managed_candidates = await _managed_release_mappings(
+        db, org, learner, source, now
+    )
+    assert any(
+        row[0].activity_uuid == next_lesson.activity_uuid
+        for row in managed_candidates
+    ), [row[0].activity_uuid for row in managed_candidates]
+    managed_diagnostic_access = await require_diagnostic_access(
+        make_synthetic_request(),
+        db,
+        org,
+        learner,
+        profile,
+        managed_diagnostic.uuid,
+        lesson.activity_uuid,
+        now,
+        validate_pool=True,
+        course_release_uuid=release.uuid,
+    )
+    assert managed_diagnostic_access.release_source is not None
+    assert (
+        managed_diagnostic_access.release_source.source_binding_digest
+        == source.source_binding_digest
+    )
+
+    # Re-consent only inside this synthetic fixture, then exercise the actual
+    # private managed-release attempt, evidence, mastery, recommendation, and
+    # tutor routes. No production approval or learner activation is implied.
+    consent_now = datetime.now(UTC)
+    now = consent_now
+    consent_policy_rows = (
+        await db.execute(
+            select(StudyPolicyVersion.policy_key, StudyPolicyVersion.id).where(
+                StudyPolicyVersion.org_id == org.id,
+                StudyPolicyVersion.policy_key.in_(
+                    (
+                        StudyPolicyKey.D_01.value,
+                        StudyPolicyKey.D_03.value,
+                        StudyPolicyKey.D_05.value,
+                        StudyPolicyKey.D_12.value,
+                        StudyPolicyKey.D_18.value,
+                    )
+                ),
+                StudyPolicyVersion.status == StudyPolicyStatus.APPROVED.value,
+            )
+        )
+    ).all()
+    consent_policy_by_key = {key: policy_id for key, policy_id in consent_policy_rows}
+    consent_policy_ids = [
+        consent_policy_by_key[key]
+        for key in (
+            StudyPolicyKey.D_01.value,
+            StudyPolicyKey.D_03.value,
+            StudyPolicyKey.D_12.value,
+            StudyPolicyKey.D_05.value,
+            StudyPolicyKey.D_18.value,
+        )
+    ]
+    db.add(
+        StudyConsentEvent(
+            org_id=org.id,
+            learner_profile_id=profile.id,
+            actor_user_id=learner.id,
+            subject_user_id=learner.id,
+            purpose_code="learning_terms",
+            choice="accept",
+            notice_version="fixture-v1",
+            scope_codes=[
+                "course_release",
+                "adaptive_diagnostics",
+                "adaptive_practice",
+                "adaptive_native_assignments",
+                "adaptive_mastery",
+                "adaptive_staff_mastery",
+                "adaptive_progress_report",
+                "adaptive_guidance",
+            ],
+            policy_version_ids=consent_policy_ids,
+            effective_at=consent_now,
+        )
+    )
+    await db.commit()
+
+    learner_headers = _headers(
+        learner, org, "password", f"aud04-managed-attempt-{uuid4()}"
+    )
+    managed_scope = {
+        "course_uuid": course.course_uuid,
+        "course_release_uuid": release.uuid,
+    }
+    attempt_options = await client.get(
+        f"{base}/me/attempts/options",
+        params={"source_activity_uuid": lesson.activity_uuid, **managed_scope},
+        headers=learner_headers,
+    )
+    assert attempt_options.status_code == 200, attempt_options.text
+    assert any(
+        row["purpose"] == "diagnostic" and row["uuid"] == managed_diagnostic.uuid
+        for row in attempt_options.json()
+    ), attempt_options.json()
+    for partial_scope in (
+        {"course_uuid": course.course_uuid},
+        {"course_release_uuid": release.uuid},
+    ):
+        denied_options = await client.get(
+            f"{base}/me/attempts/options",
+            params={
+                "source_activity_uuid": lesson.activity_uuid,
+                **partial_scope,
+            },
+            headers=learner_headers,
+        )
+        assert denied_options.status_code == 404, denied_options.text
+    denied_cross_lesson = await client.post(
+        f"{base}/me/diagnostic-attempts",
+        json={
+            "diagnostic_revision_uuid": managed_diagnostic.uuid,
+            "source_activity_uuid": unmapped_lesson.activity_uuid,
+            "course_release_uuid": release.uuid,
+        },
+        headers=learner_headers | {"Idempotency-Key": f"aud04-unmapped-{uuid4()}"},
+    )
+    assert denied_cross_lesson.status_code == 404, denied_cross_lesson.text
+
+    start_body = {
+        "diagnostic_revision_uuid": managed_diagnostic.uuid,
+        "source_activity_uuid": lesson.activity_uuid,
+        "course_release_uuid": release.uuid,
+    }
+    start_key = f"aud04-managed-start-{uuid4()}"
+    started = await client.post(
+        f"{base}/me/diagnostic-attempts",
+        json=start_body,
+        headers=learner_headers | {"Idempotency-Key": start_key},
+    )
+    assert started.status_code == 201, started.text
+    started_view = started.json()
+    assert started_view["status"] == "active"
+    assert started_view["course_release_uuid"] == release.uuid
+    replay = await client.post(
+        f"{base}/me/diagnostic-attempts",
+        json=start_body,
+        headers=learner_headers | {"Idempotency-Key": start_key},
+    )
+    assert replay.status_code == 201 and replay.json() == started_view
+    attempt_row = (
+        await db.execute(
+            select(StudyLearningAttempt).where(
+                StudyLearningAttempt.org_id == org.id,
+                StudyLearningAttempt.uuid == started_view["uuid"],
+            )
+        )
+    ).scalar_one()
+    assert attempt_row.source_release_uuid == release.uuid
+    assert attempt_row.source_binding_digest == source.source_binding_digest
+    assert "source_binding_digest" not in started.text
+
+    attempt_item = (
+        await db.execute(
+            select(StudyAttemptItem).where(
+                StudyAttemptItem.org_id == org.id,
+                StudyAttemptItem.uuid == started_view["current_item"]["uuid"],
+            )
+        )
+    ).scalar_one()
+    answer_item = await db.get(StudyItemRevision, attempt_item.item_revision_id)
+    assert answer_item.kind == "number"
+    learner_response = {"kind": "number", "value": "0"}
+    answer_body = {
+        "item_uuid": attempt_item.uuid,
+        "expected_version": started_view["version"],
+        "response": learner_response,
+        "declared_external_help": False,
+    }
+    answer_key = f"aud04-managed-response-{uuid4()}"
+    response = await client.post(
+        f"{base}/me/attempts/{started_view['uuid']}/responses",
+        json=answer_body,
+        headers=learner_headers | {"Idempotency-Key": answer_key},
+    )
+    assert response.status_code == 200, response.text
+    receipt = response.json()
+    assert receipt["status"] == "completed" and receipt["next_item"] is None
+    assert (
+        await client.post(
+            f"{base}/me/attempts/{started_view['uuid']}/responses",
+            json=answer_body,
+            headers=learner_headers | {"Idempotency-Key": answer_key},
+        )
+    ).json() == receipt
+    summary = await client.get(receipt["summary_ref"], headers=learner_headers)
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["coverage_complete"] is True
+    evidence = (
+        await db.execute(
+            select(StudyLearningEvidence).where(
+                StudyLearningEvidence.org_id == org.id,
+                StudyLearningEvidence.logical_source_uuid == attempt_item.uuid,
+            )
+        )
+    ).scalar_one()
+    assert evidence.outcome == "incorrect" and evidence.eligible is True
+
+    progress = await client.get(
+        f"{base}/me/lesson-mastery",
+        params={"activity_uuid": lesson.activity_uuid, **managed_scope},
+        headers=learner_headers,
+    )
+    assert progress.status_code == 200, progress.text
+    assert {row["concept_uuid"] for row in progress.json()["concepts"]} == set(
+        concept_uuids
+    )
+    recommendations = await client.get(
+        f"{base}/me/recommendations",
+        params={"activity_uuid": lesson.activity_uuid, **managed_scope},
+        headers=learner_headers,
+    )
+    assert recommendations.status_code == 200, recommendations.text
+    assert any(
+        row.get("activity_uuid") == next_lesson.activity_uuid
+        and row.get("course_release_uuid") == release.uuid
+        for row in recommendations.json()
+    ), recommendations.json()
+
+    tutor_options = await client.get(
+        f"{base}/me/tutor-options",
+        params={"activity_uuid": lesson.activity_uuid, **managed_scope},
+        headers=learner_headers,
+    )
+    assert tutor_options.status_code == 200, tutor_options.text
+    assert tutor_options.json()["mode"] == "guided"
+    for partial_scope in (
+        {"course_uuid": course.course_uuid},
+        {"course_release_uuid": release.uuid},
+    ):
+        denied_tutor_options = await client.get(
+            f"{base}/me/tutor-options",
+            params={"activity_uuid": lesson.activity_uuid, **partial_scope},
+            headers=learner_headers,
+        )
+        assert denied_tutor_options.status_code == 404, denied_tutor_options.text
+    tutor_body = {
+        "activity_uuid": lesson.activity_uuid,
+        **managed_scope,
+    }
+    foreign_course_uuid = (
+        await db.execute(
+            select(Course.course_uuid)
+            .where(Course.org_id == other_org.id)
+            .limit(1)
+        )
+    ).scalar_one()
+    denied_tutor_cross_course = await client.post(
+        f"{base}/me/tutor-sessions",
+        json=tutor_body | {"course_uuid": foreign_course_uuid},
+        headers=learner_headers,
+    )
+    assert denied_tutor_cross_course.status_code == 404, denied_tutor_cross_course.text
+    denied_tutor_cross_lesson = await client.post(
+        f"{base}/me/tutor-sessions",
+        json=tutor_body | {"activity_uuid": unmapped_lesson.activity_uuid},
+        headers=learner_headers,
+    )
+    assert denied_tutor_cross_lesson.status_code == 404, denied_tutor_cross_lesson.text
+    tutor = await client.post(
+        f"{base}/me/tutor-sessions", json=tutor_body, headers=learner_headers
+    )
+    assert tutor.status_code == 201, tutor.text
+    tutor_row = (
+        await db.execute(
+            select(StudyTutorSession).where(
+                StudyTutorSession.org_id == org.id,
+                StudyTutorSession.uuid == tutor.json()["uuid"],
+            )
+        )
+    ).scalar_one()
+    assert tutor_row.source_release_uuid == release.uuid
+    assert tutor_row.source_binding_digest == source.source_binding_digest
+    stored_tutor, tutor_context = await load_guidance_context(
+        Request({"type": "http", "headers": []}),
+        db,
+        org,
+        learner,
+        tutor.json()["uuid"],
+    )
+    assert stored_tutor.uuid == tutor_row.uuid
+    assert tutor_context.lesson_title == frozen_activity["name"]
+    assert "Synthetic released lesson." in tutor_context.lesson_prose
 
     with pytest.raises(HTTPException) as native_draft_denied:
         await require_mapped_source(
@@ -1288,12 +1872,14 @@ async def _exercise_publication(
     client,
     db,
     org,
+    other_org,
     base,
     detail_path,
     author_headers,
     reviewer_headers,
     revision_uuid,
     lesson,
+    next_lesson,
     education_owner,
     native_item,
     native_task,
@@ -1307,6 +1893,7 @@ async def _exercise_publication(
     snapshot = preview.json()
     assert {mapping["activity_uuid"] for mapping in snapshot["mappings"]} == {
         lesson.activity_uuid,
+        next_lesson.activity_uuid,
         native_activity.activity_uuid,
     }
     owning_course = snapshot["curriculum"]["owner_course_uuid"]
@@ -1316,7 +1903,7 @@ async def _exercise_publication(
     }
     endpoint = f"{base}/definitions/curriculum/{revision_uuid}"
     publication = {
-        "expected_version": 4,
+        "expected_version": 5,
         "expected_digest": snapshot["content_digest"],
         "review_evidence": "synthetic-curriculum-review-evidence",
     }
@@ -1397,7 +1984,7 @@ async def _exercise_publication(
         StudyPolicyKey.D_09: {
             "release_schedule": {
                 "ungated_text_activities": {
-                    owning_course: [lesson.activity_uuid],
+                    owning_course: [lesson.activity_uuid, next_lesson.activity_uuid],
                 },
             },
             "mastery_gate": {
@@ -1724,9 +2311,33 @@ async def _exercise_publication(
     )
     assert deleted.status_code == 200, deleted.text
     assert set((await db.execute(history_query)).scalars()) == retained_before
+    course = (
+        await db.execute(
+            select(Course).where(
+                Course.org_id == org.id,
+                Course.course_uuid == owning_course,
+            )
+        )
+    ).scalar_one()
+    staff = await db.get(User, education_owner.user_id)
+    await _characterize_managed_course_diagnostic_conflict(
+        client,
+        db,
+        org,
+        other_org,
+        course,
+        lesson,
+        next_lesson,
+        revision_uuid,
+        staff,
+        learner,
+        base,
+        author_headers,
+        reviewer_headers,
+    )
     retirement = await client.post(
         f"{endpoint}/retire",
-        json={"expected_version": 5, "reason": "SUPERSEDED"},
+        json={"expected_version": published.json()["version"], "reason": "SUPERSEDED"},
         headers=reviewer_headers,
     )
     assert retirement.status_code == 200, retirement.text
@@ -2910,8 +3521,11 @@ async def _exercise_learner_attempt(
     suggested = await client.get(recommendations, params=query, headers=headers)
     assert suggested.status_code == 200, suggested.text
     assert suggested.headers["Cache-Control"] == "private, no-store"
-    assert len(suggested.json()) == 1
-    suggestion = suggested.json()[0]
+    suggestion = next(
+        row
+        for row in suggested.json()
+        if row["reason"] == "not_yet_assessed"
+    )
     assert suggestion["reason"] == "not_yet_assessed"
     assert suggestion["activity_uuid"] != activity_uuid
     assert (
@@ -2930,9 +3544,10 @@ async def _exercise_learner_attempt(
     await db.commit()
     filtered = await client.get(recommendations, params=query, headers=headers)
     assert filtered.status_code == 200, filtered.text
-    assert filtered.json() == [
-        {"reason": "no_accessible_activity", "support_action": "return_to_lesson"}
-    ]
+    assert all(
+        row.get("activity_uuid") != candidate.activity_uuid
+        for row in filtered.json()
+    )
     candidate.published = True
     await db.commit()
 
