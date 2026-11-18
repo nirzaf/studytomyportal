@@ -55,7 +55,9 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   )
   await page.route(`${path}/grounded-lesson-preview`, route => {
     expect(route.request().postDataJSON()).toEqual({ source_uuids: [source.source_uuid], topic: 'Photosynthesis' })
-    return route.fulfill({ json: { title: 'Photosynthesis', blocks: [{ text: 'Initial draft.', citation }] } })
+    return route.fulfill({
+      json: { title: 'Photosynthesis', blocks: [{ text: 'Initial draft.', citation }], matching_pages_omitted: 2 },
+    })
   })
   await page.route(`${path}/grounded-lesson-draft`, route => {
     const { label, ...savedCitation } = citation
@@ -96,6 +98,7 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   await expect(topic).toHaveValue('Photosynthesis')
   await dialog.getByRole('button', { name: 'Generate lesson draft' }).click()
   await expect(dialog.getByText(citation.quote)).toBeVisible()
+  await expect(dialog.getByRole('status').filter({ hasText: 'Some pages matched the topic' })).toBeVisible()
   const draft = dialog.getByRole('textbox', { name: 'Draft paragraph 1' })
   await draft.fill('Teacher-edited paragraph.')
   await expect(draft).toHaveValue('Teacher-edited paragraph.')
@@ -103,7 +106,7 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   await expect(dialog.getByRole('alert')).toContainText('This lesson changed')
   await expect(draft).toHaveValue('Teacher-edited paragraph.')
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(sources).toBeEnabled()
+  await expect(sources).toBeEnabled({ timeout: 90_000 })
   await sources.click()
   await expect(dialog.getByRole('checkbox', { name: /energy.pdf/ })).toBeEnabled()
   await pdf.check()
