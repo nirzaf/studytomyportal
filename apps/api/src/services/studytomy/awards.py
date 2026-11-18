@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter
 from sqlmodel import select
@@ -19,6 +20,7 @@ from src.services.studytomy.grading_contract import retained_grading_contract_di
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.policies import lock_organization
 from src.services.studytomy.prerequisites import ResourceUUID, course_completion_text_activities, retained_release_pass
+from src.services.studytomy.record_requests import _self_profile
 
 _DisplayName = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=160)]
 
@@ -230,4 +232,68 @@ async def issue_managed_certificate(
         )
     return ManagedCertificateIssueReceipt(
         award_uuid=award.event_uuid, release_uuid=release_uuid, issued_at=award.created_at,
+    )
+
+
+class ManagedCertificateVerification(ManagedCertificateIssueReceipt):
+    award_name: str
+    issuer_name: str
+    course_name: str
+
+
+async def verify_my_managed_certificate(
+    db: AsyncSession, org: Organization, actor: PublicUser, award_uuid: UUID,
+) -> ManagedCertificateVerification:
+    """Read the learner's own immutable award, independent of course access."""
+    profile = await _self_profile(db, org, actor)
+    unavailable = studytomy_http_error(404, "MANAGED_CERTIFICATE_UNAVAILABLE", "Certificate unavailable.")
+    row = (await db.execute(
+        select(StudyBusinessEvent, StudyCourseRelease, StudyPolicyVersion)
+        .select_from(StudyBusinessEvent)
+        .join(StudyCourseRelease, StudyCourseRelease.uuid == StudyBusinessEvent.resource_uuid)
+        .join(StudyCourseReview, StudyCourseReview.id == StudyCourseRelease.review_id)
+        .join(StudyPolicyVersion, StudyPolicyVersion.id == StudyCourseRelease.rights_policy_id)
+        .where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.event_uuid == str(award_uuid),
+            StudyBusinessEvent.subject_uuid == profile.learner_uuid,
+            StudyBusinessEvent.resource_kind == "course_release",
+            StudyBusinessEvent.action == "studytomy.award.issued",
+            StudyCourseRelease.org_id == org.id,
+            StudyCourseReview.org_id == org.id,
+            StudyCourseReview.course_uuid == StudyCourseRelease.course_uuid,
+            StudyCourseReview.decision == "approved",
+            StudyCourseReview.revision_sha256 == StudyCourseRelease.snapshot_sha256,
+            StudyPolicyVersion.org_id == org.id,
+            StudyPolicyVersion.policy_key == StudyPolicyKey.D_16.value,
+        )
+    )).one_or_none()
+    if row is None:
+        raise unavailable
+    award, release, rights = row
+    if canonical_request_hash(release.snapshot) != release.snapshot_sha256:
+        raise unavailable
+    versions = (release.policy_binding or {}).get("versions")
+    pinned_rights = versions.get(StudyPolicyKey.D_16.value) if isinstance(versions, dict) else None
+    if (
+        not isinstance(pinned_rights, dict)
+        or pinned_rights.get("policy_id") != rights.id
+        or pinned_rights.get("body_sha256") != canonical_request_hash(rights.body)
+        or rights.id not in (award.policy_refs or [])
+    ):
+        raise unavailable
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_16, rights.body)
+    if body is None or any(blockers.values()):
+        raise unavailable
+    try:
+        conditions = _certificate_conditions(body, release.course_uuid)
+    except ValueError:
+        raise unavailable from None
+    course = release.snapshot.get("course")
+    course_name = course.get("name") if isinstance(course, dict) else None
+    if conditions is None or conditions.issuance != "reviewed" or not isinstance(course_name, str) or not course_name.strip():
+        raise unavailable
+    return ManagedCertificateVerification(
+        award_uuid=award.event_uuid, release_uuid=release.uuid, issued_at=award.created_at,
+        award_name=conditions.award_name, issuer_name=conditions.issuer_name, course_name=course_name,
     )

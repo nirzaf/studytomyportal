@@ -6,7 +6,7 @@ from hashlib import sha256
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -34,12 +34,14 @@ from src.db.studytomy.family import StudyLearnerProfile
 from src.db.studytomy.governance import StudyBusinessEvent, StudyPolicyKey
 from src.db.trails import Trail
 from src.db.users import PublicUser, User
+from src.security.session_context import SessionProvenance, set_session_provenance
 from src.services.courses.activities import assignments
 from src.services.courses.certifications import (
     get_all_user_certificates,
     get_certificate_by_user_certification_uuid,
 )
 from src.services.studytomy import access_policy, assignment_adapter, awards, grading, releases
+from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.metrics import release_completion_observations
 from src.services.studytomy.prerequisites import managed_assessed_pass_status
 from src.tests.studytomy.test_content_evidence import _seed_postgres_release_sources
@@ -203,9 +205,12 @@ async def test_issued_round_retains_exact_started_release(
             snapshot_sha256=review.revision_sha256, snapshot=snapshot, media_manifest=media_manifest,
             assessment_policy_id=policies[0].id, progression_policy_id=policies[1].id,
             retention_policy_id=policies[2].id, rights_policy_id=policies[3].id,
-            retention_category="synthetic", policy_binding={"fixture": True},
+            retention_category="synthetic", policy_binding={"versions": {"D-16": {
+                "policy_id": policies[3].id, "body_sha256": canonical_request_hash(policies[3].body),
+            }}},
         )
-        profile = StudyLearnerProfile(org_id=org.id, user_id=user.id, created_by_user_id=user.id)
+        profile = StudyLearnerProfile(org_id=org.id, user_id=user.id, created_by_user_id=user.id,
+                                      control_mode="independent")
         db.add_all([release, profile])
         await db.flush()
         now = datetime.now(UTC)
@@ -434,6 +439,31 @@ async def test_issued_round_retains_exact_started_release(
         assert await grading.issue_native_grading_contract(db, assignment, actor)
         changed = await grading.matching_grading_contract(db, assignment, stored, [task])
         assert "assessment_release_uuid" not in changed.after_state
+        grant = await db.scalar(select(StudyCourseAccessGrant).where(
+            StudyCourseAccessGrant.release_id == release.id,
+            StudyCourseAccessGrant.learner_profile_id == profile.id,
+        ))
+        grant.revoked_at = datetime.now(UTC)
+        db.add(StudyLearnerProfile(
+            org_id=org.id, user_id=certificate_reviewer.id, created_by_user_id=user.id,
+            control_mode="independent",
+        ))
+        await db.flush()
+        with pytest.raises(HTTPException) as no_session:
+            await awards.verify_my_managed_certificate(db, org, actor, UUID(award.award_uuid))
+        assert no_session.value.status_code == 403
+        set_session_provenance(SessionProvenance(amr="password", org_id=org.id))
+        try:
+            verified = await awards.verify_my_managed_certificate(db, org, actor, UUID(award.award_uuid))
+            assert verified.model_dump() == award.model_dump() | {
+                "award_name": "Synthetic certificate", "issuer_name": "Synthetic issuer",
+                "course_name": course.name,
+            }
+            with pytest.raises(HTTPException) as other_profile:
+                await awards.verify_my_managed_certificate(db, org, certificate_reviewer, UUID(award.award_uuid))
+            assert other_profile.value.status_code == 404
+        finally:
+            set_session_provenance(None)
 
 
 @pytest.mark.studytomy_postgres

@@ -50,8 +50,10 @@ from src.services.studytomy.awards import (
     ManagedCertificateEligibility,
     ManagedCertificateIssue,
     ManagedCertificateIssueReceipt,
+    ManagedCertificateVerification,
     issue_managed_certificate,
     preview_managed_certificate_eligibility,
+    verify_my_managed_certificate,
 )
 from src.services.studytomy.assessment_integrity import (
     IntegrityConcern, IntegrityDismissal, IntegrityReceipt, IntegrityResponse, dismiss_integrity_concern, learner_integrity_case,
@@ -410,6 +412,13 @@ async def api_issue_managed_certificate(
     receipt = await issue_managed_certificate(db, org, actor, course_uuid, release_uuid, learner_uuid, body)
     await db.commit()
     return receipt
+
+
+@router.get("/orgs/{org_uuid}/me/awards/{award_uuid}")
+async def api_verify_my_managed_certificate(
+    org: AdaptiveOrg, actor: AdaptiveActor, db: AdaptiveDB, award_uuid: UUID,
+) -> ManagedCertificateVerification:
+    return await verify_my_managed_certificate(db, org, actor, award_uuid)
 
 
 @router.post("/orgs/{org_uuid}/courses/{course_uuid}/assignments/{assignment_uuid}/submissions/{submission_uuid}/appeals")
