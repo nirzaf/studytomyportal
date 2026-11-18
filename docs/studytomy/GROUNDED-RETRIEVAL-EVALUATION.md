@@ -51,3 +51,43 @@ For local comparison, `LEARNHOUSE_RAG_SMALL_COURSE_EXACT=true` enables an exact 
 Row-level security remains deferred. Any future local evaluation should use a non-owner role without `BYPASSRLS`, test default denial and cross-tenant access, and account for transaction and connection reuse. No shared roles or policies changed. [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
 
 The existing MCP OAuth path uses the requested MCP resource in its token lookup and cache partition. The grounded preview tools delegate to the same service as the HTTP routes and keep inbound tokens out of downstream credentials. Teacher review and release approval remain required. [MCP draft authoring](MCP-DRAFT-AUTHORING.md) · [Current MCP middleware](../../apps/api/src/security/mcp_auth.py) · [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
+
+## Lesson-source excerpt characterization (AUD-17)
+
+Commit [`2a62e4764e8c1817870b9a4db365e5bba5cc4353`](../../apps/api/src/services/studytomy/grounding.py)
+changes transient prompt-context selection for explicit course-and-lesson
+sources. The selector now examines overlapping 2,000-character windows (1,800
+character stride) across each extracted page, keeps the highest lexical
+overlap per page, then selects at most six pages across up to five sources. The
+stored PDF bytes, extracted page text, source UUID/hash/page identity and saved
+citation format do not change; no schema migration was needed. Saved draft and
+release evidence still identifies the exact source revision and quote. The
+full provider prompt is not retained, so prior prompt context is not exactly
+replayable.
+
+The PostgreSQL synthetic fixture has an irrelevant first page, an unreadable
+blank page, a page with photosynthesis evidence and a long fourth page whose
+relevant aurora evidence appears after the old 2,000-character prefix. The new
+selector returns the exact quote with original page 4 provenance. A
+non-matching phrase using different vocabulary returns an actionable 422 and
+does not call the provider; retrieval remains lexical and does not expand
+synonyms or establish semantic support. The prompt-like sentence in the
+selected source remains inside the JSON excerpt data, while the system prompt
+instructs the model to ignore embedded source instructions. This uses a mocked
+provider and does not establish how a real model responds to adversarial
+content.
+
+The same fixture confirms a PDF with no extracted text fails with the existing
+OCR-required response and a text file is rejected as an unsupported upload.
+The unreadable fixture is a blank text page; it is not a rendered image-only
+scan. The extractor has no OCR. A scan with no text layer returns an
+OCR-required error instead of being reported as successfully extracted. The
+regression also retains the existing cross-organization/course/lesson denial, source
+revocation during generation, exact citation validation and stale-evidence
+checks. Verification on the dedicated loopback PostgreSQL 16.16 / pgvector
+0.8.7 container passed `test_grounded_material_postgres.py` (1 passed) and
+`test_grounded_retrieval_postgres.py` (3 passed). The changed source-panel
+component passed focused ESLint and the web TypeScript check. Browser acceptance,
+real-provider factual support, OCR, representative approved curriculum
+judgments and learner/pilot approval remain unverified. No hybrid runtime
+search, vector-model change or real-user flow was enabled.
