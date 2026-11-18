@@ -123,8 +123,14 @@ function DraftMaterials({ route, token, version }: { route: string; token: strin
         <label className="block space-y-1 text-sm font-medium">
           <span className="block">Searchable PDF</span>
           <input type="file" name="file" accept=".pdf,application/pdf" required disabled={state?.busy}
-            className="block w-full text-sm" />
+            aria-describedby="grounded-source-limits" className="block w-full text-sm" />
         </label>
+        <p id="grounded-source-limits" className="max-w-prose text-sm text-muted-foreground">
+          Searchable PDFs only; scanned PDFs need OCR first. Each file is limited to 4 MiB, 200 pages, and 100,000
+          extracted characters. Topic search uses shared words without synonym expansion and sends up to six matching
+          excerpts of 2,000 characters from the five selected PDFs. If no words match, the service explains the gap and
+          skips AI generation.
+        </p>
         <Button type="submit" size="sm" disabled={state?.busy}>{state?.busy ? 'Uploading…' : 'Upload PDF'}</Button>
         {state?.message && <p role={state.error ? 'alert' : 'status'} className="text-sm">{state.message}</p>}
       </form>

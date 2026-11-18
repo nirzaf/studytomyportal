@@ -37,6 +37,9 @@ from src.services.studytomy.idempotency import canonical_request_hash, claim_ide
 from src.services.studytomy.policies import lock_organization
 
 _PDF_LIMIT = 4 * 1024 * 1024
+_PAGE_EXCERPT_LIMIT = 2000
+_PAGE_EXCERPT_OVERLAP = 200
+_PAGE_EXCERPT_STRIDE = _PAGE_EXCERPT_LIMIT - _PAGE_EXCERPT_OVERLAP
 _COMMON_TERMS = frozenset({"and", "about", "draft", "explain", "for", "from", "lesson", "the", "using", "with"})
 
 
@@ -186,14 +189,20 @@ async def _retrieve_pages(db: AsyncSession, course: Course, lesson: Activity, co
         raise HTTPException(404, "One or more selected draft sources are unavailable.")
     terms = _terms(command.topic)
     candidates = []
+    stride = _PAGE_EXCERPT_STRIDE
     for source_uuid, digest, label, pages in rows:
         for page in pages:
-            text = page["text"][:2000]
-            score = len(terms & _terms(text))
-            if score:
-                candidates.append((score, {
+            text = page["text"]
+            best: tuple[int, str] | None = None
+            for offset in range(0, len(text), stride):
+                excerpt = text[offset:offset + _PAGE_EXCERPT_LIMIT].strip()
+                score = len(terms & _terms(excerpt))
+                if score and (best is None or score > best[0]):
+                    best = (score, excerpt)
+            if best:
+                candidates.append((best[0], {
                     "source_uuid": source_uuid, "sha256": digest, "label": label,
-                    "page": page["page"], "text": text,
+                    "page": page["page"], "text": best[1],
                 }))
     candidates.sort(key=lambda item: (-item[0], item[1]["source_uuid"], item[1]["page"]))
     if not candidates:
