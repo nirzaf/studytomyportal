@@ -83,6 +83,7 @@ async def test_report_queue_summary_returns_only_aggregate_safe_fields():
     rows = [
         ("queued", None, 2, now - timedelta(seconds=125)),
         ("sent", None, 3, now - timedelta(days=2)),
+        ("reconciliation_required", None, 1, now - timedelta(seconds=600)),
         ("retry", "PROVIDER_TEMPORARILY_UNAVAILABLE", 1, now - timedelta(seconds=40)),
         ("retry", "recipient@example.invalid", 1, now - timedelta(seconds=20)),
         ("retry", "RECIPIENT_SECRET_DO_NOT_LOG", 1, now - timedelta(seconds=10)),
@@ -97,8 +98,10 @@ async def test_report_queue_summary_returns_only_aggregate_safe_fields():
     assert summary["status_counts"] == {
         "queued": 2,
         "provider_accepted": 3,
+        "provider_outcome_unknown": 1,
         "retry": 3,
         "unknown": 1,
     }
-    assert summary["oldest_pending_age_seconds"] >= 120
+    assert 120 <= summary["oldest_pending_age_seconds"] < 600
+    assert summary["oldest_unknown_delivery_age_seconds"] >= 600
     assert summary["failure_code_counts"] == {"PROVIDER_TEMPORARILY_UNAVAILABLE": 1}

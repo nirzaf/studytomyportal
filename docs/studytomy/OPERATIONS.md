@@ -6,7 +6,7 @@ The report scheduler is off by default. Enable `LEARNHOUSE_STUDYTOMY_REPORT_DELI
 
 The next poll moves the expired lease to `reconciliation_required` with `LEASE_EXPIRED_OUTCOME_UNKNOWN`. The provider may already have accepted the message. The scheduler does not claim that row again, and the original sender cannot finalize the expired lease. Keep the row and its recorded outcome for review.
 
-1. Check aggregate scheduler logs for reconciliation and dead-letter counts. Use the affected organization's authorized operational access to confirm the state. Keep recipient addresses, report contents, and private identifiers out of shared tickets and logs.
+1. Check aggregate scheduler logs for reconciliation and dead-letter counts. `oldest_unknown_delivery_age_seconds` measures time since the oldest unresolved delivery was first queued. Use the affected organization's authorized operational access to confirm the state. Keep recipient addresses, report contents, and private identifiers out of shared tickets and logs.
 2. Preserve the pending record and refer it to the named operator. Confirm provider acceptance using approved provider records, if available. If the evidence is inconclusive, maintain the unknown outcome. Provider acceptance alone does not establish recipient delivery.
 3. Before any authorized replacement notification, recheck the current report version, recipient authority, and purpose. The current scheduler has no operator reconciliation command for resolving an unknown provider outcome. Follow the approved incident workflow when available; changing the database row or restarting the scheduler cannot establish delivery.
 

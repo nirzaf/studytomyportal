@@ -64,25 +64,30 @@ async def _queue_summary(db_session: AsyncSession) -> dict:
     status_counts: dict[str, int] = {}
     failure_code_counts: dict[str, int] = {}
     oldest_pending_age_seconds = 0
+    oldest_unknown_delivery_age_seconds = 0
     for raw_status, error_code, count, oldest_created_at in rows:
         status = raw_status if raw_status in _SAFE_STATUSES else "unknown"
         log_status = _LOG_STATUS_LABELS.get(status, status)
         status_counts[log_status] = status_counts.get(log_status, 0) + count
-        if status in _PENDING_STATUSES and oldest_created_at is not None:
+        if oldest_created_at is not None and (
+            status in _PENDING_STATUSES or status == "reconciliation_required"
+        ):
             created_at = oldest_created_at
             if created_at.tzinfo is None:
                 created_at = created_at.replace(tzinfo=UTC)
             else:
                 created_at = created_at.astimezone(UTC)
-            oldest_pending_age_seconds = max(
-                oldest_pending_age_seconds,
-                max(0, int((now - created_at).total_seconds())),
-            )
+            age = max(0, int((now - created_at).total_seconds()))
+            if status == "reconciliation_required":
+                oldest_unknown_delivery_age_seconds = max(oldest_unknown_delivery_age_seconds, age)
+            else:
+                oldest_pending_age_seconds = max(oldest_pending_age_seconds, age)
         if error_code in _SAFE_FAILURE_CODES:
             failure_code_counts[error_code] = failure_code_counts.get(error_code, 0) + count
     return {
         "status_counts": status_counts,
         "oldest_pending_age_seconds": oldest_pending_age_seconds,
+        "oldest_unknown_delivery_age_seconds": oldest_unknown_delivery_age_seconds,
         "failure_code_counts": failure_code_counts,
     }
 
@@ -98,13 +103,17 @@ async def _run_once() -> None:
         tally = await run_report_delivery_batch(db_session, worker_id=worker_id)
         summary = await _queue_summary(db_session)
 
-    if tally["claimed"] or summary["failure_code_counts"] or any(
-        summary["status_counts"].get(status, 0) for status in _PENDING_STATUSES
+    counts = summary["status_counts"]
+    if (
+        tally["claimed"]
+        or summary["failure_code_counts"]
+        or counts.get("provider_outcome_unknown")
+        or any(counts.get(status, 0) for status in _PENDING_STATUSES)
     ):
         logger.info(
             "Studytomy report delivery batch: claimed=%d provider_accepted=%d suppressed=%d "
             "retry=%d reconciliation_required=%d dead_letter=%d status_counts=%s "
-            "oldest_pending_age_seconds=%d failure_code_counts=%s",
+            "oldest_pending_age_seconds=%d oldest_unknown_delivery_age_seconds=%d failure_code_counts=%s",
             tally["claimed"],
             tally["sent"],
             tally["suppressed"],
@@ -113,6 +122,7 @@ async def _run_once() -> None:
             tally["dead_letter"],
             summary["status_counts"],
             summary["oldest_pending_age_seconds"],
+            summary["oldest_unknown_delivery_age_seconds"],
             summary["failure_code_counts"],
         )
 
