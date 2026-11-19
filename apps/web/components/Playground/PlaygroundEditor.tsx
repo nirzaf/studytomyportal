@@ -145,6 +145,23 @@ export default function PlaygroundEditor({
     }
   }, [title, playground, accessToken])
 
+  // Keep playground state in sync if the editor mounts with a different playground UUID
+  useEffect(() => {
+    setPlayground(initialPlayground)
+    setTitle(initialPlayground.name)
+    setHtml(initialPlayground.html_content || '')
+    setLearnerAdaptation({
+      enabled: initialPlayground.learner_adaptation?.enabled ?? true,
+      levels:
+        initialPlayground.learner_adaptation?.levels && initialPlayground.learner_adaptation.levels.length > 0
+          ? [...initialPlayground.learner_adaptation.levels]
+          : [...DEFAULT_LEARNER_LEVELS],
+      target_skills: initialPlayground.learner_adaptation?.target_skills
+        ? [...initialPlayground.learner_adaptation.target_skills]
+        : [],
+    })
+  }, [initialPlayground.playground_uuid])
+
   // Reset title dirty state when playground updates externally (e.g. via modal)
   useEffect(() => {
     setTitle(playground.name)
@@ -458,6 +475,7 @@ export default function PlaygroundEditor({
         {!isFullscreen && (
           <div className="flex-shrink-0 flex flex-col overflow-hidden" style={{ width: 320 }}>
             <PlaygroundChatPanel
+              key={playground.playground_uuid}
               messages={messages}
               isGenerating={isStreaming}
               iterationCount={iterationCount}
@@ -468,7 +486,7 @@ export default function PlaygroundEditor({
               selectedCourseUuid={selectedCourseUuid}
               onCourseChange={setSelectedCourseUuid}
               sessionStarted={sessionUuid !== null}
-              initialLearnerAdaptation={playground.learner_adaptation}
+              initialLearnerAdaptation={learnerAdaptation}
               onLearnerAdaptationChange={setLearnerAdaptation}
             />
           </div>

@@ -191,9 +191,17 @@ export default function StaffReportReview({ client, courseUuid, curricula }: {
       {review.review_state === 'current' && report.status === 'approved' && <RecipientRelease
         key={report.uuid + '/' + report.version} client={client} report={report} busy={busy}
         publish={grants => {
-          void run(report.uuid, { method: 'POST', suffix: '/publish', body: {
-            expected_version: report.version, recipient_grant_uuids: grants,
-          } })
+          const guardianUuids = grants.filter(id => id.startsWith('rel_'))
+          const sharingUuids = grants.filter(id => !id.startsWith('rel_'))
+          void run(report.uuid, {
+            method: 'POST',
+            suffix: '/publish',
+            body: {
+              expected_version: report.version,
+              ...(guardianUuids.length ? { guardian_relationship_uuids: guardianUuids } : {}),
+              ...(sharingUuids.length ? { recipient_grant_uuids: sharingUuids } : {}),
+            },
+          })
         }}
       />}
       {review.review_state === 'current' && report.status === 'published' && (
@@ -220,7 +228,125 @@ export default function StaffReportReview({ client, courseUuid, curricula }: {
         </div>
       </form>}
     </div>}
+    <DeliveryReconciliationPanel client={client} />
   </details>
+}
+
+type OutboxReconciliationItem = {
+  uuid: string
+  resource_uuid: string
+  resource_version: number | null
+  version: number
+  status: string
+  attempt_count: number
+  last_error_code: string | null
+}
+
+type OutboxReconciliationPage = {
+  deliveries: OutboxReconciliationItem[]
+  next_cursor: string | null
+}
+
+function DeliveryReconciliationPanel({ client }: { client: AdaptiveRequest }) {
+  const { t } = useTranslation()
+  const [page, setPage] = useState<OutboxReconciliationPage>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [status, setStatus] = useState('')
+
+  async function load(after?: string) {
+    setBusy(true)
+    setError('')
+    try {
+      const params = new URLSearchParams({ limit: '25' })
+      if (after) params.set('after', after)
+      const next = await client<OutboxReconciliationPage>(
+        `staff/report-deliveries/reconciliation?${params}`,
+        'GET',
+      )
+      setPage(next)
+    } catch {
+      setError(t('adaptive.staffReport.reconciliationLoadError', 'Unable to load assigned report delivery reconciliations.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resolve(item: OutboxReconciliationItem, form: FormData) {
+    const disposition = String(form.get('disposition') || '')
+    const evidenceReference = String(form.get('evidence_reference') || '').trim()
+    const providerReference = String(form.get('provider_message_reference') || '').trim()
+    if (!disposition || !evidenceReference) return
+    setBusy(true)
+    setError('')
+    setStatus('')
+    try {
+      const result = await client<{ uuid: string; status: string; version: number }>(
+        `staff/report-deliveries/${encodeURIComponent(item.uuid)}/reconciliation`,
+        'POST',
+        {
+          expected_version: item.version,
+          disposition,
+          evidence_reference: evidenceReference,
+          ...(disposition === 'accepted' && providerReference ? { provider_message_reference: providerReference } : {}),
+        },
+        crypto.randomUUID(),
+      )
+      setStatus(t('adaptive.staffReport.reconciliationSaved', 'Recorded reconciliation outcome: {{status}}.', { status: result.status }))
+      await load()
+    } catch (failure) {
+      setError(failure instanceof AdaptiveRequestError ? failure.message : t('adaptive.staffReport.reconciliationSaveError', 'Unable to record reconciliation outcome.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <div className="mt-4 space-y-3 border-t pt-4">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h4 className="font-semibold">{t('adaptive.staffReport.reconciliationTitle', 'Delivery reconciliation')}</h4>
+      <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={() => { void load() }}>
+        {t('adaptive.staffReport.loadReconciliation', 'Check pending reconciliations')}
+      </Button>
+    </div>
+    {status && <p role="status" className="text-sm font-medium">{status}</p>}
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {page && (page.deliveries.length === 0 ? (
+      <p className="text-sm text-muted-foreground">{t('adaptive.staffReport.reconciliationEmpty', 'No assigned deliveries require reconciliation.')}</p>
+    ) : (
+      <div className="space-y-3">
+        {page.deliveries.map(item => (
+          <form
+            key={item.uuid}
+            className="space-y-2 rounded-md border p-3"
+            onSubmit={event => { event.preventDefault(); void resolve(item, new FormData(event.currentTarget)) }}
+          >
+            <p className="text-xs font-mono break-all">
+              {item.uuid} · Report {item.resource_uuid} (v{item.resource_version ?? '?'}) · Error: {item.last_error_code ?? 'PROVIDER_OUTCOME_UNKNOWN'}
+            </p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <select name="disposition" required defaultValue="" disabled={busy} className="min-h-11 rounded-md border bg-background px-2 text-sm">
+                <option value="" disabled>{t('adaptive.choose', 'Choose outcome')}</option>
+                <option value="accepted">Provider confirmed accepted</option>
+                <option value="known_unsent">Verified unsent (safe to retry)</option>
+                <option value="suppressed">Suppress delivery</option>
+                <option value="unknown">Keep unknown</option>
+              </select>
+              <Input name="evidence_reference" required maxLength={120} disabled={busy} placeholder="Evidence reference (opaque ID)" className="min-h-11" />
+              <Input name="provider_message_reference" maxLength={160} disabled={busy} placeholder="Provider message ID (if accepted)" className="min-h-11" />
+            </div>
+            <Button type="submit" variant="outline" disabled={busy} className="min-h-11">
+              {t('adaptive.staffReport.recordReconciliation', 'Record reconciliation')}
+            </Button>
+          </form>
+        ))}
+        {page.next_cursor && (
+          <Button type="button" variant="outline" className="min-h-11" disabled={busy} onClick={() => { void load(page.next_cursor ?? undefined) }}>
+            {t('adaptive.staffReport.moreReconciliation', 'Next reconciliations')}
+          </Button>
+        )}
+      </div>
+    ))}
+  </div>
 }
 
 

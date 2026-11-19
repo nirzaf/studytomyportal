@@ -12,7 +12,7 @@ Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read 
 
 Build Studytomy Portal (`lms.studytomy.com`, [`nirzaf/studytomyportal`](https://github.com/nirzaf/studytomyportal)), an educator-led, AI-assisted learning management system, by adopting and selectively extending the [LearnHouse](https://github.com/learnhouse/learnhouse) open-source Community Edition.
 
-The objective is to deliver a secure, maintainable Australian-curriculum learning experience on `lms.studytomy.com` while keeping the existing public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) as a completely separate, unchanged application. Reuse existing upstream features first; write custom code only for verified gaps.
+The objective is to deliver a secure, maintainable Sri Lankan National School Syllabus learning experience (National Institute of Education / Ministry of Education, Grades 6–13, English instruction, for students and parents) on `lms.studytomy.com` while keeping the existing public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) as a completely separate, unchanged application. Reuse existing upstream features first; write custom code only for verified gaps.
 
 Success is demonstrated through complete, authorized user journeys—not features inferred from filenames, marketing pages, or a roadmap:
 
@@ -47,7 +47,7 @@ Success is demonstrated through complete, authorized user journeys—not feature
 - APIs, API tokens, supported webhooks, MCP integration, and the end-user self-hosting CLI (where configured). These product capabilities do not configure deployment or CI/CD for this repository.
 
 > [!WARNING]
-> **Do not equate**: course completion with mastery; AI question drafting with validated VCE/HSC exams; playgrounds with scientifically validated laboratories; objective auto-grading with essay/handwriting evaluation; or assignment statistics with Enterprise Analytics.
+> **Do not equate**: course completion with mastery; AI question drafting with validated G.C.E. O/L or A/L examinations; playgrounds with scientifically validated laboratories; objective auto-grading with essay/handwriting/practical evaluation; or assignment statistics with Enterprise Analytics.
 
 ### Enterprise / separately licensed boundaries
 
@@ -59,14 +59,14 @@ Never copy private Enterprise code, disable licensing safeguards to enable Enter
 
 The 2026-11-17 working-tree review found local curriculum, diagnostic, learning-evidence, mastery, tutoring and reviewed-report paths. Do not treat the list below as proof these are absent, or treat local code as released. Consult [the documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) and inspect the current source before classifying a task. Existing policy, licensing and release gates remain unchanged.
 
-The following product ambitions still require per-feature implementation and acceptance checks:
+The following product ambitions still require per-feature implementation, policy/rights approval, and acceptance checks:
 
-- Australian curriculum content and VCE/HSC-specific educational validation.
+- Sri Lankan National School Syllabus (NIE / Ministry of Education, Grades 6–13, English instruction) official edition/cohort mapping, rights verification, and qualified educator review (see [decision baseline](docs/studytomy/SRI-LANKA-DECISION-BASELINE.md)).
 - Adaptive diagnostic assessments, misconception evidence, versioned mastery and personalized study plans.
-- Validated exam-paper generation, step/essay/handwriting marking and guardian progress dashboards.
+- Validated exam-paper generation, step/essay/handwriting/practical marking and guardian progress dashboards.
 - Interactive scientific laboratories with tested models, measurements and scored observations.
 - Tutor/trial scheduling, recurring classes, attendance, notifications, billing-history migration and any chosen live-class integration.
-- AI marketing drafts and evidence-based NSW/Victoria subject/year-demand analysis; no autonomous ad publishing/spending.
+- Evidence-based subject/grade demand analysis; no autonomous ad publishing/spending.
 
 Before changing code, classify each requested behavior as **Implemented / Partial / Missing / Unverified**, citing relevant source files, API contracts, DB models/migrations, tests and observed runtime behavior.
 

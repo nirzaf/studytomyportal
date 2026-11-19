@@ -481,6 +481,7 @@ class StudyEligibilityDecisionCreate(BaseModel):
     evidence_reference: str = PydanticField(min_length=1, max_length=500)
     effective_to: Optional[datetime] = None
     review_due_at: Optional[datetime] = None
+    control_mode: Optional[StudyLearnerControlMode] = None
 
     @field_validator("evidence_reference")
     @classmethod
@@ -500,6 +501,25 @@ class StudyEligibilityDecisionCreate(BaseModel):
         if value is not None and value.tzinfo is None:
             raise ValueError("Decision timestamps must include a timezone")
         return value
+
+
+class StudyLearnerActivationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_access_version: int = PydanticField(strict=True, ge=1)
+    reason_code: str = PydanticField(min_length=1, max_length=64)
+
+    @field_validator("reason_code")
+    @classmethod
+    def reason_code_is_safe(cls, value: str) -> str:
+        normalized = value.strip()
+        if (
+            not normalized
+            or len(normalized) > 64
+            or any(not (char.isascii() and (char.isalnum() or char in "_-")) for char in normalized)
+        ):
+            raise ValueError("reason_code must be a bounded opaque code")
+        return normalized
 
 
 class StudyEligibilityDecisionRead(BaseModel):

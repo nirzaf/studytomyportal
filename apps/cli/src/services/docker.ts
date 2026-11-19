@@ -315,6 +315,61 @@ export function dockerExecFromFile(containerName: string, command: string[], inp
   }
 }
 
+/**
+ * Run a one-off compose service command (with `--no-deps` and `--entrypoint ""`)
+ * and stream its stdout into a file while the live service remains stopped.
+ */
+export function dockerComposeRunToFile(
+  cwd: string,
+  service: string,
+  command: string[],
+  outputPath: string,
+  okStatuses: number[] = [0],
+): void {
+  const fd = fs.openSync(outputPath, 'w', 0o600)
+  try {
+    const res = dockerSpawnSync(
+      ['compose', 'run', '--rm', '--no-deps', '-T', '--entrypoint', '', service, ...command],
+      { cwd, stdio: ['ignore', fd, 'pipe'] },
+    )
+    if (res.error) throw res.error
+    if (res.status === null || !okStatuses.includes(res.status)) {
+      throw Object.assign(new Error(`docker compose run ${service} ${command[0]} exited with ${res.status}`), {
+        stderr: res.stderr,
+      })
+    }
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
+/**
+ * Run a one-off compose service command (with `--no-deps` and `--entrypoint ""`)
+ * with a file as its stdin while the live service remains stopped.
+ */
+export function dockerComposeRunFromFile(
+  cwd: string,
+  service: string,
+  command: string[],
+  inputPath: string,
+): void {
+  const fd = fs.openSync(inputPath, 'r')
+  try {
+    const res = dockerSpawnSync(
+      ['compose', 'run', '--rm', '--no-deps', '-T', '--entrypoint', '', service, ...command],
+      { cwd, stdio: [fd, 'ignore', 'pipe'] },
+    )
+    if (res.error) throw res.error
+    if (res.status !== 0) {
+      throw Object.assign(new Error(`docker compose run ${service} ${command[0]} exited with ${res.status}`), {
+        stderr: res.stderr,
+      })
+    }
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
 export function isContainerRunning(containerName: string): boolean {
   try {
     const output = docker(['inspect', '-f', '{{.State.Running}}', containerName]).trim()

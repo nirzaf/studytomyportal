@@ -36,8 +36,11 @@ from src.services.studytomy.content_evidence import (
 )
 from src.services.studytomy.evidence_files import (
     list_eligibility_evidence,
+    list_relationship_evidence,
     open_eligibility_evidence,
+    open_relationship_evidence,
     upload_eligibility_evidence,
+    upload_relationship_evidence,
 )
 from src.services.studytomy.publication import (
     CourseReleasePreflight,
@@ -240,6 +243,74 @@ async def api_download_eligibility_evidence(
         organization,
         current_user,
         learner_uuid,
+        evidence_uuid,
+    )
+    return _evidence_download(evidence.evidence_uuid, evidence.media_type, content)
+
+
+@router.post(
+    "/orgs/{org_uuid}/relationships/{relationship_uuid}/evidence-files",
+    response_model=StudyEvidenceFileRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload private guardian-authority evidence bound to one relationship request",
+)
+async def api_upload_relationship_evidence(
+    org_uuid: str,
+    relationship_uuid: str,
+    file: UploadFile = File(...),
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=255),
+    current_user: PublicUser = Depends(get_authenticated_non_api_token_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> StudyEvidenceFileRead:
+    organization = await _organization(org_uuid, db_session)
+    return await upload_relationship_evidence(
+        db_session,
+        organization,
+        current_user,
+        relationship_uuid,
+        file,
+        idempotency_key,
+    )
+
+
+@router.get(
+    "/orgs/{org_uuid}/relationships/{relationship_uuid}/evidence-files",
+    response_model=list[StudyEvidenceFileRead],
+    summary="List private guardian-authority evidence bound to one relationship request",
+)
+async def api_list_relationship_evidence(
+    org_uuid: str,
+    relationship_uuid: str,
+    current_user: PublicUser = Depends(get_authenticated_non_api_token_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> list[StudyEvidenceFileRead]:
+    organization = await _organization(org_uuid, db_session)
+    return await list_relationship_evidence(
+        db_session,
+        organization,
+        current_user,
+        relationship_uuid,
+    )
+
+
+@router.get(
+    "/orgs/{org_uuid}/relationships/{relationship_uuid}/evidence-files/{evidence_uuid}/content",
+    summary="Stream private guardian-authority evidence after a fresh permission check",
+    responses={200: {"content": {"application/octet-stream": {}}}},
+)
+async def api_download_relationship_evidence(
+    org_uuid: str,
+    relationship_uuid: str,
+    evidence_uuid: str,
+    current_user: PublicUser = Depends(get_authenticated_non_api_token_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> StreamingResponse:
+    organization = await _organization(org_uuid, db_session)
+    evidence, content = await open_relationship_evidence(
+        db_session,
+        organization,
+        current_user,
+        relationship_uuid,
         evidence_uuid,
     )
     return _evidence_download(evidence.evidence_uuid, evidence.media_type, content)

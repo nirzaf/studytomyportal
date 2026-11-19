@@ -65,7 +65,10 @@ class StudyConsentEvent(SQLModel, table=True):
             name="ck_st_consent_event_choice",
         ),
         CheckConstraint(
-            "actor_user_id = subject_user_id",
+            "(provenance = 'authenticated_self_service' AND actor_user_id = subject_user_id "
+            "AND relationship_id IS NULL AND relationship_authority_version IS NULL) OR "
+            "(provenance = 'authenticated_guardian_authority' AND actor_user_id <> subject_user_id "
+            "AND relationship_id IS NOT NULL AND relationship_authority_version >= 1)",
             name="ck_st_consent_event_self_actor",
         ),
         CheckConstraint(
@@ -80,7 +83,7 @@ class StudyConsentEvent(SQLModel, table=True):
             name="ck_st_consent_event_policies",
         ),
         CheckConstraint(
-            "provenance = 'authenticated_self_service'",
+            "provenance IN ('authenticated_self_service', 'authenticated_guardian_authority')",
             name="ck_st_consent_event_provenance",
         ),
     )
@@ -108,6 +111,17 @@ class StudyConsentEvent(SQLModel, table=True):
     )
     actor_user_id: int = Field(
         sa_column=Column(Integer, ForeignKey("user.id", ondelete="RESTRICT"), nullable=False)
+    )
+    relationship_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger().with_variant(Integer, "sqlite"),
+            ForeignKey("st_relationship.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
+    )
+    relationship_authority_version: Optional[int] = Field(
+        default=None, sa_column=Column(Integer, nullable=True)
     )
     purpose_code: str = Field(sa_column=Column(String(32), nullable=False))
     choice: str = Field(sa_column=Column(String(16), nullable=False))

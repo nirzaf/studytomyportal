@@ -24,7 +24,14 @@ from src.db.studytomy.adaptive_reports import (
     StudyReportRecipient,
     StudyReportReviewRequest,
 )
-from src.db.studytomy.family import StudyLearnerProfile, StudySharingGrant
+from src.db.studytomy.family import (
+    StudyLearnerControlMode,
+    StudyLearnerProfile,
+    StudyRelationship,
+    StudyRelationshipStatus,
+    StudyRelationshipType,
+    StudySharingGrant,
+)
 from src.db.studytomy.governance import StudyPolicyKey
 from src.db.studytomy.operations import StudyOutboxRecord
 from src.db.studytomy.privacy import StudyConsentPurpose
@@ -42,6 +49,7 @@ from src.services.studytomy.adaptive_access import (
 from src.services.studytomy.adaptive_curriculum_review import _REVIEW_POLICIES
 from src.services.studytomy.adaptive_evidence import _watermark
 from src.services.studytomy.adaptive_progress import _published_curriculum, _read_policy
+from src.services.studytomy.authority import has_active_guardian_scope
 from src.services.studytomy.consents import has_current_consent_scope
 from src.services.studytomy.errors import studytomy_http_error
 from src.services.studytomy.idempotency import canonical_request_hash
@@ -312,7 +320,7 @@ async def _report_authority(
                 StudyLearnerProfile.org_id == org.id,
                 StudyLearnerProfile.learner_uuid == learner_uuid,
                 StudyLearnerProfile.status == "active",
-                StudyLearnerProfile.control_mode == "independent",
+                StudyLearnerProfile.control_mode.in_(("independent", "dependent")),
             )
             .with_for_update()
             .execution_options(populate_existing=True)
@@ -644,7 +652,11 @@ class ReportPublish(BaseModel):
     expected_version: Annotated[int, Field(strict=True, ge=1)]
     recipient_grant_uuids: Annotated[
         list[Annotated[str, Field(min_length=1, max_length=100)]],
-        Field(min_length=1, max_length=20),
+        Field(default_factory=list, max_length=20),
+    ]
+    guardian_relationship_uuids: Annotated[
+        list[Annotated[str, Field(min_length=1, max_length=100)]],
+        Field(default_factory=list, max_length=20),
     ]
 
 
@@ -707,8 +719,12 @@ async def _authorize_report_release(
     report_uuid: str,
     body: ReportPublish,
 ):
+    if not body.recipient_grant_uuids and not body.guardian_relationship_uuids:
+        raise HTTPException(422, "Select at least one authorized recipient.")
     if len(set(body.recipient_grant_uuids)) != len(body.recipient_grant_uuids):
         raise HTTPException(422, "Select each sharing grant once.")
+    if len(set(body.guardian_relationship_uuids)) != len(body.guardian_relationship_uuids):
+        raise HTTPException(422, "Select each guardian relationship once.")
     (
         row,
         profile,
@@ -719,6 +735,53 @@ async def _authorize_report_release(
     ) = await _authorize_current_approved_report(
         request, db, org, actor, report_uuid, body.expected_version
     )
+    unavailable = studytomy_http_error(
+        409,
+        "REPORT_RECIPIENT_NOT_AUTHORIZED",
+        "One or more selected recipients lack current report authority.",
+    )
+    if profile.control_mode == StudyLearnerControlMode.DEPENDENT.value:
+        if body.recipient_grant_uuids or not body.guardian_relationship_uuids:
+            raise unavailable
+        relationships = (
+            (
+                await db.execute(
+                    select(StudyRelationship)
+                    .where(
+                        StudyRelationship.org_id == org.id,
+                        StudyRelationship.learner_profile_id == profile.id,
+                        StudyRelationship.relationship_type
+                        == StudyRelationshipType.GUARDIAN.value,
+                        StudyRelationship.status
+                        == StudyRelationshipStatus.ACCEPTED.value,
+                        StudyRelationship.relationship_uuid.in_(
+                            body.guardian_relationship_uuids
+                        ),
+                    )
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if len(relationships) != len(body.guardian_relationship_uuids):
+            raise unavailable
+        for rel in relationships:
+            if not await has_active_guardian_scope(
+                db,
+                org,
+                profile,
+                int(rel.adult_user_id),
+                _REPORT_PROJECTION,
+                now=now,
+                relationship_binding=(rel.relationship_uuid, rel.authority_version),
+            ):
+                raise unavailable
+        return row, profile, curriculum, course, policy_ids, [], relationships, now
+
+    if body.guardian_relationship_uuids or not body.recipient_grant_uuids:
+        raise unavailable
     grants = (
         (
             await db.execute(
@@ -735,11 +798,6 @@ async def _authorize_report_release(
         .scalars()
         .all()
     )
-    unavailable = studytomy_http_error(
-        409,
-        "REPORT_RECIPIENT_NOT_AUTHORIZED",
-        "One or more selected recipients lack a current report sharing grant.",
-    )
     if len(grants) != len(body.recipient_grant_uuids):
         raise unavailable
     for grant in grants:
@@ -753,7 +811,7 @@ async def _authorize_report_release(
         )
         if current is None or current.id != grant.id:
             raise unavailable
-    return row, profile, curriculum, course, policy_ids, grants, now
+    return row, profile, curriculum, course, policy_ids, grants, [], now
 
 
 async def publish_report(
@@ -771,6 +829,7 @@ async def publish_report(
         course,
         policy_ids,
         grants,
+        relationships,
         now,
     ) = await _authorize_report_release(request, db, org, actor, report_uuid, body)
     start, end = _as_utc(row.period_from), _as_utc(row.period_to)
@@ -802,8 +861,24 @@ async def publish_report(
                 org_id=org.id,
                 report_id=published.id,
                 recipient_user_id=grant.recipient_user_id,
+                recipient_capacity="independent_sharing",
                 sharing_grant_id=grant.id,
+                relationship_id=None,
                 grant_version=grant.authority_version,
+                projection=_REPORT_PROJECTION,
+                available_at=now,
+            )
+        )
+    for rel in relationships:
+        db.add(
+            StudyReportRecipient(
+                org_id=org.id,
+                report_id=published.id,
+                recipient_user_id=rel.adult_user_id,
+                recipient_capacity="guardian_authority",
+                sharing_grant_id=None,
+                relationship_id=rel.id,
+                grant_version=rel.authority_version,
                 projection=_REPORT_PROJECTION,
                 available_at=now,
             )
@@ -812,7 +887,7 @@ async def publish_report(
         uuid=published.uuid,
         version=published.version,
         digest=published.digest,
-        recipient_count=len(grants),
+        recipient_count=len(grants) + len(relationships),
     )
     await db.commit()
     return receipt
@@ -857,7 +932,7 @@ async def _published_report_context(
         profile is None
         or profile.org_id != org.id
         or profile.status != "active"
-        or profile.control_mode != "independent"
+        or profile.control_mode not in ("independent", "dependent")
     ):
         return None
     if profile.user_id != actor.id and not staff:
@@ -874,19 +949,42 @@ async def _published_report_context(
         ).scalar_one_or_none()
         if recipient is None:
             return None
-        grant = await current_independent_sharing_grant(
-            db,
-            org,
-            profile,
-            actor.id,
-            recipient.projection,
-            now=now,
-        )
-        if grant is None or (grant.id, grant.authority_version) != (
-            recipient.sharing_grant_id,
-            recipient.grant_version,
-        ):
-            return None
+        if recipient.recipient_capacity == "guardian_authority":
+            if (
+                profile.control_mode != StudyLearnerControlMode.DEPENDENT.value
+                or recipient.relationship_id is None
+            ):
+                return None
+            relationship = await db.get(StudyRelationship, recipient.relationship_id)
+            if relationship is None or not await has_active_guardian_scope(
+                db,
+                org,
+                profile,
+                int(actor.id),
+                recipient.projection,
+                now=now,
+                relationship_binding=(
+                    relationship.relationship_uuid,
+                    int(recipient.grant_version),
+                ),
+            ):
+                return None
+        else:
+            if profile.control_mode != StudyLearnerControlMode.INDEPENDENT.value:
+                return None
+            grant = await current_independent_sharing_grant(
+                db,
+                org,
+                profile,
+                actor.id,
+                recipient.projection,
+                now=now,
+            )
+            if grant is None or (grant.id, grant.authority_version) != (
+                recipient.sharing_grant_id,
+                recipient.grant_version,
+            ):
+                return None
     if not await _is_learning_eligible(
         db, org, profile, now
     ) or not await has_current_consent_scope(
@@ -956,6 +1054,47 @@ async def list_report_recipients(
     _, profile, _, _, _, now = await _authorize_current_approved_report(
         request, db, org, actor, report_uuid, expected_version
     )
+    if profile.control_mode == StudyLearnerControlMode.DEPENDENT.value:
+        rel = StudyRelationship
+        query = (
+            select(rel, User.first_name)
+            .join(User, User.id == rel.adult_user_id)
+            .where(
+                rel.org_id == org.id,
+                rel.learner_profile_id == profile.id,
+                rel.relationship_type == StudyRelationshipType.GUARDIAN.value,
+                rel.status == StudyRelationshipStatus.ACCEPTED.value,
+                rel.valid_from <= now,
+                rel.valid_to > now,
+            )
+        )
+        candidates = (
+            await db.execute(query.order_by(rel.relationship_uuid).offset(offset).limit(21))
+        ).all()
+        items = []
+        for candidate, name in candidates[:20]:
+            if await has_active_guardian_scope(
+                db,
+                org,
+                profile,
+                int(candidate.adult_user_id),
+                _REPORT_PROJECTION,
+                now=now,
+                relationship_binding=(
+                    candidate.relationship_uuid,
+                    candidate.authority_version,
+                ),
+            ):
+                items.append(
+                    ReportRecipientOption(
+                        grant_uuid=candidate.relationship_uuid,
+                        first_name=name,
+                    )
+                )
+        return ReportRecipientPage(
+            items=items,
+            next_offset=offset + 20 if len(candidates) > 20 else None,
+        )
     grant = StudySharingGrant
     query = (
         select(grant, User.first_name)
@@ -1006,16 +1145,24 @@ async def preview_report_recipient(
     report_uuid: str,
     body: ReportRecipientPreview,
 ) -> PublishedReportRead:
-    row, profile, curriculum, course, _, _, _ = await _authorize_report_release(
+    publish_body = (
+        ReportPublish(
+            expected_version=body.expected_version,
+            guardian_relationship_uuids=[body.recipient_grant_uuid],
+        )
+        if body.recipient_grant_uuid.startswith("rel_")
+        else ReportPublish(
+            expected_version=body.expected_version,
+            recipient_grant_uuids=[body.recipient_grant_uuid],
+        )
+    )
+    row, profile, curriculum, course, _, _, _, _ = await _authorize_report_release(
         request,
         db,
         org,
         actor,
         report_uuid,
-        ReportPublish(
-            expected_version=body.expected_version,
-            recipient_grant_uuids=[body.recipient_grant_uuid],
-        ),
+        publish_body,
     )
     return await _report_projection(
         db,

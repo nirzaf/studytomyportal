@@ -18,6 +18,8 @@ const dockerMock = vi.hoisted(() => ({
   dockerComposeUp: vi.fn(),
   dockerExecToFile: vi.fn((_c: string, _cmd: string[], out: string) => fs.writeFileSync(out, 'SELECT 1;')),
   dockerExecFromFile: vi.fn(),
+  dockerComposeRunToFile: vi.fn((_d: string, _s: string, _cmd: string[], out: string) => fs.writeFileSync(out, 'content-tar-bytes')),
+  dockerComposeRunFromFile: vi.fn(),
 }))
 vi.mock('../src/services/docker.js', () => dockerMock)
 const promptStub = vi.hoisted(() => ({

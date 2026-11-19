@@ -161,8 +161,8 @@ def mint_session_tokens(
     )
 
 
-async def advance_session_generation(db_session: AsyncSession, user_id: int) -> int:
-    """Durably invalidate all existing sessions with one atomic row update."""
+async def bump_session_generation_in_tx(db_session: AsyncSession, user_id: int) -> int:
+    """Atomically increment session_generation inside the caller's open transaction."""
     result = await db_session.execute(
         update(User)
         .where(User.id == user_id)
@@ -171,10 +171,19 @@ async def advance_session_generation(db_session: AsyncSession, user_id: int) -> 
     )
     generation = result.scalar_one_or_none()
     if generation is None:
-        await db_session.rollback()
         raise RuntimeError("Session owner no longer exists")
-    await db_session.commit()
     return int(generation)
+
+
+async def advance_session_generation(db_session: AsyncSession, user_id: int) -> int:
+    """Durably invalidate all existing sessions with one atomic row update."""
+    try:
+        generation = await bump_session_generation_in_tx(db_session, user_id)
+    except RuntimeError:
+        await db_session.rollback()
+        raise
+    await db_session.commit()
+    return generation
 
 
 # ``amr`` values that read differently on the analytics side. Sessions minted

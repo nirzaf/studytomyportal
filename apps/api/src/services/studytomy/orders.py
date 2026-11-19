@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import and_, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -21,6 +22,8 @@ from src.db.studytomy.family import (
     StudyLearnerControlMode,
     StudyLearnerProfile,
     StudyLearnerProfileStatus,
+    StudyRelationship,
+    StudyRelationshipStatus,
 )
 from src.db.studytomy.governance import (
     StudyPolicyBody,
@@ -127,6 +130,15 @@ async def list_purchasable_learners(
     """Return only active learner profiles the purchaser may currently allocate."""
     if not 1 <= limit <= 100:
         raise studytomy_http_error(422, "ORDER_LEARNER_COUNT_INVALID", "The learner limit is invalid.")
+    now = datetime.now(UTC)
+    guardian_profile_ids = (
+        select(StudyRelationship.learner_profile_id)
+        .where(
+            StudyRelationship.org_id == org.id,
+            StudyRelationship.adult_user_id == purchaser_id,
+            StudyRelationship.status == StudyRelationshipStatus.ACCEPTED.value,
+        )
+    )
     profiles = (
         await db.execute(
             select(StudyLearnerProfile, User.first_name, User.last_name)
@@ -134,13 +146,21 @@ async def list_purchasable_learners(
             .where(
                 StudyLearnerProfile.org_id == org.id,
                 StudyLearnerProfile.status == StudyLearnerProfileStatus.ACTIVE.value,
-                StudyLearnerProfile.control_mode == StudyLearnerControlMode.INDEPENDENT.value,
+                or_(
+                    and_(
+                        StudyLearnerProfile.control_mode == StudyLearnerControlMode.INDEPENDENT.value,
+                        StudyLearnerProfile.user_id == purchaser_id,
+                    ),
+                    and_(
+                        StudyLearnerProfile.control_mode == StudyLearnerControlMode.DEPENDENT.value,
+                        StudyLearnerProfile.id.in_(guardian_profile_ids),
+                    ),
+                ),
             )
             .order_by(StudyLearnerProfile.learner_uuid)
             .limit(limit)
         )
     ).all()
-    now = datetime.now(UTC)
     choices = []
     for profile, first_name, last_name in profiles:
         if not await can_purchase_for_learner(
@@ -427,10 +447,10 @@ async def can_purchase_for_learner(
     ).execution_options(populate_existing=True))).scalar_one_or_none()
     if profile is None:
         return False
-    # The checkout pilot can only promise delivery to learner profiles that the
-    # current managed lesson path supports. Guardian purchase authority does
-    # not make dependent-profile delivery available.
-    if profile.control_mode != StudyLearnerControlMode.INDEPENDENT.value:
+    if profile.control_mode not in (
+        StudyLearnerControlMode.INDEPENDENT.value,
+        StudyLearnerControlMode.DEPENDENT.value,
+    ):
         return False
     members = set((await db.execute(select(UserOrganization.user_id).where(
         UserOrganization.org_id == org.id,

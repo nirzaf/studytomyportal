@@ -137,7 +137,7 @@ async def lock_attempt_learner(
                 StudyLearnerProfile.org_id == org.id,
                 StudyLearnerProfile.user_id == actor.id,
                 StudyLearnerProfile.status == "active",
-                StudyLearnerProfile.control_mode == "independent",
+                StudyLearnerProfile.control_mode.in_(("independent", "dependent")),
             )
             .with_for_update()
             .execution_options(populate_existing=True)
@@ -187,7 +187,7 @@ async def require_mapped_release_source(
         profile.org_id != org.id
         or profile.user_id != actor.id
         or profile.status != "active"
-        or profile.control_mode != "independent"
+        or profile.control_mode not in ("independent", "dependent")
         or curriculum.org_id != org.id
         or curriculum.status not in {"published", "retired"}
         or curriculum.owner_course_uuid != course_uuid

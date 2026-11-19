@@ -335,10 +335,17 @@ async def change_password_with_reset_code(
     if not user.email_verified:
         await _drop_unverified_sso_links(user.id, db_session)
 
-    # Change password
+    # Change password and advance session generation in the same transaction
+    # so pre-reset pending MFA challenges and concurrent refresh attempts
+    # cannot mint usable sessions against the old generation.
     user.password = security_hash_password(new_password)
     user.password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db_session.add(user)
+    await db_session.flush()
+    if user.id is not None:
+        from src.services.auth.session import bump_session_generation_in_tx
+
+        await bump_session_generation_in_tx(db_session, user.id)
 
     await db_session.commit()
     await db_session.refresh(user)
@@ -480,6 +487,11 @@ async def change_password_with_reset_code_platform(
     user.password = security_hash_password(new_password)
     user.password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db_session.add(user)
+    await db_session.flush()
+    if user.id is not None:
+        from src.services.auth.session import bump_session_generation_in_tx
+
+        await bump_session_generation_in_tx(db_session, user.id)
 
     await db_session.commit()
     await db_session.refresh(user)

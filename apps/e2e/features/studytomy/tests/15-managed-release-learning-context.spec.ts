@@ -26,6 +26,7 @@ test('managed tutor and recommendations retain the exact released lesson context
   }
   const target = { ...source, activity_uuid: targetUuid, name: 'Released unit review', position: 2 }
   const lessonsPath = `${base}/courses/${courseUuid}/releases/${releaseUuid}/lessons`
+  let expectedActivityUuid = sourceUuid
   let tutorSessionPayload: unknown
 
   await page.route(`${base}/releases`, route => route.fulfill({
@@ -42,7 +43,7 @@ test('managed tutor and recommendations retain the exact released lesson context
   }))
   await page.route(`${adaptive}lesson-mastery?*`, route => {
     const params = new URL(route.request().url()).searchParams
-    expect(params.get('activity_uuid')).toBe(sourceUuid)
+    expect(params.get('activity_uuid')).toBe(expectedActivityUuid)
     expect(params.get('course_uuid')).toBe(courseUuid)
     expect(params.get('course_release_uuid')).toBe(releaseUuid)
     return route.fulfill({ json: { concepts: [], next_offset: null } })
@@ -51,20 +52,20 @@ test('managed tutor and recommendations retain the exact released lesson context
   await page.route(`${adaptive}attempts/current?*`, route => route.fulfill({ json: null }))
   await page.route(`${adaptive}recommendations?*`, route => {
     const params = new URL(route.request().url()).searchParams
-    expect(params.get('activity_uuid')).toBe(sourceUuid)
+    expect(params.get('activity_uuid')).toBe(expectedActivityUuid)
     expect(params.get('course_uuid')).toBe(courseUuid)
     expect(params.get('course_release_uuid')).toBe(releaseUuid)
-    return route.fulfill({ json: [{
+    return route.fulfill({ json: expectedActivityUuid === sourceUuid ? [{
       activity_uuid: targetUuid,
       course_uuid: courseUuid,
       course_release_uuid: releaseUuid,
       activity_title: target.name,
       reason: 'practice_needed',
-    }] })
+    }] : [] })
   })
   await page.route(`${adaptive}tutor-options?*`, route => {
     const params = new URL(route.request().url()).searchParams
-    expect(params.get('activity_uuid')).toBe(sourceUuid)
+    expect(params.get('activity_uuid')).toBe(expectedActivityUuid)
     expect(params.get('course_uuid')).toBe(courseUuid)
     expect(params.get('course_release_uuid')).toBe(releaseUuid)
     return route.fulfill({ json: {
@@ -96,15 +97,15 @@ test('managed tutor and recommendations retain the exact released lesson context
   await progress.click()
   const suggestion = page.getByRole('button', { name: target.name, exact: true })
   await expect(suggestion).toBeVisible()
+  expectedActivityUuid = targetUuid
   await suggestion.click()
   await expect(page.getByRole('heading', { name: target.name, exact: true })).toBeVisible()
   await expect(page.getByText('Review the released units.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Back to lessons' }).click()
+  expectedActivityUuid = sourceUuid
   await page.getByRole('button', { name: source.name, exact: true }).click()
-  const guidance = page.getByRole('button', { name: 'Lesson guidance', exact: true })
-  await expect(guidance).toBeVisible()
-  await guidance.click()
+  await expect(page.getByRole('heading', { name: source.name, exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Start guidance', exact: true }).click()
   await expect.poll(() => tutorSessionPayload).toEqual({
     activity_uuid: sourceUuid,

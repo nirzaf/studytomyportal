@@ -285,7 +285,7 @@ async def read_staff_mastery(
                 StudyLearnerProfile.org_id == org.id,
                 StudyLearnerProfile.learner_uuid == learner_uuid,
                 StudyLearnerProfile.status == "active",
-                StudyLearnerProfile.control_mode == "independent",
+                StudyLearnerProfile.control_mode.in_(("independent", "dependent")),
             )
             .with_for_update()
             .execution_options(populate_existing=True)

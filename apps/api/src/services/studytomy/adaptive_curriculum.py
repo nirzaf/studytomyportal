@@ -41,6 +41,27 @@ Version = Annotated[int, Field(strict=True, ge=1, le=2_147_483_646)]
 _CREATE_OPERATION = "studytomy.adaptive.curriculum.created"
 
 
+class ProgrammeMetadata(BaseModel):
+    """Optional verified official syllabus identity & cohort coverage metadata."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    authority: Label
+    syllabus_edition: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ]
+    effective_cohort: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+    ]
+    stage: Literal["junior_secondary", "gce_ol", "gce_al", "other"] = "other"
+    coverage_status: Literal[
+        "unverified", "partial", "supplementary_only", "verified_complete"
+    ] = "unverified"
+    source_language: Annotated[
+        str, StringConstraints(pattern=r"^[A-Za-z0-9-]{1,32}$")
+    ] | None = None
+
+
 class CurriculumFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -52,6 +73,7 @@ class CurriculumFields(BaseModel):
     jurisdiction: Label | None = None
     source_reference: Reference
     rights_reference: Reference
+    programme_metadata: ProgrammeMetadata | None = None
 
 
 class CurriculumDraftCreate(CurriculumFields):

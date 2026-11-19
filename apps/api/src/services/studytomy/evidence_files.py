@@ -19,7 +19,11 @@ from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.organizations import Organization
-from src.db.studytomy.family import StudyLearnerProfile, StudyLearnerProfileStatus
+from src.db.studytomy.family import (
+    StudyLearnerProfile,
+    StudyLearnerProfileStatus,
+    StudyRelationship,
+)
 from src.db.studytomy.governance import (
     StudyOwnerFunction,
     StudyPolicyKey,
@@ -184,10 +188,13 @@ async def _authorize_evidence_action(
 ) -> list:
     if profile.status == StudyLearnerProfileStatus.CLOSED.value:
         raise HTTPException(status_code=404, detail="Learner profile not found")
-    if require_pending and profile.status != StudyLearnerProfileStatus.PENDING.value:
+    if require_pending and profile.status not in (
+        StudyLearnerProfileStatus.PENDING.value,
+        StudyLearnerProfileStatus.ACTIVE.value,
+    ):
         raise HTTPException(
             status_code=409,
-            detail="Evidence attachments are only enabled for pending learner eligibility reviews.",
+            detail="Evidence attachments are only enabled for pending or active learner eligibility reviews.",
         )
     await authorize_studytomy_staff_action(
         db_session,
@@ -295,6 +302,7 @@ async def _store_private_evidence(
     file_rules: tuple[int, set[str], str], now: datetime,
     profile: StudyLearnerProfile | None = None, record_request_event_uuid: str | None = None,
     safeguarding_case_uuid: str | None = None,
+    relationship_uuid: str | None = None,
 ) -> StudyEvidenceFile:
     max_bytes, allowed_media_types, retention_category = file_rules
     profile_id = profile.id if profile is not None else None
@@ -309,6 +317,8 @@ async def _store_private_evidence(
         "retention_category": retention_category,
         "policy_version_ids": policy_ids,
     }
+    if relationship_uuid is not None:
+        request_payload["relationship_uuid"] = relationship_uuid
     if record_request_event_uuid:
         request_payload["record_request_event_uuid"] = record_request_event_uuid
     if safeguarding_case_uuid is not None:
@@ -327,6 +337,7 @@ async def _store_private_evidence(
                 StudyEvidenceFile.org_id == organization.id,
                 StudyEvidenceFile.evidence_uuid == replay.resource_uuid,
                 StudyEvidenceFile.learner_profile_id == profile_id,
+                StudyEvidenceFile.relationship_uuid == relationship_uuid,
                 StudyEvidenceFile.safeguarding_case_uuid == safeguarding_case_uuid,
                 StudyEvidenceFile.purpose == purpose,
                 StudyEvidenceFile.record_request_event_uuid == record_request_event_uuid,
@@ -347,6 +358,7 @@ async def _store_private_evidence(
         evidence_uuid=evidence_uuid,
         org_id=organization.id,
         learner_profile_id=profile_id,
+        relationship_uuid=relationship_uuid,
         safeguarding_case_uuid=safeguarding_case_uuid,
         purpose=purpose,
         record_request_event_uuid=record_request_event_uuid,
@@ -483,6 +495,186 @@ async def open_eligibility_evidence(
             },
         )
 
+    return await _file_read(db_session, profile, record), await _open_private_evidence(organization, record)
+
+
+async def _get_relationship_and_profile(
+    db_session: AsyncSession,
+    organization: Organization,
+    relationship_uuid: str,
+    *,
+    for_update: bool = False,
+) -> tuple[StudyRelationship, StudyLearnerProfile]:
+    rel_q = select(StudyRelationship).where(
+        StudyRelationship.org_id == organization.id,
+        StudyRelationship.relationship_uuid == relationship_uuid,
+    )
+    if for_update:
+        rel_q = rel_q.with_for_update()
+    relationship = (await db_session.execute(rel_q)).scalars().first()
+    if relationship is None:
+        raise HTTPException(status_code=404, detail="Relationship request not found")
+    prof_q = select(StudyLearnerProfile).where(
+        StudyLearnerProfile.org_id == organization.id,
+        StudyLearnerProfile.id == relationship.learner_profile_id,
+    )
+    if for_update:
+        prof_q = prof_q.with_for_update()
+    profile = (await db_session.execute(prof_q)).scalars().first()
+    if profile is None or profile.status == StudyLearnerProfileStatus.CLOSED.value:
+        raise HTTPException(status_code=404, detail="Relationship request not found")
+    return relationship, profile
+
+
+async def _authorize_relationship_evidence_action(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    relationship: StudyRelationship,
+    profile: StudyLearnerProfile,
+    now: datetime,
+) -> list:
+    if int(actor.id) in {int(profile.user_id), int(relationship.adult_user_id)}:
+        raise HTTPException(status_code=403, detail="A reviewer cannot access evidence for their own relationship.")
+    await authorize_studytomy_staff_action(
+        db_session,
+        actor,
+        organization,
+        StudytomyCapabilityName.FAMILY_AUTHORITY_REVIEW,
+        target_resource_uuid=profile.learner_uuid,
+        target_scope_kind="learner",
+        subject_user_id=profile.user_id,
+        access_version=profile.access_version,
+        hide_existence_on_denial=True,
+        now=now,
+    )
+    await authorize_studytomy_staff_action(
+        db_session,
+        actor,
+        organization,
+        StudytomyCapabilityName.PRIVACY_RETENTION_REVIEW,
+        target_resource_uuid=profile.learner_uuid,
+        target_scope_kind="learner",
+        subject_user_id=profile.user_id,
+        access_version=profile.access_version,
+        hide_existence_on_denial=True,
+        now=now,
+    )
+    return await _current_policies(
+        db_session,
+        organization,
+        (
+            StudyPolicyKey.D_01,
+            StudyPolicyKey.D_03,
+            StudyPolicyKey.D_12,
+            StudyPolicyKey.D_13,
+            StudyPolicyKey.D_15,
+        ),
+        now,
+    )
+
+
+async def upload_relationship_evidence(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    relationship_uuid: str,
+    file: UploadFile,
+    idempotency_key: str,
+) -> StudyEvidenceFileRead:
+    """Store a private guardian-authority evidence attachment bound to one relationship."""
+    await lock_organization(db_session, organization.id)
+    relationship, profile = await _get_relationship_and_profile(
+        db_session, organization, relationship_uuid, for_update=True
+    )
+    now = datetime.now(timezone.utc)
+    policies = await _authorize_relationship_evidence_action(
+        db_session, organization, actor, relationship, profile, now
+    )
+    max_bytes, allowed_media_types, retention_category = _approved_file_rules(policies)
+    await lock_users(db_session, [actor.id, profile.user_id, relationship.adult_user_id])
+    record = await _store_private_evidence(
+        db_session,
+        organization,
+        actor,
+        file,
+        idempotency_key,
+        purpose="guardian_authority_evidence",
+        policy_ids=[int(policy.id) for policy in policies],
+        file_rules=(max_bytes, allowed_media_types, retention_category),
+        now=now,
+        profile=profile,
+        relationship_uuid=relationship.relationship_uuid,
+    )
+    return await _file_read(db_session, profile, record)
+
+
+async def list_relationship_evidence(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    relationship_uuid: str,
+) -> list[StudyEvidenceFileRead]:
+    relationship, profile = await _get_relationship_and_profile(
+        db_session, organization, relationship_uuid
+    )
+    policies = await _authorize_relationship_evidence_action(
+        db_session, organization, actor, relationship, profile, datetime.now(timezone.utc)
+    )
+    current_policy_ids = [int(policy.id) for policy in policies]
+    result = await db_session.execute(
+        select(StudyEvidenceFile)
+        .where(
+            StudyEvidenceFile.org_id == organization.id,
+            StudyEvidenceFile.learner_profile_id == profile.id,
+            StudyEvidenceFile.relationship_uuid == relationship.relationship_uuid,
+            StudyEvidenceFile.purpose == "guardian_authority_evidence",
+            StudyEvidenceFile.upload_status == "ready",
+        )
+        .order_by(StudyEvidenceFile.created_at.desc(), StudyEvidenceFile.id.desc())
+    )
+    return [
+        await _file_read(db_session, profile, record)
+        for record in result.scalars().all()
+        if record.policy_version_ids == current_policy_ids
+    ]
+
+
+async def open_relationship_evidence(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    relationship_uuid: str,
+    evidence_uuid: str,
+) -> tuple[StudyEvidenceFileRead, AsyncIterator[bytes]]:
+    relationship, profile = await _get_relationship_and_profile(
+        db_session, organization, relationship_uuid
+    )
+    policies = await _authorize_relationship_evidence_action(
+        db_session, organization, actor, relationship, profile, datetime.now(timezone.utc)
+    )
+    result = await db_session.execute(
+        select(StudyEvidenceFile).where(
+            StudyEvidenceFile.org_id == organization.id,
+            StudyEvidenceFile.learner_profile_id == profile.id,
+            StudyEvidenceFile.relationship_uuid == relationship.relationship_uuid,
+            StudyEvidenceFile.evidence_uuid == evidence_uuid,
+            StudyEvidenceFile.purpose == "guardian_authority_evidence",
+            StudyEvidenceFile.upload_status == "ready",
+        )
+    )
+    record = result.scalars().first()
+    if record is None:
+        raise HTTPException(status_code=404, detail="Evidence file not found")
+    current_policy_ids = [int(policy.id) for policy in policies]
+    if record.policy_version_ids != current_policy_ids:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "EVIDENCE_POLICY_STALE",
+                "message": "The evidence is unavailable until the current privacy, retention and accessibility policy is reviewed.",
+            },
+        )
     return await _file_read(db_session, profile, record), await _open_private_evidence(organization, record)
 
 

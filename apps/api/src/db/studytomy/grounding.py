@@ -22,6 +22,7 @@ class StudyDraftMaterial(SQLModel, table=True):
     sha256: str = Field(max_length=64)
     original_pdf: bytes = Field(sa_column=Column(LargeBinary, nullable=False, info={"private": True}))
     pages: list[dict] = Field(sa_column=Column(JSON, nullable=False, info={"private": True}))
+    source_provenance: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     revoked_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),

@@ -180,7 +180,8 @@ async def _authorized_learner(
 ) -> tuple[StudyLearnerProfile, StudyPolicyVersion, tuple[int, ...]]:
     profile = (await db.execute(select(StudyLearnerProfile).where(
         StudyLearnerProfile.org_id == org.id, StudyLearnerProfile.user_id == actor.id,
-        StudyLearnerProfile.status == "active", StudyLearnerProfile.control_mode == "independent",
+        StudyLearnerProfile.status == "active",
+        StudyLearnerProfile.control_mode.in_(("independent", "dependent")),
         select(UserOrganization.id).where(
             UserOrganization.org_id == org.id, UserOrganization.user_id == actor.id,
         ).exists(),

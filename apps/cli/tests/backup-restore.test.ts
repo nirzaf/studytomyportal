@@ -32,6 +32,8 @@ const dockerMock = vi.hoisted(() => ({
   dockerComposeUp: vi.fn(),
   dockerExecToFile: vi.fn(),
   dockerExecFromFile: vi.fn(),
+  dockerComposeRunToFile: vi.fn(),
+  dockerComposeRunFromFile: vi.fn(),
 }))
 vi.mock('../src/services/docker.js', () => dockerMock)
 
@@ -97,6 +99,9 @@ describe('backup / restore: real tar, stubbed database', () => {
     })
     dockerMock.dockerExecToFile.mockReset().mockImplementation((_c: string, cmd: string[], out: string) =>
       fs.writeFileSync(out, cmd[0] === 'tar' ? 'content-tar-bytes' : DUMP_SQL))
+    dockerMock.dockerComposeRunToFile.mockReset().mockImplementation((_d: string, _svc: string, _cmd: string[], out: string) =>
+      fs.writeFileSync(out, 'content-tar-bytes'))
+    dockerMock.dockerComposeRunFromFile.mockReset()
     promptStub._s.selectValue = 'create'; promptStub._s.textValue = ''; promptStub._s.confirmValue = true
     vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new ProcessExit(code ?? 0)
@@ -145,16 +150,18 @@ describe('backup / restore: real tar, stubbed database', () => {
     fs.rmSync(out, { recursive: true, force: true })
   })
 
-  it('backup includes content.tar when the app container is running', async () => {
+  it('backup quiesces writers and archives content.tar with strict exit code 0', async () => {
     await backupCommand()
 
-    expect(dockerMock.composeServiceContainer).toHaveBeenCalledWith(installDir, 'learnhouse-app')
-    expect(dockerMock.dockerExecToFile).toHaveBeenCalledWith(
-      'cid-learnhouse-app',
+    expect(dockerMock.dockerComposeStop).toHaveBeenCalledWith(installDir, 'learnhouse-app')
+    expect(dockerMock.dockerComposeRunToFile).toHaveBeenCalledWith(
+      installDir,
+      'learnhouse-app',
       ['tar', '-C', '/app/api/content', '-cf', '-', '.'],
       expect.stringMatching(/content\.tar$/),
-      [0, 1], // GNU tar exits 1 when a file changed while it was read; still a complete archive
+      [0],
     )
+    expect(dockerMock.dockerComposeUp).toHaveBeenCalledWith(installDir)
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'lh-br-x-'))
     execSync(`tar -xzf "${latestArchive()}" -C "${out}"`, { stdio: 'pipe' })
     const sub = fs.readdirSync(out)[0]
@@ -163,22 +170,14 @@ describe('backup / restore: real tar, stubbed database', () => {
     fs.rmSync(out, { recursive: true, force: true })
   })
 
-  it('backup warns but still succeeds when the app container is not running', async () => {
-    dockerMock.composeServiceContainer.mockImplementation((_dir: string, svc: string) =>
-      svc === 'learnhouse-app' ? '' : `cid-${svc}`)
-    const warn = vi.spyOn(promptStub.log, 'warn')
+  it('backup fails cleanly and restarts stopped services when content archival fails', async () => {
+    dockerMock.dockerComposeRunToFile.mockImplementation(() => { throw new Error('tar exit 1') })
 
-    await expect(backupCommand()).resolves.toBeUndefined()
-
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('uploaded content is NOT in this backup'))
-    expect(dockerMock.dockerExecToFile).toHaveBeenCalledTimes(1) // the dump only, no content tar
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'lh-br-x-'))
-    execSync(`tar -xzf "${latestArchive()}" -C "${out}"`, { stdio: 'pipe' })
-    const sub = fs.readdirSync(out)[0]
-    expect(fs.existsSync(path.join(out, sub, 'database.sql'))).toBe(true)
-    expect(fs.existsSync(path.join(out, sub, 'content.tar'))).toBe(false)
-    expect(JSON.parse(fs.readFileSync(path.join(out, sub, 'backup.json'), 'utf-8')).content).toBe(false)
-    fs.rmSync(out, { recursive: true, force: true })
+    const err = await backupCommand().catch((e) => e)
+    expect(err).toBeInstanceOf(ProcessExit)
+    expect(err.code).toBe(1)
+    expect(dockerMock.dockerComposeUp).toHaveBeenCalledWith(installDir)
+    expect(fs.readdirSync(path.join(installDir, 'backups'))).toEqual([])
   })
 
   it('backup <archive> without --restore exits 1 and touches nothing', async () => {
@@ -422,33 +421,41 @@ describe('backup / restore: real tar, stubbed database', () => {
     expect(script).toContain('DROP SCHEMA IF EXISTS public CASCADE')
     expect(script).toContain('-f -')
 
-    // The app is stopped around the schema swap, then the stack comes back up
-    // and the uploaded content is put back into the app container.
+    // The app is stopped around BOTH the schema swap and uploaded content
+    // restore, then the stack comes back up only after both succeed.
     expect(dockerMock.dockerComposeStop).toHaveBeenCalledWith(installDir, 'learnhouse-app')
     expect(dockerMock.dockerComposeUp).toHaveBeenCalledWith(installDir)
-    const stopAt = dockerMock.dockerComposeStop.mock.invocationCallOrder[0]
+    const stopAt = dockerMock.dockerComposeStop.mock.invocationCallOrder.at(-1)!
     const psqlAt = dockerMock.dockerExecFromFile.mock.invocationCallOrder[0]
-    const upAt = dockerMock.dockerComposeUp.mock.invocationCallOrder[0]
+    const contentAt = dockerMock.dockerComposeRunFromFile.mock.invocationCallOrder[0]
+    const upAt = dockerMock.dockerComposeUp.mock.invocationCallOrder.at(-1)!
     expect(stopAt).toBeLessThan(psqlAt)
-    expect(psqlAt).toBeLessThan(upAt)
-    expect(dockerMock.dockerExecFromFile).toHaveBeenCalledWith(
-      'cid-learnhouse-app', ['tar', '-C', '/app/api/content', '-xf', '-'], expect.stringMatching(/content\.tar$/),
+    expect(psqlAt).toBeLessThan(contentAt)
+    expect(contentAt).toBeLessThan(upAt)
+    expect(dockerMock.dockerComposeRunFromFile).toHaveBeenCalledWith(
+      installDir,
+      'learnhouse-app',
+      ['sh', '-c', 'mkdir -p "/app/api/content" && tar -C "/app/api/content" -xf -'],
+      expect.stringMatching(/content\.tar$/),
     )
-    expect(dockerMock.dockerExecFromFile.mock.invocationCallOrder[1]).toBeGreaterThan(upAt)
   })
 
   it('restore on an Enterprise install stops only the running db clients', async () => {
     await backupCommand()
     const archive = latestArchive()
     writeConfig({ edition: 'enterprise' })
+    dockerMock.dockerComposeStop.mockClear()
     dockerMock.composeServiceContainer.mockImplementation((_dir: string, svc: string) => svc === 'collab' ? '' : `cid-${svc}`)
 
     await expect(restoreCommand(archive, { yes: true })).resolves.toBeUndefined()
     expect(dockerMock.dockerComposeStop.mock.calls).toEqual([[installDir, 'api']])
     expect(dockerMock.dockerComposeUp).toHaveBeenCalledWith(installDir)
-    // EE content lives in the api container.
-    expect(dockerMock.dockerExecFromFile).toHaveBeenCalledWith(
-      'cid-api', ['tar', '-C', '/app/content', '-xf', '-'], expect.stringMatching(/content\.tar$/),
+    // EE content lives in the api container and is restored before services come up.
+    expect(dockerMock.dockerComposeRunFromFile).toHaveBeenCalledWith(
+      installDir,
+      'api',
+      ['sh', '-c', 'mkdir -p "/app/content" && tar -C "/app/content" -xf -'],
+      expect.stringMatching(/content\.tar$/),
     )
   })
 

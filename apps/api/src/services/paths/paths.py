@@ -678,6 +678,36 @@ def _user_ref(user: Optional[User]) -> dict:
     }
 
 
+async def _is_protected_learner(db_session: AsyncSession, user_id: int) -> bool:
+    from src.db.studytomy.family import StudyLearnerProfile
+
+    row = (
+        await db_session.execute(
+            select(StudyLearnerProfile.id)
+            .where(StudyLearnerProfile.user_id == user_id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return row is not None
+
+
+async def _protected_learner_ids(
+    db_session: AsyncSession, user_ids: set[int]
+) -> set[int]:
+    if not user_ids:
+        return set()
+    from src.db.studytomy.family import StudyLearnerProfile
+
+    rows = (
+        await db_session.execute(
+            select(StudyLearnerProfile.user_id)
+            .where(StudyLearnerProfile.user_id.in_(user_ids))
+            .distinct()
+        )
+    ).scalars().all()
+    return {int(uid) for uid in rows}
+
+
 async def enroll_in_path(
     request: Request,
     path_uuid: str,
@@ -715,17 +745,18 @@ async def enroll_in_path(
                 user_id=user_id,
                 properties={"path_uuid": path.path_uuid},
             )
-            try:
-                await dispatch_webhooks(
-                    event_name="path_enrolled",
-                    org_id=path.org_id,
-                    data={
-                        "user": _user_ref(current_user),
-                        "path": {"path_uuid": path.path_uuid, "name": path.name},
-                    },
-                )
-            except Exception as e:
-                logger.warning("path_enrolled webhook failed (non-critical): %s", e)
+            if not await _is_protected_learner(db_session, user_id):
+                try:
+                    await dispatch_webhooks(
+                        event_name="path_enrolled",
+                        org_id=path.org_id,
+                        data={
+                            "user": _user_ref(current_user),
+                            "path": {"path_uuid": path.path_uuid, "name": path.name},
+                        },
+                    )
+                except Exception as e:
+                    logger.warning("path_enrolled webhook failed (non-critical): %s", e)
 
     # Credit work done before enrolling: a learner who already finished every
     # course gets the certificate on the spot.
@@ -802,11 +833,16 @@ async def get_path_learners(
             )
         ).scalars().all()
     }
+    protected_ids = await _protected_learner_ids(
+        db_session, {user.id for _, user in rows if user.id is not None}
+    )
     path_courses = await _load_path_courses(db_session, path)
     courses = [c for _, c in path_courses]
 
     result = []
     for enrollment, user in rows:
+        if user.id in protected_ids:
+            continue
         completed_ids = await _completed_course_ids(user.id, courses, db_session)
         summary = _summarize(path, path_courses, completed_ids)
         result.append(
@@ -918,18 +954,19 @@ async def check_path_completion(
         user_id=user_id,
         properties={"path_uuid": path.path_uuid},
     )
-    try:
-        await dispatch_webhooks(
-            event_name="path_completed",
-            org_id=path.org_id,
-            data={
-                "user": _user_ref(user),
-                "path": {"path_uuid": path.path_uuid, "name": path.name},
-                "certificate": {"certificate_uuid": certificate_uuid},
-            },
-        )
-    except Exception as e:
-        logger.warning("path_completed webhook failed (non-critical): %s", e)
+    if not await _is_protected_learner(db_session, user_id):
+        try:
+            await dispatch_webhooks(
+                event_name="path_completed",
+                org_id=path.org_id,
+                data={
+                    "user": _user_ref(user),
+                    "path": {"path_uuid": path.path_uuid, "name": path.name},
+                    "certificate": {"certificate_uuid": certificate_uuid},
+                },
+            )
+        except Exception as e:
+            logger.warning("path_completed webhook failed (non-critical): %s", e)
     return True
 
 

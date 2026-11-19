@@ -331,3 +331,82 @@ test('generated adaptive widget updates scaffolding and challenges locally with 
     await dom.happyDOM.close()
   }
 })
+
+test('PlaygroundChatPanel remount (e.g. exiting fullscreen preview) preserves current parent adaptation state', async () => {
+  const dom = createDomHarness()
+  const { createRoot } = await import('react-dom/client')
+  const container = dom.document.createElement('div')
+  dom.document.body.appendChild(container)
+  const root = createRoot(container)
+  const i18n = createInstance()
+  await i18n.init({ lng: 'en', resources: { en: { translation: english } } })
+
+  // Mirror PlaygroundEditor's parent state + fullscreen conditional unmount/remount
+  function EditorHarness() {
+    const [fullscreen, setFullscreen] = React.useState(false)
+    const [adaptation, setAdaptation] = React.useState({
+      enabled: true,
+      levels: ['Foundation', 'Core', 'Extension'],
+      target_skills: [],
+    })
+    return React.createElement(
+      'div',
+      null,
+      React.createElement(
+        'button',
+        { type: 'button', 'data-testid': 'toggle-fs', onClick: () => setFullscreen((v) => !v) },
+        fullscreen ? 'Exit fullscreen' : 'Fullscreen'
+      ),
+      !fullscreen &&
+        React.createElement(PlaygroundChatPanel, {
+          key: 'pg_fs_test',
+          messages: [],
+          isGenerating: false,
+          iterationCount: 0,
+          maxIterations: 10,
+          initialLearnerAdaptation: adaptation,
+          onLearnerAdaptationChange: setAdaptation,
+          onSend: () => {},
+        })
+    )
+  }
+
+  try {
+    await act(async () => {
+      root.render(React.createElement(I18nextProvider, { i18n }, React.createElement(EditorHarness)))
+    })
+
+    // Rename level 1 and add a focus skill
+    const levelInputs = [...container.querySelectorAll('input[aria-label^="Level "]')]
+    await act(async () => {
+      setNativeValue(levelInputs[0], 'Grade 10 Starter')
+    })
+    const skillInput = container.querySelector('#playground-skills')
+    const addSkillBtn = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Add'
+    )
+    await act(async () => {
+      setNativeValue(skillInput, 'Quadratic equations')
+    })
+    await act(async () => {
+      addSkillBtn.click()
+    })
+
+    // Enter fullscreen (unmounts PlaygroundChatPanel) then exit fullscreen (remounts)
+    const fsBtn = container.querySelector('[data-testid="toggle-fs"]')
+    await act(async () => {
+      fsBtn.click()
+    })
+    expect(container.querySelector('#playground-skills')).toBeNull()
+
+    await act(async () => {
+      fsBtn.click()
+    })
+    const remountedLevels = [...container.querySelectorAll('input[aria-label^="Level "]')]
+    expect(remountedLevels.map((el) => el.value)).toEqual(['Grade 10 Starter', 'Core', 'Extension'])
+    expect(container.textContent).toContain('Quadratic equations')
+  } finally {
+    await act(async () => root.unmount())
+    await dom.happyDOM.close()
+  }
+})

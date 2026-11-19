@@ -833,8 +833,9 @@ async def api_list_report_delivery_reconciliation(
     actor: AdaptiveActor,
     db: AdaptiveDB,
     limit: Annotated[int, Query(ge=1, le=50)] = 25,
+    after: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
 ) -> OutboxReconciliationPage:
-    return await list_outbox_reconciliation(db, org, actor, limit=limit)
+    return await list_outbox_reconciliation(db, org, actor, limit=limit, after=after)
 
 
 @router.post(

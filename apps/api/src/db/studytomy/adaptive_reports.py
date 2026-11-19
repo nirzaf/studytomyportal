@@ -102,14 +102,29 @@ class StudyReportRecipient(CurriculumRecord, table=True):
             "projection = 'adaptive_report_summary' AND grant_version >= 1",
             name="ck_st_report_recipient_scope",
         ),
+        CheckConstraint(
+            "(recipient_capacity = 'independent_sharing' AND sharing_grant_id IS NOT NULL AND relationship_id IS NULL) OR "
+            "(recipient_capacity = 'guardian_authority' AND sharing_grant_id IS NULL AND relationship_id IS NOT NULL)",
+            name="ck_st_report_recipient_capacity",
+        ),
     )
 
     report_id: int = Field(
         sa_type=BigInteger, foreign_key="st_progress_report.id", ondelete="RESTRICT"
     )
     recipient_user_id: int = Field(foreign_key="user.id", ondelete="RESTRICT")
-    sharing_grant_id: int = Field(
-        sa_type=BigInteger, foreign_key="st_sharing_grant.id", ondelete="RESTRICT"
+    recipient_capacity: str = Field(default="independent_sharing", max_length=32)
+    sharing_grant_id: int | None = Field(
+        default=None,
+        sa_type=BigInteger,
+        foreign_key="st_sharing_grant.id",
+        ondelete="RESTRICT",
+    )
+    relationship_id: int | None = Field(
+        default=None,
+        sa_type=BigInteger,
+        foreign_key="st_relationship.id",
+        ondelete="RESTRICT",
     )
     grant_version: int
     projection: str = Field(max_length=64)

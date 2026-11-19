@@ -192,6 +192,22 @@ class TestConsentEvents:
                 "/api/v1/studytomy/orgs/{org_uuid}/learners/{learner_uuid}/consent-events/{event_uuid}/withdraw",
                 "POST",
             ),
+            (
+                "/api/v1/studytomy/orgs/{org_uuid}/dependents/{learner_uuid}/consent-notices/{purpose}",
+                "GET",
+            ),
+            (
+                "/api/v1/studytomy/orgs/{org_uuid}/dependents/{learner_uuid}/consent-events",
+                "GET",
+            ),
+            (
+                "/api/v1/studytomy/orgs/{org_uuid}/dependents/{learner_uuid}/consent-events",
+                "POST",
+            ),
+            (
+                "/api/v1/studytomy/orgs/{org_uuid}/dependents/{learner_uuid}/consent-events/{event_uuid}/withdraw",
+                "POST",
+            ),
         }
 
     async def test_self_notice_read_returns_current_approved_copy(

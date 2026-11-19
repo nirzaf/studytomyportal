@@ -405,8 +405,27 @@ def _require_exact_policy_approval(
             ("languages", row.language),
         )
     ]
+    programme_manifest = (
+        claims.get("programme_manifest") if isinstance(claims, dict) else None
+    )
+    programme_ok = True
+    if isinstance(programme_manifest, dict):
+        meta = row.programme_metadata if isinstance(row.programme_metadata, dict) else None
+        if meta is None:
+            programme_ok = False
+        else:
+            for manifest_key, field_key in (
+                ("authorities", "authority"),
+                ("syllabus_editions", "syllabus_edition"),
+                ("effective_cohorts", "effective_cohort"),
+            ):
+                allowed = programme_manifest.get(manifest_key)
+                if isinstance(allowed, list) and meta.get(field_key) not in allowed:
+                    programme_ok = False
+                    break
     if (
-        all(
+        programme_ok
+        and all(
             isinstance(values, list) and value in values
             for values, value in approved_scope
         )

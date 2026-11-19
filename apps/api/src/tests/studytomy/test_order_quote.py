@@ -31,10 +31,15 @@ async def test_purchase_authority_is_bound_to_actor_and_learner(db, org, admin_u
     monkeypatch.setattr(orders, "_latest_decisions", latest)
     monkeypatch.setattr(orders, "_decision_read", AsyncMock(return_value=SimpleNamespace(currently_eligible=True)))
 
+    # A dependent learner cannot self-purchase, and a non-guardian adult is denied.
     assert not await orders.can_purchase_for_learner(db, org, purchaser_id=regular_user.id, **scope)
     guardian.assert_not_awaited()
     assert not await orders.can_purchase_for_learner(db, org, purchaser_id=admin_user.id, **scope)
-    guardian.assert_not_awaited()
+    assert guardian.await_args.args[4] == "purchase_allocation"
+    # With active guardian purchase_allocation authority, the parent/guardian can purchase for the dependent learner.
+    guardian.return_value = True
+    assert await orders.can_purchase_for_learner(db, org, purchaser_id=admin_user.id, **scope)
+    guardian.return_value = False
 
     profile.control_mode = "independent"
     await db.commit()

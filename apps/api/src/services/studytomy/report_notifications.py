@@ -1,5 +1,6 @@
 """Optional progress-report delivery through the shared durable outbox."""
 
+import asyncio
 from datetime import UTC, datetime
 from html import escape
 import re
@@ -8,13 +9,18 @@ from urllib.parse import urlencode, urlsplit
 
 from fastapi import HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from src.db.organizations import Organization
 from src.db.studytomy.adaptive_reports import StudyProgressReport, StudyReportRecipient
-from src.db.studytomy.family import StudyLearnerProfile, StudySharingGrant
+from src.db.studytomy.family import (
+    StudyLearnerControlMode,
+    StudyLearnerProfile,
+    StudyRelationship,
+    StudySharingGrant,
+)
 from src.db.studytomy.governance import StudyPolicyKey
 from src.db.studytomy.operations import StudyOutboxPurpose, StudyOutboxRecord
 from src.db.users import PublicUser, User
@@ -49,6 +55,9 @@ _EMAIL_SCOPE = "adaptive_report_email"
 _PURPOSE = StudyOutboxPurpose.PROGRESS_REPORT
 _SAFE_EVIDENCE_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
 _SAFE_PROVIDER_REFERENCE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$")
+_REPORT_SEND_TIMEOUT_SECONDS = 30.0
+_RECONCILIATION_SCAN_BATCH_SIZE = 50
+_RECONCILIATION_MAX_BATCHES = 10
 
 
 class ReportDeliveryStatus(BaseModel):
@@ -105,6 +114,7 @@ class OutboxReconciliationItem(BaseModel):
 
 class OutboxReconciliationPage(BaseModel):
     deliveries: list[OutboxReconciliationItem]
+    next_cursor: str | None = None
 
 
 class OutboxReconciliationResult(BaseModel):
@@ -169,42 +179,109 @@ async def list_outbox_reconciliation(
     actor: PublicUser,
     *,
     limit: int = 25,
+    after: str | None = None,
 ) -> OutboxReconciliationPage:
     if not 1 <= limit <= 50:
         raise HTTPException(422, "limit must be between 1 and 50")
     await lock_organization(db, org.id)
-    rows = (
-        await db.execute(
-            select(StudyOutboxRecord)
-            .where(
-                StudyOutboxRecord.org_id == org.id,
-                StudyOutboxRecord.purpose == _PURPOSE.value,
-                StudyOutboxRecord.status == "reconciliation_required",
+    cursor_updated_at: datetime | None = None
+    cursor_id: int | None = None
+    if after is not None:
+        anchor = (
+            await db.execute(
+                select(StudyOutboxRecord).where(
+                    StudyOutboxRecord.org_id == org.id,
+                    StudyOutboxRecord.purpose == _PURPOSE.value,
+                    StudyOutboxRecord.record_uuid == after,
+                )
             )
-            .order_by(StudyOutboxRecord.updated_at, StudyOutboxRecord.id)
-            .limit(limit)
-        )
-    ).scalars().all()
+        ).scalar_one_or_none()
+        if anchor is None:
+            raise HTTPException(422, "Invalid reconciliation cursor.")
+        cursor_updated_at = anchor.updated_at
+        cursor_id = anchor.id
+
     deliveries: list[OutboxReconciliationItem] = []
-    for record in rows:
-        try:
-            await _outbox_report_scope(db, org, actor, record)
-        except HTTPException as error:
-            if error.status_code in (403, 404):
-                continue
-            raise
-        deliveries.append(
-            OutboxReconciliationItem(
-                uuid=record.record_uuid,
-                resource_uuid=record.resource_uuid,
-                resource_version=record.resource_version,
-                version=record.version,
-                status=record.status,
-                attempt_count=record.attempt_count,
-                last_error_code=record.last_error_code,
-            )
+    last_scanned_uuid: str | None = None
+    exhausted = False
+    for _ in range(_RECONCILIATION_MAX_BATCHES):
+        query = select(StudyOutboxRecord).where(
+            StudyOutboxRecord.org_id == org.id,
+            StudyOutboxRecord.purpose == _PURPOSE.value,
+            StudyOutboxRecord.status == "reconciliation_required",
         )
-    return OutboxReconciliationPage(deliveries=deliveries)
+        if cursor_updated_at is not None and cursor_id is not None:
+            query = query.where(
+                or_(
+                    StudyOutboxRecord.updated_at > cursor_updated_at,
+                    and_(
+                        StudyOutboxRecord.updated_at == cursor_updated_at,
+                        StudyOutboxRecord.id > cursor_id,
+                    ),
+                )
+            )
+        rows = (
+            await db.execute(
+                query.order_by(StudyOutboxRecord.updated_at, StudyOutboxRecord.id).limit(
+                    _RECONCILIATION_SCAN_BATCH_SIZE
+                )
+            )
+        ).scalars().all()
+        if not rows:
+            exhausted = True
+            break
+        for record in rows:
+            cursor_updated_at = record.updated_at
+            cursor_id = record.id
+            last_scanned_uuid = record.record_uuid
+            try:
+                await _outbox_report_scope(db, org, actor, record)
+            except HTTPException as error:
+                if error.status_code in (403, 404):
+                    continue
+                raise
+            deliveries.append(
+                OutboxReconciliationItem(
+                    uuid=record.record_uuid,
+                    resource_uuid=record.resource_uuid,
+                    resource_version=record.resource_version,
+                    version=record.version,
+                    status=record.status,
+                    attempt_count=record.attempt_count,
+                    last_error_code=record.last_error_code,
+                )
+            )
+            if len(deliveries) >= limit:
+                break
+        if len(deliveries) >= limit:
+            break
+        if len(rows) < _RECONCILIATION_SCAN_BATCH_SIZE:
+            exhausted = True
+            break
+
+    next_cursor = None
+    if not exhausted and last_scanned_uuid is not None and cursor_updated_at is not None and cursor_id is not None:
+        has_more = (
+            await db.execute(
+                select(StudyOutboxRecord.id)
+                .where(
+                    StudyOutboxRecord.org_id == org.id,
+                    StudyOutboxRecord.purpose == _PURPOSE.value,
+                    StudyOutboxRecord.status == "reconciliation_required",
+                    or_(
+                        StudyOutboxRecord.updated_at > cursor_updated_at,
+                        and_(
+                            StudyOutboxRecord.updated_at == cursor_updated_at,
+                            StudyOutboxRecord.id > cursor_id,
+                        ),
+                    ),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if has_more is not None:
+            next_cursor = last_scanned_uuid
+    return OutboxReconciliationPage(deliveries=deliveries, next_cursor=next_cursor)
 
 
 async def reconcile_outbox_delivery(
@@ -381,6 +458,32 @@ async def _eligible_recipient(
     profile = await db.get(StudyLearnerProfile, row.learner_profile_id)
     if profile is None:
         return None
+    if recipient.recipient_capacity == "guardian_authority":
+        from src.services.studytomy.authority import has_active_guardian_scope
+
+        if (
+            profile.control_mode != StudyLearnerControlMode.DEPENDENT.value
+            or recipient.relationship_id is None
+        ):
+            return None
+        relationship = await db.get(StudyRelationship, recipient.relationship_id)
+        if relationship is None or not await has_active_guardian_scope(
+            db,
+            org,
+            profile,
+            int(user.id),
+            _EMAIL_SCOPE,
+            now=now,
+            relationship_binding=(
+                relationship.relationship_uuid,
+                int(recipient.grant_version),
+            ),
+        ):
+            return None
+        actor = PublicUser.model_validate(user, from_attributes=True)
+        context = await _published_report_context(db, org, actor, row, revision_uuid, now)
+        return (user, relationship) if context is not None else None
+
     grant = await current_independent_sharing_grant(
         db, org, profile, user.id, _EMAIL_SCOPE, now=now
     )
@@ -443,7 +546,8 @@ async def request_report_notification(
         if current is None:
             status = "suppressed"
         else:
-            user, grant = current
+            user, authority = current
+            authority_uuid = getattr(authority, "grant_uuid", None) or authority.relationship_uuid
             delivery, _ = await enqueue_delivery(
                 db,
                 org_id=org.id,
@@ -452,7 +556,7 @@ async def request_report_notification(
                 resource_kind="progress_report",
                 resource_uuid=row.uuid,
                 resource_version=row.version,
-                authority_reference_uuid=grant.grant_uuid,
+                authority_reference_uuid=authority_uuid,
                 policy_refs=policy_ids,
                 created_by_user_id=actor.id,
                 dedupe_key=f"{row.uuid}:{row.version}:{recipient.id}:report-email",
@@ -505,7 +609,10 @@ async def _dispatch_context(db: AsyncSession, record: StudyOutboxRecord):
     if recipient is None:
         return None
     eligible = await _eligible_recipient(db, org, row, recipient, revision_uuid, now)
-    if eligible is None or eligible[1].grant_uuid != record.authority_reference_uuid:
+    if eligible is None:
+        return None
+    authority_uuid = getattr(eligible[1], "grant_uuid", None) or eligible[1].relationship_uuid
+    if authority_uuid != record.authority_reference_uuid:
         return None
     return org, row, eligible[0]
 
@@ -540,13 +647,21 @@ async def send_report_delivery(
     if urlsplit(origin).scheme != "https":
         raise ProviderOutcomeUnknown
     href = f"{origin.rstrip('/')}/account/reports?{urlencode({'report': row.uuid})}"
-    result = await run_in_threadpool(
-        send_email,
-        user.email,
-        "A progress report is available",
-        f'<p><a href="{escape(href, quote=True)}">Sign in to view the progress report</a>.</p>',
-        single_attempt=True,
-    )
+    try:
+        result = await asyncio.wait_for(
+            run_in_threadpool(
+                send_email,
+                user.email,
+                "A progress report is available",
+                f'<p><a href="{escape(href, quote=True)}">Sign in to view the progress report</a>.</p>',
+                single_attempt=True,
+            ),
+            timeout=_REPORT_SEND_TIMEOUT_SECONDS,
+        )
+    except TimeoutError as error:
+        # A timed-out synchronous email call may still complete at the provider.
+        # Treat it as unknown so operator reconciliation runs before any retry.
+        raise ProviderOutcomeUnknown from error
     if isinstance(result, dict):
         reference = result.get("id")
         if isinstance(reference, str) and reference:

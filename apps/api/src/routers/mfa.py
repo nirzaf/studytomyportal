@@ -6,7 +6,7 @@ challenge deliberately lives at ``/auth/login/mfa`` so the web app's auth proxy
 needing a separate allowlist entry.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -496,9 +496,8 @@ async def api_login_mfa(
             detail={"code": "MFA_SESSION_EXPIRED", "message": "Please sign in again."},
         )
 
-    pending_generation = (decode_jwt(form.mfa_token) or {}).get(
-        SESSION_GENERATION_CLAIM
-    )
+    pending_payload = decode_jwt(form.mfa_token) or {}
+    pending_generation = pending_payload.get(SESSION_GENERATION_CLAIM)
     user_generation = getattr(user, "session_generation", None)
     if (
         type(pending_generation) is not int
@@ -511,6 +510,19 @@ async def api_login_mfa(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "MFA_SESSION_EXPIRED", "message": "Please sign in again."},
         )
+    password_changed_at = getattr(user, "password_changed_at", None)
+    if isinstance(password_changed_at, datetime):
+        pending_iat = pending_payload.get("iat")
+        cutoff = (
+            password_changed_at.replace(tzinfo=timezone.utc)
+            if password_changed_at.tzinfo is None
+            else password_changed_at.astimezone(timezone.utc)
+        ).timestamp()
+        if not isinstance(pending_iat, (int, float)) or float(pending_iat) < cutoff:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"code": "MFA_SESSION_EXPIRED", "message": "Please sign in again."},
+            )
 
     mfa = await get_user_mfa(db_session, user.id)
     if mfa is None or mfa.confirmed_at is None:

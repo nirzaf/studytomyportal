@@ -22,6 +22,9 @@ from src.db.studytomy.family import (
     StudyLearnerControlMode,
     StudyLearnerProfile,
     StudyLearnerProfileStatus,
+    StudyRelationship,
+    StudyRelationshipStatus,
+    StudyRelationshipType,
 )
 from src.db.studytomy.governance import (
     StudyPolicyBody,
@@ -208,12 +211,101 @@ async def _require_current_independent_learner(
         )
 
 
+_GUARDIAN_CONSENT_SCOPE = "consent_management"
+
+
+async def _active_guardian_consent_relationship(
+    db_session: AsyncSession,
+    organization: Organization,
+    profile: StudyLearnerProfile,
+    adult_user_id: int,
+    now: datetime,
+) -> StudyRelationship | None:
+    """Resolve one current accepted guardian relationship authorized for consent."""
+    from src.services.studytomy.authority import has_active_guardian_scope
+
+    rows = (
+        await db_session.execute(
+            select(StudyRelationship)
+            .where(
+                StudyRelationship.org_id == organization.id,
+                StudyRelationship.learner_profile_id == profile.id,
+                StudyRelationship.adult_user_id == adult_user_id,
+                StudyRelationship.relationship_type == StudyRelationshipType.GUARDIAN.value,
+                StudyRelationship.status == StudyRelationshipStatus.ACCEPTED.value,
+            )
+            .order_by(StudyRelationship.decided_at.desc(), StudyRelationship.id.desc())
+        )
+    ).scalars().all()
+    for rel in rows:
+        if await has_active_guardian_scope(
+            db_session,
+            organization,
+            profile,
+            adult_user_id,
+            _GUARDIAN_CONSENT_SCOPE,
+            now=now,
+            relationship_binding=(rel.relationship_uuid, rel.authority_version),
+        ):
+            return rel
+    return None
+
+
+async def _require_current_dependent_learner(
+    db_session: AsyncSession,
+    organization: Organization,
+    profile: StudyLearnerProfile,
+    policies: list[StudyPolicyVersion],
+    now: datetime,
+) -> None:
+    if (
+        profile.org_id != organization.id
+        or profile.status != StudyLearnerProfileStatus.ACTIVE.value
+        or profile.control_mode != StudyLearnerControlMode.DEPENDENT.value
+    ):
+        raise _problem(
+            "CONSENT_ACTOR_NOT_AUTHORIZED",
+            "Guardian consent choices are available only for an active dependent learner.",
+            403,
+        )
+    policy_map = _policy_map(policies)
+    for key in _BASE_POLICY_KEYS:
+        policy = policy_map.get(key)
+        if policy is None:
+            raise _problem("POLICY_NOT_APPROVED", f"A current {key.value} policy is required.")
+        for area in _REQUIRED_SPECIFIED_AREAS.get(key, ()):
+            _body_value(policy, key, area)
+    decisions = await _latest_decisions(db_session, profile)
+    learning = next(
+        (
+            decision
+            for decision in decisions
+            if decision.eligibility_kind == StudyEligibilityKind.LEARNING.value
+        ),
+        None,
+    )
+    if learning is None or learning.outcome != StudyEligibilityOutcome.ELIGIBLE.value:
+        raise _problem(
+            "CONSENT_ACTOR_NOT_AUTHORIZED",
+            "A current human learning-eligibility decision is required for this dependent learner.",
+            403,
+        )
+    learning_read = await _decision_read(db_session, organization, learning, now)
+    if not learning_read.currently_eligible:
+        raise _problem(
+            "CONSENT_POLICY_STALE",
+            "The dependent learner's eligibility decision must be reviewed under current policy.",
+        )
+
+
 async def _consent_context(
     db_session: AsyncSession,
     organization: Organization,
     profile: StudyLearnerProfile,
     purpose: StudyConsentPurpose,
     now: datetime,
+    *,
+    guardian_actor_id: int | None = None,
 ) -> tuple[list[StudyPolicyVersion], set[str], str, str]:
     keys = (*_BASE_POLICY_KEYS, *_PURPOSE_POLICY_KEYS[purpose])
     policies = await _current_policies(db_session, organization, keys, now)
@@ -224,9 +316,24 @@ async def _consent_context(
             raise _problem("POLICY_NOT_APPROVED", f"A current {key.value} policy is required.")
         for area in _REQUIRED_SPECIFIED_AREAS.get(key, ()):
             _body_value(policy, key, area)
-    await _require_current_independent_learner(
-        db_session, organization, profile, policies, now
-    )
+    if profile.control_mode == StudyLearnerControlMode.DEPENDENT.value:
+        await _require_current_dependent_learner(
+            db_session, organization, profile, policies, now
+        )
+        if guardian_actor_id is not None:
+            rel = await _active_guardian_consent_relationship(
+                db_session, organization, profile, guardian_actor_id, now
+            )
+            if rel is None:
+                raise _problem(
+                    "CONSENT_ACTOR_NOT_AUTHORIZED",
+                    "Current verified guardian consent authority is required for this dependent learner.",
+                    403,
+                )
+    else:
+        await _require_current_independent_learner(
+            db_session, organization, profile, policies, now
+        )
     scopes, notice_version, notice_text = _approved_scopes_and_notice(policy_map, purpose)
     return policies, scopes, notice_version, notice_text
 
@@ -616,6 +723,321 @@ async def withdraw_my_consent_choice_for_self(
     )
 
 
+async def _dependent_profile_for_guardian(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    learner_uuid: str,
+    now: datetime,
+    *,
+    lock: bool = False,
+) -> tuple[StudyLearnerProfile, StudyRelationship]:
+    if actor.id is None:
+        raise HTTPException(status_code=401, detail="An authenticated account is required")
+    statement = select(StudyLearnerProfile).where(
+        StudyLearnerProfile.org_id == organization.id,
+        StudyLearnerProfile.learner_uuid == learner_uuid,
+        StudyLearnerProfile.status == StudyLearnerProfileStatus.ACTIVE.value,
+        StudyLearnerProfile.control_mode == StudyLearnerControlMode.DEPENDENT.value,
+    )
+    if lock:
+        statement = statement.with_for_update()
+    profile = (await db_session.execute(statement)).scalars().first()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Learner consent settings not found")
+    relationship = await _active_guardian_consent_relationship(
+        db_session, organization, profile, int(actor.id), now
+    )
+    if relationship is None:
+        raise HTTPException(status_code=404, detail="Learner consent settings not found")
+    return profile, relationship
+
+
+async def get_guardian_consent_notice(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    learner_uuid: str,
+    purpose: StudyConsentPurpose,
+) -> StudyConsentNoticeRead:
+    now = datetime.now(UTC)
+    profile, _ = await _dependent_profile_for_guardian(
+        db_session, organization, actor, learner_uuid, now
+    )
+    purpose = StudyConsentPurpose(purpose)
+    policies, scopes, notice_version, notice_text = await _consent_context(
+        db_session,
+        organization,
+        profile,
+        purpose,
+        now,
+        guardian_actor_id=int(actor.id),
+    )
+    return StudyConsentNoticeRead(
+        purpose=purpose,
+        notice_version=notice_version,
+        notice_text=notice_text,
+        scope_codes=sorted(scopes),
+        policy_version_ids=[int(policy.id) for policy in policies],
+    )
+
+
+async def list_guardian_consent_events(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    learner_uuid: str,
+    *,
+    limit: int = 100,
+) -> list[StudyConsentEventRead]:
+    now = datetime.now(UTC)
+    profile, _ = await _dependent_profile_for_guardian(
+        db_session, organization, actor, learner_uuid, now
+    )
+    result = await db_session.execute(
+        select(StudyConsentEvent)
+        .where(
+            StudyConsentEvent.org_id == organization.id,
+            StudyConsentEvent.learner_profile_id == profile.id,
+            StudyConsentEvent.subject_user_id == profile.user_id,
+            StudyConsentEvent.provenance == "authenticated_guardian_authority",
+        )
+        .order_by(StudyConsentEvent.effective_at.desc(), StudyConsentEvent.id.desc())
+        .limit(max(1, min(limit, 100)))
+    )
+    return [_event_read(event) for event in result.scalars().all()]
+
+
+async def record_guardian_consent_choice(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    learner_uuid: str,
+    request: StudyConsentEventCreate,
+    idempotency_key: str,
+) -> StudyConsentEventRead:
+    if actor.id is None:
+        raise HTTPException(status_code=401, detail="An authenticated account is required")
+    await lock_organization(db_session, int(organization.id))
+    now = datetime.now(UTC)
+    profile, relationship = await _dependent_profile_for_guardian(
+        db_session, organization, actor, learner_uuid, now, lock=True
+    )
+    purpose = StudyConsentPurpose(request.purpose)
+    policies, allowed_scopes, notice_version, _notice_text = await _consent_context(
+        db_session,
+        organization,
+        profile,
+        purpose,
+        now,
+        guardian_actor_id=int(actor.id),
+    )
+    if request.notice_version != notice_version:
+        raise _problem(
+            "CONSENT_NOTICE_STALE",
+            "The submitted choice does not match the current approved notice version.",
+            409,
+        )
+    if not set(request.scope_codes).issubset(allowed_scopes):
+        raise _problem(
+            "CONSENT_SCOPE_NOT_APPROVED",
+            "The selected consent scope is not included in current approved policy.",
+            422,
+        )
+
+    operation = "studytomy.consent.guardian.record"
+    replay = await claim_idempotency(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        request_payload={
+            "learner_uuid": learner_uuid,
+            "request": request.model_dump(mode="json"),
+        },
+    )
+    if replay is not None:
+        result = await db_session.execute(
+            select(StudyConsentEvent).where(
+                StudyConsentEvent.org_id == organization.id,
+                StudyConsentEvent.event_uuid == replay.resource_uuid,
+                StudyConsentEvent.actor_user_id == actor.id,
+            )
+        )
+        event = result.scalars().first()
+        if event is None:
+            raise _problem("IDEMPOTENCY_RESULT_MISSING", "The recorded consent result is unavailable.")
+        return _event_read(event)
+
+    event = StudyConsentEvent(
+        org_id=organization.id,
+        learner_profile_id=profile.id,
+        subject_user_id=profile.user_id,
+        actor_user_id=actor.id,
+        relationship_id=relationship.id,
+        relationship_authority_version=relationship.authority_version,
+        purpose_code=purpose.value,
+        choice=request.choice.value,
+        notice_version=notice_version,
+        scope_codes=list(request.scope_codes),
+        policy_version_ids=[int(policy.id) for policy in policies],
+        provenance="authenticated_guardian_authority",
+        effective_at=now,
+        created_at=now,
+    )
+    db_session.add(event)
+    await db_session.flush()
+    await append_business_event(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        actor_capacity="verified_guardian",
+        subject_uuid=profile.learner_uuid,
+        resource_kind="consent_event",
+        resource_uuid=event.event_uuid,
+        action="studytomy.consent.recorded",
+        reason_code="GUARDIAN_CONSENT_CHOICE_RECORDED",
+        after_state={
+            "status": "accepted" if request.choice == StudyConsentChoice.ACCEPT else "declined",
+            "scope_codes": event.scope_codes,
+            "authority_version": relationship.authority_version,
+        },
+        policy_refs=[int(policy.id) for policy in policies],
+        dedupe_key=f"studytomy:consent:{event.event_uuid}",
+    )
+    await complete_idempotency(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        resource_kind="consent_event",
+        resource_uuid=event.event_uuid,
+        response_status=201,
+        response_projection={"event_uuid": event.event_uuid},
+    )
+    await db_session.commit()
+    await db_session.refresh(event)
+    return _event_read(event)
+
+
+async def withdraw_guardian_consent_choice(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    learner_uuid: str,
+    event_uuid: str,
+    idempotency_key: str,
+) -> StudyConsentEventRead:
+    if actor.id is None:
+        raise HTTPException(status_code=401, detail="An authenticated account is required")
+    await lock_organization(db_session, int(organization.id))
+    now = datetime.now(UTC)
+    profile, relationship = await _dependent_profile_for_guardian(
+        db_session, organization, actor, learner_uuid, now, lock=True
+    )
+    target = (
+        await db_session.execute(
+            select(StudyConsentEvent).where(
+                StudyConsentEvent.org_id == organization.id,
+                StudyConsentEvent.learner_profile_id == profile.id,
+                StudyConsentEvent.subject_user_id == profile.user_id,
+                StudyConsentEvent.event_uuid == event_uuid,
+                StudyConsentEvent.provenance == "authenticated_guardian_authority",
+            )
+        )
+    ).scalars().first()
+    if target is None or target.choice != StudyConsentChoice.ACCEPT.value:
+        raise HTTPException(status_code=404, detail="Consent choice not found")
+
+    purpose = StudyConsentPurpose(target.purpose_code)
+    policies, _allowed_scopes, notice_version, _notice_text = await _consent_context(
+        db_session,
+        organization,
+        profile,
+        purpose,
+        now,
+        guardian_actor_id=int(actor.id),
+    )
+
+    operation = "studytomy.consent.guardian.withdraw"
+    replay = await claim_idempotency(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        request_payload={"learner_uuid": learner_uuid, "event_uuid": event_uuid},
+    )
+    if replay is not None:
+        existing = (
+            await db_session.execute(
+                select(StudyConsentEvent).where(
+                    StudyConsentEvent.org_id == organization.id,
+                    StudyConsentEvent.event_uuid == replay.resource_uuid,
+                    StudyConsentEvent.actor_user_id == actor.id,
+                )
+            )
+        ).scalars().first()
+        if existing is None:
+            raise _problem("IDEMPOTENCY_RESULT_MISSING", "The recorded withdrawal result is unavailable.")
+        return _event_read(existing)
+
+    withdrawal = StudyConsentEvent(
+        org_id=organization.id,
+        learner_profile_id=profile.id,
+        subject_user_id=profile.user_id,
+        actor_user_id=actor.id,
+        relationship_id=relationship.id,
+        relationship_authority_version=relationship.authority_version,
+        purpose_code=purpose.value,
+        choice=StudyConsentChoice.WITHDRAW.value,
+        withdraws_event_uuid=target.event_uuid,
+        notice_version=notice_version,
+        scope_codes=list(target.scope_codes),
+        policy_version_ids=[int(policy.id) for policy in policies],
+        provenance="authenticated_guardian_authority",
+        effective_at=now,
+        created_at=now,
+    )
+    db_session.add(withdrawal)
+    await db_session.flush()
+    await append_business_event(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        actor_capacity="verified_guardian",
+        subject_uuid=profile.learner_uuid,
+        resource_kind="consent_event",
+        resource_uuid=withdrawal.event_uuid,
+        action="studytomy.consent.withdrawn",
+        reason_code="GUARDIAN_CONSENT_CHOICE_WITHDRAWN",
+        before_state={"previous_event_uuid": target.event_uuid},
+        after_state={
+            "status": "withdrawn",
+            "scope_codes": withdrawal.scope_codes,
+            "authority_version": relationship.authority_version,
+        },
+        policy_refs=[int(policy.id) for policy in policies],
+        dedupe_key=f"studytomy:consent:{withdrawal.event_uuid}",
+    )
+    await complete_idempotency(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        resource_kind="consent_event",
+        resource_uuid=withdrawal.event_uuid,
+        response_status=201,
+        response_projection={"event_uuid": withdrawal.event_uuid},
+    )
+    await db_session.commit()
+    await db_session.refresh(withdrawal)
+    return _event_read(withdrawal)
+
+
 async def has_current_consent_scope(
     db_session: AsyncSession,
     organization: Organization,
@@ -624,12 +1046,16 @@ async def has_current_consent_scope(
     scope_code: str,
     now: datetime | None = None,
 ) -> bool:
-    """Resolve a current self-consent scope for an independent learner."""
+    """Resolve a current consent scope for an active independent or dependent learner."""
     if (
         _SCOPE_CODE.fullmatch(scope_code) is None
         or profile.org_id != organization.id
         or profile.status != StudyLearnerProfileStatus.ACTIVE.value
-        or profile.control_mode != StudyLearnerControlMode.INDEPENDENT.value
+        or profile.control_mode
+        not in (
+            StudyLearnerControlMode.INDEPENDENT.value,
+            StudyLearnerControlMode.DEPENDENT.value,
+        )
     ):
         return False
     effective_now = now or datetime.now(UTC)
@@ -642,13 +1068,39 @@ async def has_current_consent_scope(
     if scope_code not in allowed_scopes:
         return False
     current_policy_ids = [int(policy.id) for policy in policies]
+    if profile.control_mode == StudyLearnerControlMode.INDEPENDENT.value:
+        result = await db_session.execute(
+            select(StudyConsentEvent)
+            .where(
+                StudyConsentEvent.org_id == organization.id,
+                StudyConsentEvent.learner_profile_id == profile.id,
+                StudyConsentEvent.subject_user_id == profile.user_id,
+                StudyConsentEvent.actor_user_id == profile.user_id,
+                StudyConsentEvent.provenance == "authenticated_self_service",
+                StudyConsentEvent.purpose_code == purpose.value,
+            )
+            .order_by(StudyConsentEvent.effective_at.desc(), StudyConsentEvent.id.desc())
+        )
+        for event in result.scalars().all():
+            if scope_code not in event.scope_codes:
+                continue
+            return (
+                event.choice == StudyConsentChoice.ACCEPT.value
+                and event.notice_version == notice_version
+                and event.policy_version_ids == current_policy_ids
+                and _as_utc(event.effective_at) <= _as_utc(effective_now)
+            )
+        return False
+
+    from src.services.studytomy.authority import has_active_guardian_scope
+
     result = await db_session.execute(
         select(StudyConsentEvent)
         .where(
             StudyConsentEvent.org_id == organization.id,
             StudyConsentEvent.learner_profile_id == profile.id,
             StudyConsentEvent.subject_user_id == profile.user_id,
-            StudyConsentEvent.actor_user_id == profile.user_id,
+            StudyConsentEvent.provenance == "authenticated_guardian_authority",
             StudyConsentEvent.purpose_code == purpose.value,
         )
         .order_by(StudyConsentEvent.effective_at.desc(), StudyConsentEvent.id.desc())
@@ -656,10 +1108,28 @@ async def has_current_consent_scope(
     for event in result.scalars().all():
         if scope_code not in event.scope_codes:
             continue
-        return (
-            event.choice == StudyConsentChoice.ACCEPT.value
-            and event.notice_version == notice_version
-            and event.policy_version_ids == current_policy_ids
-            and _as_utc(event.effective_at) <= _as_utc(effective_now)
+        if (
+            event.choice != StudyConsentChoice.ACCEPT.value
+            or event.notice_version != notice_version
+            or event.policy_version_ids != current_policy_ids
+            or _as_utc(event.effective_at) > _as_utc(effective_now)
+            or event.relationship_id is None
+            or event.relationship_authority_version is None
+        ):
+            return False
+        relationship = await db_session.get(StudyRelationship, event.relationship_id)
+        if relationship is None:
+            return False
+        return await has_active_guardian_scope(
+            db_session,
+            organization,
+            profile,
+            int(event.actor_user_id),
+            _GUARDIAN_CONSENT_SCOPE,
+            now=effective_now,
+            relationship_binding=(
+                relationship.relationship_uuid,
+                int(event.relationship_authority_version),
+            ),
         )
     return False

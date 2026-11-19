@@ -10,6 +10,7 @@ from src.db.studytomy.family import (
     StudyEligibilityDecisionCreate,
     StudyEligibilityDecisionRead,
     StudyFamilyReviewQueueItem,
+    StudyLearnerActivationCreate,
     StudyLearnerProfileCreate,
     StudyLearnerProfileRead,
     StudyRelationshipDecisionCreate,
@@ -35,6 +36,7 @@ from src.services.studytomy.authority import (
     withdraw_my_relationship_request,
 )
 from src.services.studytomy.learners import (
+    activate_learner_profile,
     create_learner_profile,
     get_learner_profile,
     record_eligibility_decision,
@@ -121,6 +123,30 @@ async def api_record_eligibility_decision(
 ) -> StudyEligibilityDecisionRead:
     organization = await _organization(org_uuid, db_session)
     return await record_eligibility_decision(
+        db_session,
+        organization,
+        current_user,
+        learner_uuid,
+        request,
+        idempotency_key,
+    )
+
+
+@router.post(
+    "/orgs/{org_uuid}/learners/{learner_uuid}/activate",
+    response_model=StudyLearnerProfileRead,
+    summary="Activate a reviewed pending learner profile",
+)
+async def api_activate_learner_profile(
+    org_uuid: str,
+    learner_uuid: str,
+    request: StudyLearnerActivationCreate,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=255),
+    current_user: PublicUser = Depends(get_authenticated_non_api_token_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> StudyLearnerProfileRead:
+    organization = await _organization(org_uuid, db_session)
+    return await activate_learner_profile(
         db_session,
         organization,
         current_user,

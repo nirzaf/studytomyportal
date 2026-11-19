@@ -974,6 +974,45 @@ async def decide_relationship_request(
                     },
                 )
 
+    if request.evidence_reference.startswith("ev_"):
+        from src.db.studytomy.operations import StudyEvidenceFile
+        from src.services.studytomy.learners import _current_policies
+
+        evidence = (
+            await db_session.execute(
+                select(StudyEvidenceFile).where(
+                    StudyEvidenceFile.org_id == organization.id,
+                    StudyEvidenceFile.learner_profile_id == profile.id,
+                    StudyEvidenceFile.relationship_uuid == relationship.relationship_uuid,
+                    StudyEvidenceFile.evidence_uuid == request.evidence_reference,
+                    StudyEvidenceFile.purpose == "guardian_authority_evidence",
+                    StudyEvidenceFile.upload_status == "ready",
+                )
+            )
+        ).scalars().first()
+        if evidence is None:
+            raise HTTPException(
+                status_code=422,
+                detail="The evidence reference is not a ready guardian-authority attachment for this relationship.",
+            )
+        evidence_policies = await _current_policies(
+            db_session,
+            organization,
+            (
+                StudyPolicyKey.D_01,
+                StudyPolicyKey.D_03,
+                StudyPolicyKey.D_12,
+                StudyPolicyKey.D_13,
+                StudyPolicyKey.D_15,
+            ),
+            now,
+        )
+        if evidence.policy_version_ids != [int(policy.id) for policy in evidence_policies]:
+            raise HTTPException(
+                status_code=409,
+                detail="The evidence attachment is governed by superseded policy versions.",
+            )
+
     owner_assignment = await _reviewer_owner_assignment(
         db_session,
         organization,
@@ -1152,6 +1191,45 @@ async def restrict_relationship_authority(
                 "message": "This relationship state cannot receive the requested narrowing transition.",
             },
         )
+
+    if request.evidence_reference.startswith("ev_"):
+        from src.db.studytomy.operations import StudyEvidenceFile
+        from src.services.studytomy.learners import _current_policies
+
+        evidence = (
+            await db_session.execute(
+                select(StudyEvidenceFile).where(
+                    StudyEvidenceFile.org_id == organization.id,
+                    StudyEvidenceFile.learner_profile_id == profile.id,
+                    StudyEvidenceFile.relationship_uuid == relationship.relationship_uuid,
+                    StudyEvidenceFile.evidence_uuid == request.evidence_reference,
+                    StudyEvidenceFile.purpose == "guardian_authority_evidence",
+                    StudyEvidenceFile.upload_status == "ready",
+                )
+            )
+        ).scalars().first()
+        if evidence is None:
+            raise HTTPException(
+                status_code=422,
+                detail="The evidence reference is not a ready guardian-authority attachment for this relationship.",
+            )
+        evidence_policies = await _current_policies(
+            db_session,
+            organization,
+            (
+                StudyPolicyKey.D_01,
+                StudyPolicyKey.D_03,
+                StudyPolicyKey.D_12,
+                StudyPolicyKey.D_13,
+                StudyPolicyKey.D_15,
+            ),
+            now,
+        )
+        if evidence.policy_version_ids != [int(policy.id) for policy in evidence_policies]:
+            raise HTTPException(
+                status_code=409,
+                detail="The evidence attachment is governed by superseded policy versions.",
+            )
 
     owner_assignment = await _reviewer_owner_assignment(
         db_session,

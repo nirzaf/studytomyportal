@@ -895,8 +895,15 @@ async def update_user_password(
     user.password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)
     user.update_date = str(datetime.now())
 
-    # Update user in database
+    # Update user in database and advance durable session generation atomically
+    # in the same transaction so pending MFA challenges and concurrent refreshes
+    # cannot mint usable tokens under the pre-change generation.
     db_session.add(user)
+    await db_session.flush()
+    if user.id is not None:
+        from src.services.auth.session import bump_session_generation_in_tx
+
+        await bump_session_generation_in_tx(db_session, user.id)
     await db_session.commit()
     await db_session.refresh(user)
 

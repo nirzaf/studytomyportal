@@ -181,6 +181,7 @@ class GuidanceContext:
     independent_family_count: int
     context_limited: bool = False
     practice_linked: bool = False
+    instruction_language: str = "en"
 
 
 @dataclass(frozen=True, slots=True)
@@ -445,6 +446,7 @@ async def _binding(
             mastery.eligible_count,
             limited or len(lesson_title) > 200,
             practice_id is not None,
+            curriculum.language or "en",
         ),
     )
 

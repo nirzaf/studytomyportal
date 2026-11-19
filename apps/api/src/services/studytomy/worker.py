@@ -5,6 +5,7 @@ D-13, D-14 and D-18 remain unapproved in this checkout; no schedule is enabled
 and dispatch still revalidates recipient, report and policy authority before any provider call.
 """
 
+import asyncio
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -26,6 +27,7 @@ _SAFE_CODE = re.compile(r"^[A-Z][A-Z0-9_]{1,63}$")
 _SAFE_PROVIDER_REFERENCE = re.compile(r"^[A-Za-z0-9._:-]{1,160}$")
 _MAX_ATTEMPTS = 8
 _PROVIDER_LEASE_SECONDS = 120
+_PROVIDER_SEND_TIMEOUT_SECONDS = 45.0
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,7 @@ async def run_delivery_batch(
     limit: int = 25,
     now: datetime | None = None,
     purpose: StudyOutboxPurpose | None = None,
+    send_timeout_seconds: float = _PROVIDER_SEND_TIMEOUT_SECONDS,
 ) -> dict[str, int]:
     """Claim and process a bounded batch with recipient/resource revalidation.
 
@@ -215,12 +218,27 @@ async def run_delivery_batch(
             continue
 
         try:
-            receipt = await send(
+            receipt = await asyncio.wait_for(
+                send(
+                    db_session,
+                    record,
+                    authorization,
+                    record.provider_idempotency_key,
+                ),
+                timeout=send_timeout_seconds,
+            )
+        except TimeoutError:
+            released = await _release_or_mark_unknown(
                 db_session,
                 record,
-                authorization,
-                record.provider_idempotency_key,
+                worker_id=worker_id,
+                status_value="reconciliation_required",
+                now=_as_utc(datetime.now(timezone.utc)),
+                error_code="PROVIDER_OUTCOME_UNKNOWN",
+                outcomes=outcomes,
             )
+            if released:
+                outcomes["reconciliation_required"] += 1
         except ProviderTransientFailure:
             await _retry_or_dead_letter(
                 db_session,

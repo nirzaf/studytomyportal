@@ -9,8 +9,11 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import {
+  decideRelationship,
   getFamilyReviewQueue,
   getRelationshipForReview,
+  listRelationshipEvidence,
+  type StudyEvidenceFileItem,
 } from '@services/studytomy/family'
 import type {
   StudyFamilyReviewQueueItem,
@@ -45,8 +48,13 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
   const [reviewResult, setReviewResult] = useState<{
     key: string
     review?: StudyRelationshipReview
+    evidenceFiles?: StudyEvidenceFileItem[]
     error?: string
   } | null>(null)
+  const [selectedEvidence, setSelectedEvidence] = useState('')
+  const [decisionBusy, setDecisionBusy] = useState(false)
+  const [decisionNotice, setDecisionNotice] = useState<string | null>(null)
+  const [decisionError, setDecisionError] = useState<string | null>(null)
   const [queueLoading, setQueueLoading] = useState(true)
   const [queueError, setQueueError] = useState<string | null>(null)
   const authMissing = !orgUuid || !accessToken
@@ -100,6 +108,7 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
     : null
   const currentReviewResult = reviewResult?.key === selectedReviewKey ? reviewResult : null
   const review = currentReviewResult?.review ?? null
+  const evidenceFiles = currentReviewResult?.evidenceFiles ?? []
   const reviewError = currentReviewResult?.error ?? null
   const reviewLoading = selectedReviewKey !== null && currentReviewResult === null
 
@@ -110,14 +119,22 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
     }
 
     const key = `${selectedLearnerUuid}:${selectedRelationshipUuid}`
-    getRelationshipForReview(
-      orgUuid,
-      selectedLearnerUuid,
-      selectedRelationshipUuid,
-      accessToken
-    )
-      .then((result) => {
-        if (current) setReviewResult({ key, review: result })
+    setDecisionNotice(null)
+    setDecisionError(null)
+    Promise.all([
+      getRelationshipForReview(
+        orgUuid,
+        selectedLearnerUuid,
+        selectedRelationshipUuid,
+        accessToken
+      ),
+      listRelationshipEvidence(orgUuid, selectedRelationshipUuid, accessToken).catch(() => []),
+    ])
+      .then(([result, files]) => {
+        if (current) {
+          setReviewResult({ key, review: result, evidenceFiles: files })
+          setSelectedEvidence(files[0]?.evidence_uuid || '')
+        }
       })
       .catch((error: unknown) => {
         if (current) {
@@ -260,15 +277,134 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
                   <div className="rounded-md border border-sky-200 bg-sky-50 p-4">
                     <h3 className="text-sm font-semibold text-sky-950">Assigned evidence reference</h3>
                     <p className="mt-1 break-all font-mono text-sm text-sky-950">{review.request_evidence_reference}</p>
-                    <p className="mt-2 text-sm leading-6 text-sky-950">
-                      This workspace shows the reference only. A verified case-evidence repository is not connected, so it cannot record or approve a decision.
-                    </p>
+                    {evidenceFiles.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-sky-900">
+                          Bound ready guardian-authority evidence
+                        </p>
+                        <ul className="space-y-1">
+                          {evidenceFiles.map((item) => (
+                            <li key={item.evidence_uuid} className="flex items-center justify-between gap-2 rounded bg-white px-2.5 py-1.5 text-xs text-gray-800">
+                              <span className="font-mono break-all">{item.evidence_uuid}</span>
+                              <span>{item.media_type}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm leading-6 text-sky-950">
+                        No ready guardian-authority evidence file is attached to this relationship yet.
+                      </p>
+                    )}
                   </div>
 
-                  {review.status === 'pending' ? (
-                    <p className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="status">
-                      Next step: review this request in the approved case system. Decision controls stay unavailable until evidence linking and current policies are verified.
+                  {decisionNotice && (
+                    <p className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-950" role="status">
+                      {decisionNotice}
                     </p>
+                  )}
+                  {decisionError && (
+                    <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900" role="alert">
+                      {decisionError}
+                    </p>
+                  )}
+
+                  {review.status === 'pending' ? (
+                    evidenceFiles.length > 0 && accessToken ? (
+                      <form
+                        className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-4"
+                        onSubmit={async (event) => {
+                          event.preventDefault()
+                          if (decisionBusy) return
+                          const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
+                          const outcome = submitter?.value === 'deny' ? 'deny' : 'accept'
+                          const form = new FormData(event.currentTarget)
+                          const validDays = Number(form.get('valid_days') || 365)
+                          const nowDate = new Date()
+                          const validTo = new Date(nowDate.getTime() + Math.max(1, validDays) * 86_400_000)
+                          setDecisionBusy(true)
+                          setDecisionError(null)
+                          setDecisionNotice(null)
+                          try {
+                            const updated = await decideRelationship(
+                              orgUuid,
+                              review.learner_uuid,
+                              review.relationship_uuid,
+                              accessToken,
+                              crypto.randomUUID(),
+                              {
+                                outcome,
+                                expected_version: review.authority_version,
+                                approved_scopes: outcome === 'accept' ? review.requested_scopes : [],
+                                valid_from: outcome === 'accept' ? nowDate.toISOString() : null,
+                                valid_to: outcome === 'accept' ? validTo.toISOString() : null,
+                                evidence_reference: selectedEvidence || evidenceFiles[0].evidence_uuid,
+                                reason_code: outcome === 'accept' ? 'GUARDIAN_VERIFIED' : 'GUARDIAN_DENIED',
+                              }
+                            )
+                            setReviewResult((prev) =>
+                              prev ? { ...prev, review: updated } : prev
+                            )
+                            setDecisionNotice(`Decision recorded: ${STATUS_LABELS[updated.status]}.`)
+                          } catch (error) {
+                            setDecisionError(error instanceof Error ? error.message : 'Unable to record this decision.')
+                          } finally {
+                            setDecisionBusy(false)
+                          }
+                        }}
+                      >
+                        <h3 className="text-sm font-semibold text-gray-900">Record bound authority decision</h3>
+                        <label className="block text-xs font-medium text-gray-700">
+                          Evidence attachment
+                          <select
+                            value={selectedEvidence}
+                            onChange={(e) => setSelectedEvidence(e.target.value)}
+                            disabled={decisionBusy}
+                            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm"
+                          >
+                            {evidenceFiles.map((file) => (
+                              <option key={file.evidence_uuid} value={file.evidence_uuid}>
+                                {file.evidence_uuid} ({file.media_type})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-xs font-medium text-gray-700">
+                          Validity window (days, for approval)
+                          <input
+                            type="number"
+                            name="valid_days"
+                            min={1}
+                            max={365}
+                            defaultValue={365}
+                            disabled={decisionBusy}
+                            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm"
+                          />
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="submit"
+                            value="accept"
+                            disabled={decisionBusy}
+                            className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                          >
+                            Approve requested scopes
+                          </button>
+                          <button
+                            type="submit"
+                            value="deny"
+                            disabled={decisionBusy}
+                            className="rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Decline request
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <p className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="status">
+                        Next step: upload and verify a bound guardian-authority evidence file for this relationship before recording an approval or denial.
+                      </p>
+                    )
                   ) : review.status === 'denied' ? (
                     <p className="rounded-md border border-gray-300 bg-gray-50 p-4 text-sm leading-6 text-gray-800" role="status">
                       This request was declined. Any new request must follow the current approved family-service process.

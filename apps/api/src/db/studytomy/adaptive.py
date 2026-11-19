@@ -65,6 +65,7 @@ class StudyCurriculumRevision(CurriculumRecord, table=True):
     jurisdiction: str | None = Field(default=None, max_length=120)
     source_reference: str = Field(max_length=500)
     rights_reference: str = Field(max_length=500)
+    programme_metadata: dict | None = Field(default=None, sa_type=JSON)
     reviewer_id: int | None = Field(
         default=None, foreign_key="user.id", ondelete="RESTRICT"
     )
@@ -183,6 +184,7 @@ class CurriculumRevisionRead(BaseModel):
     level: str
     language: str
     jurisdiction: str | None
+    programme_metadata: dict | None = None
 
 
 class CurriculumDraftRead(CurriculumRevisionRead):

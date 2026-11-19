@@ -20,11 +20,15 @@ from src.db.studytomy.family import (
     StudyEligibilityDecisionRead,
     StudyEligibilityKind,
     StudyEligibilityOutcome,
+    StudyLearnerActivationCreate,
     StudyLearnerControlMode,
     StudyLearnerProfile,
     StudyLearnerProfileCreate,
     StudyLearnerProfileRead,
     StudyLearnerProfileStatus,
+    StudyRelationship,
+    StudyRelationshipStatus,
+    StudyRelationshipType,
 )
 from src.db.studytomy.governance import (
     StudyOwnerAssignment,
@@ -608,10 +612,13 @@ async def record_eligibility_decision(
             raise HTTPException(status_code=409, detail="The idempotent eligibility decision is unavailable")
         return await _decision_read(db_session, organization, decision, now)
 
-    if profile.status != StudyLearnerProfileStatus.PENDING.value:
+    if profile.status not in (
+        StudyLearnerProfileStatus.PENDING.value,
+        StudyLearnerProfileStatus.ACTIVE.value,
+    ):
         raise HTTPException(
             status_code=409,
-            detail="Only a pending learner profile can receive a new eligibility decision in this release.",
+            detail="Only a pending or active learner profile can receive a new eligibility decision.",
         )
     if request.effective_to is not None and _as_utc(request.effective_to) <= now:
         raise HTTPException(status_code=422, detail="effective_to must be in the future")
@@ -626,6 +633,22 @@ async def record_eligibility_decision(
     )
     if request.eligibility_kind == StudyEligibilityKind.INDEPENDENT_PARTICIPATION:
         _require_independent_transition_decisions(policies)
+    if request.control_mode is not None:
+        if (
+            request.eligibility_kind != StudyEligibilityKind.LEARNING
+            or request.outcome != StudyEligibilityOutcome.ELIGIBLE
+            or request.control_mode != StudyLearnerControlMode.DEPENDENT
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="Explicit control_mode is only valid for an eligible dependent learning decision.",
+            )
+        await _current_policies(
+            db_session,
+            organization,
+            (StudyPolicyKey.D_01, StudyPolicyKey.D_03, StudyPolicyKey.D_12),
+            now,
+        )
     if request.evidence_reference.startswith("ev_"):
         evidence_result = await db_session.execute(
             select(StudyEvidenceFile).where(
@@ -680,6 +703,12 @@ async def record_eligibility_decision(
             profile.control_mode = StudyLearnerControlMode.INDEPENDENT.value
         elif profile.control_mode == StudyLearnerControlMode.INDEPENDENT.value:
             profile.control_mode = StudyLearnerControlMode.UNRESOLVED.value
+    elif (
+        request.eligibility_kind == StudyEligibilityKind.LEARNING
+        and request.outcome == StudyEligibilityOutcome.ELIGIBLE
+        and request.control_mode == StudyLearnerControlMode.DEPENDENT
+    ):
+        profile.control_mode = StudyLearnerControlMode.DEPENDENT.value
     profile.access_version += 1
     profile.updated_at = now
 
@@ -738,3 +767,242 @@ async def record_eligibility_decision(
     await db_session.commit()
     await db_session.refresh(decision)
     return await _decision_read(db_session, organization, decision, now)
+
+
+async def _has_pending_dependent_guardian_approval(
+    db_session: AsyncSession,
+    organization: Organization,
+    profile: StudyLearnerProfile,
+    now: datetime,
+) -> bool:
+    """Verify an accepted, time-valid, current-policy guardian relationship
+    directly on a pending dependent profile without calling active-profile
+    access resolution (avoiding a circular activation dependency)."""
+    guardian_policies = await _current_policies(
+        db_session,
+        organization,
+        (StudyPolicyKey.D_03, StudyPolicyKey.D_12, StudyPolicyKey.D_13),
+        now,
+    )
+    current_policy_ids = [int(policy.id) for policy in guardian_policies]
+    rows = (
+        await db_session.execute(
+            select(StudyRelationship).where(
+                StudyRelationship.org_id == organization.id,
+                StudyRelationship.learner_profile_id == profile.id,
+                StudyRelationship.relationship_type == StudyRelationshipType.GUARDIAN.value,
+                StudyRelationship.status == StudyRelationshipStatus.ACCEPTED.value,
+            )
+        )
+    ).scalars().all()
+    for rel in rows:
+        if int(rel.adult_user_id) == int(profile.user_id):
+            continue
+        if rel.decision_policy_version_ids != current_policy_ids:
+            continue
+        if rel.valid_from is None or rel.valid_to is None:
+            continue
+        if not (_as_utc(rel.valid_from) <= now < _as_utc(rel.valid_to)):
+            continue
+        if not rel.approved_scopes:
+            continue
+        membership = (
+            await db_session.execute(
+                select(UserOrganization.id).where(
+                    UserOrganization.org_id == organization.id,
+                    UserOrganization.user_id == rel.adult_user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if membership is not None:
+            return True
+    return False
+
+
+async def activate_learner_profile(
+    db_session: AsyncSession,
+    organization: Organization,
+    actor: PublicUser,
+    learner_uuid: str,
+    request: StudyLearnerActivationCreate,
+    idempotency_key: str,
+) -> StudyLearnerProfileRead:
+    """Explicitly transition a reviewed pending learner profile to active.
+
+    Activation does not grant consent, commercial entitlement, or course
+    access; downstream learning still requires current consent and grants.
+    """
+    await lock_organization(db_session, organization.id)
+    profile_result = await db_session.execute(
+        select(StudyLearnerProfile)
+        .where(
+            StudyLearnerProfile.org_id == organization.id,
+            StudyLearnerProfile.learner_uuid == learner_uuid,
+        )
+        .with_for_update()
+    )
+    profile = profile_result.scalars().first()
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Learner profile not found")
+    now = datetime.now(timezone.utc)
+    await authorize_studytomy_staff_action(
+        db_session,
+        actor,
+        organization,
+        StudytomyCapabilityName.LEARNER_ELIGIBILITY_REVIEW,
+        target_resource_uuid=profile.learner_uuid,
+        target_scope_kind="learner",
+        subject_user_id=profile.user_id,
+        access_version=profile.access_version,
+        hide_existence_on_denial=True,
+        now=now,
+    )
+    await lock_users(db_session, [actor.id, profile.user_id])
+
+    replay = await claim_idempotency(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        operation="studytomy.learner.profile.activate",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "learner_uuid": learner_uuid,
+            "activation": request.model_dump(mode="json"),
+        },
+    )
+    if replay is not None:
+        return await _profile_read(db_session, organization, profile)
+
+    if profile.status != StudyLearnerProfileStatus.PENDING.value:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "LEARNER_PROFILE_NOT_PENDING",
+                "message": "Only a pending learner profile can be activated.",
+            },
+        )
+    if profile.access_version != request.expected_access_version:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "STALE_VERSION",
+                "message": "The learner profile changed before activation. Refresh and retry.",
+            },
+        )
+
+    decisions = await _latest_decisions(db_session, profile)
+    if profile.control_mode == StudyLearnerControlMode.INDEPENDENT.value:
+        policies = await _current_policies(
+            db_session,
+            organization,
+            _policy_keys_for_kind(StudyEligibilityKind.INDEPENDENT_PARTICIPATION),
+            now,
+        )
+        _require_independent_transition_decisions(policies)
+        independent = next(
+            (
+                d
+                for d in decisions
+                if d.eligibility_kind == StudyEligibilityKind.INDEPENDENT_PARTICIPATION.value
+            ),
+            None,
+        )
+        if independent is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ELIGIBILITY_REQUIRED",
+                    "message": "A current independent-participation decision is required before activation.",
+                },
+            )
+        ind_read = await _decision_read(db_session, organization, independent, now)
+        if not ind_read.currently_eligible:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ELIGIBILITY_NOT_CURRENT",
+                    "message": "The learner's independent-participation decision is not currently eligible.",
+                },
+            )
+        policy_refs = [int(p.id) for p in policies]
+    elif profile.control_mode == StudyLearnerControlMode.DEPENDENT.value:
+        policies = await _current_policies(
+            db_session,
+            organization,
+            (StudyPolicyKey.D_01, StudyPolicyKey.D_02, StudyPolicyKey.D_03, StudyPolicyKey.D_12, StudyPolicyKey.D_13),
+            now,
+        )
+        learning = next(
+            (d for d in decisions if d.eligibility_kind == StudyEligibilityKind.LEARNING.value),
+            None,
+        )
+        if learning is None or not (await _decision_read(db_session, organization, learning, now)).currently_eligible:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ELIGIBILITY_REQUIRED",
+                    "message": "A current eligible learning decision is required before activating a dependent learner.",
+                },
+            )
+        if not await _has_pending_dependent_guardian_approval(db_session, organization, profile, now):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "GUARDIAN_AUTHORITY_REQUIRED",
+                    "message": "An accepted, current guardian authority decision is required before activating a dependent learner.",
+                },
+            )
+        policy_refs = [int(p.id) for p in policies]
+    else:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "CONTROL_MODE_UNRESOLVED",
+                "message": "Record an eligible independent or dependent control decision before activation.",
+            },
+        )
+
+    before_state = {
+        "status": profile.status,
+        "control_mode": profile.control_mode,
+        "access_version": profile.access_version,
+    }
+    profile.status = StudyLearnerProfileStatus.ACTIVE.value
+    profile.access_version += 1
+    profile.updated_at = now
+    db_session.add(profile)
+    await db_session.flush()
+    invalidate_protected_studytomy_user_ids(db_session)
+    await append_business_event(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        actor_capacity=StudyOwnerFunction.FAMILY_SERVICES.value,
+        subject_uuid=profile.learner_uuid,
+        resource_kind="learner_profile",
+        resource_uuid=profile.learner_uuid,
+        action="studytomy.learner.profile_activated",
+        reason_code=request.reason_code,
+        before_state=before_state,
+        after_state={
+            "status": profile.status,
+            "control_mode": profile.control_mode,
+            "access_version": profile.access_version,
+        },
+        policy_refs=policy_refs,
+        dedupe_key=f"studytomy:learner-profile:{profile.learner_uuid}:activated:v{profile.access_version}",
+    )
+    await complete_idempotency(
+        db_session,
+        org_id=organization.id,
+        actor_user_id=actor.id,
+        operation="studytomy.learner.profile.activate",
+        idempotency_key=idempotency_key,
+        resource_kind="learner_profile",
+        resource_uuid=profile.learner_uuid,
+        response_status=200,
+        response_projection={"learner_uuid": profile.learner_uuid, "status": profile.status},
+    )
+    await db_session.commit()
+    await db_session.refresh(profile)
+    return await _profile_read(db_session, organization, profile)

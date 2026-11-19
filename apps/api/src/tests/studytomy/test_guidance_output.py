@@ -47,6 +47,7 @@ async def test_guidance_passes_one_bounded_plain_structured_request():
         "concept_title",
         "reviewed_objective",
         "lesson_excerpt",
+        "instruction_language",
         "context_limited",
     }
 

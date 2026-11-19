@@ -8,6 +8,8 @@ import { VERSION } from '../constants.js'
 import { readConfig, findInstallDir } from '../services/config-store.js'
 import {
   composeServiceContainer,
+  dockerComposeRunFromFile,
+  dockerComposeRunToFile,
   dockerComposeStop,
   dockerComposeUp,
   dockerExecToFile,
@@ -109,7 +111,17 @@ async function createBackup() {
   }
   fs.mkdirSync(stagingDir, { recursive: true, mode: 0o700 })
 
+  // Quiesce application write services so database dump and local uploaded
+  // content capture one consistent point in time. Services are restarted in
+  // the finally block regardless of outcome.
+  const stopped: string[] = []
   try {
+    const running = layout.dbClients.filter((svc) => composeServiceContainer(installDir, svc))
+    for (const svc of running) {
+      stopped.push(svc)
+      dockerComposeStop(installDir, svc)
+    }
+
     const s = p.spinner()
     s.start('Creating database dump')
     try {
@@ -128,26 +140,32 @@ async function createBackup() {
       fs.chmodSync(path.join(stagingDir, '.env'), 0o600)
     }
 
-    // Uploaded files (course media, avatars...) live in the app's content
-    // directory unless S3 is used; a database-only backup would lose them.
+    // Uploaded files (course media, avatars, private evidence) live in the app's
+    // content volume unless S3 is used. Archive them while app writers are stopped
+    // and require exit code 0 so changed-file races never produce a silently
+    // inconsistent backup.
     let content = false
     if (!usesS3Content(installDir)) {
-      const app = composeServiceContainer(installDir, layout.appService)
-      if (!app) {
-        p.log.warn(`The ${layout.appService} container is not running, so uploaded content is NOT in this backup.`)
-      } else {
-        const s2 = p.spinner()
-        s2.start('Archiving uploaded content')
-        try {
-          // Exit 1 = "file changed as we read it" on a busy site: the archive is still complete.
-          dockerExecToFile(app, ['tar', '-C', layout.contentPath, '-cf', '-', '.'], path.join(stagingDir, 'content.tar'), [0, 1])
-          content = true
-          s2.stop('Uploaded content archived')
-        } catch (err) {
-          s2.stop('Content archive failed')
-          fs.rmSync(path.join(stagingDir, 'content.tar'), { force: true })
-          p.log.warn(`Uploaded content is NOT in this backup: ${errorDetail(err)}`)
+      const s2 = p.spinner()
+      s2.start('Archiving uploaded content')
+      const contentTarPath = path.join(stagingDir, 'content.tar')
+      try {
+        dockerComposeRunToFile(
+          installDir,
+          layout.appService,
+          ['tar', '-C', layout.contentPath, '-cf', '-', '.'],
+          contentTarPath,
+          [0],
+        )
+        if (fs.statSync(contentTarPath).size === 0) {
+          throw new Error('Content archive produced an empty tar file')
         }
+        content = true
+        s2.stop('Uploaded content archived')
+      } catch (err) {
+        s2.stop('Content archive failed')
+        fs.rmSync(contentTarPath, { force: true })
+        fail(`Failed to archive uploaded content consistently: ${errorDetail(err)}`)
       }
     }
 
@@ -172,6 +190,9 @@ async function createBackup() {
       fail(`Failed to create archive: ${errorDetail(err)}`)
     }
   } finally {
+    if (stopped.length > 0) {
+      try { dockerComposeUp(installDir) } catch { /* reported by docker */ }
+    }
     fs.rmSync(stagingDir, { recursive: true, force: true })
   }
 
@@ -307,27 +328,42 @@ export async function restoreBackup(archivePath: string, options: RestoreOptions
       }
     }
 
-    // Start what we stopped, then put uploaded content back.
+    // Restore uploaded content BEFORE restarting serving traffic so the
+    // application never serves a restored database against stale or missing
+    // private media. If the archive declares content, missing/corrupt content
+    // fails the restore rather than reporting false success.
+    const contentTar = dump.folder ? path.join(dump.folder, 'content.tar') : ''
+    const hasContentTar = !!(contentTar && fs.existsSync(contentTar))
+    if (meta.content === true && !hasContentTar) {
+      stopped.length = 0
+      fail(`Backup metadata requires uploaded content (content.tar), but it is missing. Services remain stopped for recovery; archive kept at ${archivePath}.`)
+    }
+    if (hasContentTar) {
+      const s3 = p.spinner()
+      s3.start('Restoring uploaded content')
+      try {
+        dockerComposeRunFromFile(
+          installDir,
+          layout.appService,
+          ['sh', '-c', `mkdir -p "${layout.contentPath}" && tar -C "${layout.contentPath}" -xf -`],
+          contentTar,
+        )
+        s3.stop('Uploaded content restored')
+      } catch (err) {
+        s3.stop('Content restore failed')
+        // Do not auto-restart traffic on a half-restored state; clear `stopped`
+        // so finally does not silently expose mismatched DB/media.
+        stopped.length = 0
+        fail(`Uploaded content could not be restored (${errorDetail(err)}). Application services remain stopped so mismatched DB/media is not served. Archive kept at ${archivePath}.`)
+      }
+    } else if (!usesS3Content(installDir)) {
+      p.log.warn('This archive is database-only and does not include local uploaded content.')
+    }
+
+    // Start serving traffic only after both DB and required media have restored cleanly.
     if (stopped.length > 0) {
       dockerComposeUp(installDir)
       stopped.length = 0
-    }
-    const contentTar = dump.folder ? path.join(dump.folder, 'content.tar') : ''
-    if (contentTar && fs.existsSync(contentTar)) {
-      const app = composeServiceContainer(installDir, layout.appService)
-      if (!app) {
-        p.log.warn(`Could not restore uploaded content: ${layout.appService} is not running. Archive kept at ${archivePath}.`)
-      } else {
-        const s3 = p.spinner()
-        s3.start('Restoring uploaded content')
-        try {
-          dockerExecFromFile(app, ['tar', '-C', layout.contentPath, '-xf', '-'], contentTar)
-          s3.stop('Uploaded content restored')
-        } catch (err) {
-          s3.stop('Content restore failed')
-          p.log.warn(`Uploaded content was not restored: ${errorDetail(err)}`)
-        }
-      }
     }
   } finally {
     if (stopped.length > 0) {
