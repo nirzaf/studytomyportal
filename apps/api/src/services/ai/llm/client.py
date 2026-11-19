@@ -153,10 +153,21 @@ async def generate(
     ``output_type`` (a Pydantic model) for structured output.
     """
     agent = _agent(model_name, system_prompt, output_type)
+    settings = _settings(max_tokens, temperature, timeout)
+    # Luna Chat Completions supports function-call output only without reasoning.
+    # Keep plain text, other models/providers and compatible gateways unchanged.
+    from pydantic_ai.models.openai import OpenAIChatModel
+    if (
+        model_name == "gpt-6-luna"
+        and output_type is not str
+        and isinstance(agent.model, OpenAIChatModel)
+        and str(agent.model.client.base_url) == "https://api.openai.com/v1/"
+    ):
+        settings["openai_reasoning_effort"] = "none"
     result = await agent.run(
         user_prompt,
         message_history=_history_with_system(history, system_prompt),
-        model_settings=_settings(max_tokens, temperature, timeout),
+        model_settings=settings,
         retries=retries,
     )
     return result.output
