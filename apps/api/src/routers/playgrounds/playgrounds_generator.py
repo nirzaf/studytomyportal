@@ -155,6 +155,10 @@ async def start_playground_session(
         session_request.prompt,
     )
 
+    playground.learner_adaptation = session_request.context.learner_adaptation.model_dump()
+    db_session.add(playground)
+    await db_session.commit()
+
     session = create_playground_session(
         playground_uuid=session_request.playground_uuid,
         context=session_request.context,
@@ -261,6 +265,12 @@ async def iterate_playground_session(
         message_request.message,
     )
 
+    if message_request.learner_adaptation is not None:
+        session.context.learner_adaptation = message_request.learner_adaptation
+        playground.learner_adaptation = message_request.learner_adaptation.model_dump()
+        db_session.add(playground)
+        await db_session.commit()
+
     html_to_iterate = message_request.current_html or session.current_html
 
     stream = generate_playground_stream(
@@ -337,4 +347,5 @@ async def get_session_state(
             PlaygroundMessage(role=msg.role, content=msg.content)
             for msg in session.message_history
         ],
+        learner_adaptation=getattr(getattr(session, "context", None), "learner_adaptation", None),
     )

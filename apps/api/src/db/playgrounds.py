@@ -1,7 +1,9 @@
 from typing import Optional
 from enum import Enum
-from sqlalchemy import Column, ForeignKey, Integer, Text
+from sqlalchemy import JSON, Column, ForeignKey, Integer, Text
 from sqlmodel import Field, SQLModel
+
+from src.services.playgrounds.schemas.playgrounds_generator import LearnerAdaptationContext
 
 
 class PlaygroundAccessType(str, Enum):
@@ -19,6 +21,9 @@ class PlaygroundBase(SQLModel):
     course_uuid: Optional[str] = None  # Optional course link (for RAG)
     html_content: Optional[str] = Field(
         default=None, sa_column=Column(Text, nullable=True)
+    )
+    learner_adaptation: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
     )
 
 
@@ -64,6 +69,7 @@ class PlaygroundCreate(SQLModel):
     access_type: PlaygroundAccessType = PlaygroundAccessType.AUTHENTICATED
     course_uuid: Optional[str] = None
     html_content: Optional[str] = None
+    learner_adaptation: Optional[LearnerAdaptationContext] = None
 
 
 class PlaygroundUpdate(SQLModel):
@@ -74,3 +80,4 @@ class PlaygroundUpdate(SQLModel):
     published: Optional[bool] = None
     course_uuid: Optional[str] = None
     html_content: Optional[str] = None
+    learner_adaptation: Optional[LearnerAdaptationContext] = None

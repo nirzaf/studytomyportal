@@ -2,7 +2,14 @@
 
 import React, { useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { PaperPlaneTilt, Sparkle, CircleNotch, BookOpen, Brain } from '@phosphor-icons/react'
+import { PaperPlaneTilt, Sparkle, CircleNotch, BookOpen, Brain, Plus, X } from '@phosphor-icons/react'
+import {
+  DEFAULT_LEARNER_LEVELS,
+  MAX_ADAPTATION_LABEL_LENGTH,
+  MAX_LEARNER_LEVELS,
+  MAX_TARGET_SKILLS,
+  type PlaygroundLearnerAdaptation,
+} from '@services/playgrounds/generator'
 
 interface Message {
   role: 'user' | 'model'
@@ -19,12 +26,36 @@ interface PlaygroundChatPanelProps {
   isGenerating: boolean
   iterationCount: number
   maxIterations: number
-  onSend: (prompt: string) => void
+  onSend: (_prompt: string, _learnerAdaptation: PlaygroundLearnerAdaptation) => void
   disabled?: boolean
   orgCourses?: Course[]
   selectedCourseUuid?: string
   onCourseChange?: (uuid: string) => void
   sessionStarted?: boolean
+  initialLearnerAdaptation?: PlaygroundLearnerAdaptation | null
+  onLearnerAdaptationChange?: (_learnerAdaptation: PlaygroundLearnerAdaptation) => void
+}
+
+function sanitizeLabels(values: readonly string[], maxItems: number): string[] {
+  const result: string[] = []
+  const seen = new Set<string>()
+  for (const raw of values) {
+    const trimmed = raw.replace(/[\r\n]+/g, ' ').trim().slice(0, MAX_ADAPTATION_LABEL_LENGTH)
+    if (!trimmed) continue
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(trimmed)
+    if (result.length >= maxItems) break
+  }
+  return result
+}
+
+function parseSkillTokens(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((item) => item.replace(/[\r\n]+/g, ' ').trim())
+    .filter(Boolean)
 }
 
 const SUGGESTION_CHIPS = [
@@ -49,21 +80,94 @@ export default function PlaygroundChatPanel({
   selectedCourseUuid = '',
   onCourseChange,
   sessionStarted = false,
+  initialLearnerAdaptation = null,
+  onLearnerAdaptationChange,
 }: PlaygroundChatPanelProps) {
   const { t } = useTranslation()
   const [input, setInput] = React.useState('')
   const [sourceMode, setSourceMode] = React.useState<'ai' | 'course'>('ai')
+  const [adaptationEnabled, setAdaptationEnabled] = React.useState<boolean>(
+    initialLearnerAdaptation?.enabled ?? true
+  )
+  const [levelLabels, setLevelLabels] = React.useState<string[]>(() =>
+    initialLearnerAdaptation?.levels && initialLearnerAdaptation.levels.length > 0
+      ? [...initialLearnerAdaptation.levels]
+      : [...DEFAULT_LEARNER_LEVELS]
+  )
+  const [focusSkills, setFocusSkills] = React.useState<string[]>(() =>
+    initialLearnerAdaptation?.target_skills ? [...initialLearnerAdaptation.target_skills] : []
+  )
+  const [skillDraft, setSkillDraft] = React.useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const buildAdaptationPayload = React.useCallback(
+    (
+      enabled: boolean,
+      levels: readonly string[],
+      skills: readonly string[],
+      pendingSkill = ''
+    ): PlaygroundLearnerAdaptation => ({
+      enabled,
+      levels: sanitizeLabels(levels, MAX_LEARNER_LEVELS),
+      target_skills: sanitizeLabels([...skills, ...parseSkillTokens(pendingSkill)], MAX_TARGET_SKILLS),
+    }),
+    []
+  )
+
+  useEffect(() => {
+    onLearnerAdaptationChange?.(buildAdaptationPayload(adaptationEnabled, levelLabels, focusSkills))
+  }, [adaptationEnabled, levelLabels, focusSkills, buildAdaptationPayload, onLearnerAdaptationChange])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  const commitSkillDraft = () => {
+    const tokens = parseSkillTokens(skillDraft)
+    if (tokens.length === 0) return
+    setFocusSkills((prev) => sanitizeLabels([...prev, ...tokens], MAX_TARGET_SKILLS))
+    setSkillDraft('')
+  }
+
+  const handleSkillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      commitSkillDraft()
+    }
+  }
+
+  const handleLevelChange = (index: number, value: string) => {
+    setLevelLabels((prev) => prev.map((label, i) => (i === index ? value : label)))
+  }
+
+  const handleAddLevel = () => {
+    if (levelLabels.length >= MAX_LEARNER_LEVELS) return
+    setLevelLabels((prev) => [...prev, ''])
+  }
+
+  const handleRemoveLevel = (index: number) => {
+    setLevelLabels((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleRemoveSkill = (index: number) => {
+    setFocusSkills((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const handleSend = () => {
     const trimmed = input.trim()
     if (!trimmed || isGenerating || disabled) return
-    onSend(trimmed)
+    const nextAdaptation = buildAdaptationPayload(
+      adaptationEnabled,
+      levelLabels,
+      focusSkills,
+      skillDraft
+    )
+    if (skillDraft.trim()) {
+      setFocusSkills(nextAdaptation.target_skills)
+      setSkillDraft('')
+    }
+    onSend(trimmed, nextAdaptation)
     setInput('')
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
@@ -158,6 +262,116 @@ export default function PlaygroundChatPanel({
             )}
           </div>
         )}
+
+        <section className="mt-3 rounded-lg border border-sky-100 bg-sky-50/70 p-2.5">
+          <label className="flex items-start gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={adaptationEnabled}
+              onChange={(event) => setAdaptationEnabled(event.target.checked)}
+              className="mt-0.5 accent-sky-600"
+            />
+            <span>{t('playgrounds.chat.adapt_for_learner')}</span>
+          </label>
+          {adaptationEnabled && (
+            <div className="mt-2.5 space-y-2.5">
+              {/* Editable level labels */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-slate-600">
+                    {t('playgrounds.chat.level_options')}
+                  </span>
+                  {levelLabels.length < MAX_LEARNER_LEVELS && (
+                    <button
+                      type="button"
+                      onClick={handleAddLevel}
+                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-sky-700 hover:text-sky-800"
+                    >
+                      <Plus size={10} weight="bold" />
+                      {t('playgrounds.chat.add_level')}
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {levelLabels.map((label, index) => (
+                    <div key={index} className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={label}
+                        onChange={(event) => handleLevelChange(index, event.target.value)}
+                        maxLength={MAX_ADAPTATION_LABEL_LENGTH}
+                        placeholder={t('playgrounds.chat.level_placeholder', { index: index + 1 })}
+                        aria-label={t('playgrounds.chat.level_placeholder', { index: index + 1 })}
+                        className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveLevel(index)}
+                        aria-label={t('playgrounds.chat.remove_level', { label: label || index + 1 })}
+                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200/70 hover:text-slate-600"
+                      >
+                        <X size={11} weight="bold" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Focus skills chip input */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-semibold text-slate-600" htmlFor="playground-skills">
+                  {t('playgrounds.chat.target_skills')}
+                </label>
+                {focusSkills.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {focusSkills.map((skill, index) => (
+                      <span
+                        key={`${skill}-${index}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-white border border-sky-200 px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                      >
+                        <span className="max-w-[180px] truncate">{skill}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSkill(index)}
+                          aria-label={t('playgrounds.chat.remove_skill', { skill })}
+                          className="text-slate-400 hover:text-slate-600"
+                        >
+                          <X size={10} weight="bold" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {focusSkills.length < MAX_TARGET_SKILLS && (
+                  <div className="flex items-center gap-1">
+                    <input
+                      id="playground-skills"
+                      type="text"
+                      value={skillDraft}
+                      onChange={(event) => setSkillDraft(event.target.value)}
+                      onKeyDown={handleSkillKeyDown}
+                      maxLength={MAX_ADAPTATION_LABEL_LENGTH}
+                      placeholder={t('playgrounds.chat.target_skills_placeholder')}
+                      className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={commitSkillDraft}
+                      disabled={!skillDraft.trim()}
+                      className="rounded-md bg-sky-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400"
+                    >
+                      {t('playgrounds.chat.add_skill')}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-[10px] leading-relaxed text-slate-500">
+                {t('playgrounds.chat.adaptation_privacy_note')}
+              </p>
+            </div>
+          )}
+        </section>
 
         {iterationCount > 0 && (
           <div className="flex items-center gap-0.5 mt-2.5">

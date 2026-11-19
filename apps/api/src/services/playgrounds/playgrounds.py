@@ -248,6 +248,11 @@ async def create_playground(
         published=False,
         course_uuid=playground_data.course_uuid,
         html_content=playground_data.html_content,
+        learner_adaptation=(
+            playground_data.learner_adaptation.model_dump()
+            if playground_data.learner_adaptation is not None
+            else None
+        ),
         org_id=org_id,
         playground_uuid=str(uuid4()),
         course_id=course_id,
@@ -458,6 +463,8 @@ async def update_playground(
             playground.course_id = None
 
     for key, value in update_data.items():
+        if key == "learner_adaptation" and hasattr(value, "model_dump"):
+            value = value.model_dump()
         setattr(playground, key, value)
 
     playground.update_date = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -539,6 +546,7 @@ async def duplicate_playground(
         published=False,
         course_uuid=playground.course_uuid,
         html_content=playground.html_content,
+        learner_adaptation=playground.learner_adaptation,
         org_id=playground.org_id,
         playground_uuid=str(uuid4()),
         course_id=playground.course_id,

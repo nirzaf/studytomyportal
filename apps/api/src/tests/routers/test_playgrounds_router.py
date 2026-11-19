@@ -580,7 +580,7 @@ class TestPlaygroundsRouter:
         ), patch(
             "src.routers.playgrounds.playgrounds_generator.create_playground_session",
             return_value=fake_session,
-        ), patch(
+        ) as create_session, patch(
             "src.routers.playgrounds.playgrounds_generator.generate_playground_stream",
             return_value=_single_chunk_stream(),
         ):
@@ -592,11 +592,20 @@ class TestPlaygroundsRouter:
                     "context": {
                         "playground_name": "Playground",
                         "playground_description": "Desc",
+                        "learner_adaptation": {
+                            "enabled": True,
+                            "levels": ["Foundation", "Extension"],
+                            "target_skills": ["Calculate mean"],
+                        },
                     },
                 },
             )
         assert response.status_code == 200
         assert "text/event-stream" in response.headers["content-type"]
+        adaptation = create_session.call_args.kwargs["context"].learner_adaptation
+        assert adaptation.enabled is True
+        assert adaptation.levels == ["Foundation", "Extension"]
+        assert adaptation.target_skills == ["Calculate mean"]
 
         iterate_session = SimpleNamespace(
             session_uuid="session1",
@@ -850,3 +859,122 @@ class TestPlaygroundsRouter:
             )
 
         assert response.status_code == 404
+
+    async def test_playground_generator_defaults_persists_and_iterates_learner_adaptation(
+        self, client, db, org, admin_user
+    ):
+        playground = Playground(
+            id=82,
+            org_id=org.id,
+            name="Adaptation Playground",
+            description="Desc",
+            thumbnail_image="",
+            access_type="authenticated",
+            published=False,
+            course_uuid=None,
+            html_content="<div>seed</div>",
+            playground_uuid="playground_adapt",
+            course_id=None,
+            created_by=admin_user.id,
+            creation_date="2024-01-01",
+            update_date="2024-01-01",
+        )
+        db.add(playground)
+        await db.commit()
+
+        session_holder: dict = {}
+
+        def _capture_session(**kwargs):
+            sess = SimpleNamespace(
+                session_uuid="session_adapt",
+                playground_uuid=kwargs["playground_uuid"],
+                iteration_count=0,
+                max_iterations=10,
+                current_html="<div>seed</div>",
+                context=kwargs["context"],
+                message_history=[],
+            )
+            session_holder["session"] = sess
+            return sess
+
+        # 1. Start without learner_adaptation -> defaults enabled=True and persists on Playground
+        with patch("src.routers.playgrounds.playgrounds_generator.reserve_ai_credit"), patch(
+            "src.routers.playgrounds.playgrounds_generator.get_org_ai_model",
+            return_value="gemini-test",
+        ), patch(
+            "src.services.playgrounds.playgrounds._get_user_rights",
+            return_value={"playgrounds": {"action_update": True}},
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator._get_course_context",
+            return_value=(None, None),
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator.create_playground_session",
+            side_effect=_capture_session,
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator.generate_playground_stream",
+            return_value=_single_chunk_stream(),
+        ):
+            start_resp = await client.post(
+                "/api/v1/playgrounds/generate/start",
+                json={
+                    "playground_uuid": "playground_adapt",
+                    "prompt": "Build an interactive fractions lab",
+                    "context": {
+                        "playground_name": "Adaptation Playground",
+                        "playground_description": "Desc",
+                    },
+                },
+            )
+        assert start_resp.status_code == 200
+        assert session_holder["session"].context.learner_adaptation.enabled is True
+        await db.refresh(playground)
+        assert playground.learner_adaptation == {
+            "enabled": True,
+            "levels": [],
+            "target_skills": [],
+        }
+
+        # 2. Iterate with alias fields (level_labels / focus_skills) -> sanitizes, updates session & DB
+        with patch(
+            "src.routers.playgrounds.playgrounds_generator.get_playground_session",
+            return_value=session_holder["session"],
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator.get_playground_session_owner",
+            return_value=admin_user.id,
+        ), patch("src.routers.playgrounds.playgrounds_generator.reserve_ai_credit"), patch(
+            "src.routers.playgrounds.playgrounds_generator.get_org_ai_model",
+            return_value="gemini-test",
+        ), patch(
+            "src.services.playgrounds.playgrounds._get_user_rights",
+            return_value={"playgrounds": {"action_update": True}},
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator._get_course_context",
+            return_value=(None, None),
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator.generate_playground_stream",
+            return_value=_single_chunk_stream(),
+        ):
+            iter_resp = await client.post(
+                "/api/v1/playgrounds/generate/iterate",
+                json={
+                    "session_uuid": "session_adapt",
+                    "playground_uuid": "playground_adapt",
+                    "message": "Update levels",
+                    "learner_adaptation": {
+                        "enabled": True,
+                        "level_labels": ["  Support ", "", "Mastery", "support"],
+                        "focus_skills": [" Equivalent fractions ", "  "],
+                    },
+                },
+            )
+        assert iter_resp.status_code == 200
+        assert session_holder["session"].context.learner_adaptation.levels == ["Support", "Mastery"]
+        assert session_holder["session"].context.learner_adaptation.target_skills == [
+            "Equivalent fractions"
+        ]
+        await db.refresh(playground)
+        assert playground.learner_adaptation == {
+            "enabled": True,
+            "levels": ["Support", "Mastery"],
+            "target_skills": ["Equivalent fractions"],
+        }

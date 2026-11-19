@@ -22,7 +22,12 @@ import PlaygroundChatPanel from './PlaygroundChatPanel'
 import PlaygroundOptionsModal from './PlaygroundOptionsModal'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query/keys'
-import { startPlaygroundSession, iteratePlayground } from '@services/playgrounds/generator'
+import {
+  DEFAULT_LEARNER_LEVELS,
+  startPlaygroundSession,
+  iteratePlayground,
+  type PlaygroundLearnerAdaptation,
+} from '@services/playgrounds/generator'
 import { updatePlayground, Playground } from '@services/playgrounds/playgrounds'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 
@@ -97,6 +102,16 @@ export default function PlaygroundEditor({
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [selectedCourseUuid, setSelectedCourseUuid] = useState<string>('')
+  const [learnerAdaptation, setLearnerAdaptation] = useState<PlaygroundLearnerAdaptation>(() => ({
+    enabled: initialPlayground.learner_adaptation?.enabled ?? true,
+    levels:
+      initialPlayground.learner_adaptation?.levels && initialPlayground.learner_adaptation.levels.length > 0
+        ? [...initialPlayground.learner_adaptation.levels]
+        : [...DEFAULT_LEARNER_LEVELS],
+    target_skills: initialPlayground.learner_adaptation?.target_skills
+      ? [...initialPlayground.learner_adaptation.target_skills]
+      : [],
+  }))
   const [titleFocused, setTitleFocused] = useState(false)
   const [isSavingTitle, setIsSavingTitle] = useState(false)
   const [titleSaveStatus, setTitleSaveStatus] = useState<'idle' | 'saved'>('idle')
@@ -142,7 +157,7 @@ export default function PlaygroundEditor({
   }
 
   const handleSend = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, nextLearnerAdaptation: PlaygroundLearnerAdaptation) => {
       if (isStreaming) return
 
       const isFirstGeneration = !sessionUuid
@@ -187,6 +202,7 @@ export default function PlaygroundEditor({
         })
       }
 
+      setLearnerAdaptation(nextLearnerAdaptation)
       if (!sessionUuid) {
         await startPlaygroundSession(
           playground.playground_uuid,
@@ -196,6 +212,7 @@ export default function PlaygroundEditor({
             playground_description: playground.description || '',
             course_uuid: selectedCourseUuid || undefined,
             course_name: selectedCourse?.name || undefined,
+            learner_adaptation: nextLearnerAdaptation,
           },
           accessToken,
           onChunk,
@@ -211,7 +228,8 @@ export default function PlaygroundEditor({
           onChunk,
           onComplete,
           onError,
-          html
+          html,
+          nextLearnerAdaptation
         )
       }
     },
@@ -226,6 +244,7 @@ export default function PlaygroundEditor({
         {
           name: title,
           html_content: html || undefined,
+          learner_adaptation: learnerAdaptation,
         },
         accessToken
       )
@@ -449,6 +468,8 @@ export default function PlaygroundEditor({
               selectedCourseUuid={selectedCourseUuid}
               onCourseChange={setSelectedCourseUuid}
               sessionStarted={sessionUuid !== null}
+              initialLearnerAdaptation={playground.learner_adaptation}
+              onLearnerAdaptationChange={setLearnerAdaptation}
             />
           </div>
         )}

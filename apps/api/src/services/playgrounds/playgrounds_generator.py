@@ -7,6 +7,7 @@ import json
 from config.config import get_learnhouse_config
 from src.services.ai.llm import generate_stream, model_for_tier
 from src.services.playgrounds.schemas.playgrounds_generator import (
+    DEFAULT_LEARNER_LEVELS,
     PlaygroundContext,
     PlaygroundSessionData,
     PlaygroundMessage,
@@ -121,6 +122,31 @@ def build_playground_system_prompt(
 CONTEXT:
 - Playground: {context.playground_name}
 - Description: {context.playground_description}"""
+
+    adaptation = context.learner_adaptation
+    if adaptation.enabled:
+        levels = adaptation.levels or list(DEFAULT_LEARNER_LEVELS)
+        skills = adaptation.target_skills
+        level_labels = "\n".join(f"- {label}" for label in levels)
+        skill_labels = (
+            "\n".join(f"- {skill}" for skill in skills)
+            if skills
+            else "- Infer a small set of core focus skills directly from the educator's request and any provided course material."
+        )
+        base_prompt += f"""
+
+LEARNER-CHOSEN ADAPTATION (enabled by the educator):
+- Build visible, learner-facing interactive controls inside the widget so learners can freely choose a level (using the exact level labels below) and select or toggle focus skills at any time.
+- Available level labels (plain labels supplied by the educator):
+{level_labels}
+- Focus skills (plain labels supplied by the educator):
+{skill_labels}
+- Meaningful pedagogical adaptation — changing the selected level or focus skill MUST visibly and functionally adapt BOTH:
+  - Scaffolding: adjust explanation depth, worked examples, step-by-step guidance, hints, conceptual cues, and cognitive load (more structured scaffolding at earlier levels vs. minimal hints at advanced levels) while preserving the same core learning objective.
+  - Challenges: adjust problem complexity, multi-step tasks, edge cases, open-ended prompts, and skill-specific practice scenarios tied directly to the chosen focus skills.
+- Smooth runtime switching: learners must be able to switch levels and focus skills freely at any time without breaking the widget layout or crashing state. Keep question keys, calculations, and answer checks deterministic and correct; do not ask an LLM to calculate or decide a grade at runtime.
+- Strict local & self-selected state boundary: keep the learner's level and skill choices strictly in local component/page memory only. Do not read or claim to use learner history, mastery, identity, or other profile data. Do not persist choices to a backend, send telemetry or analytics, or couple to any server-side adaptive engine or gating/placement logic; the generated widget must not call external APIs or use browser storage.
+- Include an accessible reset, keyboard-operable controls, and a brief note that choices are self-selected for this activity and are not a measured mastery result."""
 
     if course_context and context.course_name:
         base_prompt += f"""

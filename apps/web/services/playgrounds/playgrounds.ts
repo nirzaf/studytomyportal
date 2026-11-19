@@ -1,4 +1,5 @@
 import { getAPIUrl } from '@services/config/config'
+import type { PlaygroundLearnerAdaptation } from '@services/playgrounds/generator'
 import {
   RequestBodyWithAuthHeader,
   errorHandling,
@@ -20,6 +21,7 @@ export interface Playground {
   course_uuid?: string | null
   course_id?: number | null
   html_content?: string | null
+  learner_adaptation?: PlaygroundLearnerAdaptation | null
   created_by?: number | null
   author_username?: string | null
   author_first_name?: string | null
@@ -37,6 +39,7 @@ export interface PlaygroundCreate {
   access_type?: PlaygroundAccessType
   course_uuid?: string
   html_content?: string
+  learner_adaptation?: PlaygroundLearnerAdaptation
 }
 
 export interface PlaygroundUpdate {
@@ -47,6 +50,7 @@ export interface PlaygroundUpdate {
   published?: boolean
   course_uuid?: string
   html_content?: string
+  learner_adaptation?: PlaygroundLearnerAdaptation
 }
 
 export async function createPlayground(

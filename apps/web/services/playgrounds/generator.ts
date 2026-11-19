@@ -1,10 +1,22 @@
 import { getAPIUrl } from '@services/config/config'
 
+export const DEFAULT_LEARNER_LEVELS = ['Foundation', 'Core', 'Extension'] as const
+export const MAX_LEARNER_LEVELS = 5
+export const MAX_TARGET_SKILLS = 8
+export const MAX_ADAPTATION_LABEL_LENGTH = 80
+
+export interface PlaygroundLearnerAdaptation {
+  enabled: boolean
+  levels: string[]
+  target_skills: string[]
+}
+
 interface PlaygroundContext {
   playground_name: string
   playground_description: string
   course_uuid?: string
   course_name?: string
+  learner_adaptation: PlaygroundLearnerAdaptation
 }
 
 interface StreamChunk {
@@ -56,7 +68,8 @@ export async function iteratePlayground(
   onChunk: (chunk: string) => void,
   onComplete: (sessionUuid: string) => void,
   onError: (error: string) => void,
-  currentHtml?: string | null
+  currentHtml?: string | null,
+  learnerAdaptation?: PlaygroundLearnerAdaptation
 ): Promise<void> {
   try {
     const response = await fetch(`${getAPIUrl()}playgrounds/generate/iterate`, {
@@ -70,6 +83,7 @@ export async function iteratePlayground(
         playground_uuid: playgroundUuid,
         message,
         current_html: currentHtml || undefined,
+        learner_adaptation: learnerAdaptation,
       }),
     })
 
