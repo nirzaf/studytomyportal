@@ -73,7 +73,7 @@ def test_empty_schema_bootstrap_serializes_and_installs_integrity_guards():
             reports = list(workers.map(lambda _: ensure_schema(database_url), range(2)))
 
         expected_heads = head_revisions()
-        assert expected_heads == ["b91d2f6a08c3"]
+        assert expected_heads == ["e7f2c9a4b138"]
         assert all(report.after == expected_heads for report in reports)
         assert {report.state for report in reports} == {"empty", "stamped"}
 
@@ -199,12 +199,12 @@ def test_interrupted_upgrade_rolls_back_ddl_and_preserves_revision():
 def test_supported_prior_revision_upgrades_through_application_bootstrap():
     with _isolated_database() as (database_url, database):
         initial = ensure_schema(database_url)
-        assert initial.after == ["b91d2f6a08c3"]
+        assert initial.after == ["e7f2c9a4b138"]
 
         head = migrations.ScriptDirectory.from_config(migrations.alembic_config()).get_revision(
             initial.after[0]
         )
-        assert head.down_revision == "a78f2c9d1e64"
+        assert head.down_revision == "c4e8a1b7d209"
 
         token = uuid4().hex
         engine = create_engine(database_url)
@@ -240,20 +240,16 @@ def test_supported_prior_revision_upgrades_through_application_bootstrap():
                     migrations.alembic_config(connection), head.down_revision
                 )
                 assert migrations.current_revisions(connection) == [head.down_revision]
-                attempt_columns = {
+                evidence_columns = {
                     column["name"]
-                    for column in inspect(connection).get_columns("st_learning_attempt")
+                    for column in inspect(connection).get_columns("st_evidence_file")
                 }
-                tutor_columns = {
+                curriculum_columns = {
                     column["name"]
-                    for column in inspect(connection).get_columns("st_tutor_session")
+                    for column in inspect(connection).get_columns("st_curriculum_revision")
                 }
-                assert {"source_release_uuid", "source_binding_digest"}.isdisjoint(
-                    attempt_columns
-                )
-                assert {"source_release_uuid", "source_binding_digest"}.isdisjoint(
-                    tutor_columns
-                )
+                assert "relationship_uuid" not in evidence_columns
+                assert "programme_metadata" not in curriculum_columns
                 assert connection.execute(
                     text("SELECT count(*) FROM st_business_event WHERE event_uuid=:id"),
                     {"id": event_uuid},
@@ -261,22 +257,22 @@ def test_supported_prior_revision_upgrades_through_application_bootstrap():
 
             # The downgrade above constructs only the exact empty parent state
             # inside this synthetic schema. The application startup contract is
-            # the path under test: it upgrades a78 through ensure_schema().
+            # the path under test: it upgrades the prior revision through ensure_schema().
             upgraded = ensure_schema(database_url)
             assert upgraded.before == [head.down_revision]
-            assert upgraded.after == ["b91d2f6a08c3"]
+            assert upgraded.after == ["e7f2c9a4b138"]
 
             with engine.connect() as connection:
-                attempt_columns = {
+                evidence_columns = {
                     column["name"]
-                    for column in inspect(connection).get_columns("st_learning_attempt")
+                    for column in inspect(connection).get_columns("st_evidence_file")
                 }
-                tutor_columns = {
+                curriculum_columns = {
                     column["name"]
-                    for column in inspect(connection).get_columns("st_tutor_session")
+                    for column in inspect(connection).get_columns("st_curriculum_revision")
                 }
-                assert {"source_release_uuid", "source_binding_digest"} <= attempt_columns
-                assert {"source_release_uuid", "source_binding_digest"} <= tutor_columns
+                assert "relationship_uuid" in evidence_columns
+                assert "programme_metadata" in curriculum_columns
                 assert connection.execute(
                     text("SELECT count(*) FROM st_business_event WHERE event_uuid=:id"),
                     {"id": event_uuid},

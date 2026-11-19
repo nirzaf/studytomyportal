@@ -19,6 +19,10 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 import GeneralWrapperStyled from '@components/Objects/StyledElements/Wrappers/GeneralWrapper'
 import { Breadcrumbs } from '@components/Objects/Breadcrumbs/Breadcrumbs'
 import { PlaygroundReactionButton } from '@components/Playground/PlaygroundReactionButton'
+import {
+  buildSandboxedPlaygroundHtml,
+  PLAYGROUND_IFRAME_SANDBOX,
+} from '@components/Playground/sandboxHtml'
 import UserAvatar from '@components/Objects/UserAvatar'
 import { Playground } from '@services/playgrounds/playgrounds'
 import { getPlaygroundThumbnailMediaDirectory, getUserAvatarMediaDirectory } from '@services/media/media'
@@ -244,9 +248,10 @@ export default function PlaygroundViewClient({
             {/* Iframe / empty state */}
             {playground.html_content ? (
               <iframe
-                srcDoc={playground.html_content}
-                // srcDoc content runs on an opaque origin (no allow-same-origin)
-                sandbox="allow-scripts allow-forms allow-popups"
+                srcDoc={buildSandboxedPlaygroundHtml(playground.html_content)}
+                // srcDoc content runs on an opaque origin with zero-egress CSP
+                sandbox={PLAYGROUND_IFRAME_SANDBOX}
+                referrerPolicy="no-referrer"
                 className="w-full h-full border-0"
                 title={playground.name}
               />

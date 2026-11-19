@@ -4,7 +4,8 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from fastapi import HTTPException
+from pydantic import BaseModel, ConfigDict, Field as PydanticField, model_validator
 from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -43,6 +44,7 @@ from src.services.studytomy.idempotency import (
     claim_idempotency,
     complete_idempotency,
 )
+from src.services.studytomy.learners import _current_policies
 from src.services.studytomy.policies import lock_organization, lock_users
 from src.services.studytomy.releases import (
     ReleasePolicyBinding,
@@ -465,6 +467,259 @@ async def record_course_review(
         idempotency_key=idempotency_key,
         resource_kind="course_review",
         resource_uuid=row.uuid,
+        response_status=201,
+        response_projection=receipt.model_dump(),
+    )
+    await db.commit()
+    return receipt
+
+
+class PlaygroundReviewCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_digest: str = PydanticField(pattern=r"^[0-9a-f]{64}$")
+    decision: Literal["approved", "rejected"]
+    rights_confirmed: bool
+    accessibility_confirmed: bool
+    age_suitability_confirmed: bool
+    evidence_reference: str = PydanticField(min_length=4, max_length=255)
+
+    @model_validator(mode="after")
+    def validate_confirmations(self):
+        if self.decision == "approved" and not (
+            self.rights_confirmed
+            and self.accessibility_confirmed
+            and self.age_suitability_confirmed
+        ):
+            raise ValueError(
+                "Approval requires rights, accessibility, and age-suitability confirmation."
+            )
+        return self
+
+
+class PlaygroundReviewReceipt(BaseModel):
+    review_event_uuid: str
+    playground_uuid: str
+    decision: Literal["approved", "rejected"]
+    content_digest: str
+
+
+def playground_content_digest(playground) -> str:
+    """Canonical SHA-256 digest of all student-visible Playground state."""
+    from src.services.studytomy.idempotency import canonical_request_hash
+
+    access = getattr(playground, "access_type", None)
+    if hasattr(access, "value"):
+        access = access.value
+    return canonical_request_hash(
+        {
+            "schema": "studytomy_playground_review_v1",
+            "name": getattr(playground, "name", ""),
+            "description": getattr(playground, "description", None),
+            "access_type": access,
+            "course_uuid": getattr(playground, "course_uuid", None),
+            "html_content": getattr(playground, "html_content", None),
+            "learner_adaptation": getattr(playground, "learner_adaptation", None),
+        }
+    )
+
+
+async def is_studytomy_governed_playground(
+    db: AsyncSession,
+    playground,
+) -> bool:
+    """True when this Playground belongs to a Studytomy school/minors cohort.
+
+    Plain LearnHouse Community organizations without Studytomy learner profiles,
+    approved Studytomy policies, or managed-course links keep upstream behavior.
+    """
+    from src.db.studytomy.family import StudyLearnerProfile
+    from src.db.studytomy.governance import StudyPolicyStatus, StudyPolicyVersion
+
+    if getattr(playground, "course_id", None) is not None:
+        managed_course = (
+            await db.execute(
+                select(Course.id).where(
+                    Course.id == playground.course_id,
+                    Course.org_id == playground.org_id,
+                    Course.studytomy_managed.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        if managed_course is not None:
+            return True
+
+    has_profile = (
+        await db.execute(
+            select(StudyLearnerProfile.id)
+            .where(StudyLearnerProfile.org_id == playground.org_id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if has_profile is not None:
+        return True
+
+    has_policy = (
+        await db.execute(
+            select(StudyPolicyVersion.id)
+            .where(
+                StudyPolicyVersion.org_id == playground.org_id,
+                StudyPolicyVersion.status == StudyPolicyStatus.APPROVED.value,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return has_policy is not None
+
+
+async def has_approved_playground_review(
+    db: AsyncSession,
+    playground,
+    content_digest: str | None = None,
+) -> bool:
+    """Return True only if an independent reviewer approved the exact current digest."""
+    from src.db.studytomy.governance import StudyBusinessEvent
+
+    expected = content_digest or playground_content_digest(playground)
+    event = (
+        await db.execute(
+            select(StudyBusinessEvent)
+            .where(
+                StudyBusinessEvent.org_id == playground.org_id,
+                StudyBusinessEvent.resource_kind == "playground",
+                StudyBusinessEvent.resource_uuid == playground.playground_uuid,
+                StudyBusinessEvent.action.in_(
+                    (
+                        "studytomy.playground.review_approved",
+                        "studytomy.playground.review_rejected",
+                    )
+                ),
+            )
+            .order_by(StudyBusinessEvent.created_at.desc(), StudyBusinessEvent.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if event is None:
+        return False
+    if event.action != "studytomy.playground.review_approved":
+        return False
+    if playground.created_by is not None and event.actor_user_id == playground.created_by:
+        return False
+    state = event.after_state if isinstance(event.after_state, dict) else {}
+    return state.get("status") == "approved" and state.get("evidence_sha256") == expected
+
+
+async def record_playground_review(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    playground_uuid: str,
+    command: PlaygroundReviewCommand,
+    idempotency_key: str,
+) -> PlaygroundReviewReceipt:
+    """Record an independent reviewer's digest-bound decision for a Playground."""
+    from src.db.playgrounds import Playground
+
+    await lock_organization(db, org.id)
+    now = datetime.now(UTC)
+    playground = (
+        await db.execute(
+            select(Playground)
+            .where(
+                Playground.org_id == org.id,
+                Playground.playground_uuid == playground_uuid,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if playground is None:
+        raise HTTPException(404, "Playground not found.")
+
+    excluded = {int(playground.created_by)} if playground.created_by is not None else set()
+    scope_kind = "course" if playground.course_uuid else "function"
+    scope_uuid = playground.course_uuid or _RESPONSIBILITY.value
+    await authorize_studytomy_staff_action(
+        db,
+        actor,
+        org,
+        StudytomyCapabilityName.CONTENT_RELEASE_REVIEW,
+        target_scope_kind=scope_kind,
+        target_resource_uuid=scope_uuid,
+        excluded_user_ids=excluded,
+        hide_existence_on_denial=True,
+        now=now,
+    )
+    policies = await _current_policies(
+        db, org, (StudyPolicyKey.D_15, StudyPolicyKey.D_16), now
+    )
+    policy_ids = sorted(int(p.id) for p in policies)
+
+    operation = "studytomy.playground.review"
+    replay = await claim_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        request_payload={
+            "playground_uuid": playground_uuid,
+            "command": command.model_dump(mode="json"),
+        },
+    )
+    if replay is not None:
+        return PlaygroundReviewReceipt.model_validate(replay.response_projection)
+
+    current_digest = playground_content_digest(playground)
+    if command.expected_digest != current_digest:
+        raise studytomy_http_error(
+            409,
+            "PLAYGROUND_REVIEW_STALE",
+            "The Playground changed since inspection. Reload and review the current revision.",
+        )
+
+    action = (
+        "studytomy.playground.review_approved"
+        if command.decision == "approved"
+        else "studytomy.playground.review_rejected"
+    )
+    reason = (
+        "PLAYGROUND_REVIEW_APPROVED"
+        if command.decision == "approved"
+        else "PLAYGROUND_REVIEW_REJECTED"
+    )
+    event = await append_business_event(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        actor_capacity=_RESPONSIBILITY.value,
+        subject_uuid=playground.playground_uuid,
+        resource_kind="playground",
+        resource_uuid=playground.playground_uuid,
+        action=action,
+        reason_code=reason,
+        after_state={
+            "status": command.decision,
+            "evidence_sha256": current_digest,
+            "evidence_reference": command.evidence_reference,
+        },
+        policy_refs=policy_ids,
+        dedupe_key=f"studytomy:playground_review:{playground.playground_uuid}:{current_digest}:{idempotency_key}",
+    )
+    receipt = PlaygroundReviewReceipt(
+        review_event_uuid=event.event_uuid,
+        playground_uuid=playground.playground_uuid,
+        decision=command.decision,
+        content_digest=current_digest,
+    )
+    await complete_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation=operation,
+        idempotency_key=idempotency_key,
+        resource_kind="playground_review",
+        resource_uuid=event.event_uuid,
         response_status=201,
         response_projection=receipt.model_dump(),
     )

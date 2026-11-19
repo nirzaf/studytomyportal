@@ -99,6 +99,7 @@ export default function PlaygroundEditor({
   const [iterationCount, setIterationCount] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle')
+  const [publishError, setPublishError] = useState<string | null>(null)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [selectedCourseUuid, setSelectedCourseUuid] = useState<string>('')
@@ -283,6 +284,7 @@ export default function PlaygroundEditor({
 
   const handlePublishToggle = async () => {
     const nowPublished = !playground.published
+    setPublishError(null)
     try {
       const updated = await updatePlayground(
         playground.playground_uuid,
@@ -296,6 +298,11 @@ export default function PlaygroundEditor({
       queryClient.invalidateQueries({ queryKey: queryKeys.playgrounds.detail(playground.playground_uuid) })
       queryClient.invalidateQueries({ queryKey: queryKeys.playgrounds.list(orgslug) })
     } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Publishing requires an independent content review approval for the current revision.'
+      setPublishError(message)
       console.error('Publish toggle failed:', err)
     }
   }
@@ -441,6 +448,23 @@ export default function PlaygroundEditor({
           </Link>
         </div>
       </div>
+
+      {publishError && (
+        <div
+          role="alert"
+          style={{ margin: '0 40px 12px' }}
+          className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900"
+        >
+          <span>{publishError}</span>
+          <button
+            type="button"
+            onClick={() => setPublishError(null)}
+            className="text-xs font-semibold text-amber-800 underline hover:text-amber-950"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* ── Main split panel ── */}
       <div

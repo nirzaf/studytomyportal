@@ -257,6 +257,78 @@ async def _published_curriculum(
     return pair[0][0], pair[0][1]
 
 
+async def _published_or_managed_curriculum(
+    db: AsyncSession,
+    org: Organization,
+    profile: StudyLearnerProfile,
+    revision_uuid: str | None,
+    now: datetime,
+) -> tuple[StudyCurriculumRevision, Course]:
+    """Resolve a published curriculum for either a published native course or
+    an intact private managed release that this learner is entitled to."""
+    from src.db.studytomy.education import StudyCourseRelease
+    from src.services.studytomy.access_policy import (
+        _reviewed_releases,
+        resolve_active_course_grants,
+    )
+    from src.services.studytomy.idempotency import canonical_request_hash
+
+    pair = (
+        await db.execute(
+            select(StudyCurriculumRevision, Course)
+            .join(
+                Course, Course.course_uuid == StudyCurriculumRevision.owner_course_uuid
+            )
+            .where(
+                StudyCurriculumRevision.org_id == org.id,
+                StudyCurriculumRevision.uuid == revision_uuid,
+                StudyCurriculumRevision.status == "published",
+                Course.org_id == org.id,
+            )
+            .limit(2)
+        )
+    ).all()
+    if len(pair) != 1:
+        raise HTTPException(404, "Curriculum not found.")
+    curriculum, course = pair[0][0], pair[0][1]
+
+    if course.published and not course.studytomy_managed:
+        return curriculum, course
+
+    if course.studytomy_managed and not course.public and not course.published:
+        releases = (
+            await db.execute(
+                _reviewed_releases(org.id).where(
+                    StudyCourseRelease.course_uuid == course.course_uuid
+                )
+            )
+        ).scalars().all()
+        for release in releases:
+            if canonical_request_hash(release.snapshot) != release.snapshot_sha256:
+                continue
+            snapshot_course = release.snapshot.get("course")
+            if (
+                not isinstance(snapshot_course, dict)
+                or snapshot_course.get("id") != course.id
+                or snapshot_course.get("org_id") != org.id
+                or snapshot_course.get("course_uuid") != course.course_uuid
+            ):
+                continue
+            grants = await resolve_active_course_grants(
+                db,
+                org_id=org.id,
+                learner_profile_id=profile.id,
+                course_uuid=course.course_uuid,
+                release_id=release.id,
+                now=now,
+                include_unstarted=True,
+            )
+            if grants:
+                return curriculum, course
+
+    raise HTTPException(404, "Curriculum not found.")
+
+
 async def read_staff_mastery(
     request: Request,
     db: AsyncSession,
@@ -272,12 +344,6 @@ async def read_staff_mastery(
     if not await adaptive_enabled(db, org):
         raise unavailable
     now = datetime.now(UTC)
-    try:
-        curriculum, course = await _published_curriculum(db, org, revision_uuid)
-    except HTTPException as error:
-        if error.status_code != 404:
-            raise
-        raise unavailable from error
     profile = (
         await db.execute(
             select(StudyLearnerProfile)
@@ -293,6 +359,14 @@ async def read_staff_mastery(
     ).scalar_one_or_none()
     if profile is None:
         raise unavailable
+    try:
+        curriculum, course = await _published_or_managed_curriculum(
+            db, org, profile, revision_uuid, now
+        )
+    except HTTPException as error:
+        if error.status_code != 404:
+            raise
+        raise unavailable from error
     for kind, uuid in (
         ("course", course.course_uuid),
         ("learner", profile.learner_uuid),

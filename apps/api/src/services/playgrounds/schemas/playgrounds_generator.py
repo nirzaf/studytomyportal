@@ -116,6 +116,7 @@ class PlaygroundSessionResponse(BaseModel):
 class PlaygroundSessionData(BaseModel):
     session_uuid: str
     playground_uuid: str
+    owner_user_id: Optional[int] = None
     iteration_count: int
     max_iterations: int
     message_history: List[PlaygroundMessage]

@@ -48,7 +48,10 @@ from src.services.studytomy.adaptive_access import (
 )
 from src.services.studytomy.adaptive_curriculum_review import _REVIEW_POLICIES
 from src.services.studytomy.adaptive_evidence import _watermark
-from src.services.studytomy.adaptive_progress import _published_curriculum, _read_policy
+from src.services.studytomy.adaptive_progress import (
+    _published_or_managed_curriculum,
+    _read_policy,
+)
 from src.services.studytomy.authority import has_active_guardian_scope
 from src.services.studytomy.consents import has_current_consent_scope
 from src.services.studytomy.errors import studytomy_http_error
@@ -329,7 +332,9 @@ async def _report_authority(
     if profile is None:
         raise unavailable
     try:
-        curriculum, course = await _published_curriculum(db, org, revision_uuid)
+        curriculum, course = await _published_or_managed_curriculum(
+            db, org, profile, revision_uuid, now
+        )
         for scope, uuid in (("learner", learner_uuid), ("course", course.course_uuid)):
             await authorize_studytomy_staff_action(
                 db,
@@ -997,7 +1002,9 @@ async def _published_report_context(
     ):
         return None
     try:
-        curriculum, course = await _published_curriculum(db, org, revision_uuid)
+        curriculum, course = await _published_or_managed_curriculum(
+            db, org, profile, revision_uuid, now
+        )
         policies = await _report_policies(db, org, curriculum, now)
     except HTTPException as error:
         if error.status_code not in (403, 404, 409):

@@ -162,6 +162,7 @@ async def test_upload_retains_one_private_source_version(postgres_session_factor
             "source_uuid": receipt["source_uuid"], "label": "source.pdf",
             "sha256": sha256(pdf).hexdigest(), "readable_pages": [1, 3, *range(4, 12)],
             "pages_without_readable_text": [2],
+            "source_provenance": None,
         }
         listed = await client.get(path)
         assert listed.headers["cache-control"] == "private, no-store"

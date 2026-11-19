@@ -791,7 +791,7 @@ async def list_guardian_consent_events(
     limit: int = 100,
 ) -> list[StudyConsentEventRead]:
     now = datetime.now(UTC)
-    profile, _ = await _dependent_profile_for_guardian(
+    profile, relationship = await _dependent_profile_for_guardian(
         db_session, organization, actor, learner_uuid, now
     )
     result = await db_session.execute(
@@ -800,6 +800,8 @@ async def list_guardian_consent_events(
             StudyConsentEvent.org_id == organization.id,
             StudyConsentEvent.learner_profile_id == profile.id,
             StudyConsentEvent.subject_user_id == profile.user_id,
+            StudyConsentEvent.actor_user_id == actor.id,
+            StudyConsentEvent.relationship_id == relationship.id,
             StudyConsentEvent.provenance == "authenticated_guardian_authority",
         )
         .order_by(StudyConsentEvent.effective_at.desc(), StudyConsentEvent.id.desc())
@@ -943,6 +945,8 @@ async def withdraw_guardian_consent_choice(
                 StudyConsentEvent.org_id == organization.id,
                 StudyConsentEvent.learner_profile_id == profile.id,
                 StudyConsentEvent.subject_user_id == profile.user_id,
+                StudyConsentEvent.actor_user_id == actor.id,
+                StudyConsentEvent.relationship_id == relationship.id,
                 StudyConsentEvent.event_uuid == event_uuid,
                 StudyConsentEvent.provenance == "authenticated_guardian_authority",
             )
@@ -1094,6 +1098,23 @@ async def has_current_consent_scope(
 
     from src.services.studytomy.authority import has_active_guardian_scope
 
+    # Fail closed if any guardian authority relationship for this learner is
+    # actively disputed.
+    disputed_rel = (
+        await db_session.execute(
+            select(StudyRelationship.id)
+            .where(
+                StudyRelationship.org_id == organization.id,
+                StudyRelationship.learner_profile_id == profile.id,
+                StudyRelationship.relationship_type == StudyRelationshipType.GUARDIAN.value,
+                StudyRelationship.status == StudyRelationshipStatus.DISPUTED.value,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if disputed_rel is not None:
+        return False
+
     result = await db_session.execute(
         select(StudyConsentEvent)
         .where(
@@ -1105,26 +1126,28 @@ async def has_current_consent_scope(
         )
         .order_by(StudyConsentEvent.effective_at.desc(), StudyConsentEvent.id.desc())
     )
+    latest_by_guardian: dict[tuple[int, int], StudyConsentEvent] = {}
     for event in result.scalars().all():
         if scope_code not in event.scope_codes:
             continue
-        if (
-            event.choice != StudyConsentChoice.ACCEPT.value
-            or event.notice_version != notice_version
-            or event.policy_version_ids != current_policy_ids
-            or _as_utc(event.effective_at) > _as_utc(effective_now)
-            or event.relationship_id is None
-            or event.relationship_authority_version is None
-        ):
-            return False
-        relationship = await db_session.get(StudyRelationship, event.relationship_id)
+        if _as_utc(event.effective_at) > _as_utc(effective_now):
+            continue
+        if event.relationship_id is None or event.relationship_authority_version is None:
+            continue
+        key = (int(event.actor_user_id), int(event.relationship_id))
+        if key not in latest_by_guardian:
+            latest_by_guardian[key] = event
+
+    has_valid_accept = False
+    for (actor_user_id, relationship_id), event in latest_by_guardian.items():
+        relationship = await db_session.get(StudyRelationship, relationship_id)
         if relationship is None:
-            return False
-        return await has_active_guardian_scope(
+            continue
+        still_active_guardian = await has_active_guardian_scope(
             db_session,
             organization,
             profile,
-            int(event.actor_user_id),
+            actor_user_id,
             _GUARDIAN_CONSENT_SCOPE,
             now=effective_now,
             relationship_binding=(
@@ -1132,4 +1155,16 @@ async def has_current_consent_scope(
                 int(event.relationship_authority_version),
             ),
         )
-    return False
+        if not still_active_guardian:
+            continue
+        if event.choice != StudyConsentChoice.ACCEPT.value:
+            # Explicit decline or withdrawal by any currently authorized
+            # guardian fails closed and overrides other guardians' prior accepts.
+            return False
+        if (
+            event.notice_version == notice_version
+            and event.policy_version_ids == current_policy_ids
+        ):
+            has_valid_accept = True
+
+    return has_valid_accept

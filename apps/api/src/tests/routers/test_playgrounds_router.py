@@ -609,6 +609,7 @@ class TestPlaygroundsRouter:
 
         iterate_session = SimpleNamespace(
             session_uuid="session1",
+            owner_user_id=admin_user.id,
             iteration_count=0,
             max_iterations=3,
             current_html="<div></div>",
@@ -645,6 +646,7 @@ class TestPlaygroundsRouter:
 
         response_session = SimpleNamespace(
             session_uuid="session1",
+            owner_user_id=admin_user.id,
             iteration_count=1,
             max_iterations=3,
             current_html="<div>done</div>",
@@ -843,6 +845,36 @@ class TestPlaygroundsRouter:
             )
         assert state.status_code == 404
         assert iterate.status_code == 404
+
+        # Fail closed when neither embedded owner nor Redis owner key exists,
+        # and ensure zero AI credits are reserved.
+        with patch(
+            "src.routers.playgrounds.playgrounds_generator.get_playground_session",
+            return_value=session,
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator.get_playground_session_owner",
+            return_value=None,
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator.reserve_ai_credit",
+            new_callable=AsyncMock,
+        ) as credit_mock, patch(
+            "src.services.playgrounds.playgrounds._get_user_rights",
+            return_value={"playgrounds": {"action_update": True}},
+        ):
+            missing_owner_state = await client.get(
+                "/api/v1/playgrounds/generate/session/session_other"
+            )
+            missing_owner_iterate = await client.post(
+                "/api/v1/playgrounds/generate/iterate",
+                json={
+                    "session_uuid": "session_other",
+                    "playground_uuid": "playground_session_owner",
+                    "message": "Refine it",
+                },
+            )
+        assert missing_owner_state.status_code == 404
+        assert missing_owner_iterate.status_code == 404
+        credit_mock.assert_not_awaited()
 
     async def test_playground_generator_rejects_missing_session(self, client):
         with patch(

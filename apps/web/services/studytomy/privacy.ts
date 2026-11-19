@@ -274,3 +274,105 @@ export async function withdrawMyConsentChoiceForSelf(
   if (!response.ok) throw new StudyConsentRequestError(response.status)
   return (await response.json()) as StudyConsentEventRead
 }
+
+export type GuardianRelationshipSummary = {
+  relationship_uuid: string
+  learner_uuid: string
+  status: string
+  approved_scopes: string[]
+  valid_from: string | null
+  valid_to: string | null
+  authority_version: number
+}
+
+export async function listMyGuardianRelationships(
+  accessToken: string,
+  orgUuid: string
+): Promise<GuardianRelationshipSummary[]> {
+  const response = await fetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/my-relationships`,
+    RequestBodyWithAuthHeader('GET', null, null, accessToken)
+  )
+  if ([401, 403, 404, 409].includes(response.status)) return []
+  const body = await response.json().catch(() => null)
+  if (!response.ok || !Array.isArray(body)) {
+    throw new Error('Unable to load guardian relationships.')
+  }
+  return body as GuardianRelationshipSummary[]
+}
+
+export async function getGuardianConsentNotice(
+  accessToken: string,
+  orgUuid: string,
+  learnerUuid: string,
+  purpose: StudyConsentPurpose
+): Promise<StudyConsentNoticeRead | null> {
+  const response = await fetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/dependents/${encodeURIComponent(learnerUuid)}/consent-notices/${encodeURIComponent(purpose)}`,
+    RequestBodyWithAuthHeader('GET', null, null, accessToken)
+  )
+  const body = await response.json().catch(() => null)
+  if ([403, 404, 409].includes(response.status)) return null
+  if (!response.ok || !body || typeof body !== 'object') {
+    throw new Error('Unable to load dependent consent notices.')
+  }
+  return body as StudyConsentNoticeRead
+}
+
+export async function getGuardianConsentEvents(
+  accessToken: string,
+  orgUuid: string,
+  learnerUuid: string
+): Promise<StudyConsentEventRead[]> {
+  const response = await fetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/dependents/${encodeURIComponent(learnerUuid)}/consent-events?limit=100`,
+    RequestBodyWithAuthHeader('GET', null, null, accessToken)
+  )
+  if ([403, 404].includes(response.status)) return []
+  const body = await response.json().catch(() => null)
+  if (!response.ok || !Array.isArray(body)) {
+    throw new Error('Unable to load dependent consent history.')
+  }
+  return body as StudyConsentEventRead[]
+}
+
+export async function recordGuardianConsentChoice(
+  accessToken: string,
+  orgUuid: string,
+  learnerUuid: string,
+  choice: {
+    purpose: StudyConsentPurpose
+    choice: Extract<StudyConsentChoice, 'accept' | 'decline'>
+    notice_version: string
+    scope_codes: string[]
+  },
+  idempotencyKey: string
+): Promise<StudyConsentEventRead> {
+  const response = await fetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/dependents/${encodeURIComponent(learnerUuid)}/consent-events`,
+    withIdempotencyKey(
+      RequestBodyWithAuthHeader('POST', choice, null, accessToken),
+      idempotencyKey
+    )
+  )
+  if (!response.ok) throw new StudyConsentRequestError(response.status)
+  return (await response.json()) as StudyConsentEventRead
+}
+
+export async function withdrawGuardianConsentChoice(
+  accessToken: string,
+  orgUuid: string,
+  learnerUuid: string,
+  eventUuid: string,
+  idempotencyKey: string
+): Promise<StudyConsentEventRead> {
+  const response = await fetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/dependents/${encodeURIComponent(learnerUuid)}/consent-events/${encodeURIComponent(eventUuid)}/withdraw`,
+    withIdempotencyKey(
+      RequestBodyWithAuthHeader('POST', {}, null, accessToken),
+      idempotencyKey
+    )
+  )
+  if (!response.ok) throw new StudyConsentRequestError(response.status)
+  return (await response.json()) as StudyConsentEventRead
+}

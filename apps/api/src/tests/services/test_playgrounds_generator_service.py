@@ -331,8 +331,12 @@ class TestPlaygroundSessionOwner:
             session = create_playground_session("playground_1", context, user_id=42)
         keys = [call.args[0] for call in fake_redis.setex.call_args_list]
         assert f"playground_session_owner:{session.session_uuid}" in keys
+        assert session.owner_user_id == 42
+        session_call = next(c for c in fake_redis.setex.call_args_list if "owner" not in c.args[0])
+        assert '"owner_user_id": 42' in session_call.args[2]
         owner_call = next(c for c in fake_redis.setex.call_args_list if "owner" in c.args[0])
         assert owner_call.args[2] == "42"
+        assert get_playground_session_owner(session.session_uuid, session) == 42
 
     def test_owner_lookup(self):
         fake_redis = Mock()

@@ -3,6 +3,10 @@
 import React, { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowsOutSimple, ArrowsInSimple, CircleNotch } from '@phosphor-icons/react'
+import {
+  buildSandboxedPlaygroundHtml,
+  PLAYGROUND_IFRAME_SANDBOX,
+} from './sandboxHtml'
 
 interface PlaygroundPreviewProps {
   html: string | null
@@ -23,11 +27,11 @@ export default function PlaygroundPreview({
   const writeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // srcdoc, not document.write(): the frame is sandboxed onto an opaque
-  // origin, so its document isn't reachable from here.
+  // origin with a zero-egress CSP injected into the document head.
   const writeToIframe = useCallback((content: string) => {
     const iframe = iframeRef.current
     if (!iframe) return
-    iframe.srcdoc = content
+    iframe.srcdoc = buildSandboxedPlaygroundHtml(content)
   }, [])
 
   useEffect(() => {
@@ -104,7 +108,8 @@ export default function PlaygroundPreview({
       <iframe
         ref={iframeRef}
         className="w-full h-full border-0"
-        sandbox="allow-scripts allow-forms allow-popups"
+        sandbox={PLAYGROUND_IFRAME_SANDBOX}
+        referrerPolicy="no-referrer"
         title={t('playgrounds.preview.iframe_title')}
       />
     </div>

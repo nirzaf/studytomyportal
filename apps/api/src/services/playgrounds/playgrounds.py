@@ -446,6 +446,15 @@ async def update_playground(
     if not can_update:
         raise HTTPException(status_code=403, detail="Insufficient permissions to update playground")
 
+    from src.services.studytomy.publication import (
+        has_approved_playground_review,
+        is_studytomy_governed_playground,
+        playground_content_digest,
+    )
+
+    was_published = bool(playground.published)
+    previous_digest = playground_content_digest(playground)
+
     update_data = playground_data.model_dump(exclude_unset=True)
 
     # Resolve course_id if course_uuid changed
@@ -466,6 +475,30 @@ async def update_playground(
         if key == "learner_adaptation" and hasattr(value, "model_dump"):
             value = value.model_dump()
         setattr(playground, key, value)
+
+    if await is_studytomy_governed_playground(db_session, playground):
+        next_digest = playground_content_digest(playground)
+        if playground.published:
+            approved = await has_approved_playground_review(
+                db_session, playground, next_digest
+            )
+            if not approved:
+                if update_data.get("published") is True or not was_published:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "PLAYGROUND_REVIEW_REQUIRED",
+                            "message": (
+                                "Publishing a Playground in a Studytomy-governed cohort "
+                                "requires an independent content review approval for the current revision."
+                            ),
+                            "content_digest": next_digest,
+                        },
+                    )
+                if next_digest != previous_digest:
+                    # Editing a previously published Playground invalidates the
+                    # prior review receipt; return it to draft until re-reviewed.
+                    playground.published = False
 
     playground.update_date = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     db_session.add(playground)

@@ -46,9 +46,12 @@ from src.services.studytomy.publication import (
     CourseReleasePreflight,
     CourseReleaseReceipt,
     CourseReviewCommand,
+    PlaygroundReviewCommand,
+    PlaygroundReviewReceipt,
     designate_managed_course,
     record_course_release,
     record_course_review,
+    record_playground_review,
     verify_course_release,
 )
 
@@ -131,6 +134,26 @@ async def api_record_course_review(
     organization = await _organization(org_uuid, db_session)
     response.headers["Cache-Control"] = "private, no-store"
     return await record_course_review(db_session, organization, current_user, course_uuid, command, idempotency_key)
+
+
+@router.post(
+    "/orgs/{org_uuid}/playgrounds/{playground_uuid}/content-review-decisions",
+    status_code=status.HTTP_201_CREATED,
+)
+async def api_record_playground_review(
+    org_uuid: str,
+    playground_uuid: str,
+    command: PlaygroundReviewCommand,
+    response: Response,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=255)],
+    current_user: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
+    db_session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> PlaygroundReviewReceipt:
+    organization = await _organization(org_uuid, db_session)
+    response.headers["Cache-Control"] = "private, no-store"
+    return await record_playground_review(
+        db_session, organization, current_user, playground_uuid, command, idempotency_key
+    )
 
 
 @router.post(

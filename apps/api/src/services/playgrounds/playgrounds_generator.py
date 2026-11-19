@@ -51,8 +51,14 @@ def get_playground_session(session_uuid: str) -> Optional[PlaygroundSessionData]
     return None
 
 
-def get_playground_session_owner(session_uuid: str) -> Optional[int]:
+def get_playground_session_owner(
+    session_uuid: str,
+    session: Optional[PlaygroundSessionData] = None,
+) -> Optional[int]:
     """Return the user id that created the session, or None if unknown."""
+    embedded_owner = getattr(session, "owner_user_id", None) if session is not None else None
+    if isinstance(embedded_owner, int):
+        return embedded_owner
     r = get_redis_connection()
     if not r:
         return None
@@ -77,14 +83,16 @@ def create_playground_session(
     session = PlaygroundSessionData(
         session_uuid=session_uuid,
         playground_uuid=playground_uuid,
+        owner_user_id=user_id,
         iteration_count=0,
         max_iterations=MAX_ITERATIONS,
         message_history=[],
         current_html=None,
         context=context,
     )
-    # The session holds the prompts and generated HTML, so only its creator
-    # may continue or read it (same rule as Boards Playground sessions).
+    # Persist owner atomically inside the session payload (and keep the legacy
+    # side-key populated for compatibility). Read/iterate fail closed if no owner
+    # matches the acting user.
     if user_id is not None:
         r = get_redis_connection()
         if r:
@@ -171,8 +179,8 @@ CRITICAL DESIGN PHILOSOPHY:
 - Prefer a neutral or light background (white, gray-50, slate-50) with one or two accent colors max.
 
 DESIGN RULES:
-1. Generate a COMPLETE, self-contained HTML document
-2. ALWAYS use Tailwind CSS via CDN for styling
+1. Generate a COMPLETE, 100% self-contained HTML document with inline <style> CSS and inline vanilla JavaScript (plus inline SVG or HTML5 <canvas> when visuals or charts help).
+2. DO NOT load external scripts, external stylesheets, external fonts, external images, iframes, or CDNs: the preview sandbox enforces a strict zero-egress Content Security Policy (`connect-src 'none'`, no remote scripts/styles/images/forms/popups). Everything must work completely offline inside the single HTML document.
 3. Use LIGHT backgrounds, no dark full-page themes
 4. Centered, card-style layout; the interactive content is the star
 5. Responsive with proper spacing, rounded corners, subtle shadows on cards
@@ -226,18 +234,9 @@ BAD EXAMPLES (do NOT build these):
 - A multi-page app with routing
 - A dashboard with a left sidebar nav
 
-AVAILABLE LIBRARIES (use via CDN when needed):
-- Tailwind CSS: <script src="https://cdn.tailwindcss.com"></script>
-- Chart.js: <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-- D3.js: <script src="https://d3js.org/d3.v7.min.js"></script>
-- Matter.js: <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-- P5.js: <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-- Anime.js: <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
-- GSAP: <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.4/gsap.min.js"></script>
-- Confetti: <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.0/dist/confetti.browser.min.js"></script>
-- KaTeX: <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-- SortableJS: <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-- Mermaid: <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+CONTAINMENT & NETWORK SAFETY:
+- Never include external `<script src=...>`, `<link href=...>`, remote `<img>`, `fetch()`, `XMLHttpRequest`, `navigator.sendBeacon()`, `WebSocket`, `<form action=...>`, `window.open()`, or top-level navigation.
+- Render styling with clean inline `<style>` CSS, and build charts, diagrams, math layouts, and physics visuals using inline SVG, HTML5 `<canvas>`, Unicode/HTML formatting, and deterministic vanilla JavaScript.
 
 OUTPUT FORMAT:
 Return ONLY the HTML code, starting with <!DOCTYPE html> and ending with </html>.

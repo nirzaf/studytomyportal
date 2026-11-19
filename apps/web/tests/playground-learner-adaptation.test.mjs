@@ -410,3 +410,61 @@ test('PlaygroundChatPanel remount (e.g. exiting fullscreen preview) preserves cu
     await dom.happyDOM.close()
   }
 })
+
+test('PlaygroundPreview enforces zero-egress CSP and strict allow-scripts-only sandbox (TASK-03 / TASK-17)', async () => {
+  const { default: PlaygroundPreview } = await import('../components/Playground/PlaygroundPreview.tsx')
+  const {
+    buildSandboxedPlaygroundHtml,
+    PLAYGROUND_IFRAME_SANDBOX,
+    PLAYGROUND_WIDGET_CSP,
+  } = await import('../components/Playground/sandboxHtml.ts')
+
+  const maliciousWidget = `<!DOCTYPE html><html><head>
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-eval'">
+    <base href="https://evil.example/">
+  </head><body><div id="app">Widget</div></body></html>`
+
+  const wrapped = buildSandboxedPlaygroundHtml(maliciousWidget)
+  expect(wrapped).toContain(`<meta http-equiv="Content-Security-Policy" content="${PLAYGROUND_WIDGET_CSP}">`)
+  expect(wrapped).not.toContain("default-src *")
+  expect(wrapped).not.toContain('evil.example')
+  expect(PLAYGROUND_WIDGET_CSP).toContain("connect-src 'none'")
+  expect(PLAYGROUND_WIDGET_CSP).toContain("form-action 'none'")
+  expect(PLAYGROUND_WIDGET_CSP).toContain("frame-src 'none'")
+  expect(PLAYGROUND_WIDGET_CSP).toContain("object-src 'none'")
+  expect(PLAYGROUND_WIDGET_CSP).toContain("base-uri 'none'")
+  expect(PLAYGROUND_IFRAME_SANDBOX).toBe('allow-scripts')
+
+  const dom = createDomHarness()
+  const { createRoot } = await import('react-dom/client')
+  const container = dom.document.createElement('div')
+  dom.document.body.appendChild(container)
+  const root = createRoot(container)
+  const i18n = createInstance()
+  await i18n.init({ lng: 'en', resources: { en: { translation: english } } })
+
+  try {
+    await act(async () => {
+      root.render(
+        React.createElement(
+          I18nextProvider,
+          { i18n },
+          React.createElement(PlaygroundPreview, { html: maliciousWidget, isStreaming: false })
+        )
+      )
+    })
+
+    const iframe = container.querySelector('iframe')
+    expect(iframe).not.toBeNull()
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(iframe.getAttribute('sandbox')).not.toContain('allow-forms')
+    expect(iframe.getAttribute('sandbox')).not.toContain('allow-popups')
+    expect(iframe.getAttribute('sandbox')).not.toContain('allow-same-origin')
+    expect(iframe.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(iframe.srcdoc).toContain("connect-src 'none'")
+    expect(iframe.srcdoc).not.toContain('evil.example')
+  } finally {
+    await act(async () => root.unmount())
+    await dom.happyDOM.close()
+  }
+})

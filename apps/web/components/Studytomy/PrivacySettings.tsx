@@ -5,6 +5,7 @@ import { ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import ConsentSettings from '@components/Studytomy/ConsentSettings'
+import GuardianConsentPanel from '@components/Studytomy/GuardianConsentPanel'
 import RecordRequest from '@components/Studytomy/RecordRequest'
 import { getMyConsentEventsForSelf, getMyPrivacyStatus } from '@services/studytomy/privacy'
 import type { StudyConsentEventRead, StudyPrivacyStatus } from '@/types/studytomy'
@@ -140,6 +141,10 @@ const PrivacySettings = ({ orgUuid }: { orgUuid: string }) => {
 
       {hasProtectedProfile && accessToken && orgUuid && (
         <RecordRequest key={JSON.stringify([orgUuid, accessToken])} orgUuid={orgUuid} accessToken={accessToken} />
+      )}
+
+      {accessToken && orgUuid && (
+        <GuardianConsentPanel accessToken={accessToken} orgUuid={orgUuid} />
       )}
 
       {status?.learner_profile_protected && (

@@ -233,11 +233,8 @@ async def iterate_playground_session(
     if isinstance(current_user, APITokenUser) and current_user.org_id != playground.org_id:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-    # Verify user can edit
+    # Verify user can edit and fail closed on session ownership
     iterate_acting_user_id = resolve_acting_user_id(current_user)
-    session_owner = get_playground_session_owner(session.session_uuid)
-    if session_owner is not None and session_owner != iterate_acting_user_id:
-        raise HTTPException(status_code=404, detail="Session not found")
     from src.services.playgrounds.playgrounds import _get_user_rights
     rights = await _get_user_rights(iterate_acting_user_id, playground.org_id, db_session)
     pg_rights = rights.get("playgrounds", {})
@@ -247,6 +244,15 @@ async def iterate_playground_session(
     )
     if not can_edit:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    embedded_owner = getattr(session, "owner_user_id", None)
+    session_owner = (
+        embedded_owner
+        if isinstance(embedded_owner, int)
+        else get_playground_session_owner(session.session_uuid)
+    )
+    if session_owner is None or session_owner != iterate_acting_user_id:
+        raise HTTPException(status_code=404, detail="Session not found")
 
     # F-9: per-user + per-org rate limit before any compute / credit spend.
     from src.services.security.rate_limiting import enforce_ai_rate_limit
@@ -324,10 +330,10 @@ async def get_session_state(
     if not playground:
         raise HTTPException(status_code=404, detail="Playground not found")
 
+    if isinstance(current_user, APITokenUser) and current_user.org_id != playground.org_id:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
     state_acting_user_id = resolve_acting_user_id(current_user)
-    session_owner = get_playground_session_owner(session.session_uuid)
-    if session_owner is not None and session_owner != state_acting_user_id:
-        raise HTTPException(status_code=404, detail="Session not found")
     from src.services.playgrounds.playgrounds import _get_user_rights
     rights = await _get_user_rights(state_acting_user_id, playground.org_id, db_session)
     pg_rights = rights.get("playgrounds", {})
@@ -337,6 +343,15 @@ async def get_session_state(
     )
     if not can_edit:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    embedded_owner = getattr(session, "owner_user_id", None)
+    session_owner = (
+        embedded_owner
+        if isinstance(embedded_owner, int)
+        else get_playground_session_owner(session.session_uuid)
+    )
+    if session_owner is None or session_owner != state_acting_user_id:
+        raise HTTPException(status_code=404, detail="Session not found")
 
     return PlaygroundSessionResponse(
         session_uuid=session.session_uuid,
