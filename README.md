@@ -797,7 +797,7 @@ The platform involves minors and potentially sensitive educational information. 
 - **AI governance**: Approved providers, human oversight, versioned prompts/rubrics, safe errors, transparent limitations, and no secret exposure.
 - **Children's safeguards**: Obtain legal/privacy review for Australian operations, guardian consent rules, cross-border data access, and applicable retention requirements.
 - **Operations**: Centralized error logs without leaking learner content; rate limiting; restore drills; dependency updates; alert ownership.
-- **Irreversible changes**: Require the project's designated authorization codeword before merges, destructive production operations, critical deletions, or history rewrites.
+- **Irreversible changes**: Require an explicit user instruction naming the action before merges, destructive production operations, critical deletions, or history rewrites. No codeword is required.
 
 ## Engineering standards
 

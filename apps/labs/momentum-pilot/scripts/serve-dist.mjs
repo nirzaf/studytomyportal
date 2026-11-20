@@ -60,6 +60,7 @@ const server = http.createServer((req, res) => {
   const isImmutableAsset = cleanRel.includes('/assets/') || cleanRel.startsWith('assets/');
   res.writeHead(200, {
     'Content-Type': MIME_BY_EXT[ext] || 'application/octet-stream',
+    'Access-Control-Allow-Origin': '*',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',

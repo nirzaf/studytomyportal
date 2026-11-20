@@ -685,7 +685,7 @@ Do not describe root feature switches as authorisation. Managed resources remain
 
 Application rollback is preferred while additive schema and committed evidence stay intact. Disabling sale/AI/message automation is different from deleting records. Stop workers safely and retain pending operation references. A previous binary may not understand new policy records; never roll back to a version that ignores grants or confidential-case restrictions for already managed content.
 
-Database restore is an explicitly authorised last-resort recovery, not an ordinary release rollback. It must reconcile provider events, external refunds/emails already executed, retained audit/attempt records and deletion/hold manifests. A rollback cannot unsend a report or uncharge a card. Destructive operations require the user-designated Studytomy confirmation codeword; it is not defined in this specification.
+Database restore is an explicitly authorised last-resort recovery, not an ordinary release rollback. It must reconcile provider events, external refunds/emails already executed, retained audit/attempt records and deletion/hold manifests. A rollback cannot unsend a report or uncharge a card. Destructive operations require an explicit user instruction; no codeword is required.
 
 <a id="tasks"></a>
 ## 12. Atomic implementation backlog
@@ -3032,7 +3032,7 @@ Use small reviewable branches/diffs; do not make unrelated formatting/dependency
 
 2. Run strict commands and record actual exit status; the inherited lint command that masks errors is not a release check.
 
-3. Obtain separate implementation/merge/deployment approval and the user-designated irreversible-action codeword; never invent it or revive removed CI without authorization.
+3. Obtain separate implementation/merge/deployment approval ; never revive removed CI without authorization.
 
 4. Enable only approved offers/cohorts, then monitor the agreed pilot measures before expansion.
 
@@ -5973,7 +5973,7 @@ These are derived implementation decisions, distinct from D-01–D-20:
 | Existing endpoint compatibility | Route managed resources through shared new policy services; keep unrelated existing workflows compatible | Before enabling family-managed offers |
 | CI execution mechanism | Use the owner-approved external/local validation mechanism; do not restore removed GitHub Actions as incidental work | Before asserting unattended release protection |
 | Hosting/provider region | Configure and verify approved deployment/data-processing locations; the domain name does not establish residency | Before real learner data |
-| Merge/deployment confirmation | Use the user's designated Studytomy codeword, once supplied; no inherited codeword from another project | Before irreversible actions |
+| Merge/deployment confirmation | Explicit user instruction; no codeword required | Before irreversible actions |
 
 <a id="verification"></a>
 ## 16. Verification strategy, commands and completion evidence

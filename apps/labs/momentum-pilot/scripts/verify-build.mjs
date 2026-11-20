@@ -92,6 +92,8 @@ async function fetchVerifiedBytes(url, expectedSha = null, requiredHeaders = {})
   assert.ok(!xfo || !/SAMEORIGIN|DENY/i.test(xfo), `Disallowed X-Frame-Options on ${url}: ${xfo}`);
   const xcto = res.headers.get('x-content-type-options') || '';
   assert.equal(xcto.toLowerCase(), 'nosniff', `Missing X-Content-Type-Options: nosniff on ${url}`);
+  const acao = res.headers.get('access-control-allow-origin') || '';
+  assert.equal(acao, '*', `Missing Access-Control-Allow-Origin: * (required for opaque sandboxed iframe module scripts) on ${url}`);
 
   const bytes = Buffer.from(await res.arrayBuffer());
   if (expectedSha) {

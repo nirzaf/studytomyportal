@@ -23,10 +23,21 @@ type LiveScenario = {
   expiredTaskNumUuid: string
   labBaseUrl: string
   teacher: { email: string; password: string }
+  reviewer: { email: string; password: string }
   learner: { email: string; password: string }
   stranger: { email: string; password: string }
   learnerStorageState: string
   consentEventUuid?: string
+  authoringReceipts?: {
+    managedDraftStatus: number
+    selfReviewDeniedStatus: number
+    rightsEvidenceUuid: string
+    accessibilityEvidenceUuid: string
+    reviewUuid: string
+    revisionSha256: string
+    preflightStatus: number
+    releaseStatus: number
+  }
 }
 
 const scenarioFile = process.env.E2E_LIVE_VLAB_SCENARIO
@@ -62,10 +73,30 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     const tmpDir = testInfo.outputDir
     fs.mkdirSync(tmpDir, { recursive: true })
 
-    // Pre-login real teacher, learner, and unauthorized stranger tokens against real API
+    // Pre-login real teacher, independent reviewer, learner, and unauthorized stranger tokens against real API
     const teacherToken = await login(sc.teacher.email, sc.teacher.password)
+    const reviewerToken = await login(sc.reviewer.email, sc.reviewer.password)
     const learnerToken = await login(sc.learner.email, sc.learner.password)
     const strangerToken = await login(sc.stranger.email, sc.stranger.password)
+
+    // Verify real-API teacher -> independent reviewer -> immutable release receipts (F-05)
+    expect(sc.authoringReceipts).toBeTruthy()
+    expect(sc.authoringReceipts!.managedDraftStatus).toBe(204)
+    expect(sc.authoringReceipts!.selfReviewDeniedStatus).toBe(403)
+    expect(sc.authoringReceipts!.rightsEvidenceUuid).toMatch(/^ev_[0-9a-f-]{36}$/)
+    expect(sc.authoringReceipts!.accessibilityEvidenceUuid).toMatch(/^ev_[0-9a-f-]{36}$/)
+    expect(sc.authoringReceipts!.reviewUuid).toMatch(/^course_review_[0-9a-f-]{36}$/)
+    expect(sc.authoringReceipts!.revisionSha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(sc.authoringReceipts!.preflightStatus).toBe(200)
+    expect(sc.authoringReceipts!.releaseStatus).toBe(201)
+
+    const liveCandidate = await req<any>(
+      'GET',
+      `/studytomy/orgs/${sc.orgUuid}/courses/${sc.courseUuid}/content-review-candidate`,
+      reviewerToken,
+    )
+    expect(liveCandidate.media_review_blocked).toBe(false)
+    expect(liveCandidate.current_review?.decision).toBe('approved')
 
     // 1. Desktop learner context using real storageState
     const desktopContext = await browser.newContext({
@@ -110,13 +141,18 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     const labFrame = page.frameLocator('iframe[title*="Conservation"]')
     await expect(labFrame.getByRole('heading', { name: /Conservation of Linear Momentum/i })).toBeVisible()
 
-    // Interact inside hosted lab: adjust Mass 1, record/export CSV readings
-    const mass1Input = labFrame.getByLabel(/Mass 1/i)
-    await expect(mass1Input).toBeVisible()
-    await mass1Input.fill('3.5')
-    await mass1Input.dispatchEvent('change')
+    // Interact inside hosted lab: adjust Body 1 Mass (m1) slider via real keyboard interaction, verify HUD & export CSV readings (F-01, F-02)
+    const mass1Slider = labFrame.getByRole('slider', { name: /Body 1 Mass/i })
+    await expect(mass1Slider).toBeVisible()
+    await expect(mass1Slider).toHaveValue('2')
+    await mass1Slider.focus()
+    await mass1Slider.press('ArrowRight')
+    await mass1Slider.press('ArrowRight')
+    await mass1Slider.press('ArrowRight')
+    await expect(mass1Slider).toHaveValue('3.5')
+    await expect(labFrame.locator('#live-status')).toContainText('P_x=11.50 kg·m/s')
 
-    const exportBtn = labFrame.getByRole('button', { name: /Export Current Run CSV/i })
+    const exportBtn = labFrame.getByRole('button', { name: /Export Active Run CSV/i })
     await expect(exportBtn).toBeVisible()
     const downloadPromise = page.waitForEvent('download')
     await exportBtn.click()
@@ -133,11 +169,15 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     expect(egressViolations).toEqual([])
 
     // 2. Open linked practical assignment & verify NO leaked answer keys
+    const openAsgBtn = page.getByRole('button', { name: /Open practical assignment/i })
+    await expect(openAsgBtn).toBeVisible()
+    await page.bringToFront()
+    await openAsgBtn.focus()
     const openAsgPromise = page.waitForResponse(res =>
       res.url().includes(`/releases/${sc.releaseUuid}/assignments/${sc.asgActivityUuid}`) &&
       res.request().method() === 'GET',
     )
-    await page.getByRole('button', { name: /Open practical assignment/i }).click()
+    await openAsgBtn.click()
     const asgRes = await openAsgPromise
     expect(asgRes.status()).toBe(200)
     const asgText = await asgRes.text()
@@ -146,14 +186,37 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     // Rejection of direct CSV in UI
     const fileInput = page.locator(`#task-file-${sc.taskFileUuid}`)
     await fileInput.setInputFiles(csvPath)
-    await expect(page.getByRole('alert')).toContainText('Direct CSV uploads are not accepted')
+    await expect(page.locator('p[role="alert"]')).toContainText('Direct CSV uploads are not accepted')
+
+    const apiBase = `${API_URL}/studytomy/orgs/${sc.orgUuid}/learning`
+    // Invalid direct CSV upload via API while unlocked -> 415
+    const csvApiUpload = await page.request.post(
+      `${apiBase}/courses/${sc.courseUuid}/releases/${sc.releaseUuid}/assignments/${sc.asgActivityUuid}/tasks/${sc.taskFileUuid}/files`,
+      {
+        headers: { Authorization: `Bearer ${learnerToken}`, 'Idempotency-Key': `csv-reject-${randomUUID()}` },
+        multipart: {
+          sub_file: { name: 'raw.csv', mimeType: 'text/csv', buffer: Buffer.from('t,p\n0,4\n') },
+        },
+      },
+    )
+    expect(csvApiUpload.status()).toBe(415)
+
+    // Client-supplied grade injection via extra field -> 422
+    const gradeInject = await page.request.put(
+      `${apiBase}/courses/${sc.courseUuid}/releases/${sc.releaseUuid}/assignments/${sc.asgActivityUuid}/tasks/${sc.taskNumUuid}/draft`,
+      {
+        headers: { Authorization: `Bearer ${learnerToken}`, 'Content-Type': 'application/json' },
+        data: { task_submission: { answer: '2.5' }, grade: 10 },
+      },
+    )
+    expect(gradeInject.status()).toBe(422)
 
     // Offline transient failure recovery check during draft save
     const numInput = page.locator(`#task-num-${sc.taskNumUuid}`)
     await numInput.fill('2.5')
     await desktopContext.setOffline(true)
     await page.getByRole('button', { name: 'Save draft' }).click()
-    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(page.locator('p[role="alert"]')).toBeVisible()
     await expect(numInput).toHaveValue('2.5')
     await desktopContext.setOffline(false)
 
@@ -163,7 +226,7 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     )
     await page.getByRole('button', { name: 'Save draft' }).click()
     expect((await draftSavePromise).status()).toBe(200)
-    await expect(page.getByRole('status')).toContainText('Draft saved.')
+    await expect(page.locator('p[role="status"]').filter({ hasText: 'Draft saved.' })).toBeVisible()
 
     // Package downloaded CSV into ZIP and upload + submit
     const zipPath = buildMinimalZip(tmpDir, csvPath, 'momentum-lab-report.zip')
@@ -186,7 +249,6 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     await expect(page.getByText('Submitted — awaiting teacher review')).toBeVisible()
 
     // 3. Negative checks via real HTTP against real FastAPI server
-    const apiBase = `${API_URL}/studytomy/orgs/${sc.orgUuid}/learning`
     // Duplicate submit with new key -> 409
     const dupRes = await page.request.post(
       `${apiBase}/courses/${sc.courseUuid}/releases/${sc.releaseUuid}/assignments/${sc.asgActivityUuid}/submit`,
@@ -194,8 +256,19 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     )
     expect(dupRes.status()).toBe(409)
 
-    // Same-key replay succeeds safely cleanly on upload/draft/submit; wrong org denied
-    const replayKey = `replay-${randomUUID()}`
+    // File upload after submission is locked -> 409
+    const lockedUploadRes = await page.request.post(
+      `${apiBase}/courses/${sc.courseUuid}/releases/${sc.releaseUuid}/assignments/${sc.asgActivityUuid}/tasks/${sc.taskFileUuid}/files`,
+      {
+        headers: { Authorization: `Bearer ${learnerToken}`, 'Idempotency-Key': `locked-${randomUUID()}` },
+        multipart: {
+          sub_file: { name: 'late.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF\n') },
+        },
+      },
+    )
+    expect(lockedUploadRes.status()).toBe(409)
+
+    // Wrong org denied
     const wrongOrgRes = await page.request.get(
       `${API_URL}/studytomy/orgs/${sc.wrongOrgUuid}/learning/releases`,
       { headers: { Authorization: `Bearer ${learnerToken}` } },
@@ -232,44 +305,27 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     )
     expect(pastDueDraft.status()).toBe(403)
 
-    // Invalid direct CSV upload via API -> 415
-    const csvApiUpload = await page.request.post(
-      `${apiBase}/courses/${sc.courseUuid}/releases/${sc.releaseUuid}/assignments/${sc.asgActivityUuid}/tasks/${sc.taskFileUuid}/files`,
-      {
-        headers: { Authorization: `Bearer ${learnerToken}`, 'Idempotency-Key': replayKey },
-        multipart: {
-          sub_file: { name: 'raw.csv', mimeType: 'text/csv', buffer: Buffer.from('t,p\n0,4\n') },
-        },
-      },
-    )
-    expect(csvApiUpload.status()).toBe(415)
-
-    // Client-supplied grade injection via extra field -> 422
-    const gradeInject = await page.request.put(
-      `${apiBase}/courses/${sc.courseUuid}/releases/${sc.releaseUuid}/assignments/${sc.asgActivityUuid}/tasks/${sc.taskNumUuid}/draft`,
-      {
-        headers: { Authorization: `Bearer ${learnerToken}`, 'Content-Type': 'application/json' },
-        data: { task_submission: { answer: '2.5' }, grade: 10 },
-      },
-    )
-    expect(gradeInject.status()).toBe(422)
-
-    // 4. Teacher inspects & downloads uploaded ZIP and grades real submission
+    // 4. Teacher inspects & downloads uploaded ZIP and grades real submission (F-03)
     const submissions = await req<any[]>('GET', `/assignments/${sc.assignmentUuid}/submissions`, teacherToken)
     expect(submissions.length).toBe(1)
     const learnerUserId = submissions[0].user_id
 
-    const taskSubs = await req<any[]>(
+    const fileSub = await req<{
+      assignment_task_submission_uuid: string
+      assignment_task_id: number
+      task_submission: { fileUUID?: string }
+    }>(
       'GET',
       `/assignments/${sc.assignmentUuid}/tasks/${sc.taskFileUuid}/submissions/user/${learnerUserId}`,
       teacherToken,
     )
-    const fileSub = taskSubs.find(t => t.task_submission?.fileUUID === uploadedMeta.file_uuid)
     expect(fileSub).toBeTruthy()
+    expect(fileSub.task_submission?.fileUUID).toBe(uploadedMeta.file_uuid)
 
     // Teacher downloads learner's ZIP report via gated /content path
+    const apiRootUrl = API_URL.replace(/\/api\/v1\/?$/, '')
     const teacherFileDownload = await page.request.get(
-      `${API_URL}/content/orgs/${sc.orgUuid}/courses/${sc.courseUuid}/activities/${sc.asgActivityUuid}/assignments/${sc.assignmentUuid}/tasks/${sc.taskFileUuid}/subs/${uploadedMeta.file_uuid}`,
+      `${apiRootUrl}/content/orgs/${sc.orgUuid}/courses/${sc.courseUuid}/activities/${sc.asgActivityUuid}/assignments/${sc.assignmentUuid}/tasks/${sc.taskFileUuid}/subs/${uploadedMeta.file_uuid}`,
       { headers: { Authorization: `Bearer ${teacherToken}` } },
     )
     expect(teacherFileDownload.status()).toBe(200)
@@ -308,7 +364,14 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     await mobilePage.goto('/account/learning', { waitUntil: 'domcontentloaded' })
     await mobilePage.getByRole('button', { name: sc.releaseName, exact: true }).click()
     await mobilePage.getByRole('button', { name: /Virtual Lab: Conservation of Linear Momentum/i }).click()
-    await mobilePage.getByRole('button', { name: /Open practical assignment/i }).click()
+    const openAsgMobile = mobilePage.getByRole('button', { name: /Open practical assignment/i })
+    await expect(openAsgMobile).toBeVisible()
+    const mobileAsgGetPromise = mobilePage.waitForResponse(res =>
+      res.url().includes(`/assignments/${sc.asgActivityUuid}`) && res.request().method() === 'GET',
+    )
+    await openAsgMobile.focus()
+    await openAsgMobile.click()
+    expect((await mobileAsgGetPromise).status()).toBe(200)
 
     await expect(mobilePage.getByText('Graded')).toBeVisible()
     await expect(mobilePage.getByText('9 / 10')).toBeVisible()
@@ -329,12 +392,11 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
         {
           headers: {
             Authorization: `Bearer ${learnerToken}`,
-            'Content-Type': 'application/json',
+            'Idempotency-Key': `withdraw-${randomUUID()}`,
           },
-          data: { reason: 'e2e_verification_withdraw' },
         },
       )
-      expect([200, 204]).toContain(withdrawRes.status())
+      expect([200, 201, 204]).toContain(withdrawRes.status())
       const afterWithdraw = await mobilePage.request.get(
         `${apiBase}/courses/${sc.courseUuid}/releases/${sc.releaseUuid}/assignments/${sc.asgActivityUuid}`,
         { headers: { Authorization: `Bearer ${learnerToken}` } },

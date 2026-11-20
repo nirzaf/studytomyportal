@@ -81,7 +81,7 @@ def _valid_lab_content(
             "lab_id": "conservation-momentum",
             "experiment_id": "conservation-momentum",
             "build_version": "1.0.0-pilot.1",
-            "build_sha256": "43c4a9668f9a9ed2a56954286a2141bae452f9c48af3a631b2b24e4db1e64181",
+            "build_sha256": "3d5209e7896a5594f01c3d65282740c746ee2860d2e5f702acdb003e00595dcf",
             "entry_url": entry_url,
             "units_system": "SI",
             "source_repository": "https://github.com/danielw-sudo/agentuto",
