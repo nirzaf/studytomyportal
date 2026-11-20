@@ -20,6 +20,14 @@ import { SlashIcon, DividerVerticalIcon } from '@radix-ui/react-icons'
 import PlaygroundPreview from './PlaygroundPreview'
 import PlaygroundChatPanel from './PlaygroundChatPanel'
 import PlaygroundOptionsModal from './PlaygroundOptionsModal'
+import {
+  currentPlaygroundReviewAssent,
+  emptyPlaygroundReviewAssent,
+  hasCurrentPlaygroundReviewAssent,
+  isCurrentPlaygroundRejection,
+  updatePlaygroundReviewAssent,
+  type PlaygroundReviewConfirmationField,
+} from './playground-review-state'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query/keys'
 import {
@@ -113,11 +121,11 @@ export default function PlaygroundEditor({
   const [reviewStatusTick, setReviewStatusTick] = useState(0)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reviewBusy, setReviewBusy] = useState(false)
+  const [reviewReloading, setReviewReloading] = useState(false)
+  const [reviewDigestInvalidated, setReviewDigestInvalidated] = useState(false)
   const [reviewError, setReviewError] = useState<{ message: string; stale?: boolean } | null>(null)
   const [reviewNotice, setReviewNotice] = useState<string | null>(null)
-  const [rightsConfirmed, setRightsConfirmed] = useState(false)
-  const [accessibilityConfirmed, setAccessibilityConfirmed] = useState(false)
-  const [ageSuitabilityConfirmed, setAgeSuitabilityConfirmed] = useState(false)
+  const [reviewAssent, setReviewAssent] = useState(emptyPlaygroundReviewAssent)
   const [evidenceReference, setEvidenceReference] = useState('')
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -129,6 +137,29 @@ export default function PlaygroundEditor({
   const [isSavingTitle, setIsSavingTitle] = useState(false)
   const [titleSaveStatus, setTitleSaveStatus] = useState<'idle' | 'saved'>('idle')
   const titleInputRef = useRef<HTMLInputElement>(null)
+  const resetReviewAssent = useCallback(() => {
+    setReviewAssent(emptyPlaygroundReviewAssent())
+  }, [])
+  const currentReviewAssent = currentPlaygroundReviewAssent(
+    reviewAssent,
+    reviewStatus?.playground_uuid,
+    reviewStatus?.content_digest
+  )
+  const updateReviewConfirmation = (
+    field: PlaygroundReviewConfirmationField,
+    checked: boolean
+  ) => {
+    if (reviewDigestInvalidated || reviewReloading || isSaving || isSavingTitle) return
+    setReviewAssent((previous) =>
+      updatePlaygroundReviewAssent(
+        previous,
+        reviewStatus?.playground_uuid,
+        reviewStatus?.content_digest,
+        field,
+        checked
+      )
+    )
+  }
   const toggleFullscreen = () => setIsFullscreen((f) => !f)
   const MAX_ITERATIONS = 10
 
@@ -136,16 +167,22 @@ export default function PlaygroundEditor({
 
   const selectedCourse = orgCourses.find((c) => c.course_uuid === selectedCourseUuid) || null
   const savedLearnerAdaptation = learnerAdaptationForPlayground(playground)
+  const currentReviewRejected = isCurrentPlaygroundRejection(reviewStatus)
 
   // Auto-save title on blur
   const handleTitleBlur = useCallback(async () => {
     setTitleFocused(false)
     const trimmed = title.trim()
     if (!trimmed || trimmed === playground.name) return
+    resetReviewAssent()
     setIsSavingTitle(true)
     try {
       const updated = await updatePlayground(playground.playground_uuid, { name: trimmed }, accessToken)
       setPlayground(updated)
+      setReviewStatus(null)
+      setReviewDigestInvalidated(false)
+      setReviewStatusTick((n) => n + 1)
+      setReviewError(null)
       setTitle(updated.name)
       setTitleSaveStatus('saved')
       setTimeout(() => setTitleSaveStatus('idle'), 2000)
@@ -157,15 +194,18 @@ export default function PlaygroundEditor({
     } finally {
       setIsSavingTitle(false)
     }
-  }, [title, playground, accessToken])
+  }, [title, playground, accessToken, resetReviewAssent])
 
   // Keep playground state in sync if the editor mounts with a different playground UUID
   useEffect(() => {
+    resetReviewAssent()
+    setReviewDigestInvalidated(false)
+    setReviewStatus(null)
     setPlayground(initialPlayground)
     setTitle(initialPlayground.name)
     setHtml(initialPlayground.html_content || '')
     setLearnerAdaptation(learnerAdaptationForPlayground(initialPlayground))
-  }, [initialPlayground.playground_uuid])
+  }, [initialPlayground.playground_uuid, resetReviewAssent])
 
   // Reset title dirty state when playground updates externally (e.g. via modal)
   useEffect(() => {
@@ -182,7 +222,16 @@ export default function PlaygroundEditor({
     let active = true
     getPlaygroundReviewStatus(orgUuid, playground.playground_uuid, accessToken)
       .then((status) => {
-        if (active) setReviewStatus(status)
+        if (active) {
+          setReviewAssent((previous) =>
+            currentPlaygroundReviewAssent(
+              previous,
+              status.playground_uuid,
+              status.content_digest
+            )
+          )
+          setReviewStatus(status)
+        }
       })
       .catch(() => {
         if (active) setReviewStatus(null)
@@ -193,23 +242,43 @@ export default function PlaygroundEditor({
   }, [playground.org_uuid, playground.playground_uuid, playground.update_date, accessToken, reviewStatusTick])
 
   const reloadPlaygroundRevision = useCallback(async () => {
+    resetReviewAssent()
+    setReviewReloading(true)
     try {
       const latest = await getPlayground(playground.playground_uuid, accessToken)
       setPlayground(latest)
       setTitle(latest.name)
       setHtml(latest.html_content || '')
       setLearnerAdaptation(learnerAdaptationForPlayground(latest))
+      setReviewStatus(null)
+      setReviewDigestInvalidated(false)
       setReviewError(null)
       setReviewStatusTick((n) => n + 1)
     } catch (err) {
       setReviewError({
         message: err instanceof Error ? err.message : 'Unable to reload Playground revision.',
+        stale: true,
       })
+    } finally {
+      setReviewReloading(false)
     }
-  }, [playground.playground_uuid, accessToken])
+  }, [playground.playground_uuid, accessToken, resetReviewAssent])
 
   const handleSubmitReview = async (decision: 'approved' | 'rejected') => {
-    if (!playground.org_uuid || !reviewStatus || reviewBusy) return
+    if (
+      !playground.org_uuid ||
+      !reviewStatus?.content_digest ||
+      reviewBusy ||
+      reviewReloading ||
+      isSaving ||
+      isSavingTitle ||
+      reviewDigestInvalidated
+    ) return
+    const confirmation = currentPlaygroundReviewAssent(
+      reviewAssent,
+      reviewStatus.playground_uuid,
+      reviewStatus.content_digest
+    )
     const trimmedEvidence = evidenceReference.trim()
     if (trimmedEvidence.length < 4) {
       setReviewError({ message: 'Enter an evidence reference (at least 4 characters).' })
@@ -217,7 +286,11 @@ export default function PlaygroundEditor({
     }
     if (
       decision === 'approved' &&
-      !(rightsConfirmed && accessibilityConfirmed && ageSuitabilityConfirmed)
+      !hasCurrentPlaygroundReviewAssent(
+        confirmation,
+        reviewStatus.playground_uuid,
+        reviewStatus.content_digest
+      )
     ) {
       setReviewError({
         message: 'Confirm rights, accessibility, and age suitability before approving.',
@@ -234,9 +307,9 @@ export default function PlaygroundEditor({
         {
           expected_digest: reviewStatus.content_digest,
           decision,
-          rights_confirmed: rightsConfirmed,
-          accessibility_confirmed: accessibilityConfirmed,
-          age_suitability_confirmed: ageSuitabilityConfirmed,
+          rights_confirmed: confirmation.rightsConfirmed,
+          accessibility_confirmed: confirmation.accessibilityConfirmed,
+          age_suitability_confirmed: confirmation.ageSuitabilityConfirmed,
           evidence_reference: trimmedEvidence,
         },
         accessToken,
@@ -253,6 +326,10 @@ export default function PlaygroundEditor({
       queryClient.invalidateQueries({ queryKey: queryKeys.playgrounds.list(orgslug) })
     } catch (err) {
       const stale = err instanceof PlaygroundReviewError && err.code === 'PLAYGROUND_REVIEW_STALE'
+      if (stale) {
+        resetReviewAssent()
+        setReviewDigestInvalidated(true)
+      }
       setReviewError({
         message: err instanceof Error ? err.message : 'Unable to record content review.',
         stale,
@@ -264,6 +341,11 @@ export default function PlaygroundEditor({
 
   // Keep title in sync if playground name changes via modal
   const handleUpdated = (updated: Playground) => {
+    resetReviewAssent()
+    setReviewDigestInvalidated(false)
+    setReviewStatus(null)
+    setReviewStatusTick((n) => n + 1)
+    setReviewError(null)
     setPlayground(updated)
     setTitle(updated.name)
   }
@@ -351,6 +433,7 @@ export default function PlaygroundEditor({
   )
 
   const handleSave = async () => {
+    resetReviewAssent()
     setIsSaving(true)
     try {
       const updated = await updatePlayground(
@@ -494,7 +577,7 @@ export default function PlaygroundEditor({
                 className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
                   reviewStatus.current_revision_approved
                     ? 'bg-emerald-100 text-emerald-900'
-                    : reviewStatus.latest_decision === 'rejected'
+                    : currentReviewRejected
                       ? 'bg-red-100 text-red-900'
                       : 'bg-amber-100 text-amber-900'
                 }`}
@@ -502,15 +585,16 @@ export default function PlaygroundEditor({
               >
                 {reviewStatus.current_revision_approved
                   ? 'Review approved'
-                  : reviewStatus.latest_decision === 'rejected'
+                  : currentReviewRejected
                     ? 'Review rejected'
                     : 'Review required'}
               </span>
               {reviewStatus.can_review && (
                 <button
                   type="button"
+                  disabled={isSaving || isSavingTitle || reviewReloading}
                   onClick={() => {
-                    setReviewError(null)
+                    if (!reviewDigestInvalidated) setReviewError(null)
                     setReviewModalOpen(true)
                   }}
                   className="flex items-center gap-1.5 h-9 px-3 py-2 font-black text-sm nice-shadow rounded-lg transition-all ease-linear hover:cursor-pointer bg-amber-600 hover:bg-amber-700 text-white"
@@ -715,7 +799,11 @@ export default function PlaygroundEditor({
               </div>
               {reviewStatus.latest_decision && (
                 <div>
-                  <span className="font-semibold text-gray-700">Latest decision: </span>
+                  <span className="font-semibold text-gray-700">
+                    Latest decision ({reviewStatus.latest_reviewed_digest === reviewStatus.content_digest
+                      ? 'current revision'
+                      : 'historical revision'}):
+                  </span>{' '}
                   <span className="text-gray-800">
                     {reviewStatus.latest_decision}
                     {reviewStatus.latest_reviewed_digest
@@ -736,24 +824,27 @@ export default function PlaygroundEditor({
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={rightsConfirmed}
-                  onChange={(e) => setRightsConfirmed(e.target.checked)}
+                  checked={currentReviewAssent.rightsConfirmed}
+                  disabled={reviewBusy || reviewReloading || isSaving || isSavingTitle || reviewDigestInvalidated}
+                  onChange={(e) => updateReviewConfirmation('rightsConfirmed', e.target.checked)}
                 />
                 <span>Rights & syllabus attribution confirmed</span>
               </label>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={accessibilityConfirmed}
-                  onChange={(e) => setAccessibilityConfirmed(e.target.checked)}
+                  checked={currentReviewAssent.accessibilityConfirmed}
+                  disabled={reviewBusy || reviewReloading || isSaving || isSavingTitle || reviewDigestInvalidated}
+                  onChange={(e) => updateReviewConfirmation('accessibilityConfirmed', e.target.checked)}
                 />
                 <span>Accessibility requirements confirmed</span>
               </label>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={ageSuitabilityConfirmed}
-                  onChange={(e) => setAgeSuitabilityConfirmed(e.target.checked)}
+                  checked={currentReviewAssent.ageSuitabilityConfirmed}
+                  disabled={reviewBusy || reviewReloading || isSaving || isSavingTitle || reviewDigestInvalidated}
+                  onChange={(e) => updateReviewConfirmation('ageSuitabilityConfirmed', e.target.checked)}
                 />
                 <span>Age suitability for target learner cohort confirmed</span>
               </label>
@@ -775,8 +866,9 @@ export default function PlaygroundEditor({
                 {reviewError.stale && (
                   <button
                     type="button"
+                    disabled={reviewReloading}
                     onClick={() => void reloadPlaygroundRevision()}
-                    className="rounded border border-red-400 bg-white px-2.5 py-1 font-semibold text-red-800 hover:bg-red-100"
+                    className="rounded border border-red-400 bg-white px-2.5 py-1 font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
                   >
                     Reload revision
                   </button>
@@ -787,7 +879,7 @@ export default function PlaygroundEditor({
             <div className="flex flex-wrap justify-end gap-2 pt-2">
               <button
                 type="button"
-                disabled={reviewBusy}
+                disabled={reviewBusy || reviewReloading || isSaving || isSavingTitle || reviewDigestInvalidated}
                 onClick={() => void handleSubmitReview('rejected')}
                 className="rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
               >
@@ -795,7 +887,18 @@ export default function PlaygroundEditor({
               </button>
               <button
                 type="button"
-                disabled={reviewBusy}
+                disabled={
+                  reviewBusy ||
+                  reviewReloading ||
+                  isSaving ||
+                  isSavingTitle ||
+                  reviewDigestInvalidated ||
+                  !hasCurrentPlaygroundReviewAssent(
+                    currentReviewAssent,
+                    reviewStatus.playground_uuid,
+                    reviewStatus.content_digest
+                  )
+                }
                 onClick={() => void handleSubmitReview('approved')}
                 className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
               >

@@ -524,17 +524,25 @@ def playground_content_digest(playground) -> str:
     access = getattr(playground, "access_type", None)
     if hasattr(access, "value"):
         access = access.value
-    return canonical_request_hash(
-        {
-            "schema": "studytomy_playground_review_v1",
-            "name": getattr(playground, "name", ""),
-            "description": getattr(playground, "description", None),
-            "access_type": access,
-            "course_uuid": getattr(playground, "course_uuid", None),
-            "html_content": getattr(playground, "html_content", None),
-            "learner_adaptation": getattr(playground, "learner_adaptation", None),
+    reviewed_state = {
+        "schema": "studytomy_playground_review_v1",
+        "name": getattr(playground, "name", ""),
+        "description": getattr(playground, "description", None),
+        "access_type": access,
+        "course_uuid": getattr(playground, "course_uuid", None),
+        "html_content": getattr(playground, "html_content", None),
+        "learner_adaptation": getattr(playground, "learner_adaptation", None),
+    }
+    thumbnail_name = getattr(playground, "thumbnail_image", None)
+    thumbnail_sha256 = getattr(playground, "thumbnail_content_sha256", None)
+    if thumbnail_name or thumbnail_sha256:
+        # Keep the stored reference and byte identity together. A reference by
+        # itself is mutable and cannot prove which image the reviewer saw.
+        reviewed_state["thumbnail"] = {
+            "stored_name": thumbnail_name,
+            "content_sha256": thumbnail_sha256,
         }
-    )
+    return canonical_request_hash(reviewed_state)
 
 
 async def is_studytomy_governed_playground(
@@ -830,6 +838,21 @@ async def record_playground_review(
             "PLAYGROUND_REVIEW_STALE",
             "The Playground changed since inspection. Reload and review the current revision.",
         )
+
+    thumbnail_name = getattr(playground, "thumbnail_image", None)
+    thumbnail_sha256 = getattr(playground, "thumbnail_content_sha256", None)
+    if command.decision == "approved" and (thumbnail_name or thumbnail_sha256):
+        valid_thumbnail_digest = (
+            isinstance(thumbnail_sha256, str)
+            and len(thumbnail_sha256) == 64
+            and all(char in "0123456789abcdef" for char in thumbnail_sha256)
+        )
+        if not thumbnail_name or not valid_thumbnail_digest:
+            raise studytomy_http_error(
+                409,
+                "PLAYGROUND_THUMBNAIL_IDENTITY_REQUIRED",
+                "Upload the thumbnail through the Playground thumbnail endpoint before approving this revision.",
+            )
 
     action = (
         "studytomy.playground.review_approved"

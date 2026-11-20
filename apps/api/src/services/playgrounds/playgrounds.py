@@ -1,3 +1,4 @@
+import hashlib
 from typing import List
 from uuid import uuid4
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from src.db.user_organizations import UserOrganization
 from src.db.courses.courses import Course
 from src.security.rbac.constants import ADMIN_OR_MAINTAINER_ROLE_IDS
 from src.security.superadmin import is_user_superadmin
+from src.security.file_validation import validate_upload_stream
 from src.services.utils.upload_content import upload_file
 from src.services.webhooks.dispatch import dispatch_webhooks
 from src.services.analytics import events as analytics_events
@@ -547,6 +549,7 @@ async def update_playground(
             raise HTTPException(status_code=404, detail="Playground not found")
 
     was_published = bool(playground.published)
+    previous_thumbnail_name = getattr(playground, "thumbnail_image", None)
 
     # Resolve course_id if course_uuid changed
     if "course_uuid" in update_data:
@@ -566,6 +569,13 @@ async def update_playground(
         if key == "learner_adaptation" and hasattr(value, "model_dump"):
             value = value.model_dump()
         setattr(playground, key, value)
+    if (
+        "thumbnail_image" in update_data
+        and update_data["thumbnail_image"] != previous_thumbnail_name
+    ):
+        # A direct path edit has no verified byte identity. Re-upload through
+        # the thumbnail endpoint before this image can receive review approval.
+        playground.thumbnail_content_sha256 = None
 
     if governed or await is_studytomy_governed_playground(db_session, playground):
         next_digest = playground_content_digest(playground)
@@ -815,6 +825,16 @@ async def update_playground_thumbnail(
     if not thumbnail_file or not thumbnail_file.filename:
         raise HTTPException(status_code=400, detail="No thumbnail file provided")
 
+    # Validate and hash the exact uploaded bytes before storage. The validator
+    # leaves seekable uploads rewound; reading in chunks keeps memory bounded.
+    validate_upload_stream(thumbnail_file, ["image"])
+    thumbnail_file.file.seek(0)
+    thumbnail_hasher = hashlib.sha256()
+    while chunk := thumbnail_file.file.read(1024 * 1024):
+        thumbnail_hasher.update(chunk)
+    thumbnail_content_sha256 = thumbnail_hasher.hexdigest()
+    thumbnail_file.file.seek(0)
+
     name_in_disk = await upload_file(
         file=thumbnail_file,
         directory=f"playgrounds/{playground.playground_uuid}/thumbnails",
@@ -824,8 +844,43 @@ async def update_playground_thumbnail(
         filename_prefix="thumbnail",
     )
 
+    # Serialize against review and other governed edits, then re-read the
+    # current row before applying the uploaded image identity. Plain CE keeps
+    # its existing write path and does not take governance locks.
+    from src.services.studytomy.policies import lock_organization
+    from src.services.studytomy.publication import (
+        has_approved_playground_review,
+        is_studytomy_governed_playground,
+        playground_content_digest,
+    )
+
+    governed = await is_studytomy_governed_playground(db_session, playground)
+    if governed:
+        await lock_organization(db_session, playground.org_id)
+        playground = (
+            await db_session.execute(
+                select(Playground)
+                .where(Playground.playground_uuid == playground_uuid)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalars().first()
+        if not playground:
+            raise HTTPException(status_code=404, detail="Playground not found")
+
     playground.thumbnail_image = name_in_disk
+    playground.thumbnail_content_sha256 = thumbnail_content_sha256
     playground.update_date = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    if playground.published and (
+        governed or await is_studytomy_governed_playground(db_session, playground)
+    ):
+        current_digest = playground_content_digest(playground)
+        if not await has_approved_playground_review(
+            db_session, playground, current_digest
+        ):
+            # Keep the prior review event as history; this new thumbnail needs
+            # its own independent review before learners can receive it.
+            playground.published = False
     db_session.add(playground)
     await db_session.commit()
     await db_session.refresh(playground)

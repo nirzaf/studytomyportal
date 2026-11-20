@@ -2,11 +2,12 @@
 (TASK-02, TASK-04, TASK-05, TASK-07, TASK-12, TASK-14, TASK-15)."""
 
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
 
 from src.db.courses.courses import Course
@@ -29,6 +30,7 @@ from src.db.studytomy.family import (
     StudyRelationshipStatus,
 )
 from src.db.studytomy.governance import (
+    StudyBusinessEvent,
     StudyOwnerAssignment,
     StudyOwnerFunction,
     StudyOwnerStatus,
@@ -48,6 +50,7 @@ from src.services.playgrounds.playgrounds import (
     get_playground,
     list_org_playgrounds,
     update_playground,
+    update_playground_thumbnail,
 )
 from src.services.studytomy import (
     adaptive_attempt_access,
@@ -68,6 +71,28 @@ from src.tests.studytomy.test_studytomy_access import (
     _seed_approved_policy,
     _seed_staff_scope,
 )
+
+_TEST_THUMBNAIL_A = b"\x89PNG\r\n\x1a\n" + b"\x00" * 256
+_TEST_THUMBNAIL_B = b"\x89PNG\r\n\x1a\n" + b"\x01" * 256
+
+
+def test_task04_playground_review_digest_binds_thumbnail_bytes_at_same_path():
+    playground = SimpleNamespace(
+        name="Digest fixture",
+        description="Synthetic review fixture",
+        access_type=PlaygroundAccessType.AUTHENTICATED,
+        course_uuid=None,
+        html_content="<p>fixture</p>",
+        learner_adaptation=None,
+        thumbnail_image="same-stored-name.png",
+        thumbnail_content_sha256="a" * 64,
+    )
+    first_digest = publication.playground_content_digest(playground)
+    playground.thumbnail_content_sha256 = "b" * 64
+    second_digest = publication.playground_content_digest(playground)
+
+    assert playground.thumbnail_image == "same-stored-name.png"
+    assert first_digest != second_digest
 
 
 async def _seed_owner(db, org_id: int, org_uuid: str, user_id: int, fn: StudyOwnerFunction):
@@ -334,8 +359,27 @@ async def test_task04_governed_playground_publish_requires_independent_review_an
             )
         assert stale_pub.value.status_code == 409
 
+    # Give v2 a server-verified thumbnail before independent review.
+    with patch(
+        "src.services.playgrounds.playgrounds._get_user_rights",
+        new_callable=AsyncMock,
+        return_value={"playgrounds": {"action_update": True}},
+    ), patch(
+        "src.services.playgrounds.playgrounds.upload_file",
+        new_callable=AsyncMock,
+        return_value="thumb-reviewed-v2.png",
+    ):
+        await update_playground_thumbnail(
+            SimpleNamespace(),
+            governed_pg.playground_uuid,
+            regular_user,
+            db,
+            UploadFile(filename="thumb.png", file=BytesIO(_TEST_THUMBNAIL_A)),
+        )
+    await db.refresh(governed_pg)
+
     # Approve and publish v2, then test T-04/T-05 rejection withdrawal + review status + learner visibility
-    v2_digest = publication.playground_content_digest(edited)
+    v2_digest = publication.playground_content_digest(governed_pg)
     learner = await _make_user(db, org.id, "pg_learner", "pglearner@lk.test", "user_pg_learner")
 
     with patch(
@@ -380,6 +424,97 @@ async def test_task04_governed_playground_publish_requires_independent_review_an
     assert reviewer_status.can_review is True
     assert reviewer_status.deliverable is True
     assert reviewer_status.current_revision_approved is True
+
+    # Replacing the learner-visible image changes the digest and withdraws the
+    # Playground; the old approval remains in the append-only review history.
+    with patch(
+        "src.services.playgrounds.playgrounds._get_user_rights",
+        new_callable=AsyncMock,
+        return_value={"playgrounds": {"action_update": True}},
+    ), patch(
+        "src.services.playgrounds.playgrounds.upload_file",
+        new_callable=AsyncMock,
+        return_value="thumb-changed-v3.png",
+    ):
+        changed_thumbnail = await update_playground_thumbnail(
+            SimpleNamespace(),
+            governed_pg.playground_uuid,
+            regular_user,
+            db,
+            UploadFile(filename="thumb.png", file=BytesIO(_TEST_THUMBNAIL_B)),
+        )
+    assert changed_thumbnail.published is False
+    await db.refresh(governed_pg)
+    v3_digest = publication.playground_content_digest(governed_pg)
+    assert v3_digest != v2_digest
+
+    with patch(
+        "src.services.playgrounds.playgrounds._get_user_rights",
+        new_callable=AsyncMock,
+        return_value={"playgrounds": {"action_update": True}},
+    ), pytest.raises(HTTPException) as stale_thumbnail_pub:
+        await update_playground(
+            SimpleNamespace(),
+            governed_pg.playground_uuid,
+            PlaygroundUpdate(published=True),
+            regular_user,
+            db,
+        )
+    assert stale_thumbnail_pub.value.status_code == 409
+    assert stale_thumbnail_pub.value.detail["code"] == "PLAYGROUND_REVIEW_REQUIRED"
+    await db.refresh(governed_pg)
+    with pytest.raises(HTTPException) as hidden_after_thumbnail:
+        await get_playground(SimpleNamespace(), governed_pg.playground_uuid, learner, db)
+    assert hidden_after_thumbnail.value.status_code == 404
+    assert governed_pg.playground_uuid not in {
+        p.playground_uuid
+        for p in await list_org_playgrounds(SimpleNamespace(), org.id, learner, db)
+    }
+
+    prior_thumbnail_review = (
+        await db.execute(
+            select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.resource_kind == "playground",
+                StudyBusinessEvent.resource_uuid == governed_pg.playground_uuid,
+                StudyBusinessEvent.action == "studytomy.playground.review_approved",
+            )
+        )
+    ).scalars().all()
+    assert any(
+        (event.after_state or {}).get("evidence_sha256") == v2_digest
+        for event in prior_thumbnail_review
+    )
+
+    await publication.record_playground_review(
+        db,
+        org,
+        admin_user,
+        governed_pg.playground_uuid,
+        publication.PlaygroundReviewCommand(
+            expected_digest=v3_digest,
+            decision="approved",
+            rights_confirmed=True,
+            accessibility_confirmed=True,
+            age_suitability_confirmed=True,
+            evidence_reference="REVIEW-LK-PG-03-THUMBNAIL",
+        ),
+        "idem-pg-indep-v3-thumbnail",
+    )
+    with patch(
+        "src.services.playgrounds.playgrounds._get_user_rights",
+        new_callable=AsyncMock,
+        return_value={"playgrounds": {"action_update": True}},
+    ):
+        republished_thumbnail = await update_playground(
+            SimpleNamespace(),
+            governed_pg.playground_uuid,
+            PlaygroundUpdate(published=True),
+            regular_user,
+            db,
+        )
+    assert republished_thumbnail.published is True
+    v2_digest = v3_digest
 
     with patch(
         "src.services.playgrounds.playgrounds._get_user_rights",
@@ -433,6 +568,44 @@ async def test_task04_governed_playground_publish_requires_independent_review_an
     assert (
         await get_playground(SimpleNamespace(), governed_pg.playground_uuid, admin_user, db)
     ).playground_uuid == governed_pg.playground_uuid
+
+    # A direct path edit has no trusted byte identity, so it cannot retain
+    # approval or receive a new approval until the thumbnail is re-uploaded.
+    with patch(
+        "src.services.playgrounds.playgrounds._get_user_rights",
+        new_callable=AsyncMock,
+        return_value={"playgrounds": {"action_update": True}},
+    ):
+        await update_playground(
+            SimpleNamespace(),
+            governed_pg.playground_uuid,
+            PlaygroundUpdate(thumbnail_image="manually-selected.png"),
+            regular_user,
+            db,
+        )
+    await db.refresh(governed_pg)
+    direct_path_digest = publication.playground_content_digest(governed_pg)
+    with pytest.raises(HTTPException) as thumbnail_identity_required:
+        await publication.record_playground_review(
+            db,
+            org,
+            admin_user,
+            governed_pg.playground_uuid,
+            publication.PlaygroundReviewCommand(
+                expected_digest=direct_path_digest,
+                decision="approved",
+                rights_confirmed=True,
+                accessibility_confirmed=True,
+                age_suitability_confirmed=True,
+                evidence_reference="REVIEW-UNVERIFIED-THUMBNAIL",
+            ),
+            "idem-pg-unverified-thumbnail",
+        )
+    assert thumbnail_identity_required.value.status_code == 409
+    assert (
+        thumbnail_identity_required.value.detail["code"]
+        == "PLAYGROUND_THUMBNAIL_IDENTITY_REQUIRED"
+    )
 
     # Legacy unreviewed published item (published=True before org became governed) fails closed for learners
     assert ce_pub.playground_uuid not in {

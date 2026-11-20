@@ -1,6 +1,6 @@
 from typing import Optional
 from enum import Enum
-from sqlalchemy import JSON, Column, ForeignKey, Integer, Text
+from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Text
 from sqlmodel import Field, SQLModel
 
 from src.services.playgrounds.schemas.playgrounds_generator import LearnerAdaptationContext
@@ -33,6 +33,10 @@ class Playground(PlaygroundBase, table=True):
         sa_column=Column(Integer, ForeignKey("organization.id", ondelete="CASCADE"), index=True)
     )
     playground_uuid: str = Field(default="", index=True)
+    thumbnail_content_sha256: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(length=64), nullable=True),
+    )
     course_id: Optional[int] = Field(
         default=None,
         sa_column=Column(Integer, ForeignKey("course.id", ondelete="SET NULL"), nullable=True),

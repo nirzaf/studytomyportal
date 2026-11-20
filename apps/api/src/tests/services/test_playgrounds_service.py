@@ -1,6 +1,7 @@
 """Tests for src/services/playgrounds/playgrounds.py."""
 
 from datetime import datetime
+from io import BytesIO
 from types import SimpleNamespace
 from uuid import uuid4
 from unittest.mock import AsyncMock, patch
@@ -31,6 +32,8 @@ from src.services.playgrounds.playgrounds import (
     update_playground,
     update_playground_thumbnail,
 )
+
+_TEST_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 256
 
 
 async def _make_playground(db, org, admin_user, **overrides):
@@ -405,7 +408,7 @@ class TestPlaygroundsService:
     ):
         playground = await _make_playground(db, org, admin_user)
         usergroup = await _make_usergroup(db, org)
-        upload = UploadFile(filename="thumb.png", file=SimpleNamespace())
+        upload = UploadFile(filename="thumb.png", file=BytesIO(_TEST_PNG))
 
         added = await add_usergroup_to_playground(
             mock_request, playground.playground_uuid, usergroup.usergroup_uuid, admin_user, db
@@ -443,7 +446,7 @@ class TestPlaygroundsService:
         playground = await _make_playground(db, org, admin_user, playground_uuid="pg_errors")
         usergroup = await _make_usergroup(db, org, usergroup_uuid="ug_errors")
         other_usergroup = await _make_usergroup(db, org, id=101, usergroup_uuid="ug_other")
-        upload = UploadFile(filename="thumb.png", file=SimpleNamespace())
+        upload = UploadFile(filename="thumb.png", file=BytesIO(_TEST_PNG))
 
         with pytest.raises(HTTPException) as add_missing_pg_exc:
             await add_usergroup_to_playground(
