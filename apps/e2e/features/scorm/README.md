@@ -23,10 +23,13 @@ E2E_ADMIN_EMAIL=<admin email> E2E_ADMIN_PASSWORD=<admin password> \
 bun run test features/scorm
 ```
 
-The API specs (`01`, `02`) are pure REST and exercise the backend fixes
-(de-dup import, no total_time double-count, valid 2004 tokens, resume,
-write-only hygiene, authz, instructor results). The browser spec (`03`) drives
-the player UI.
+The API specs (`01`, `02`, `04`) are pure REST. `01` and `02` exercise the
+backend fixes (de-dup import, no total_time double-count, valid 2004 tokens,
+resume, write-only hygiene, authz, instructor results). `04` imports
+real-authoring-tool shapes — an Articulate Rise-style `./scormcontent/index.html`
+entry and a resource whose entry point is a nested `<file>` with no `href` — and
+asserts the launch content actually resolves with HTTP 200. The browser spec
+(`03`) drives the player UI.
 
 ## Fixtures
 

@@ -11,7 +11,7 @@ import { writeConfig, readConfig } from '../services/config-store.js'
 import { hasComposeService } from '../services/stack.js'
 import { readEnvVar } from '../utils/env-file.js'
 import { writeFileAtomic } from '../utils/fs-atomic.js'
-import { readPostgresComposeSettings, type PostgresComposeSettings } from '../services/postgres-compose.js'
+import { hasPostgresServiceDeclaration, readPostgresComposeSettings, type PostgresComposeSettings } from '../services/postgres-compose.js'
 import {
   dockerLogin,
   dockerLogout,
@@ -148,10 +148,15 @@ function existingDatabaseSettings(installDir: string): PostgresComposeSettings |
   const composePath = path.join(installDir, 'docker-compose.yml')
   if (!fs.existsSync(composePath)) return undefined
   const compose = fs.readFileSync(composePath, 'utf-8')
-  if (!/^  db:\s*$/m.test(compose)) return undefined
-  const settings = readPostgresComposeSettings(compose)
+  if (!hasPostgresServiceDeclaration(compose)) return undefined
+  const envPath = path.join(installDir, '.env')
+  if (!fs.existsSync(envPath)) {
+    throw new Error(`Cannot safely reconfigure ${installDir}: a local database is present but its .env file is missing. Preserve the current files and inspect them manually.`)
+  }
+  const envFile = fs.readFileSync(envPath, 'utf-8')
+  const settings = readPostgresComposeSettings(compose, envFile, process.env.COMPOSE_PROJECT_NAME)
   if (!settings) {
-    throw new Error(`Cannot safely reconfigure ${installDir}: local database image or persistent mount could not be read from docker-compose.yml. Preserve the current database configuration and inspect it manually.`)
+    throw new Error(`Cannot safely reconfigure ${installDir}: the local database image, volume, project name, or PGDATA could not be read safely from docker-compose.yml/.env. Preserve the current files and inspect them manually.`)
   }
   return settings
 }
@@ -377,6 +382,12 @@ async function setupEnterpriseCi(options: EeSetupOptions): Promise<void> {
     ? path.resolve(options.installDir)
     : path.join(os.homedir(), '.learnhouse', installName)
   if (communityInstallAt(installDir)) fail(`${installDir} holds a Community installation; pick another --name or --install-dir`)
+  let database: PostgresComposeSettings | undefined
+  try {
+    database = existingDatabaseSettings(installDir)
+  } catch (err) {
+    fail(`cannot safely reconfigure ${installDir}: ${(err as Error)?.message ?? String(err)}`)
+  }
   const firstDeploy = !fs.existsSync(path.join(installDir, '.env'))
   const kept = redeployDefaults(installDir, options)
   // Tenant subdomains need a wildcard certificate, which Let's Encrypt only
@@ -406,10 +417,8 @@ async function setupEnterpriseCi(options: EeSetupOptions): Promise<void> {
   })
 
   const secrets = resolveSecrets(installDir)
-  let database: PostgresComposeSettings | undefined
   console.log(`Setting up LearnHouse Enterprise (${tenancy}) in ${installDir}`)
   try {
-    database = existingDatabaseSettings(installDir)
     writeEeFiles(config, secrets, database)
   } catch (err) {
     fail(`could not write configuration files to ${installDir}: ${(err as Error)?.message ?? String(err)}`)

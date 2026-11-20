@@ -4,7 +4,7 @@ Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read 
 
 **AI-assisted learning, trusted tutoring, and measurable progress.**
 
-Studytomy Portal is a LearnHouse-based Australian curriculum-focused learning platform under active development combining structured courses, educator-led tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The initial target market is Australia (a Victorian pilot, subject to client approval), with engineering delivery supported from Sri Lanka.
+Studytomy Portal is a LearnHouse-based learning platform under active development combining structured courses, educator-led tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The intended learner offering is the Sri Lankan National School Syllabus (National Institute of Education / Ministry of Education, Grades 6–13, English instruction) for students and their parents/guardians; see the [Sri Lankan decision baseline](docs/studytomy/SRI-LANKA-DECISION-BASELINE.md). That scope is an engineering alignment only: the programme, market and cohort decisions behind it (`D-01`, `D-02`) remain unapproved.
 
 **Current operation: local development only.** This repository has no configured deployment or CI/CD workflow. See [LOCAL-ONLY.md](LOCAL-ONLY.md) for local verification commands and the external-integration boundary.
 
@@ -95,13 +95,13 @@ The remaining product ambitions below are a roadmap, not a claim that all custom
 |---|---|---|
 | AI diagnostic assessments | Versioned curriculum, reviewed items, diagnostic attempts and server-owned objective scoring. | Partial: local API/model/service implementation; educational and end-to-end acceptance pending |
 | Personalized study plans | Mastery-driven lesson recommendations and guided teaching; richer tutor-editable schedules remain a target. | Partial: local mastery/recommendation/tutor paths; not a completed planning product |
-| Australian senior-secondary / ATAR preparation | Approved state-specific content, mock assessments, marking schemes, practice workflows. | Planned |
+| Sri Lankan senior-secondary (G.C.E. O/L and A/L) preparation | Approved syllabus-specific content, past-paper practice, marking schemes, practice workflows. | Planned |
 | AI-generated examination papers | Syllabus-aligned blueprints, controlled question variation, validated answers, tutor approval, export. | Planned |
 | Advanced marking | Structured solution steps, rubric-based feedback, uncertainty escalation; handwriting/essays by explicit scope. | Planned |
 | Student, guardian and tutor progress views | Authorized progress, reviewed report snapshots, exact-recipient release and withdrawal. | Partial: local progress/report services and learner/staff UI; full browser and real-user acceptance pending |
-| Virtual science laboratories | Validated 2D/3D experiments, measurements, mistakes, experiment records, and scoring. | Planned |
+| Virtual science laboratories | Validated 2D/3D experiments, measurements, mistakes, experiment records, and scoring. | Partial: Pilot 01 (momentum) runs locally with managed assignment submission, release-bound grading, build-integrity checks and live browser specs; validated-model review and educator/publication approvals remain open |
 | AI marketing assistant | Draft creatives/copy, campaign recommendations, reviewed publishing workflow. | Planned / optional |
-| NSW and Victoria market intelligence | Evidence-labelled research into subject/year demand using approved public data and Studytomy enquiry trends. | Planned / optional |
+| Subject and grade demand analysis | Evidence-labelled research into subject/grade demand using approved public data and Studytomy enquiry trends. | Planned / optional |
 
 ### Public website and legacy workflow separation
 
@@ -661,9 +661,11 @@ Use frozen lockfile installs (`bun install --frozen-lockfile`, `uv sync --frozen
 
 View only explicitly linked children's approved progress information and communications. Guardians do not inherit access to full student records or other children's data.
 
-### Science laboratory (planned)
+### Science laboratory (local pilot)
 
 Select experiment → predict result → manipulate variables → record measurements → explain observation → validated assessment → tutor/AI feedback → save evidence.
+
+Pilot 01 (*Conservation of Linear Momentum*, `apps/labs/momentum-pilot`, Grade 12 G.C.E. A/L Physics Unit 2) implements a bounded version of this journey locally, with managed assignment submission, release-bound grading, build-integrity binding and live browser specs. Its [specification](docs/studytomy/VIRTUAL-LAB-MOMENTUM-PILOT-SPEC.md) is still a draft awaiting qualified educator sign-off and syllabus-edition provenance, so no student launch, NIE endorsement or physical-laboratory equivalence is claimed.
 
 ## AI and virtual laboratory principles
 
@@ -694,10 +696,10 @@ For initial labs, prefer a scientifically validated 2D Ohm's Law or motion exper
 
 ### Content quality and intellectual property
 
-- Identify curriculum owners, reviewers, and the approved source of truth for Victoria and NSW.
+- Identify curriculum owners, reviewers, and the approved source of truth for the Sri Lankan National School Syllabus (NIE / Ministry of Education).
 - Do not presume redistribution rights for past examination papers, marking schemes, lab assets, or images.
 - Check licenses and asset provenance before integrating third-party simulation code.
-- Do not state or imply that generated mock exams are official VCE/HSC examinations.
+- Do not state or imply that generated mock exams are official G.C.E. Ordinary Level or Advanced Level examinations.
 
 ## Repository organization
 
@@ -748,7 +750,7 @@ Run commands in the component directory indicated, not as a single root script. 
 - Browser acceptance (`apps/e2e`): `bun run test` after configuring its target environment and browsers.
 - SDK/renderers (`packages`): `bun run build`, `bun run test`, `bun run check`.
 
-These are available scripts, not a statement that all checks currently pass. The web's ordinary `lint` script masks errors with `|| true`; use `lint:strict` for a meaningful gate. Do not run concurrent writers or heavyweight suites against another agent's in-progress verification.
+These are available scripts, not a statement that all checks currently pass. The web's ordinary `lint` script runs ESLint across the app and fails on errors only — warnings alone do not fail it; use `lint:strict -- <changed paths>`, adding `--max-warnings=0` when a warning budget is required, for a scoped gate. Do not run concurrent writers or heavyweight suites against another agent's in-progress verification.
 
 ### 3. Configuration
 
@@ -795,7 +797,7 @@ The platform involves minors and potentially sensitive educational information. 
 - **Authorization**: Backend-enforced permissions for every read, write, document, session, and AI tool action. Never trust browser-supplied student or organization IDs alone.
 - **Data protection**: Encrypt transport and storage where supported; protect backups; minimize retained uploads, audio, and prompts; define deletion and retention processes.
 - **AI governance**: Approved providers, human oversight, versioned prompts/rubrics, safe errors, transparent limitations, and no secret exposure.
-- **Children's safeguards**: Obtain legal/privacy review for Australian operations, guardian consent rules, cross-border data access, and applicable retention requirements.
+- **Children's safeguards**: Obtain legal/privacy review for Sri Lankan operations, guardian consent rules, cross-border data access, and applicable retention requirements.
 - **Operations**: Centralized error logs without leaking learner content; rate limiting; restore drills; dependency updates; alert ownership.
 - **Irreversible changes**: Require an explicit user instruction naming the action before merges, destructive production operations, critical deletions, or history rewrites. No codeword is required.
 
@@ -827,7 +829,7 @@ The platform involves minors and potentially sensitive educational information. 
 |---|---|---|
 | **0 — Foundation** | Pinned upstream fork, development/staging environments, PostgreSQL, roles, storage, AI configuration. | One authenticated course, lesson, assignment and feedback workflow is demonstrated. |
 | **1 — Branding and migration** | Studytomy design, public website integration, approved operational record mapping. | Public journeys work and staged data reconciliation passes. |
-| **2 — Learning pilot** | One approved Australian curriculum cohort/unit, lesson-level AI, quizzes, supported grading and progress. | Educators sign off correctness, permissions, and representative learner workflows. |
+| **2 — Learning pilot** | One approved National School Syllabus cohort/unit (subject to the open `D-02` pilot-slice decision), lesson-level AI, quizzes, supported grading and progress. | Educators sign off correctness, permissions, and representative learner workflows. |
 | **3 — Learning intelligence** | Diagnostics, versioned skill evidence, learning plans, guardian visibility and exam preparation. | Evaluators pass reference cases; educators can inspect evidence and override outcomes. |
 | **4 — Interactive science** | First validated lab experiment, measurements, saved evidence and scoring. | Subject-matter expert signs off scientific tests and student interaction acceptance. |
 | **5 — Business enhancement** | Approved marketing agent, regional demand research and selected operational integrations. | Research cites sources; campaign actions require documented human approval. |
@@ -837,7 +839,7 @@ Phases are proposed, not committed dates or completed implementation milestones.
 ## Decisions still required
 
 - Which launch model: human-tutor-supported, self-service AI, or both?
-- First target region, curriculum, year levels, subjects and cohort size (Victoria is the current recommendation, not a confirmed customer commitment).
+- First pilot slice within the National School Syllabus: grades, subjects, syllabus edition and cohort size. `D-01`/`D-02` are unapproved, and the Grade 12 A/L Physics laboratory pilot does not settle this choice.
 - Which legacy tutoring workflows must migrate before launch?
 - Public site: separate static frontend initially or consolidated Next.js routes?
 - Exact AI provider, allowed student data, age safeguards, cost controls, and permitted AI autonomy?

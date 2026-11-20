@@ -77,7 +77,7 @@ cd "$RUN/apps/api"
 .venv/bin/python cli.py migrate --status
 ```
 
-Do not use raw Alembic alone to bootstrap an empty database: the supported CLI coordinates initial model/schema creation. Expected revision at the inspected commit is `9b7d4c2a1e6f`; reread the current migration head after any code change.
+Do not use raw Alembic alone to bootstrap an empty database: the supported CLI coordinates initial model/schema creation. Expected revision at the inspected commit is `9b7d4c2a1e6f`; reread the current migration head after any code change. The `pg16` image above is this rehearsal's own disposable container; the committed CLI default for managed installs is now the pinned `pgvector/pgvector:0.8.7-pg19` image (`apps/cli/src/constants.ts:10`), and [PostgreSQL 19 upgrade notes](studytomy/POSTGRESQL-19-UPGRADE.md) records that verification.
 
 ## 3. Accounts and repeatable baseline
 
@@ -159,7 +159,6 @@ LEARNHOUSE_INTERNAL_API_URL=http://127.0.0.1:1342/ \
 NEXT_PUBLIC_LEARNHOUSE_DOMAIN=localhost:3042 \
 NEXT_PUBLIC_LEARNHOUSE_DEFAULT_ORG=default \
 NEXT_PUBLIC_LEARNHOUSE_HTTPS=False \
-NEXT_PUBLIC_LEARNHOUSE_TENANCY=single \
 LEARNHOUSE_DISABLE_EE=1 \
 node node_modules/next/dist/bin/next dev --webpack --hostname localhost --port 3042
 ```
@@ -314,7 +313,10 @@ Before implementing the missing transition, read
 [`ADR-LEARNER-CREDENTIALS.md`](studytomy/ADR-LEARNER-CREDENTIALS.md).
 It is explicitly **proposed, not approved**, with no selected credential option,
 permitted cohort, named approval/evidence or effective/review dates. The source
-specification (`STUDYTOMY-FAMILY-LEARNING-ATOMIC-IMPLEMENTATION-SPEC.md:276,305`)
+specification ([`TASK-010`](../STUDYTOMY-FAMILY-LEARNING-ATOMIC-IMPLEMENTATION-SPEC.md#task-010),
+blocked on the unapproved `D-01`/`D-03`/`D-12` credential decisions; the file was
+condensed to a checklist on 2026-11-20, so the `:276,305` line numbers cited by this
+2026-11-19 run no longer resolve)
 requires an approved credential model before profile activation. Existing
 `learner_eligibility_review` permits scoped eligibility decisions; it does not
 itself define an activation decision or approved credential-model binding.

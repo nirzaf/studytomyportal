@@ -58,8 +58,8 @@ foundation rehearsal's historical head. Inspect staged, unstaged
 and untracked migration files. From `apps/api`, run `uv run --no-sync alembic heads`
 and `uv run --no-sync alembic history`; compare with the target database revision
 using read-only inspection. Do not stamp or downgrade a database merely to match
-a number copied from this document. Local `ALE-LOCAL-PILOT.md` and
-`ALE-IMPLEMENTATION.md`, when present, hold later dated rehearsal records; their
+a number copied from this document. `ALE-LOCAL-PILOT.md` and
+`ALE-IMPLEMENTATION.md`, both in this directory, hold later dated rehearsal records; their
 counts/heads are also checkpoint evidence, not universal current facts.
 
 ## Older-application rollback

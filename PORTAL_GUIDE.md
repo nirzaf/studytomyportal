@@ -18,13 +18,13 @@ The main classroom and learning content area. Administrators and tutors can crea
 ### 2. Paths — Structured learning programs
 Combine multiple courses into a guided learning journey. You can define required and optional courses, arrange their order, unlock later courses after prerequisites are completed, and award certificates.
 
-- **Studytomy example**: A *VCE Mathematics Preparation Path* containing *Foundation Revision → Mathematical Methods → Exam Practice*.
+- **Studytomy example**: A *G.C.E. A/L Combined Mathematics Preparation Path* containing *Common Unit Revision → Pure Mathematics → Exam Practice* (the practice material must be authored or licensed; a path name does not imply access to official papers).
 - **Note**: These are rule-based learning paths, not automatically AI-personalized study plans.
 
 ### 3. Library — Central educational resource repository
 Store and organize PDFs, worksheets, textbooks, images, videos, audio, courses, playgrounds, and other learning materials in folders. You can manage access and reuse resources across lessons.
 
-- **Studytomy example**: Create *Victoria → Year 12 → Chemistry* and organize approved syllabus documents, revision notes, diagrams, and practical worksheets.
+- **Studytomy example**: Create *Grade 12 → Chemistry* under the Sri Lankan National School Syllabus and organize approved syllabus documents, revision notes, diagrams, and practical worksheets.
 
 ### 4. Podcasts — Audio-based learning
 Create educational podcast channels, upload episodes, and publish audio lessons. Students can listen through the platform. Podcast episodes can also be embedded in courses and distributed through RSS feeds.
@@ -35,7 +35,7 @@ Create educational podcast channels, upload episodes, and publish audio lessons.
 ### 5. Communities — Student discussions and collaboration
 Create subject-specific or course-specific discussion forums. Students can post questions, reply, react, and vote. Administrators can configure membership restrictions and moderation rules.
 
-- **Studytomy example**: A *VCE Chemistry Discussion Group* where students discuss difficult topics and tutors clarify misconceptions.
+- **Studytomy example**: A *Grade 13 Chemistry Discussion Group* where students discuss difficult topics and tutors clarify misconceptions.
 - **Note**: Communities are discussion forums; private direct messaging is a separate Enterprise feature.
 
 ### 6. Playgrounds — AI-generated interactive learning experiences
@@ -77,7 +77,7 @@ To test it:
 ### Example AI Playground prompt for Studytomy
 
 ```text
-Create an interactive educational simulation of Ohm's Law for Australian Year 10 Science students. Include adjustable voltage and resistance, an illustrated circuit, live current readings calculated using I = V/R, a measurement table, a graph, and three concept-check questions. Provide Start, Reset, and Record Measurement controls. Explain the ideal-circuit assumptions and make the layout responsive.
+Create an interactive educational simulation of Ohm's Law for Grade 10 (G.C.E. Ordinary Level) Science students under the Sri Lankan National School Syllabus. Include adjustable voltage and resistance, an illustrated circuit, live current readings calculated using I = V/R, a measurement table, a graph, and three concept-check questions. Provide Start, Reset, and Record Measurement controls. Explain the ideal-circuit assumptions and make the layout responsive.
 ```
 
 > [!IMPORTANT]
@@ -100,4 +100,4 @@ Create an interactive educational simulation of Ohm's Law for Australian Year 10
 | **Boards** | Collaborative mathematical problem-solving board |
 | **Assessments** *(via Dashboard)* | A baseline test and topic checkpoints |
 
-**Recommended starting step**: Create **one course**, **one assessment**, and **one interactive playground** first to demonstrate how Studytomy supports teaching, learning, AI-assisted explanation, practice, and progress tracking before expanding to the broader Australian curriculum and specialized AI features.
+**Recommended starting step**: Create **one course**, **one assessment**, and **one interactive playground** first to demonstrate how Studytomy supports teaching, learning, AI-assisted explanation, practice, and progress tracking before expanding to the broader National School Syllabus and specialized AI features.

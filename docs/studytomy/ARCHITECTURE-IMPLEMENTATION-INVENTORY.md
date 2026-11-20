@@ -1,5 +1,13 @@
 # Architecture improvement implementation inventory
 
+## Re-verification on 2026-11-20
+
+Re-inspected primary `main` at `ef6b730d` (ten in-flight files untouched: nine under `apps/cli/`, plus `POSTGRESQL-19-UPGRADE.md`). Nothing in this sweep changed a TASK-01…TASK-11 classification below, but three reading notes apply:
+
+- Alembic reports one head, `b7c2e9a4d1f0`. The heads named in the dated sections (`0cb1b9a418ed`, `b91d2f6a08c3`, `dfa43c51b792`, `b043fde62c98`) are all ancestors of it, so those records stay valid as point-in-time evidence.
+- Line anchors in the tables below are inspection-time references into a changing worktree. Several have shifted; for example the graph validator is now near `adaptive_curriculum.py:280`. Re-verify before citing one as current.
+- The focused Studytomy suite now ends 416 passed with **4 failures**, and the full API suite 10,588 passed with **15 failures**, against a migrated disposable PostgreSQL 16 database; two failures concern delete-time guard precedence and one a case-status expectation, so treat the affected rows as having open focused checks. Details: [local verification log](LOCAL-VERIFICATION.md#documentation-refresh-verification-sweep-20-november-2026).
+
 ## Current authoring and disclosure checkpoint
 
 Reviewed primary `main` at `fa404b6abd4f5128c8306bf03ac51f298b135ead`. The [local verification log](LOCAL-VERIFICATION.md) records the fixture boundaries and exact test revisions.

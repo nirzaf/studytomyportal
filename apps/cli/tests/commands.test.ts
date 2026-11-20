@@ -2595,6 +2595,35 @@ describe('setup / update in-process', () => {
     expect(envVar('NEXTAUTH_SECRET')).toBe(nextAuth)
   })
 
+  it('setup --ci refuses inline volume metadata before changing an existing install', async () => {
+    const opts = {
+      ci: true, name: 'inline-volume', domain: 'localhost', port: 8097,
+      adminEmail: 'admin@school.dev', adminPassword: 'password123', start: false,
+    }
+    await setupCommand(opts)
+    const dir = path.join(home, '.learnhouse', 'inline-volume')
+    const config = JSON.parse(fs.readFileSync(path.join(dir, 'learnhouse.config.json'), 'utf-8'))
+    const composePath = path.join(dir, 'docker-compose.yml')
+    const volumeKey = `learnhouse_db_data_${config.deploymentId}`
+    const originalCompose = fs.readFileSync(composePath, 'utf-8')
+    expect(originalCompose).toContain(`  ${volumeKey}:`)
+    fs.writeFileSync(
+      composePath,
+      originalCompose.replace(`  ${volumeKey}:`, `  ${volumeKey}: { name: retained-postgres-data, external: true }`),
+    )
+
+    const unchangedFiles = [
+      'docker-compose.yml',
+      '.env',
+      'learnhouse.config.json',
+      'extra/nginx.prod.conf',
+    ]
+    const before = unchangedFiles.map((file) => fs.readFileSync(path.join(dir, file), 'utf-8'))
+    await expect(setupCommand(opts)).rejects.toThrow(/Cannot safely reconfigure/)
+    const after = unchangedFiles.map((file) => fs.readFileSync(path.join(dir, file), 'utf-8'))
+    expect(after).toEqual(before)
+  })
+
   it('setup --ci re-run keeps the running image and the external database', async () => {
     const dir = path.join(home, '.learnhouse', 'rerun-ext')
     const opts = {

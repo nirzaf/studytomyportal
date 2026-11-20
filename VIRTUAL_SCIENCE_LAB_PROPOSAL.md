@@ -113,7 +113,7 @@ Agentuto's [routing implementation](https://github.com/danielw-sudo/agentuto/blo
 2. The iframe's sandbox and browser-storage behavior must allow the simulation to function.
 3. The existing Embed activity uses a relatively compact frame; a full-screen lab option is preferable for serious experiments.
 
-At this stage, lab data is not automatically saved in Studytomy; students export single-condition CSV files and submit their practical report (PDF or ZIP containing CSV + written observations) plus numerical answers through an existing authorized Studytomy assignment for manual teacher review. Simulation completion or CSV export is never treated as independent mastery or physical-laboratory equivalence.
+At the Stage-A embed level, lab data is not automatically saved in Studytomy; students export single-condition CSV files and submit their practical report (PDF or ZIP containing CSV + written observations) plus numerical answers through an existing authorized Studytomy assignment for manual teacher review. The Stage-B managed path described below is implemented locally for the momentum pilot and does retain submission and evidence records server-side. Simulation completion or CSV export is never treated as independent mastery or physical-laboratory equivalence.
 
 ### Stage B — Native Studytomy integration
 
@@ -142,8 +142,8 @@ Scientific calculations stay in the simulator. The Studytomy FastAPI backend val
 | **Measurement export** | Available in Agentuto | Reuse CSV export |
 | **Submission workflow** | Available in Studytomy | Use an assignment for the pilot |
 | **Automatic completion after experiment** | Not integrated | Add a validated completion workflow later |
-| **Persisted experiment history** | Not integrated | Add PostgreSQL records |
-| **Experiment-specific automated marking** | Not integrated | Add deterministic scoring rules |
+| **Persisted experiment history** | Integrated for managed pilot submissions: evidence files and submission records are stored in PostgreSQL (`StudyEvidenceFile`, `apps/api/src/db/studytomy/operations.py:238`, written through `submit_managed_linked_assignment`) | Broaden beyond the momentum pilot and add learner-facing history views |
+| **Experiment-specific automated marking** | Integrated for numeric observation tasks: server-side tolerance checking reuses the assignment `NUMBER_ANSWER` grader, and the graded lifecycle is covered by `src/tests/studytomy/test_managed_virtual_lab_submission_and_consistency.py` | Educator-reviewed rubrics for qualitative observations and other pilot subjects |
 | **Context-aware AI lab assistance** | Agentuto has optional client-side AI | Integrate with Studytomy's protected FastAPI AI services |
 | **Tutor experiment review** | Generic assignment review exists | Add experiment-specific review only when needed |
 | **Curriculum validation** | Draft Sri Lankan NIE syllabus specification pending qualified educator sign-off | Educator review, provenance recording, and reference-case testing (see [VIRTUAL-LAB-MOMENTUM-PILOT-SPEC.md](docs/studytomy/VIRTUAL-LAB-MOMENTUM-PILOT-SPEC.md)) |

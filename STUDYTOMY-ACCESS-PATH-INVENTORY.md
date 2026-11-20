@@ -6,9 +6,9 @@
 **Checkout HEAD:** `2c1062a6872cb5c9bc041c6258e2c79085a1f897` (`main`, same as `origin/main`)<br>
 **Scope:** Static source inventory for TASK-025/TASK-026. The worktree is dirty, so findings describe the inspected files as they exist in this checkout, not the checked-in revision or deployed behavior.
 
-## Current boundary
+## Boundary as inspected 2026-11-16
 
-The inspected Studytomy model/service tree has no managed-course marker and no purchase-backed course-grant resolver. Existing LearnHouse resource access still controls public/published courses, authors, organization roles, user groups, and the upstream paid-access hook. A future managed course therefore must be protected across every path below before it can be advertised. Do not add a blanket restriction to ordinary Community courses.
+The Studytomy model/service tree inspected on 2026-11-16 had no managed-course marker and no purchase-backed course-grant resolver. Existing LearnHouse resource access still controlled public/published courses, authors, organization roles, user groups, and the upstream paid-access hook. A future managed course therefore had to be protected across every path below before it could be advertised. Do not add a blanket restriction to ordinary Community courses.
 
 TASK-024 also depends on confirmed-collection work (TASK-021), learner eligibility (TASK-009), and business events (TASK-004). The order/collection and identity-policy decisions remain unresolved. This inventory does not authorize a grant, sale, learner access, or production migration.
 

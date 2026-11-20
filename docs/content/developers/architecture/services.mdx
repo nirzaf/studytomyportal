@@ -7,7 +7,7 @@ description: "Configure the services LearnHouse runs alongside its apps: Postgre
 
 LearnHouse relies on several supporting services that run alongside the main applications.
 
-- In **development** (`learnhouse dev`), PostgreSQL and Redis run in Docker via `.learnhouse/docker-compose.dev.yml` while the API, web, and collab processes run locally on the host.
+- In **development** (`learnhouse dev`), PostgreSQL 19 and Redis run in Docker via `.learnhouse/docker-compose.pg19.yml` (project `learnhouse-dev-pg19`), exposed on loopback ports `5433` and `6380`. The API, web, and collab processes run locally on the host.
 - In **self-hosted production**, the LearnHouse CLI generates a `docker-compose.yml` from templates in `apps/cli/src/templates/` that runs PostgreSQL, Redis, a single `learnhouse-app` container (which bundles web + API + collab), and either nginx or Caddy as a reverse proxy.
 
 ## PostgreSQL

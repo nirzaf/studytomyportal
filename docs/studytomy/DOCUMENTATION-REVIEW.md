@@ -23,6 +23,9 @@ Paths in shortened evidence cells are beneath `apps/api/src/services/studytomy/`
 
 The empty web README now provides scoped navigation and warns that the convenience lint command masks exit failures (`apps/web/package.json:11-14`). The CLI README retains useful upstream commands while clearly separating them from Studytomy deployment authorization.
 
+> [!NOTE]
+> **2026-11-20:** that masking no longer exists. `apps/web/package.json` declares `"lint": "eslint ."`, the `|| true` suffix having been removed in `029f1af1`. The web README and the root README's testing section were corrected the same day; `lint:strict` remains the scoped gate, and an unweighted whole-app run currently reports 0 errors with 975 warnings.
+
 ## Current engineering boundaries
 
 The observed diagnostic, mastery, tutoring and report services are real local source, not merely a roadmap. They still require dependency-complete tests, browser acceptance and applicable education/safeguarding approvals. MCP has an existing authenticated native service (`apps/api/src/services/mcp/handlers.py`); a complete newly requested teacher/admin authoring and tightly course/lesson-grounded generation workflow was not established by this review. Do not create a redundant server or claim that workflow complete.

@@ -118,7 +118,7 @@ The §1 and §4 records above are the frozen pre-modification baseline. Each Stu
 | M1 | `a1d9f4c8b732` | `st_policy_version`, `st_owner_assignment`, `st_staff_scope`, `st_business_event`, `st_idempotency_record`, `st_outbox_record`. |
 | M2 | `b72a11c83e2f` | `st_learner_profile`, `st_eligibility_decision`. |
 | M2 | `c91c2b73468f` | `st_evidence_file`. |
-| M3 (started) | `d4a7c9e2b1f0` | `st_offer`, `st_offer_version`. Current single head. |
+| M3 (started) | `d4a7c9e2b1f0` | `st_offer`, `st_offer_version`. Head as recorded at the Wave 3 start; see §7 for the current head. |
 
 ### 5.5 Wave 1 Focused Verification (executed)
 
@@ -137,3 +137,18 @@ The §1 and §4 records above are the frozen pre-modification baseline. Each Stu
 - **Business decisions `D-01` through `D-20`:** All 20 decisions remain `UNAPPROVED`. No default age threshold, market jurisdiction, price, currency, pass mark, retry rule, AI provider policy, or retention duration may be silently activated in production.
 - **Child credential gate (`TASK-010`):** `User.email` is required by the current schema and auth router. Until an approved credential ADR and verification flow are established, learners without an approved individual login model cannot be activated via fabricated emails or shared adult sessions.
 - **Confirmation gate (`AGENTS.md` §4 Stage D):** No codeword is required; explicit user instruction is sufficient for merges and releases.
+
+---
+
+## 7. Addendum — baseline pointers re-verified 2026-11-20
+
+`§1`, `§3` and `§4` above remain the frozen 2026-11-15 pre-modification record and were not rewritten. Four of their values no longer describe the live checkout, so they are restated here as dated changes.
+
+| Frozen record | Value at `2026-11-15` | Verified at `ef6b730d` on 2026-11-20 |
+|---|---|---|
+| Alembic head (`§1`, `§5.4`) | `f5a8b3d0c2e4`, then `d4a7c9e2b1f0` at the Wave 3 start | `uv run alembic heads` reports one head, `b7c2e9a4d1f0`, across 137 revision files. Every revision cited anywhere in these documents (`f5a8b3d0c2e4`, `d4a7c9e2b1f0`, `b91d2f6a08c3`, `0cb1b9a418ed`, `8b53c0d1e6a4`, `4a9f72c6e801`, `9b7d4c2a1e6f`, `08fd9332b6ac`, `b043fde62c98`) is an ancestor of it, so the chain stayed additive and unbranched |
+| `test_existing_contracts.py` head pin (`§5.2` item 1) | passing, pinning `f5a8b3d0c2e4` then the Wave 3 head | **failing**: the assertion still pins `b91d2f6a08c3` and receives `b7c2e9a4d1f0`. TASK-001's open "clean-tree refresh" item includes re-pinning this contract, which is the mechanism §5.4 relies on for auditability |
+| Authoritative specification digest (`§1`) | SHA-256 `5afe84a7fb3ea1300d0727676ca55a34610304c25c0c8634f4df44af8cf358ea` | the file was condensed to a status checklist on 2026-11-20 (6,248 lines to 209; SHA-256 `738228947778b613105d6a7f923cd0b560ec091d5c1dcfe9d512e344d2343251`). Identifiers `TASK-0NN`, `AC-NN`, `D-NN`, `BR-*` and `V-NN` and their anchors were preserved; the removed prose, evidence register and traceability remain in git history at the frozen digest |
+| Web `lint` script (`[E02]`) | `eslint . \|\| true`, masking the exit code | accurate at `0d3b4394`; the mask was removed in `029f1af1`. `lint` is now `eslint .`, so it fails on errors but not on warnings, and `lint:strict . --max-warnings=0` currently reports 0 errors with 975 warnings |
+
+Post-change regression totals for this date, against a migrated disposable PostgreSQL 16 database, are in the [local verification log](LOCAL-VERIFICATION.md#documentation-refresh-verification-sweep-20-november-2026). None of the above changes the `D-01`–`D-20` approval state or authorizes a deployment.

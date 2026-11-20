@@ -66,12 +66,12 @@ The Swagger UI at `/docs` is only available in development mode. Production inst
 Press `q` or `Ctrl+C` in the terminal where `npx learnhouse dev` is running to stop the API, web and collab servers. The PostgreSQL and Redis containers keep running for the next session. To stop them:
 
 ```bash
-docker compose -f .learnhouse/docker-compose.dev.yml -p learnhouse-dev down
+docker compose -f .learnhouse/docker-compose.pg19.yml -p learnhouse-dev-pg19 down
 ```
 
 ## Troubleshooting
 
-- **Port conflicts**: Make sure ports 3000 (web), 1338 (API), 4000 (collab), 5432 (Postgres), and 6379 (Redis) are not in use by other applications.
+- **Port conflicts**: Make sure host ports 3000 (web), 1338 (API), 4000 (collab), 5433 (PostgreSQL), and 6380 (Redis) are not in use by other applications.
 - **Docker not running**: Ensure the Docker daemon is started before running `npx learnhouse dev`.
 - **Dependency issues**: The CLI only installs dependencies when `node_modules` (web, collab) or `.venv` (API) is missing. After pulling changes that touch dependencies, run `bun install` or `uv sync` yourself, or delete those directories and re-run `npx learnhouse dev`.
 - **Lockfile errors**: after changing a `package.json` or `apps/api/pyproject.toml`, run `scripts/lockfiles.sh` to regenerate every lockfile, then run `scripts/lockfiles.sh --check` locally. No repository CI workflow runs this automatically.

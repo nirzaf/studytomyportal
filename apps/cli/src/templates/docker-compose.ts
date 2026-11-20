@@ -87,6 +87,7 @@ export function generateDockerCompose(config: SetupConfig, appImage?: string, ex
   const dbImage = existingDatabase?.image ?? (config.useAiDatabase ? POSTGRES_AI_IMAGE : POSTGRES_IMAGE)
   const dbDataVolumePath = existingDatabase?.dataVolumePath ?? POSTGRES_DATA_VOLUME_PATH
   const dbDataVolumeMount = existingDatabase?.dataVolumeMount ?? `learnhouse_db_data_${id}:${dbDataVolumePath}`
+  const dbPgDataEnvironment = existingDatabase?.pgData ? `      - PGDATA=${existingDatabase.pgData}\n` : ''
   const dbService = useLocalDb
     ? `
   db:
@@ -99,7 +100,7 @@ export function generateDockerCompose(config: SetupConfig, appImage?: string, ex
       - POSTGRES_USER=\${POSTGRES_USER:-learnhouse}
       - POSTGRES_PASSWORD=\${POSTGRES_PASSWORD:-learnhouse}
       - POSTGRES_DB=\${POSTGRES_DB:-learnhouse}
-    volumes:
+${dbPgDataEnvironment}    volumes:
       - ${dbDataVolumeMount}
     networks:
       - learnhouse-network-${id}
@@ -153,10 +154,11 @@ export function generateDockerCompose(config: SetupConfig, appImage?: string, ex
   const volumesSection = volumeEntries.length > 0
     ? `volumes:\n${volumeEntries.join('\n')}`
     : ''
+  const composeName = existingDatabase
+    ? existingDatabase.projectName ? `name: ${existingDatabase.projectName}\n\n` : ''
+    : `name: learnhouse-${id}\n\n`
 
-  return `name: learnhouse-${id}
-
-services:
+  return `${composeName}services:
   learnhouse-app:
     image: ${image}
     container_name: learnhouse-app-${id}

@@ -1,5 +1,20 @@
 # Bounded security review: LearnHouse PR #1192
 
+## Follow-up on 2026-11-20
+
+Re-inspected at `ef6b730d`. Two of the four candidates are now present in this fork's source, so the 18 November table's "current source evidence" column is superseded for those rows; the dated sections below it remain the record of what was reviewed at the time.
+
+| Finding | State at `ef6b730d` | Evidence |
+|---|---|---|
+| 1192-01 Outbound address pinning | **Adopted for the preview and webhook paths; the domain probe gap remains.** `pinned_transport()` now constructs both clients, so the address is validated at connect time instead of only after the response. The verified-domain TLS check still opens a socket on the hostname and lets it resolve again | `apps/api/src/services/utils/ssrf_guard.py:186`, `services/utils/link_preview.py:86`, `services/webhooks/dispatch.py:105`, `services/orgs/custom_domains.py:730` |
+| 1192-02 Media input format restriction | **Adopted.** A shared single-file demuxer allowlist is applied through `-format_whitelist` to every FFmpeg/FFprobe input, alongside the existing `-protocol_whitelist` | `apps/api/src/services/utils/video_processing.py:26-41` |
+| 1192-03 Internal-key configuration | **Unchanged.** Collaboration still rejects shipped example placeholders on its own; the API board dependency accepts any non-empty configured `COLLAB_INTERNAL_KEY`, and the CSRF exemption compares against configured values without a placeholder blocklist | `apps/collab/src/index.ts:68,83`, `apps/api/src/routers/boards/boards.py:41-49`, `apps/api/src/security/csrf.py:245-256` |
+| 1192-04 Inbox-proof state | **Unchanged.** Self-hosted signup still sets `email_verified` and its timestamp at creation | `apps/api/src/services/users/users.py:224-229` |
+
+The adoption left stale test doubles behind, and they are the reason the security suite is red in the [2026-11-20 sweep](LOCAL-VERIFICATION.md#documentation-refresh-verification-sweep-20-november-2026): five `TestLinkPreviewResponseCap` cases pass their own `transport=` into a client that now receives `transport=pinned_transport()` (`TypeError: multiple values for keyword argument 'transport'`), and five `test_logout_revocation_credentials.py` cases patch `src.routers.auth.revoke_user_sessions_before`, which moved to `apps/api/src/security/auth.py:289` behind a lazy import. Neither is evidence that the protection regressed; both are open test work, and the pinned-transport regression cases the 18 November review asked for still have not been written.
+
+No provider, deployment, secret rotation or production data change followed from this review. Adoption of the two remaining candidates still requires the approval the project rules specify.
+
 ## Follow-up on 2026-11-18
 
 The four candidate areas remain applicable at Studytomy `ef7e4f49fc759df955dae028a33f5faf36226c93`, inspected on clean `main`. The [upstream PR](https://github.com/learnhouse/learnhouse/pull/1192) is merged into LearnHouse `dev` at `839f3b45d17cf51f145a80bf93b9217926383654`. That commit is absent from the local object database. The assessment below compares current source behavior with the upstream change.

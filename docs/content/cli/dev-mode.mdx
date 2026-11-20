@@ -16,7 +16,7 @@ npx learnhouse dev
 
 The command splits infrastructure and application services:
 
-- **Infrastructure** (Docker): PostgreSQL with pgvector and Redis run in containers, defined in `.learnhouse/docker-compose.dev.yml` (the CLI writes this file on each run)
+- **Infrastructure** (Docker): PostgreSQL 19 with pgvector and Redis run in the `learnhouse-dev-pg19` Compose project. The CLI writes `.learnhouse/docker-compose.pg19.yml` on each run.
 - **Application** (local): the API, web, and collab servers run directly on your machine with hot reload
 
 ## Requirements
@@ -54,7 +54,7 @@ The CLI checks these variables and, if you accept, appends development defaults 
 | `apps/collab/.env` | `LEARNHOUSE_AUTH_JWT_SECRET_KEY` | Same value as the API |
 | `apps/collab/.env` | `COLLAB_INTERNAL_KEY` | Same value as the API |
 
-Other API settings fall back to `apps/api/config/config.yaml`, which ships localhost defaults (database `postgresql://learnhouse:learnhouse@localhost:5432/learnhouse`, Redis `redis://localhost:6379/learnhouse`).
+`learnhouse dev` overrides the API’s database and Redis addresses to use host ports `5433` and `6380`. Other API settings fall back to `apps/api/config/config.yaml`.
 
 The CLI also sets these for the processes it starts:
 
@@ -112,7 +112,7 @@ When you quit (`q` or Ctrl+C):
 - To fully stop infrastructure:
 
 ```bash
-docker compose -f .learnhouse/docker-compose.dev.yml -p learnhouse-dev down
+docker compose -f .learnhouse/docker-compose.pg19.yml -p learnhouse-dev-pg19 down
 ```
 
 <Callout type="info">

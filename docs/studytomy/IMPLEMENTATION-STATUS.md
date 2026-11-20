@@ -1,5 +1,35 @@
 # Studytomy Family Learning Implementation Status
 
+## Documentation-refresh checkpoint (20 November 2026)
+
+Reviewed primary `main` at `ef6b730d`, with ten in-flight files untouched (nine under `apps/cli/`, plus `POSTGRESQL-19-UPGRADE.md`). Commands, environments and per-check exits are in the [local verification log](LOCAL-VERIFICATION.md#documentation-refresh-verification-sweep-20-november-2026). This entry records only what the sweep changes about the claims below; every dated checkpoint stays as recorded.
+
+Aggregate state at this HEAD: single Alembic head `b7c2e9a4d1f0`; 10,588 API tests passed with 15 failures; the focused Studytomy suite passed 416 of 420; web typecheck, 761 unit tests and production build passed; collab 48/48 and e2e typecheck passed. No acceptance scenario (`AC-01`–`AC-34`) and no business decision (`D-01`–`D-20`) moved.
+
+| Claim affected | Verified state at `ef6b730d` | Status effect |
+|---|---|---|
+| TASK-001 "clean-tree refresh and D-17 sign-off open" | `test_existing_contracts.py::test_alembic_head_revision_is_pinned` still pins `b91d2f6a08c3` and fails against the current head | Remains **partial**; the stale pin is now demonstrated, not merely suspected |
+| TASK-051 / TASK-052 reviewed-report routing | `test_service_cases_postgres.py::test_report_routing_enforces_persisted_approval_and_exact_case_grant` fails on `acknowledged` vs `assigned` | Implementation present; this focused check is **open** and needs a ruling before the claim reads as verified |
+| TASK-007 / TASK-063 retention guards | Two `test_adaptive_curriculum_api.py` cases receive `MANAGED_ASSESSMENT_SOURCE_RETAINED` where `ADAPTIVE_RETENTION_REVIEW_REQUIRED` is asserted | Guard precedence changed; the retention-review dependency is **unverified** until someone decides which guard should win |
+| Ten logout and link-preview security tests | Patch target moved to `src/security/auth.py`; fixture passes `transport` alongside the adopted pinned transport | Test-side defects from the SSRF adoption, not security regressions; still 10 open failures in the security suite |
+| "Strict lint gate" wording in evidence logs | `lint:strict . --max-warnings=0` reports 0 errors and 975 warnings; `bun run lint` no longer masks exit codes (`\|\| true` removed in `029f1af1`) | Any doc asserting the masking behavior was corrected on 2026-11-20; scoped-file lint claims stay scoped |
+| Laboratory and package claims | `apps/labs/momentum-pilot` (Pilot 01, build `1.0.0-pilot.1`) plus managed submission/grading and live browser specs exist; `packages/react`/`packages/vue` tests need `bun run build` first, and the three packages sit at `1.4.3` while `apps/web` is `1.4.4` | Root README lab rows corrected from "Planned" to partial-local; the package version drift is a code-side follow-up, not a documentation fix |
+
+Documentation corrections applied during the sweep, across all 47 tracked
+`.md` files (dated checkpoint sections were left as recorded): mission wording
+moved from Australian/Victorian to the Sri Lankan National School Syllabus in
+`README.md` and `PORTAL_GUIDE.md`; `VIRTUAL_SCIENCE_LAB_PROPOSAL.md` lab rows,
+`docs/studytomy/OPERATIONS.md` reconciliation and pilot-cash endpoints, and
+`DEMO_STACK.md` analytics/payments/no-op-sync claims were replaced with
+source-verified statements; `docs/studytomy/LOCAL-VERIFICATION.md`,
+`AGENT-ARCHITECTURE-GUIDE.md`, `BASELINE.md` (§7) and this file gained the
+20 November records; `apps/e2e/features/scorm/README.md` lists spec `04`; and
+`apps/api/src/services/demo/bundle/LICENSES.md` now states that the ten podcast
+`.mp3` clips come from a macOS system voice rather than Pillow authorship.
+Relative links and cross-file anchors resolve in all 47 files.
+
+Nothing here authorizes a pilot, a real learner flow, a deployment or a release.
+
 ## Award and report acceptance follow-up
 
 Reviewed primary `main` at `83f0ac8e770fbd42344d1cefdd4551d6e170d8f5`. The checks below used synthetic records. Detailed environments and earlier outcomes are in the [local verification log](LOCAL-VERIFICATION.md).
@@ -72,9 +102,10 @@ This file records code present in the working tree against the proposal in
 `STUDYTOMY-FAMILY-LEARNING-ATOMIC-IMPLEMENTATION-SPEC.md`. It does not approve
 business decisions or claim production behavior.
 
-## Current local checkpoint
+## Local checkpoint of 17 November 2026
 
-The current Alembic head is `4a9f72c6e801`. The [content and access evidence](CONTENT-PUBLICATION-PATHS.md) supersedes historical entries below where an implementation has since progressed. The local stack includes these partial pieces:
+The Alembic head at that checkpoint was `4a9f72c6e801`; see the 20 November
+checkpoint above for the current head. The [content and access evidence](CONTENT-PUBLICATION-PATHS.md) supersedes historical entries below where an implementation has since progressed. The local stack includes these partial pieces:
 
 | Task | Current implementation evidence | Pending acceptance |
 |---|---|---|

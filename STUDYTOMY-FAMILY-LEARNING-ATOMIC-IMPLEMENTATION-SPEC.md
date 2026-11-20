@@ -2,6 +2,8 @@
 
 **Status: in progress. 17/73 tasks have verified implementation, 0 are accepted for launch, 20/20 business decisions are unapproved, 0/34 acceptance scenarios have been executed end to end.**
 
+Re-verified 2026-11-20 at `ef6b730d`: the focused Studytomy suite passes 416 of 420 and the full API suite 10,588 of 10,603 against a migrated disposable PostgreSQL database. The [verification log](docs/studytomy/LOCAL-VERIFICATION.md#documentation-refresh-verification-sweep-20-november-2026) lists every open failure and its cause. `[x]` below means implementation plus focused evidence — never acceptance — and where a focused check now fails, the task says so.
+
 Source: business requirements draft D2 (`BR-*`, `AC-*`, `D-*` identifiers preserved). Prose removed from this file — the detailed specification, data contracts, API inventory, rule traceability and evidence register remain in this file's git history. Current status detail: [IMPLEMENTATION-STATUS](docs/studytomy/IMPLEMENTATION-STATUS.md), [CONTENT-PUBLICATION-PATHS](docs/studytomy/CONTENT-PUBLICATION-PATHS.md), [LOCAL-VERIFICATION](docs/studytomy/LOCAL-VERIFICATION.md).
 
 **Checkbox meaning**
@@ -53,7 +55,7 @@ Approval record per decision: scope, selected policy, rationale, effective date,
 
 ### Foundations
 
-- [ ] <a id="task-001"></a>**TASK-001** Freeze the implementation baseline and regression contracts — partial: clean-tree refresh and D-17 sign-off open
+- [ ] <a id="task-001"></a>**TASK-001** Freeze the implementation baseline and regression contracts — partial: the pinned head contract still asserts `b91d2f6a08c3` while `alembic heads` reports `b7c2e9a4d1f0`, so the regression test fails; D-17 sign-off open
 - [x] <a id="task-002"></a>**TASK-002** Persist approved decisions and accountable service owners
 - [x] <a id="task-003"></a>**TASK-003** Extend staff capabilities without changing learner authority
 - [x] <a id="task-004"></a>**TASK-004** Record mandatory business decisions in the same transaction
@@ -119,7 +121,7 @@ Approval record per decision: scope, selected policy, rationale, effective date,
 ### Reporting, communication and community
 
 - [x] <a id="task-051"></a>**TASK-051** Produce reviewed staff-led parent progress reports · cond:included report
-- [x] <a id="task-052"></a>**TASK-052** Revalidate recipients and correct wrong disclosures · cond:included report
+- [x] <a id="task-052"></a>**TASK-052** Revalidate recipients and correct wrong disclosures · cond:included report — focused report-routing check open at `ef6b730d` (case `acknowledged` where `assigned` is asserted)
 - [ ] <a id="task-053"></a>**TASK-053** Show reliable deadlines and material date changes — not started
 - [ ] <a id="task-054"></a>**TASK-054** Separate service messages, optional reminders and marketing — not started
 - [ ] <a id="task-055"></a>**TASK-055** Constrain course spaces, membership and adult contact · cond:community — not started
@@ -136,7 +138,7 @@ Approval record per decision: scope, selected policy, rationale, effective date,
 - [ ] <a id="task-063"></a>**TASK-063** Apply purpose-specific retention and reviewed holds — partial: other record classes, versioned object storage
 - [ ] <a id="task-064"></a>**TASK-064** Link quality, privacy and outage incidents to remediation — not started
 - [x] <a id="task-065"></a>**TASK-065** Define source-faithful pilot and operating measures
-- [ ] <a id="task-066"></a>**TASK-066** Verify real PostgreSQL constraints and transaction races — partial: races await dependent workflows
+- [ ] <a id="task-066"></a>**TASK-066** Verify real PostgreSQL constraints and transaction races — partial: races await dependent workflows; delete-time guard precedence (`MANAGED_ASSESSMENT_SOURCE_RETAINED` ahead of `ADAPTIVE_RETENTION_REVIEW_REQUIRED`) needs a ruling before the retention checks can pass
 - [ ] <a id="task-067"></a>**TASK-067** Exercise family, educator and commerce journeys end to end — not started
 - [ ] <a id="task-068"></a>**TASK-068** Rehearse additive migration and non-destructive backfill — partial: deployed restore, backfill
 - [ ] <a id="task-069"></a>**TASK-069** Demonstrate delivery recovery and service operating targets — blocked: no approved availability/response targets
@@ -192,7 +194,7 @@ Task-level tests do not satisfy a scenario. Status values: `NOT_RUN`, `PASS`, `F
 Each task records the command run, exit status and test IDs, plus failures and unverified areas. "Tests exist" is not "tests passed".
 
 ```bash
-# Frontend — the default `lint` masks errors; use the strict script for evidence.
+# Frontend — `lint` reports errors only; the strict script with a warning budget is the evidence gate.
 cd apps/web && bun install --frozen-lockfile
 bun run lint:strict . --max-warnings=0
 bun ./node_modules/typescript/bin/tsc --noEmit
@@ -205,5 +207,7 @@ TESTING=true uv run pytest src/tests/studytomy -m "not studytomy_postgres"
 # PostgreSQL races and constraints — opt-in disposable loopback database only.
 STUDYTOMY_TEST_DATABASE_URL=... uv run pytest src/tests/studytomy -m studytomy_postgres
 ```
+
+Measured on 2026-11-20 at `ef6b730d`: web typecheck, 761 unit tests and the production build pass; `lint:strict . --max-warnings=0` exits non-zero on 975 pre-existing warnings with 0 errors, so treat it as a changed-file gate; the opt-in PostgreSQL Studytomy run ends 416 passed / 4 failed and the full API run 10,588 passed / 15 failed. `packages/react` and `packages/vue` require `bun run build` before their tests collect.
 
 Invariants V-01 to V-20 (baseline compatibility, authority, staff separation, offers, money, concurrency, migrations, assessment evidence, awards, AI, reports, casework, notifications, retention, accessibility, performance, website separation, publication truth, metrics, pilot gate) stay open until the affected capability is exercised. A pilot is approved only when applicable AC scenarios pass or carry an approved non-applicability reason, every listed decision is approved, and unrelated Later capabilities remain disabled.

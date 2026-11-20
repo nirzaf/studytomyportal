@@ -65,7 +65,7 @@ Behavior:
 - Cookies set with `Domain=.your-domain.tld` so a user logged in on `acme.your-domain.tld` is also logged in on `beta.your-domain.tld`.
 - Per-org **custom domains** (e.g. `learn.acme-academy.com` mapped to org `acme`) are resolved via the `CustomDomain` table at request time. Cookies on a custom domain are host-only; that org's session does not roam to the platform's own subdomains.
 - Email/invite links use the org's verified custom domain when set, otherwise `https://{slug}.your-domain.tld/...`.
-- Reserved subdomains: `auth`, `www`, `api`, `admin`. None of these can be an org slug.
+- **Reserved subdomains:** not enforced. `Organization.slug` is validated only for uniqueness and format; nothing blocks an org slug of `auth`, `www`, `api` or `admin`. `RESERVED_DOMAIN_PATTERNS` (`apps/api/src/services/orgs/custom_domains.py:34-41`) reserves only the platform's own apex and wildcard hosts against being claimed as an org **custom domain**.
 
 ## Mode 2 / 3: Single (localhost or VPS)
 
@@ -148,7 +148,7 @@ If you cannot tolerate forced logouts, deploy this change during a maintenance w
 | Tenancy    | `allow_origin_regex`                                                       | Why                                          |
 |------------|----------------------------------------------------------------------------|----------------------------------------------|
 | `multi`    | Configured via `LEARNHOUSE_ALLOWED_REGEXP` (matches apex + subdomains)     | Strict allowlist for known multi-tenant domain |
-| `single`   | `^https?://[^/\s]+$` (any well-formed http(s) origin)                      | Operator's host is the only valid origin; cookies are host-only so cross-origin attackers cannot forge authenticated requests |
+| `single`   | `^https?://(?:{configured host(s)}\|localhost\|127\.0\.0\.1)(:\d+)?$` — built from `frontend_domain`/`domain` | Reflecting any origin with credentials enabled is unsafe (S25), so the regex is pinned to the operator's configured hosts plus loopback |
 
 `allow_credentials=True` in both modes (cookie-based auth requires it).
 
@@ -167,7 +167,7 @@ The frontend middleware fetches `GET /api/v1/instance/info` once per 30 seconds 
 }
 ```
 
-`multi_org_enabled` is a deprecated alias for `tenancy === "multi"`. Prefer `tenancy` in new code.
+`multi_org_enabled` is a deprecated alias, and it is `true` only when `tenancy === "multi"` **and** the deployment mode is `ee` or `saas` (`apps/api/src/routers/instance.py:75`) — in self-hosted OSS mode it stays `false`. Prefer `tenancy` in new code.
 
 ## Link generation
 

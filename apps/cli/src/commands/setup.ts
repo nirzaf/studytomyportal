@@ -25,7 +25,7 @@ import { checkPort, findAvailablePort } from '../utils/network.js'
 import { resolveAppImage } from '../services/version-check.js'
 import { readEnvVar } from '../utils/env-file.js'
 import { writeFileAtomic } from '../utils/fs-atomic.js'
-import { readPostgresComposeSettings, type PostgresComposeSettings } from '../services/postgres-compose.js'
+import { hasPostgresServiceDeclaration, readPostgresComposeSettings, type PostgresComposeSettings } from '../services/postgres-compose.js'
 import {
   validateEmail,
   validateInstallName,
@@ -87,13 +87,22 @@ function composeImage(dir: string): string | undefined {
 
 function readExistingInstall(dir: string): ExistingInstall | null {
   const config = readConfig(dir)
-  if (!config?.deploymentId || !fs.existsSync(path.join(dir, '.env'))) return null
   const composePath = path.join(dir, 'docker-compose.yml')
   const compose = fs.existsSync(composePath) ? fs.readFileSync(composePath, 'utf-8') : ''
-  const hasLocalDatabase = /^  db:\s*$/m.test(compose)
-  const database = hasLocalDatabase ? readPostgresComposeSettings(compose) : undefined
+  const hasLocalDatabase = hasPostgresServiceDeclaration(compose)
+  const envPath = path.join(dir, '.env')
+  if (!config?.deploymentId || !fs.existsSync(envPath)) {
+    if (hasLocalDatabase) {
+      throw new Error(`Cannot safely reconfigure ${dir}: a local database is present but its installation config or .env file is missing. Preserve the current files and inspect them manually.`)
+    }
+    return null
+  }
+  const envFile = fs.readFileSync(envPath, 'utf-8')
+  const database = hasLocalDatabase
+    ? readPostgresComposeSettings(compose, envFile, process.env.COMPOSE_PROJECT_NAME)
+    : undefined
   if (hasLocalDatabase && !database) {
-    throw new Error(`Cannot safely reconfigure ${dir}: local database image or persistent mount could not be read from docker-compose.yml. Preserve the current database configuration and inspect it manually.`)
+    throw new Error(`Cannot safely reconfigure ${dir}: the local database image, volume, project name, or PGDATA could not be read safely from docker-compose.yml/.env. Preserve the current files and inspect them manually.`)
   }
   return {
     edition: config.edition || 'community',

@@ -83,8 +83,11 @@ all restored, and anything you *created* is removed as drift. `demo-sync` forces
 it immediately rather than waiting.
 
 Run `demo-sync` twice in a row: the second run reports "nothing to do". That is
-the design working: a settled demo costs one UPDATE to its own bookkeeping row
-and nothing else.
+the design working: rows are matched to bundle entries through the `DemoEntity`
+registry and compared before assignment (`_apply`), so an unchanged row emits no
+`UPDATE` at all rather than one that rewrites the same values
+(`src/services/demo/sync.py:12-16,161-170`). There is no separate sync-state or
+bookkeeping row to write.
 
 ## What is in it
 
@@ -99,14 +102,24 @@ Riverbend Academy, on the **pro** plan so every feature is visible:
 - A store: 5 offers (a subscription, two single courses, a bundle, one
   pay-what-you-want) and 18 enrolments
 
-**Analytics will look sparse.** Analytics is an Enterprise Edition feature, and
-the seed writes no analytics events, so the charts only fill in with what
-visitors actually do in the demo. This is a known limitation rather than
+**Analytics will look sparse.** Analytics is not an Enterprise Edition gate:
+`analytics` is a plan-tier feature at `standard`
+(`src/security/features_utils/plans.py:23`), it is absent from
+`EE_ONLY_FEATURES` (`src/core/deployment_mode.py:25-27`, which lists
+`analytics_advanced`, not `analytics`), and its tables come from a community
+migration. The seed writes no analytics events, so the charts only fill in with
+what visitors actually do in the demo. This is a known limitation rather than
 something seeding should fake.
 
-**The store needs the Enterprise Edition.** Payments models live in the private
-`ee/` tree and their tables are not in the migrations, so the seeding step skips
-itself cleanly on a community install. It also needs the EE routers to mount.
+**The store needs the Enterprise Edition.** The payments *tables* are created by
+community migrations (`migrations/versions/0314ec7791e1_payments.py:24` adds
+`paymentsconfig`, `paymentsproduct` and `paymentscourse`, and
+`f2a3b4c5d6e7_payments_sell_anything.py` adds the later ones), but the models and
+the `/payments/*` routers live in the private `ee/` tree, which this checkout
+does not carry — `git ls-files apps/api/ee` returns nothing. The seeding step
+imports `ee.db.payments.payments` and, on failure, logs the reason and skips
+itself cleanly (`src/services/demo/sync.py:2241,2270`), so a community install
+is a stated outcome rather than a fault. It also needs the EE routers to mount.
 If `apps/api/ee` points at an EE branch that expects main-repo code this branch
 does not have, `/payments/*` returns 404 and the store page renders empty even
 though the offers are in the database.

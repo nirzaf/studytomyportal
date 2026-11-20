@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { generateDockerCompose } from '../src/templates/docker-compose.js'
-import { readPostgresComposeSettings } from '../src/services/postgres-compose.js'
+import { hasPostgresServiceDeclaration, readPostgresComposeSettings } from '../src/services/postgres-compose.js'
 import { POSTGRES_DATA_VOLUME_PATH, POSTGRES_IMAGE } from '../src/constants.js'
 import { generateEnvFile } from '../src/templates/env.js'
 import { generateNginxConf } from '../src/templates/nginx.js'
@@ -100,6 +100,62 @@ describe('generateDockerCompose', () => {
     expect(yml).not.toContain('  learnhouse_db_data_test1234:')
   })
 
+  it('preserves parsed physical volume name, project name, mount, image, and PGDATA', () => {
+    const existing = readPostgresComposeSettings(`name: school-prod
+services:
+  db:
+    image: postgres:16
+    environment:
+      PGDATA: /var/lib/postgresql/custom
+    volumes:
+      - pgdata:/var/lib/postgresql
+volumes:
+  pgdata:
+    name: school-postgres-data
+    external: true
+`)
+    expect(existing).toMatchObject({
+      image: 'postgres:16',
+      dataVolumeSource: 'pgdata',
+      dataVolumePath: '/var/lib/postgresql',
+      dataVolumeDeclaration: '  pgdata:\n    name: school-postgres-data\n    external: true',
+      projectName: 'school-prod',
+      pgData: '/var/lib/postgresql/custom',
+    })
+
+    const rerendered = generateDockerCompose(baseConfig, 'ghcr.io/learnhouse/app:1.0.0', existing!)
+    expect(rerendered).toContain('name: school-prod')
+    expect(rerendered).toContain('image: postgres:16')
+    expect(rerendered).toContain('- pgdata:/var/lib/postgresql')
+    expect(rerendered).toContain('- PGDATA=/var/lib/postgresql/custom')
+    expect(rerendered).toContain('  pgdata:\n    name: school-postgres-data\n    external: true')
+  })
+
+  it('preserves a literal PGDATA loaded from the database service env_file', () => {
+    const compose = `services:\n  db:\n    image: postgres:16\n    env_file:\n      - .env\n    volumes:\n      - pgdata:/var/lib/postgresql\n`
+    const existing = readPostgresComposeSettings(compose, 'PGDATA=/var/lib/postgresql/custom\n')
+    expect(existing?.pgData).toBe('/var/lib/postgresql/custom')
+    expect(generateDockerCompose(baseConfig, 'app:old', existing!).toContain('- PGDATA=/var/lib/postgresql/custom'))
+  })
+
+  it('keeps an unnamed existing project on Compose directory/environment defaults', () => {
+    const compose = `services:\n  db:\n    image: postgres:16\n    volumes:\n      - pgdata:/var/lib/postgresql\n`
+    const existing = readPostgresComposeSettings(compose)
+    expect(existing).not.toBeNull()
+    expect(existing).not.toHaveProperty('projectName')
+    expect(generateDockerCompose(baseConfig, 'app:old', existing!)).not.toMatch(/^name:/)
+  })
+
+  it('retains a project name supplied through .env or the setup process environment', () => {
+    const compose = `services:\n  db:\n    image: postgres:16\n    volumes:\n      - pgdata:/var/lib/postgresql\n`
+    const envNamed = readPostgresComposeSettings(compose, 'COMPOSE_PROJECT_NAME=school-env\n')
+    const processNamed = readPostgresComposeSettings(compose, '', 'school-shell')
+    expect(envNamed?.projectName).toBe('school-env')
+    expect(processNamed?.projectName).toBe('school-shell')
+    expect(generateDockerCompose(baseConfig, 'app:old', envNamed!).startsWith('name: school-env')).toBe(true)
+    expect(readPostgresComposeSettings(`name: file-name\n${compose}`, 'COMPOSE_PROJECT_NAME=env-name\n')).toBeNull()
+  })
+
   it('excludes db when useExternalDb is true', () => {
     const yml = generateDockerCompose({ ...baseConfig, useExternalDb: true })
     expect(yml).not.toContain('learnhouse-db-test1234')
@@ -177,6 +233,34 @@ describe('readPostgresComposeSettings', () => {
       dataVolumeIsBind: true,
     })
     expect(bind?.dataVolumeDeclaration).toBeUndefined()
+  })
+
+  it('fails closed for inline named-volume metadata instead of emitting an empty declaration', () => {
+    const compose = `name: school-prod\nservices:\n  db:\n    image: postgres:16\n    volumes:\n      - pgdata:/var/lib/postgresql\nvolumes:\n  pgdata: { name: school-postgres-data, external: true }\n`
+    expect(hasPostgresServiceDeclaration(compose)).toBe(true)
+    expect(readPostgresComposeSettings(compose)).toBeNull()
+  })
+
+  it('fails closed when the database image depends on custom Compose interpolation', () => {
+    const compose = ['services:', '  db:', '    image: ${POSTGRES_IMAGE}', '    volumes:', '      - pgdata:/var/lib/postgresql', ''].join('\n')
+    expect(hasPostgresServiceDeclaration(compose)).toBe(true)
+    expect(readPostgresComposeSettings(compose)).toBeNull()
+  })
+
+  it('detects noncanonical local db service layouts so setup fails closed', () => {
+    const indented = 'services:\n    db:\n      image: postgres:16\n'
+    const inline = 'services: { db: { image: postgres:16 } }\n'
+    const flowMultiline = 'services: {\n  db: { image: postgres:16 }\n}\n'
+    const quoted = '"services":\n  "db":\n    image: postgres:16\n'
+    expect(hasPostgresServiceDeclaration(indented)).toBe(true)
+    expect(hasPostgresServiceDeclaration(inline)).toBe(true)
+    expect(hasPostgresServiceDeclaration(flowMultiline)).toBe(true)
+    expect(hasPostgresServiceDeclaration(quoted)).toBe(true)
+    expect(readPostgresComposeSettings(indented)).toBeNull()
+    expect(readPostgresComposeSettings(inline)).toBeNull()
+    expect(readPostgresComposeSettings(flowMultiline)).toBeNull()
+    expect(readPostgresComposeSettings(quoted)).toBeNull()
+    expect(hasPostgresServiceDeclaration('services:\n  app:\n    depends_on:\n      db:\n        condition: service_healthy\n')).toBe(false)
   })
 
   it('fails closed when the local database image or persistent mount is missing', () => {

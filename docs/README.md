@@ -47,6 +47,7 @@ content/          # MDX documentation pages
   self-hosting/
   developers/
   enterprise/
+  guides/
   cli/
 app/              # Next.js App Router
 components/       # React components

@@ -2,6 +2,9 @@
 
 Evidence snapshot: 2026-11-17. Inspected local `main` at `4f3346af99b516bab2d422217905d078096d55ac` and its dirty worktree. Remote `main` was `a11289a01e83c1fcdcbbfc418f7340ffee697e59`; its one additional commit updates only the access inventory. Local adaptive, family and commerce source can differ from published main. Reinspect source and current approvals before relying on this map.
 
+> [!NOTE]
+> **Re-verified 2026-11-20 at `ef6b730d`** (dirty worktree: ten in-flight `apps/cli` files plus `POSTGRESQL-19-UPGRADE.md`). The stack map still holds; three things moved. Alembic reports a single head `b7c2e9a4d1f0` (137 revision files). The committed CLI default database image is now `pgvector/pgvector:0.8.7-pg19` (`apps/cli/src/constants.ts:10`), while the local runbook containers still request `pg16`. The web `lint` script no longer masks ESLint's exit code. Line-number links in the tables below remain 2026-11-17 worktree references and have shifted since (for example the Studytomy router mounts begin near `router.py:72`, the native grade finalizer is `assignments.py:4186`, and `search_course_content` is `query_service.py:45`); re-verify before citing one as current. Full sweep numbers: [local verification log](LOCAL-VERIFICATION.md).
+
 ## 1. Purpose, provenance and status vocabulary
 
 One educator-led platform connects learner courses, native assignments, adaptive guidance, teacher/admin authoring and authorized guardian reports. It extends LearnHouse Community Edition; the legacy public website is a separate application. This guide expands the three conceptual views in the user-approved **Studytomy-Conceptual-Architecture.pdf** with current technical evidence and explicit implementation boundaries.
@@ -70,7 +73,7 @@ Application services, not browser or MCP arguments, decide authority. The MCP ad
 | UI routes/components | `apps/web/app`, `apps/web/components`, `apps/web/components/Studytomy` |
 | API boundary | `apps/api/src/routers`; Studytomy `routers/studytomy` |
 | Native learning services | `apps/api/src/services/courses`, native assignment services and their callers |
-| Identity and authorization | `apps/api/src/security/auth.py`, `org_auth.py`, `rbac.py`, `mcp_auth.py` |
+| Identity and authorization | `apps/api/src/security/auth.py`, `org_auth.py`, `rbac/rbac.py`, `mcp_auth.py` |
 | Studytomy domain | `apps/api/src/services/studytomy`, `apps/api/src/db/studytomy` |
 | AI planning/assignment drafts | `apps/api/src/services/ai/courseplanning.py`, `assignment_gen.py` |
 | RAG | `apps/api/src/services/ai/rag`; `apps/api/src/db/course_embeddings.py` |

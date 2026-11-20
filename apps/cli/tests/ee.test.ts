@@ -104,9 +104,13 @@ describe('generateEeDockerCompose (single)', () => {
       dataVolumeSource: 'legacy_db',
       dataVolumeIsBind: false,
       dataVolumeDeclaration: '  legacy_db:\n    name: existing-ee-db-volume',
+      projectName: 'existing-ee-project',
+      pgData: '/var/lib/postgresql/data',
     })
+    expect(legacy).toContain('name: existing-ee-project')
     expect(legacy).toContain('image: pgvector/pgvector:pg16')
     expect(legacy).toContain('- legacy_db:/var/lib/postgresql/data:rw')
+    expect(legacy).toContain('PGDATA: /var/lib/postgresql/data')
     expect(legacy).toContain('  legacy_db:\n    name: existing-ee-db-volume')
     expect(legacy).not.toContain('  db_data:')
   })

@@ -234,6 +234,28 @@ describe('EE setup: start, DNS and file variants (CI)', () => {
     expectMode(path.join(dir, '.env'), 0o600)
   })
 
+  it('refuses unsupported database volume metadata before changing an EE install', async () => {
+    const fs = await import('node:fs'); const path = await import('node:path')
+    const opts = { ...CI, name: 'ee-inline-volume', start: false }
+    await setupEnterprise(opts)
+    const dir = path.join(home, '.learnhouse', 'ee-inline-volume')
+    const composePath = path.join(dir, 'docker-compose.yml')
+    const originalCompose = fs.readFileSync(composePath, 'utf-8')
+    expect(originalCompose).toContain('  db_data:')
+    fs.writeFileSync(
+      composePath,
+      originalCompose.replace('  db_data:', '  db_data: { name: retained-ee-postgres-data, external: true }'),
+    )
+
+    const preservedFiles = [
+      'docker-compose.yml', '.env', 'Caddyfile', 'pgvector-init.sql', 'learnhouse.config.json',
+    ]
+    const before = preservedFiles.map((file) => fs.readFileSync(path.join(dir, file), 'utf-8'))
+    await expect(setupEnterprise(opts)).rejects.toThrow(/exit 1/)
+    const after = preservedFiles.map((file) => fs.readFileSync(path.join(dir, file), 'utf-8'))
+    expect(after).toEqual(before)
+  })
+
   it('removes a stale local-TLS override when redeploying onto real certificates', async () => {
     const fs = await import('node:fs'); const path = await import('node:path')
     const dir = path.join(home, '.learnhouse', 'ee-stale')

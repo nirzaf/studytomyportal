@@ -53,7 +53,7 @@ feature-local things relatively. Specs never reach into another feature.
 
 ## Running locally
 
-Requires Docker running, plus Node 20+ / bun.
+Requires Docker running, plus Node 22+ / bun (the default `E2E_CLI` is the published `learnhouse` image, which declares `engines.node >= 22` — `apps/cli/package.json:55-57`).
 
 ```bash
 cd apps/e2e
@@ -124,7 +124,7 @@ bunx playwright test features/assignments/tests/06-manual-grading.spec.ts
   caches tokens per email + retries on 429. A full run does only a handful of
   logins (the API rate-limits logins to **30 / 5 min / IP**).
 
-## Feature coverage: assignments (32 tests)
+## Feature coverage: assignments (34 tests across 24 specs)
 
 Driven through the UI, verified against the REST API (`features/assignments/verify.ts`):
 
@@ -149,10 +149,9 @@ Driven through the UI, verified against the REST API (`features/assignments/veri
 | `21-grading-display` | Student grade display per type: PASS_FAIL→Pass, ALPHABET→A, GPA→4.0 |
 | `22-student-aux` | Hint reveal, reference-document link, due date, attempt counter |
 | `23-anti-copy-paste` | Anti-copy-paste deterrent blocks pasting into a form blank |
+| `24-formative` | Formative mode: handing in a document unlocks the model answer without grading, and a retry re-locks it until the next hand-in |
 
-Complemented by ~580 fast backend edge-case tests under
-`apps/api/src/tests/services/` (grading math, matching modes, tolerance,
-server-verify dispatch, CODE grading, retry caps, due dates, permissions).
+Complemented by 367 assignment-behavior tests in the ten `apps/api/src/tests/services/test_assignment*.py` modules (grading math, matching modes, tolerance, server-verify dispatch, CODE grading, retry caps, due dates, permissions); the directory as a whole collects 5,459 tests.
 
 ### Bugs found & fixed
 

@@ -89,7 +89,7 @@ npx learnhouse update
 npx learnhouse update --to 1.2.0
 ```
 
-The update command backs up the database to `backups/db-pre-upgrade-*.sql.gz`, pulls the new image, runs the database migrations with it before it starts, then restarts services. If a step fails, the previous version keeps running. To roll back the database, run `npx learnhouse restore backups/db-pre-upgrade-<timestamp>.sql.gz`.
+The update command first takes a backup, pulls the new image, runs the database migrations with it before it starts, then restarts services. The artifact depends on the installation: a Community update writes a `backups/learnhouse-backup-<timestamp>.tar.gz` bundle (`src/commands/backup.ts:118`), while an Enterprise update writes `backups/db-pre-upgrade-<timestamp>.sql.gz` (`src/commands/update-ee.ts:81`). Pass `--no-backup` to skip that step (not recommended). If a step fails, the previous version keeps running. To roll back, restore the archive this installation produced, for example `npx learnhouse restore backups/learnhouse-backup-<timestamp>.tar.gz --yes`.
 
 ## Choosing an installation
 
@@ -135,6 +135,9 @@ npx learnhouse restore backups/learnhouse-backup-<timestamp>.tar.gz --yes
 
 # Update without migrations
 npx learnhouse update --no-migrate
+
+# Update without the pre-upgrade backup (not recommended)
+npx learnhouse update --no-backup
 
 # Setup without starting services
 npx learnhouse setup --ci --admin-password pass123 --no-start

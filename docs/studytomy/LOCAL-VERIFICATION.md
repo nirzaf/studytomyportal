@@ -1,5 +1,48 @@
 # AUD-18 local verification record
 
+## Documentation-refresh verification sweep (20 November 2026)
+
+Reviewed primary `main` at `ef6b730d`. Ten in-flight files were left untouched: nine under `apps/cli/` and `docs/studytomy/POSTGRESQL-19-UPGRADE.md`. The sweep changed no application code; it is the evidence behind the 2026-11-20 documentation corrections.
+
+**Environment.** macOS arm64. Python dependencies from the locked `uv` environment (`--no-sync`). Each JavaScript workspace installed with `bun install --frozen-lockfile`. PostgreSQL checks used a fresh disposable container (`pgvector/pgvector:pg16`, label `studytomy.purpose=docs-refresh-tests`, loopback-only random port, database `studytomy_docsweep2_test`), bootstrapped with `ensure_schema()` and an ephemeral generated `LEARNHOUSE_AUTH_JWT_SECRET_KEY`. The container was stopped by its label afterwards, and the tracked tree stayed byte-identical apart from the documentation edits.
+
+| Check (working directory `apps/api` unless noted) | Exit | Observed result |
+|---|---|---|
+| `uv run alembic heads` | 0 | single head `b7c2e9a4d1f0` (137 revision files) |
+| `uv run --no-sync pytest -q src/tests/studytomy` (migrated disposable PostgreSQL) | 1 | **416 passed, 4 failed** in 68.14s |
+| `uv run --no-sync pytest -q src/tests/studytomy -m studytomy_postgres` | 1 | **78 passed, 2 failed**, 340 deselected in 52.59s |
+| `uv run --no-sync pytest -q src/tests` (full API suite, same database) | 1 | **10,588 passed, 15 failed**, 22 skipped, 251 warnings in 279.01s |
+| `uv run --no-sync pytest -q src/tests/core/test_migrations.py` | 0 | 54 passed in 6.34s |
+| `apps/web`: `bun ./node_modules/typescript/bin/tsc --noEmit` | 0 | pass |
+| `apps/web`: `bun run test` | 0 | 761 pass, 0 fail across 81 files (2,246 assertions) in 10.51s |
+| `apps/web`: `bun run build` | 0 | pass |
+| `apps/web`: `bun run lint:strict . --max-warnings=0` | 1 | 0 errors, **975 warnings**; the non-zero exit is the warning budget, not a rule failure. `bun run lint` (`eslint .`) exits 0 on the same tree because warnings alone do not fail it |
+| `apps/collab`: `bun run test` | 0 | 48 pass, 0 fail |
+| `apps/e2e`: `bun run typecheck` | 0 | pass |
+| `packages/sdk`: `bun run test` | 0 | 118 pass, 3 skipped (8 files passed, 1 skipped) |
+| `packages/react` / `packages/vue`: `bun run test` | 1 | fail to collect: 3 and 1 test files import `../dist/*`, which requires `bun run build` first |
+| `apps/cli`: `bun run typecheck` (dirty worktree) | 1 | one `TS2322` at `src/commands/setup.ts:121` (`PostgresComposeSettings \| null \| undefined`) |
+| `apps/cli`: `bun run test` (dirty worktree) | 1 | 83 pass, 36 fail, 25 errors |
+
+The `apps/cli` results describe uncommitted work in progress and are not evidence about the committed CLI. The React/Vue collection failures are an ordering requirement (`build` before `test`), not a renderer defect; the SDK package passed on its own.
+
+### The 15 API failures, classified
+
+All 15 reproduce against the migrated PostgreSQL database and none is a new product regression, but each is open engineering work:
+
+| Count | Test | Cause and evidence |
+|---|---|---|
+| 5 | `src/tests/security/test_logout_revocation_credentials.py` | patches `src.routers.auth.revoke_user_sessions_before`; `AttributeError` — the symbol lives in `apps/api/src/security/auth.py:289` and is imported lazily, so the module attribute no longer exists to patch |
+| 5 | `src/tests/security/test_resource_exhaustion_limits.py::TestLinkPreviewResponseCap` | `TypeError: httpx.AsyncClient() got multiple values for keyword argument 'transport'` — the fixture injects its own `transport` while `services/utils/link_preview.py` now passes `transport=pinned_transport()` |
+| 1 | `src/tests/services/test_llm_provider.py::test_build_model_bedrock_needs_no_api_key` | `botocore.exceptions.MissingDependencyException` — `botocore[crt]` is absent from the locked environment |
+| 1 | `src/tests/studytomy/test_existing_contracts.py::TestMigrationAndMetadataBaseline::test_alembic_head_revision_is_pinned` | asserts `['b91d2f6a08c3']`; actual `['b7c2e9a4d1f0']`. The pinned revision is an ancestor of the current head, so the pin is stale rather than the chain forked |
+| 2 | `src/tests/studytomy/test_adaptive_curriculum_api.py` (`…require_direct_session_exact_scope_and_native_access`, `…round_trip_on_postgres`) | asserts `ADAPTIVE_RETENTION_REVIEW_REQUIRED` on delete and receives `MANAGED_ASSESSMENT_SOURCE_RETAINED`; the managed-assessment guard in `services/studytomy/assignment_adapter.py:878,894,911` now runs before `services/studytomy/adaptive_retention.py:31` |
+| 1 | `src/tests/studytomy/test_service_cases_postgres.py::test_report_routing_enforces_persisted_approval_and_exact_case_grant` | `assert 'acknowledged' == 'assigned'` at `:1349` |
+
+Two of these are behavior questions, not assertion hygiene, and were deliberately **not** resolved by editing tests or docs: whether `MANAGED_ASSESSMENT_SOURCE_RETAINED` should preempt the adaptive-retention review on course or account deletion, and whether report routing should accept an `acknowledged` case. The first belongs to TASK-066 PostgreSQL concurrency and retention-scope work. Until someone rules, capability evidence in this record and in [implementation status](IMPLEMENTATION-STATUS.md) should be read as "focused suite has open failures", not as a clean pass.
+
+No browser journey, live AI provider, real notification delivery, production database, deployed-data migration or real learner account was exercised by this sweep. No approval, release or pilot activation is implied.
+
 ## Mac managed enrollment and access verification (18 November 2026)
 
 The Mac ran `main` at `8308715b14f7f73bdb74a0c7a7e3819baf98047a`. The isolated PostgreSQL 16/pgvector and Redis 7 containers listened on `127.0.0.1:59158` and `127.0.0.1:59159`. The test database and demo database were separate. The fresh test schema was initialized with `ensure_schema()` at `b91d2f6a08c3`. The demo database used `python cli.py install --short` with generated local credentials. No AI provider was configured for this check.
