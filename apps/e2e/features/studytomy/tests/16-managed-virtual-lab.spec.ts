@@ -19,7 +19,7 @@ test('managed virtual lab renders pinned sandboxed build and connects to linked 
   const assignmentUuid = `assignment_${randomUUID()}`
   const base = `**/studytomy/orgs/${orgUuid}/learning`
   const release = { course_uuid: courseUuid, release_uuid: releaseUuid, name: 'Grade 12 Physics — Momentum Pilot' }
-  const buildSha = '3d5209e7896a5594f01c3d65282740c746ee2860d2e5f702acdb003e00595dcf'
+  const buildSha = 'e5b013fc9943ba82be536ba49b6aa12b2c0f8c9672fe094dc50320fe00448c7f'
 
   const egressRequests: string[] = []
   page.on('request', req => {

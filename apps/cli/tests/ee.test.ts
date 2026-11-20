@@ -22,6 +22,7 @@ import {
 } from '../src/templates/ee.js'
 import { writeConfig } from '../src/services/config-store.js'
 import { quoteEnvValue } from '../src/utils/env-quote.js'
+import { POSTGRES_DATA_VOLUME_PATH, POSTGRES_IMAGE } from '../src/constants.js'
 
 // The CLI subprocess runs against a fake docker (prerequisite probes only;
 // everything here passes --no-start), so these tests need no Docker daemon.
@@ -90,6 +91,24 @@ describe('generateEeDockerCompose (single)', () => {
     expect(yml).toContain('images.learnhouse.app/enterprise-backend:${EE_IMAGE_TAG:-prod}')
     expect(yml).toContain('images.learnhouse.app/enterprise-frontend:${EE_IMAGE_TAG:-prod}')
     expect(yml).toContain('images.learnhouse.app/enterprise-collab:${EE_IMAGE_TAG:-prod}')
+  })
+  it('uses PostgreSQL 19 and the parent data volume for a fresh EE install', () => {
+    expect(yml).toContain(`image: ${POSTGRES_IMAGE}`)
+    expect(yml).toContain(`- db_data:${POSTGRES_DATA_VOLUME_PATH}`)
+  })
+  it('preserves the existing EE database major and mount during redeploy', () => {
+    const legacy = generateEeDockerCompose(baseEe(), {
+      image: 'pgvector/pgvector:pg16',
+      dataVolumePath: '/var/lib/postgresql/data',
+      dataVolumeMount: 'legacy_db:/var/lib/postgresql/data:rw',
+      dataVolumeSource: 'legacy_db',
+      dataVolumeIsBind: false,
+      dataVolumeDeclaration: '  legacy_db:\n    name: existing-ee-db-volume',
+    })
+    expect(legacy).toContain('image: pgvector/pgvector:pg16')
+    expect(legacy).toContain('- legacy_db:/var/lib/postgresql/data:rw')
+    expect(legacy).toContain('  legacy_db:\n    name: existing-ee-db-volume')
+    expect(legacy).not.toContain('  db_data:')
   })
   it('namespaces project by deploymentId', () => {
     expect(yml).toContain('name: learnhouse-abcd1234')

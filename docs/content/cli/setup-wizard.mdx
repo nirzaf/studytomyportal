@@ -43,7 +43,7 @@ Choose a name for the installation. Installations live in `~/.learnhouse/<name>`
   - **PostgreSQL with AI capabilities** (recommended): enables the AI course chatbot (RAG)
   - **Standard PostgreSQL**
 
-  Both currently use `pgvector/pgvector:pg16`. The user is `learnhouse`, the host is `db:5432`, and a random password is generated and saved in `.env` as `POSTGRES_PASSWORD` (it is not printed).
+  Fresh installs use the digest-pinned PostgreSQL 19 + pgvector 0.8.7 image. The user is `learnhouse`, the host is `db:5432`, and a random password is generated and saved in `.env` as `POSTGRES_PASSWORD` (it is not printed). PostgreSQL 19 data is mounted at `/var/lib/postgresql`; setup reconfiguration preserves an existing install's image and mount target.
 - **Use an external database**: enter a connection string starting with `postgresql://` or `postgres://`. The wizard checks that the host and port are reachable before continuing.
 
 ### Redis
@@ -105,7 +105,7 @@ Each deployment gets a unique 8-character ID used in the compose project name (`
 | Service | Container | Image | Purpose |
 | --- | --- | --- | --- |
 | `learnhouse-app` | `learnhouse-app-<id>` | `ghcr.io/learnhouse/app:<tag>` | Web app, API and collaboration server |
-| `db` | `learnhouse-db-<id>` | `pgvector/pgvector:pg16` | PostgreSQL (omitted with an external database) |
+| `db` | `learnhouse-db-<id>` | PostgreSQL 19 + pgvector 0.8.7 (digest-pinned) | PostgreSQL (omitted with an external database) |
 | `redis` | `learnhouse-redis-<id>` | `redis:7.4-alpine` | Redis (omitted with an external Redis) |
 | `caddy` | `learnhouse-caddy-<id>` | `caddy:2.11-alpine` | Reverse proxy with automatic SSL |
 | `nginx` | `learnhouse-nginx-<id>` | `nginx:1.30-alpine` | Reverse proxy without automatic SSL |

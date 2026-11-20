@@ -13,14 +13,8 @@ import { MomentumRenderer2D } from './MomentumRenderer2D.ts';
 import { ExperimentRunSession, formatRunToCSV, type ExperimentRun } from './RunRecorder.ts';
 import { StudentLabNotebook } from './journalStorage.ts';
 
-declare global {
-  interface Window {
-    __STUDYTOMY_LAB_BUILD__?: {
-      buildVersion: string;
-      buildSha256: string;
-    };
-  }
-}
+declare const __STUDYTOMY_LAB_BUILD_VERSION__: string;
+declare const __STUDYTOMY_LAB_BUILD_SHA256__: string;
 
 function downloadTextFile(filename: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
@@ -36,9 +30,9 @@ function downloadTextFile(filename: string, content: string, mimeType: string): 
 }
 
 export function mountMomentumLab(root: HTMLElement): void {
-  const buildInfo = window.__STUDYTOMY_LAB_BUILD__ ?? {
-    buildVersion: '1.0.0-pilot.1',
-    buildSha256: 'unpinned-local-dev',
+  const buildInfo = {
+    buildVersion: __STUDYTOMY_LAB_BUILD_VERSION__,
+    buildSha256: __STUDYTOMY_LAB_BUILD_SHA256__,
   };
 
   const engine = new MomentumEngine();

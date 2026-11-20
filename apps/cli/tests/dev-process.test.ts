@@ -12,7 +12,7 @@ vi.mock('node:child_process', async () => {
 })
 
 import { spawn } from 'node:child_process'
-import { killProcess, hasExited, createLineBuffer } from '../src/commands/dev.js'
+import { killProcess, hasExited, createLineBuffer, DEV_COMPOSE } from '../src/commands/dev.js'
 
 const isWindows = process.platform === 'win32'
 
@@ -156,5 +156,17 @@ describe('createLineBuffer', () => {
     buffer.push(euro.subarray(0, 2))
     buffer.push(euro.subarray(2))
     expect(lines).toEqual(['a€'])
+  })
+})
+
+describe('PG19 development profile', () => {
+  it('uses a pinned PG19 image with new ports, container names and volumes', () => {
+    expect(DEV_COMPOSE).toContain('learnhouse-dev-pg19')
+    expect(DEV_COMPOSE).toContain('pgvector/pgvector:0.8.7-pg19@sha256:')
+    expect(DEV_COMPOSE).toContain('127.0.0.1:5433:5432')
+    expect(DEV_COMPOSE).toContain('learnhouse_db_dev_pg19_data:/var/lib/postgresql')
+    expect(DEV_COMPOSE).toContain('127.0.0.1:6380:6379')
+    expect(DEV_COMPOSE).not.toContain('learnhouse_db_dev_data:')
+    expect(DEV_COMPOSE).not.toContain('learnhouse-redis-dev\n')
   })
 })

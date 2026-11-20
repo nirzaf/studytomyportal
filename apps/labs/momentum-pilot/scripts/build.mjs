@@ -6,6 +6,36 @@ import { execFileSync } from 'node:child_process';
 const rootDir = path.resolve(import.meta.dirname, '..');
 const distDir = path.join(rootDir, 'dist');
 const assetsDir = path.join(distDir, 'assets');
+const buildVersion = '1.0.0-pilot.1';
+const labId = 'conservation-momentum';
+const declaredBunVersion = fs.readFileSync(path.resolve(rootDir, '../../..', '.bun-version'), 'utf8').trim();
+const bunVersion = execFileSync('bun', ['--version'], { encoding: 'utf8' }).trim();
+
+function collectTypeScriptFiles(dir, parent = '') {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const rel = path.posix.join(parent, entry.name);
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return collectTypeScriptFiles(full, rel);
+    return entry.isFile() && entry.name.endsWith('.ts') ? [rel] : [];
+  }).sort();
+}
+
+// Build identity covers source and declared build inputs only. Output bytes are
+// hashed separately below so the identity is not circular.
+const identityHash = crypto.createHash('sha256');
+identityHash.update('studytomy-lab-source-input-sha256-v1\0');
+for (const relativePath of [
+  ...collectTypeScriptFiles(path.join(rootDir, 'src')).map((file) => `src/${file}`),
+  'package.json',
+  'public/_headers',
+  'scripts/build.mjs',
+].sort()) {
+  identityHash.update(relativePath).update('\0');
+  identityHash.update(fs.readFileSync(path.join(rootDir, relativePath))).update('\0');
+}
+identityHash.update(`lab_id=${labId}\nbuild_version=${buildVersion}\n`);
+identityHash.update(`declared_bun_version=${declaredBunVersion}\nbuild_bun_version=${bunVersion}\n`);
+const buildSha = identityHash.digest('hex');
 
 fs.rmSync(distDir, { recursive: true, force: true });
 fs.mkdirSync(assetsDir, { recursive: true });
@@ -24,6 +54,10 @@ execFileSync(
     '--format',
     'esm',
     '--minify',
+    '--define',
+    `__STUDYTOMY_LAB_BUILD_VERSION__=${JSON.stringify(buildVersion)}`,
+    '--define',
+    `__STUDYTOMY_LAB_BUILD_SHA256__=${JSON.stringify(buildSha)}`,
   ],
   { stdio: 'inherit' }
 );
@@ -33,8 +67,6 @@ const jsSha = crypto.createHash('sha256').update(jsBytes).digest('hex');
 const hashedJsName = `momentum-lab.${jsSha.slice(0, 12)}.js`;
 fs.renameSync(bundleOut, path.join(assetsDir, hashedJsName));
 
-const buildVersion = '1.0.0-pilot.1';
-const labId = 'conservation-momentum';
 const versionedDir = path.join(distDir, labId, buildVersion);
 const versionedAssetsDir = path.join(versionedDir, 'assets');
 fs.mkdirSync(versionedAssetsDir, { recursive: true });
@@ -86,17 +118,22 @@ const html = `<!DOCTYPE html>
 `;
 
 fs.writeFileSync(path.join(distDir, 'index.html'), html, 'utf8');
-fs.copyFileSync(path.join(rootDir, 'public', '_headers'), path.join(distDir, '_headers'));
+const baseHeaders = fs.readFileSync(path.join(rootDir, 'public', '_headers'), 'utf8').trimEnd();
+const rootAssetPath = `/assets/${hashedJsName}`;
+const versionedAssetPath = `/${labId}/${buildVersion}/assets/${hashedJsName}`;
+const headers = `${baseHeaders}\n\n${rootAssetPath}\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=31536000, immutable\n\n${versionedAssetPath}\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=31536000, immutable\n`;
+fs.writeFileSync(path.join(distDir, '_headers'), headers, 'utf8');
 fs.copyFileSync(path.join(rootDir, 'LICENSE'), path.join(distDir, 'LICENSE'));
 
 // Mirror immutable, versioned hosting directory under dist/<lab_id>/<build_version>/
 fs.writeFileSync(path.join(versionedDir, 'index.html'), html, 'utf8');
 fs.copyFileSync(path.join(assetsDir, hashedJsName), path.join(versionedAssetsDir, hashedJsName));
-fs.copyFileSync(path.join(rootDir, 'public', '_headers'), path.join(versionedDir, '_headers'));
+fs.writeFileSync(path.join(versionedDir, '_headers'), headers, 'utf8');
 fs.copyFileSync(path.join(rootDir, 'LICENSE'), path.join(versionedDir, 'LICENSE'));
 
-// Compute deterministic build digest over index.html + bundled JS + _headers
-const combinedDigest = crypto
+// Artifact digest is for byte integrity only; build_sha256 is the independent
+// source/input-derived identity embedded in this bundle and recorded in CSV.
+const artifactSha = crypto
   .createHash('sha256')
   .update(fs.readFileSync(path.join(distDir, 'index.html')))
   .update(jsBytes)
@@ -114,7 +151,10 @@ const manifest = {
   experiment_id: labId,
   build_version: buildVersion,
   versioned_entry_path: `${labId}/${buildVersion}/index.html`,
-  build_sha256: combinedDigest,
+  build_identity: 'studytomy-lab-source-input-sha256-v1',
+  build_sha256: buildSha,
+  build_tool: { name: 'Bun', version: bunVersion, repository_pin: declaredBunVersion },
+  artifact_sha256: artifactSha,
   bundle_asset: `assets/${hashedJsName}`,
   bundle_sha256: jsSha,
   license_sha256: licenseSha,
@@ -135,4 +175,4 @@ const manifestJson = JSON.stringify(manifest, null, 2) + '\n';
 fs.writeFileSync(path.join(distDir, 'manifest.json'), manifestJson, 'utf8');
 fs.writeFileSync(path.join(versionedDir, 'manifest.json'), manifestJson, 'utf8');
 fs.writeFileSync(path.join(rootDir, 'manifest.json'), manifestJson, 'utf8');
-console.log(`Built curated momentum pilot ${buildVersion} (${combinedDigest})`);
+console.log(`Built curated momentum pilot ${buildVersion} (${buildSha}; artifact ${artifactSha})`);

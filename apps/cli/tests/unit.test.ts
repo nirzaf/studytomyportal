@@ -4,6 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { generateDockerCompose } from '../src/templates/docker-compose.js'
+import { readPostgresComposeSettings } from '../src/services/postgres-compose.js'
+import { POSTGRES_DATA_VOLUME_PATH, POSTGRES_IMAGE } from '../src/constants.js'
 import { generateEnvFile } from '../src/templates/env.js'
 import { generateNginxConf } from '../src/templates/nginx.js'
 import { generateCaddyfile } from '../src/templates/caddyfile.js'
@@ -64,6 +66,40 @@ describe('generateDockerCompose', () => {
     expect(yml).toContain('pgvector')
   })
 
+  it('uses the pinned PostgreSQL 19 image and the parent data mount on a fresh local install', () => {
+    const yml = generateDockerCompose(baseConfig)
+    expect(yml).toContain(`image: ${POSTGRES_IMAGE}`)
+    expect(yml).toContain(`learnhouse_db_data_test1234:${POSTGRES_DATA_VOLUME_PATH}`)
+    expect(yml).not.toContain('/var/lib/postgresql/data')
+  })
+
+  it('preserves an existing major-version image and data mount during reconfiguration', () => {
+    const yml = generateDockerCompose(baseConfig, 'ghcr.io/learnhouse/app:1.0.0', {
+      image: 'pgvector/pgvector:pg16',
+      dataVolumePath: '/var/lib/postgresql/data',
+      dataVolumeMount: 'custom_pgdata:/var/lib/postgresql/data:rw',
+      dataVolumeSource: 'custom_pgdata',
+      dataVolumeIsBind: false,
+      dataVolumeDeclaration: '  custom_pgdata:\n    name: studytomy-existing-volume',
+    })
+    expect(yml).toContain('image: pgvector/pgvector:pg16')
+    expect(yml).toContain('custom_pgdata:/var/lib/postgresql/data:rw')
+    expect(yml).toContain('  custom_pgdata:\n    name: studytomy-existing-volume')
+    expect(yml).not.toContain('learnhouse_db_data_test1234:')
+  })
+
+  it('preserves a PostgreSQL bind source without declaring a named volume', () => {
+    const yml = generateDockerCompose(baseConfig, 'ghcr.io/learnhouse/app:1.0.0', {
+      image: 'postgres:16',
+      dataVolumePath: '/var/lib/postgresql/data',
+      dataVolumeMount: './existing-db:/var/lib/postgresql/data:rw',
+      dataVolumeSource: './existing-db',
+      dataVolumeIsBind: true,
+    })
+    expect(yml).toContain('./existing-db:/var/lib/postgresql/data:rw')
+    expect(yml).not.toContain('  learnhouse_db_data_test1234:')
+  })
+
   it('excludes db when useExternalDb is true', () => {
     const yml = generateDockerCompose({ ...baseConfig, useExternalDb: true })
     expect(yml).not.toContain('learnhouse-db-test1234')
@@ -113,6 +149,39 @@ describe('generateDockerCompose', () => {
     const yml = generateDockerCompose({ ...baseConfig, s3Enabled: true })
     expect(yml).not.toContain('/app/api/content')
     expect(yml).not.toContain('learnhouse_content_test1234')
+  })
+})
+
+describe('readPostgresComposeSettings', () => {
+  it('reads the database image and mount target from a legacy PG16 compose file', () => {
+    const compose = `services:\n  db:\n    image: pgvector/pgvector:pg16\n    volumes:\n      - learnhouse_db_data:/var/lib/postgresql/data\n  redis:\n    image: redis:7\n`
+    expect(readPostgresComposeSettings(compose)).toEqual({
+      image: 'pgvector/pgvector:pg16',
+      dataVolumePath: '/var/lib/postgresql/data',
+      dataVolumeMount: 'learnhouse_db_data:/var/lib/postgresql/data',
+      dataVolumeSource: 'learnhouse_db_data',
+      dataVolumeIsBind: false,
+      dataVolumeDeclaration: '  learnhouse_db_data:',
+    })
+  })
+
+  it('retains a declared custom Docker volume name and a bind source', () => {
+    const named = readPostgresComposeSettings(`services:\n  db:\n    image: postgres:16\n    volumes:\n      - pgdata:/var/lib/postgresql/data:rw\nvolumes:\n  pgdata:\n    external: true\n    name: school-postgres-data\n`)
+    expect(named?.dataVolumeDeclaration).toBe('  pgdata:\n    external: true\n    name: school-postgres-data')
+    expect(named?.dataVolumeMount).toBe('pgdata:/var/lib/postgresql/data:rw')
+
+    const bind = readPostgresComposeSettings(`services:\n  db:\n    image: postgres:16\n    volumes:\n      - ./existing-data:/var/lib/postgresql/data:rw\n`)
+    expect(bind).toMatchObject({
+      dataVolumeMount: './existing-data:/var/lib/postgresql/data:rw',
+      dataVolumeSource: './existing-data',
+      dataVolumeIsBind: true,
+    })
+    expect(bind?.dataVolumeDeclaration).toBeUndefined()
+  })
+
+  it('fails closed when the local database image or persistent mount is missing', () => {
+    expect(readPostgresComposeSettings('services:\n  db:\n    image: postgres:16\n')).toBeNull()
+    expect(readPostgresComposeSettings('services:\n  redis:\n    image: redis:7\n')).toBeNull()
   })
 })
 

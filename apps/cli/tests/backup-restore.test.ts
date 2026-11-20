@@ -32,6 +32,7 @@ const dockerMock = vi.hoisted(() => ({
   dockerComposeUp: vi.fn(),
   dockerExecToFile: vi.fn(),
   dockerExecFromFile: vi.fn(),
+  dockerExec: vi.fn(() => '16.4'),
   dockerComposeRunToFile: vi.fn(),
   dockerComposeRunFromFile: vi.fn(),
 }))
@@ -45,7 +46,7 @@ class ProcessExit extends Error {
   constructor(code: number) { super(`process.exit(${code})`); this.code = code }
 }
 
-const DUMP_SQL = 'CREATE TABLE t (id int);\nDROP TABLE IF EXISTS t;\n'
+const DUMP_SQL = '-- Dumped from database version 16.4\nCREATE TABLE t (id int);\nDROP TABLE IF EXISTS t;\n'
 const PG_DUMP = 'pg_dump -U "${POSTGRES_USER:-learnhouse}" --clean --if-exists "${POSTGRES_DB:-learnhouse}"'
 
 /** Restore (and backup's interactive menu) need BOTH stdin and stdout to be terminals. */
@@ -97,6 +98,7 @@ describe('backup / restore: real tar, stubbed database', () => {
     dockerMock.dockerExecFromFile.mockReset().mockImplementation((_c: string, cmd: string[], inPath: string) => {
       if (cmd[0] === 'sh') restoredSql.push(fs.readFileSync(inPath, 'utf-8'))
     })
+    dockerMock.dockerExec.mockReset().mockReturnValue('16.4')
     dockerMock.dockerExecToFile.mockReset().mockImplementation((_c: string, cmd: string[], out: string) =>
       fs.writeFileSync(out, cmd[0] === 'tar' ? 'content-tar-bytes' : DUMP_SQL))
     dockerMock.dockerComposeRunToFile.mockReset().mockImplementation((_d: string, _svc: string, _cmd: string[], out: string) =>
@@ -146,7 +148,7 @@ describe('backup / restore: real tar, stubbed database', () => {
     expect(fs.readFileSync(path.join(out, sub, 'database.sql'), 'utf-8')).toContain('DROP TABLE IF EXISTS')
     expect(fs.existsSync(path.join(out, sub, '.env'))).toBe(true)
     const meta = JSON.parse(fs.readFileSync(path.join(out, sub, 'backup.json'), 'utf-8'))
-    expect(meta).toMatchObject({ deploymentId: 'dep1', edition: 'community' })
+    expect(meta).toMatchObject({ deploymentId: 'dep1', edition: 'community', postgresVersion: '16.4' })
     fs.rmSync(out, { recursive: true, force: true })
   })
 
@@ -220,6 +222,54 @@ describe('backup / restore: real tar, stubbed database', () => {
     expect(restoredSql).toEqual([DUMP_SQL])
     // The per-run .restore-XXXXXX working dir must be cleaned up afterwards.
     expect(restoreDirs()).toEqual([])
+  })
+
+  it('refuses a PostgreSQL 19 dump on a PostgreSQL 16 target before stopping services or running psql', async () => {
+    await backupCommand()
+    const archive = latestArchive()
+    const extracted = fs.mkdtempSync(path.join(os.tmpdir(), 'lh-br-pg19-'))
+    execSync(`tar -xzf "${archive}" -C "${extracted}"`, { stdio: 'pipe' })
+    const backupFolder = path.join(extracted, fs.readdirSync(extracted)[0])
+    const metaPath = path.join(backupFolder, 'backup.json')
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'))
+    meta.postgresVersion = '19.0'
+    fs.writeFileSync(metaPath, JSON.stringify(meta))
+    fs.writeFileSync(path.join(backupFolder, 'database.sql'), DUMP_SQL.replace('16.4', '19.0'))
+    const pg19Archive = path.join(home, 'pg19-backup.tar.gz')
+    execSync(`tar -czf "${pg19Archive}" -C "${extracted}" "${fs.readdirSync(extracted)[0]}"`, { stdio: 'pipe' })
+    fs.rmSync(extracted, { recursive: true, force: true })
+    dockerMock.dockerExec.mockReturnValue('16.11')
+    dockerMock.dockerComposeStop.mockClear()
+    dockerMock.dockerExecFromFile.mockClear()
+    const error = vi.spyOn(promptStub.log, 'error')
+
+    const err = await restoreCommand(pg19Archive, { yes: true }).catch((e) => e)
+    expect(err).toBeInstanceOf(ProcessExit)
+    expect(err.code).toBe(1)
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('Refusing to restore a PostgreSQL 19 backup into PostgreSQL 16'))
+    expect(dockerMock.dockerComposeStop).not.toHaveBeenCalled()
+    expect(dockerMock.dockerExecFromFile).not.toHaveBeenCalled()
+  })
+
+  it('accepts PostgreSQL 19 backup on PostgreSQL 19 target', async () => {
+    await backupCommand()
+    const archive = latestArchive()
+    const extracted = fs.mkdtempSync(path.join(os.tmpdir(), 'lh-br-pg19ok-'))
+    execSync(`tar -xzf "${archive}" -C "${extracted}"`, { stdio: 'pipe' })
+    const backupFolderName = fs.readdirSync(extracted)[0]
+    const backupFolder = path.join(extracted, backupFolderName)
+    const metaPath = path.join(backupFolder, 'backup.json')
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'))
+    meta.postgresVersion = '19.0'
+    fs.writeFileSync(metaPath, JSON.stringify(meta))
+    fs.writeFileSync(path.join(backupFolder, 'database.sql'), DUMP_SQL.replace('16.4', '19.0'))
+    const pg19Archive = path.join(home, 'pg19-compatible-backup.tar.gz')
+    execSync(`tar -czf "${pg19Archive}" -C "${extracted}" "${backupFolderName}"`, { stdio: 'pipe' })
+    fs.rmSync(extracted, { recursive: true, force: true })
+    dockerMock.dockerExec.mockReturnValue('19.0')
+
+    await expect(restoreCommand(pg19Archive, { yes: true })).resolves.toBeUndefined()
+    expect(dockerMock.dockerExecFromFile).toHaveBeenCalledTimes(1)
   })
 
   it('non-TTY restore without --yes exits 1 and never touches the database; with --yes it proceeds', async () => {

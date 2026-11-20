@@ -11,6 +11,7 @@ import { writeConfig, readConfig } from '../services/config-store.js'
 import { hasComposeService } from '../services/stack.js'
 import { readEnvVar } from '../utils/env-file.js'
 import { writeFileAtomic } from '../utils/fs-atomic.js'
+import { readPostgresComposeSettings, type PostgresComposeSettings } from '../services/postgres-compose.js'
 import {
   dockerLogin,
   dockerLogout,
@@ -143,11 +144,23 @@ function writeOrRemove(file: string, wanted: boolean, content: () => string): vo
   else fs.rmSync(file, { force: true })
 }
 
-function writeEeFiles(config: SetupConfig, secrets: EeSecrets): void {
+function existingDatabaseSettings(installDir: string): PostgresComposeSettings | undefined {
+  const composePath = path.join(installDir, 'docker-compose.yml')
+  if (!fs.existsSync(composePath)) return undefined
+  const compose = fs.readFileSync(composePath, 'utf-8')
+  if (!/^  db:\s*$/m.test(compose)) return undefined
+  const settings = readPostgresComposeSettings(compose)
+  if (!settings) {
+    throw new Error(`Cannot safely reconfigure ${installDir}: local database image or persistent mount could not be read from docker-compose.yml. Preserve the current database configuration and inspect it manually.`)
+  }
+  return settings
+}
+
+function writeEeFiles(config: SetupConfig, secrets: EeSecrets, database?: PostgresComposeSettings): void {
   const dir = config.installDir
   // Owner-only: .env holds the license, DB password, JWT secret and tokens.
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
-  writeFileAtomic(path.join(dir, 'docker-compose.yml'), generateEeDockerCompose(config))
+  writeFileAtomic(path.join(dir, 'docker-compose.yml'), generateEeDockerCompose(config, database))
   writeFileAtomic(path.join(dir, '.env'), generateEeEnv(config, secrets), 0o600)
   writeFileAtomic(path.join(dir, 'Caddyfile'), generateEeCaddyfile(config))
   writeOrRemove(path.join(dir, 'pgvector-init.sql'), !isExternalDb(config), generatePgvectorInit)
@@ -393,9 +406,11 @@ async function setupEnterpriseCi(options: EeSetupOptions): Promise<void> {
   })
 
   const secrets = resolveSecrets(installDir)
+  let database: PostgresComposeSettings | undefined
   console.log(`Setting up LearnHouse Enterprise (${tenancy}) in ${installDir}`)
   try {
-    writeEeFiles(config, secrets)
+    database = existingDatabaseSettings(installDir)
+    writeEeFiles(config, secrets, database)
   } catch (err) {
     fail(`could not write configuration files to ${installDir}: ${(err as Error)?.message ?? String(err)}`)
   }
@@ -504,10 +519,12 @@ async function setupEnterpriseInteractive(options: EeSetupOptions): Promise<void
   })
 
   const secrets = resolveSecrets(installDir)
+  let database: PostgresComposeSettings | undefined
   const s = p.spinner()
   s.start('Generating configuration files')
   try {
-    writeEeFiles(config, secrets)
+    database = existingDatabaseSettings(installDir)
+    writeEeFiles(config, secrets, database)
   } catch (err) {
     s.stop('Failed to generate configuration files')
     p.log.error(`Could not write to ${installDir}: ${(err as Error)?.message ?? String(err)}`)

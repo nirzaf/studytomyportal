@@ -66,7 +66,7 @@ from src.services.studytomy.releases import (
     course_candidate_snapshot,
     validate_release_media_coverage,
 )
-from src.services.studytomy.virtual_labs import validate_governed_virtual_lab_content
+from src.services.studytomy.virtual_labs import approved_virtual_lab_manifests, validate_governed_virtual_lab_content
 from src.tests.studytomy.test_current_head_audit_remediations import _seed_policies_with_approvals
 
 
@@ -81,7 +81,9 @@ def _valid_lab_content(
             "lab_id": "conservation-momentum",
             "experiment_id": "conservation-momentum",
             "build_version": "1.0.0-pilot.1",
-            "build_sha256": "3d5209e7896a5594f01c3d65282740c746ee2860d2e5f702acdb003e00595dcf",
+            "build_sha256": approved_virtual_lab_manifests()[
+                ("conservation-momentum", "1.0.0-pilot.1")
+            ]["build_sha256"],
             "entry_url": entry_url,
             "units_system": "SI",
             "source_repository": "https://github.com/danielw-sudo/agentuto",

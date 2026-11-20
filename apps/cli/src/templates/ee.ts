@@ -6,7 +6,10 @@ import {
   EE_COLLAB_IMAGE,
   EE_FRONTEND_IMAGE,
   EE_LICENSE_SERVER,
+  POSTGRES_DATA_VOLUME_PATH,
+  POSTGRES_IMAGE,
 } from '../constants.js'
+import type { PostgresComposeSettings } from '../services/postgres-compose.js'
 
 // Enterprise Edition deploy templates. These mirror the production-grade
 // partner templates (single / agency) that ship at
@@ -67,7 +70,7 @@ export function isCloudflareDns(config: SetupConfig): boolean {
   return config.dnsProvider === 'cloudflare'
 }
 
-export function generateEeDockerCompose(config: SetupConfig): string {
+export function generateEeDockerCompose(config: SetupConfig, existingDatabase?: PostgresComposeSettings): string {
   const id = config.deploymentId
   const tag = config.eeImageTag || 'prod'
   const agency = isAgency(config)
@@ -85,13 +88,13 @@ export function generateEeDockerCompose(config: SetupConfig): string {
   const dbService = external
     ? ''
     : `  db:
-    image: pgvector/pgvector:pg16
+    image: ${existingDatabase?.image ?? POSTGRES_IMAGE}
     environment:
       POSTGRES_USER: \${DB_USER:-learnhouse}
       POSTGRES_PASSWORD: \${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_DB: \${DB_NAME:-learnhouse}
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - ${existingDatabase?.dataVolumeMount ?? `db_data:${POSTGRES_DATA_VOLUME_PATH}`}
       - ./pgvector-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     restart: unless-stopped
     healthcheck:
@@ -123,7 +126,9 @@ export function generateEeDockerCompose(config: SetupConfig): string {
   const caddyCfEnv = cfDns ? `
       CLOUDFLARE_API_TOKEN: \${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required for DNS-01}` : ''
 
-  const dbVolume = external ? '' : '  db_data:\n'
+  const dbVolume = external || existingDatabase?.dataVolumeIsBind
+    ? ''
+    : `${existingDatabase?.dataVolumeDeclaration ?? '  db_data:'}\n`
   const networksBlock = ipv6 ? `
 
 networks:

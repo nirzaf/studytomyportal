@@ -167,7 +167,7 @@ This inventory describes the checked-out source and committed dependency declara
 | Collaboration | Hocuspocus 4.8.0, Yjs 13.6.33, ioredis 6.0.0 | `apps/collab/package.json`, `apps/collab/bun.lock` |
 | AI adapters | Pydantic AI Slim 2.66.0 (OpenAI, Anthropic, Google, Mistral extras), Google GenAI 2.34.0 | API inventory; provider configuration and approval still required |
 | Package/build tooling | Bun 1.4.4, uv 0.10.7; Node 26.13.0 in combined container; PM2 7.1.0 | `.bun-version`, root `Dockerfile` |
-| Database and cache templates | `pgvector/pgvector:pg16`, `redis:7.4-alpine` | `apps/cli/src/constants.ts`; image tags do not pin exact patch/digest |
+| Database and cache templates | Fresh CLI-managed local databases use `pgvector/pgvector:0.8.7-pg19` pinned by multi-architecture digest; local development uses an isolated PG19 profile | `apps/cli/src/constants.ts`, `apps/cli/src/commands/dev.ts`; existing installs retain their selected database image and mount until explicitly migrated |
 | Proxy templates | `nginx:1.30-alpine`, `caddy:2.11-alpine`, `alpine/socat:1.8.1.3` | `apps/cli/src/constants.ts`; OS packages installed by `apk` are not exactly pinned |
 | Tests | Bun test, pytest 9.2.0, Playwright 1.64.1, Vitest 5.1.0 | Per-component manifests below |
 | Documentation | Next.js 16.4.5, Fumadocs Core 16.18.1 / MDX 15.5.0 | `docs/package.json`, `docs/bun.lock` |

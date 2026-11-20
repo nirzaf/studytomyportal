@@ -25,6 +25,7 @@ import { checkPort, findAvailablePort } from '../utils/network.js'
 import { resolveAppImage } from '../services/version-check.js'
 import { readEnvVar } from '../utils/env-file.js'
 import { writeFileAtomic } from '../utils/fs-atomic.js'
+import { readPostgresComposeSettings, type PostgresComposeSettings } from '../services/postgres-compose.js'
 import {
   validateEmail,
   validateInstallName,
@@ -74,6 +75,8 @@ interface ExistingInstall {
   /** Connection strings of an external database / Redis (no db / redis service in compose). */
   externalDb?: string
   externalRedis?: string
+  /** Preserve the existing local PostgreSQL major and data path on reconfigure. */
+  database?: PostgresComposeSettings
 }
 
 function composeImage(dir: string): string | undefined {
@@ -85,6 +88,13 @@ function composeImage(dir: string): string | undefined {
 function readExistingInstall(dir: string): ExistingInstall | null {
   const config = readConfig(dir)
   if (!config?.deploymentId || !fs.existsSync(path.join(dir, '.env'))) return null
+  const composePath = path.join(dir, 'docker-compose.yml')
+  const compose = fs.existsSync(composePath) ? fs.readFileSync(composePath, 'utf-8') : ''
+  const hasLocalDatabase = /^  db:\s*$/m.test(compose)
+  const database = hasLocalDatabase ? readPostgresComposeSettings(compose) : undefined
+  if (hasLocalDatabase && !database) {
+    throw new Error(`Cannot safely reconfigure ${dir}: local database image or persistent mount could not be read from docker-compose.yml. Preserve the current database configuration and inspect it manually.`)
+  }
   return {
     edition: config.edition || 'community',
     deploymentId: config.deploymentId,
@@ -99,6 +109,7 @@ function readExistingInstall(dir: string): ExistingInstall | null {
     image: composeImage(dir),
     externalDb: hasComposeService(dir, 'db') ? undefined : readEnvVar(dir, 'LEARNHOUSE_SQL_CONNECTION_STRING'),
     externalRedis: hasComposeService(dir, 'redis') ? undefined : readEnvVar(dir, 'LEARNHOUSE_REDIS_CONNECTION_STRING'),
+    database,
   }
 }
 
@@ -266,11 +277,11 @@ function summaryLines(config: SetupConfig): string {
   ].join('\n')
 }
 
-function writeInstallFiles(config: SetupConfig, appImage: string, secrets: Partial<EnvSecrets>): void {
+function writeInstallFiles(config: SetupConfig, appImage: string, secrets: Partial<EnvSecrets>, database?: PostgresComposeSettings): void {
   const dir = config.installDir
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
   fs.mkdirSync(path.join(dir, 'extra'), { recursive: true })
-  writeFileAtomic(path.join(dir, 'docker-compose.yml'), generateDockerCompose(config, appImage))
+  writeFileAtomic(path.join(dir, 'docker-compose.yml'), generateDockerCompose(config, appImage, database))
   writeFileAtomic(path.join(dir, '.env'), generateEnvFile(config, secrets), 0o600)
   if (config.autoSsl) {
     writeFileAtomic(path.join(dir, 'extra', 'Caddyfile'), generateCaddyfile(config))
@@ -430,7 +441,7 @@ export async function setupCommand(rawOptions: SetupOptions) {
         ciFail(`could not move uploaded content into a persistent volume: ${(err as Error)?.message ?? err}. Nothing was changed.`)
       }
     }
-    writeInstallFiles(config, appImage, existing?.secrets ?? {})
+    writeInstallFiles(config, appImage, existing?.secrets ?? {}, existing?.database)
 
     console.log('Configuration files generated')
 
@@ -680,7 +691,7 @@ export async function setupCommand(rawOptions: SetupOptions) {
   const finalDir = config.installDir
   try {
     if (existing) preserveContent(finalDir, existing)
-    writeInstallFiles(config, appImage, existing?.secrets ?? {})
+    writeInstallFiles(config, appImage, existing?.secrets ?? {}, existing?.database)
   } catch (err: any) {
     s.stop('Failed to generate configuration files')
     p.log.error(err?.message ?? String(err))

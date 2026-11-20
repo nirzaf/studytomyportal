@@ -4,8 +4,12 @@ export const DEV_IMAGE = 'ghcr.io/learnhouse/app:dev'
 // Third-party images are pinned to a minor line: patch releases (security
 // fixes) still arrive on pull, new minors/majors only with a CLI release.
 export const NGINX_IMAGE = 'nginx:1.30-alpine'
-export const POSTGRES_IMAGE = 'pgvector/pgvector:pg16'
-export const POSTGRES_AI_IMAGE = 'pgvector/pgvector:pg16'
+// PostgreSQL 19.0 + pgvector 0.8.7. The multi-architecture manifest is pinned
+// so fresh installs resolve to the same reviewed image on amd64 and arm64.
+export const POSTGRES_IMAGE = 'pgvector/pgvector:0.8.7-pg19@sha256:89879f41d564f67b0c1462a491d16fcbc6de39ac10db17e7a4bba2138a5e0ba5'
+export const POSTGRES_AI_IMAGE = POSTGRES_IMAGE
+export const POSTGRES_CLIENT_IMAGE = 'postgres:19@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60'
+export const POSTGRES_DATA_VOLUME_PATH = '/var/lib/postgresql'
 export const REDIS_IMAGE = 'redis:7.4-alpine'
 export const CADDY_IMAGE = 'caddy:2.11-alpine'
 export const SOCAT_IMAGE = 'alpine/socat:1.8.1.3'

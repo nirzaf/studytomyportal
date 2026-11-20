@@ -4,6 +4,11 @@ import path from 'node:path';
 
 const rootDir = path.resolve(import.meta.dirname, '..');
 const distDir = path.join(rootDir, 'dist');
+const manifest = JSON.parse(fs.readFileSync(path.join(distDir, 'manifest.json'), 'utf8'));
+const corsAssets = new Set([
+  `assets/${manifest.bundle_asset.split('/').at(-1)}`,
+  `${manifest.lab_id}/${manifest.build_version}/${manifest.bundle_asset}`,
+]);
 
 const MIME_BY_EXT = {
   '.html': 'text/html; charset=utf-8',
@@ -58,15 +63,16 @@ const server = http.createServer((req, res) => {
   }
   const ext = path.extname(target).toLowerCase();
   const isImmutableAsset = cleanRel.includes('/assets/') || cleanRel.startsWith('assets/');
-  res.writeHead(200, {
+  const headers = {
     'Content-Type': MIME_BY_EXT[ext] || 'application/octet-stream',
-    'Access-Control-Allow-Origin': '*',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
     'Content-Security-Policy': cspHeader,
     'Cache-Control': isImmutableAsset ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate',
-  });
+  };
+  if (corsAssets.has(cleanRel)) headers['Access-Control-Allow-Origin'] = '*';
+  res.writeHead(200, headers);
   if (req.method === 'HEAD') {
     res.end();
     return;

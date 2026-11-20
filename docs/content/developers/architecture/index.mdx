@@ -48,7 +48,7 @@ The API also runs background work inside its own process: AI search indexing, vi
 
 LearnHouse relies on two primary backing services:
 
-- **PostgreSQL 16 (pgvector)**: The primary relational database for storing all application data including users, courses, organizations, and activity records. Uses the pgvector extension for AI embedding storage. Both dev and self-host production use the `pgvector/pgvector:pg16` image.
+- **PostgreSQL (pgvector)**: Fresh CLI-managed local databases and the isolated local development profile use the digest-pinned PostgreSQL 19 / pgvector 0.8.7 image. Existing installations keep their configured database image and data mount until an explicit major-version migration is completed.
 - **Redis**: Used for caching, session management, rate limiting, background job queues, and collaboration state persistence. Dev mode uses `redis:8.6.1-alpine`; the CLI-generated self-host production stack uses `redis:7.4-alpine`.
 
 ## Deployed Image

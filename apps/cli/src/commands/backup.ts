@@ -14,6 +14,7 @@ import {
   dockerComposeUp,
   dockerExecToFile,
   dockerExecFromFile,
+  dockerExec,
 } from '../services/docker.js'
 import { stackLayout, usesExternalDb, usesS3Content } from '../services/stack.js'
 import type { LearnHouseConfigJson } from '../types.js'
@@ -36,11 +37,30 @@ interface BackupMeta {
   edition: string
   createdAt: string
   content: boolean
+  postgresVersion: string
 }
 
 function errorDetail(err: unknown): string {
   const e = err as { stderr?: Buffer | string; message?: string }
   return (e?.stderr?.toString().trim() || e?.message || String(err)).slice(0, 800)
+}
+
+/** The first pg_dump comment records the source server version. */
+function readDumpServerVersion(dumpPath: string): string | null {
+  const fd = fs.openSync(dumpPath, 'r')
+  try {
+    const buffer = Buffer.alloc(64 * 1024)
+    const bytes = fs.readSync(fd, buffer, 0, buffer.length, 0)
+    const match = buffer.toString('utf8', 0, bytes).match(/^-- Dumped from database version (.+)$/m)
+    return match?.[1]?.trim() ?? null
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
+function postgresMajor(version: string): number | null {
+  const match = version.match(/^(\d+)(?:\.\d+)?/)
+  return match ? Number(match[1]) : null
 }
 
 /**
@@ -115,6 +135,7 @@ async function createBackup() {
   // content capture one consistent point in time. Services are restarted in
   // the finally block regardless of outcome.
   const stopped: string[] = []
+  let backupPostgresVersion = ''
   try {
     const running = layout.dbClients.filter((svc) => composeServiceContainer(installDir, svc))
     for (const svc of running) {
@@ -128,6 +149,17 @@ async function createBackup() {
       const dumpPath = path.join(stagingDir, 'database.sql')
       dockerExecToFile(dbContainer, ['sh', '-c', PG_DUMP], dumpPath)
       if (fs.statSync(dumpPath).size === 0) throw new Error('pg_dump produced an empty dump')
+      const dumpVersion = readDumpServerVersion(dumpPath)
+      if (!dumpVersion) throw new Error('pg_dump did not include its source PostgreSQL server version')
+      // Read the active server version separately from the client version in
+      // the dump header; the latter can be newer when exporting an external DB.
+      const serverVersion = dockerExec(dbContainer, [
+        'sh', '-c', 'psql -U "${POSTGRES_USER:-learnhouse}" -d "${POSTGRES_DB:-learnhouse}" -Atc "SHOW server_version"',
+      ])
+      if (!serverVersion || postgresMajor(serverVersion) !== postgresMajor(dumpVersion)) {
+        throw new Error(`PostgreSQL server version could not be matched to the dump (${dumpVersion} -> ${serverVersion || 'unknown'})`)
+      }
+      backupPostgresVersion = serverVersion
       s.stop('Database dump created')
     } catch (err) {
       s.stop('Database dump failed')
@@ -175,6 +207,7 @@ async function createBackup() {
       edition: config.edition || 'community',
       createdAt: new Date().toISOString(),
       content,
+      postgresVersion: backupPostgresVersion,
     }
     fs.writeFileSync(path.join(stagingDir, 'backup.json'), JSON.stringify(meta, null, 2) + '\n', { mode: 0o600 })
 
@@ -292,6 +325,22 @@ export async function restoreBackup(archivePath: string, options: RestoreOptions
       fail(`Failed to read backup: ${errorDetail(err)}`)
     }
     const meta = readMeta(dump.folder)
+    const sourceVersion = meta.postgresVersion || readDumpServerVersion(dump.dumpPath)
+    if (sourceVersion) {
+      const targetVersion = dockerExec(dbContainer, [
+        'sh', '-c', 'psql -U "${POSTGRES_USER:-learnhouse}" -d "${POSTGRES_DB:-learnhouse}" -Atc "SHOW server_version"',
+      ])
+      const sourceMajor = postgresMajor(sourceVersion)
+      const targetMajor = postgresMajor(targetVersion)
+      if (sourceMajor === null || targetMajor === null) {
+        fail(`Could not verify PostgreSQL compatibility (backup: ${sourceVersion}; target: ${targetVersion || 'unknown'}). No database changes were made.`)
+      }
+      if (targetMajor < sourceMajor) {
+        fail(`Refusing to restore a PostgreSQL ${sourceMajor} backup into PostgreSQL ${targetMajor}. Restore into the same or a newer major version; no database changes were made.`)
+      }
+    } else {
+      p.log.warn('Backup does not record its PostgreSQL source version; major-version compatibility could not be checked.')
+    }
 
     // Nothing may hold connections or write while the schema is replaced.
     const running = layout.dbClients.filter((svc) => composeServiceContainer(installDir, svc))

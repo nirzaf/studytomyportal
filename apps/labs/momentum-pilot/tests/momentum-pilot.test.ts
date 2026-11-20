@@ -214,11 +214,14 @@ test('T-02 & T-05 built artifact removes standalone AI, pins SHA-256 manifest, a
   const html = fs.readFileSync(path.join(distDir, 'index.html'));
   const jsBytes = fs.readFileSync(path.join(distDir, manifest.bundle_asset));
   const headers = fs.readFileSync(path.join(distDir, '_headers'));
-  const computed = crypto.createHash('sha256').update(html).update(jsBytes).update(headers).digest('hex');
-  assert.equal(manifest.build_sha256, computed);
+  const artifactSha = crypto.createHash('sha256').update(html).update(jsBytes).update(headers).digest('hex');
+  assert.equal(manifest.artifact_sha256, artifactSha);
+  assert.equal(manifest.build_identity, 'studytomy-lab-source-input-sha256-v1');
 
   // Zero browser AI endpoints or API key collection in built bundle
   const bundleText = jsBytes.toString('utf8');
+  assert.ok(bundleText.includes(manifest.build_sha256), 'Build identity is compiled into the immutable browser bundle');
+  assert.doesNotMatch(bundleText, /unpinned-local-dev|__STUDYTOMY_LAB_BUILD_SHA256__/);
   assert.doesNotMatch(bundleText, /generativelanguage\.googleapis\.com/i);
   assert.doesNotMatch(bundleText, /geminiClient|playlistGenerator|GEMINI_API_KEY/i);
   assert.doesNotMatch(bundleText, /agentuto\.inquiry-log\.v1/i);
@@ -228,6 +231,10 @@ test('T-02 & T-05 built artifact removes standalone AI, pins SHA-256 manifest, a
   assert.doesNotMatch(headerText, /X-Frame-Options:\s*SAMEORIGIN/i);
   assert.match(headerText, /frame-ancestors 'self' https:\/\/lms\.studytomy\.com/);
   assert.match(headerText, /connect-src 'none'/);
+  assert.equal((headerText.match(/Access-Control-Allow-Origin:/g) || []).length, 2);
+  assert.doesNotMatch(headerText, /Access-Control-Allow-Credentials/i);
+  assert.doesNotMatch(headerText, /\/\*\s*\n\s*Access-Control-Allow-Origin:/i);
+  assert.match(headerText, new RegExp(`/${manifest.bundle_asset.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n  Access-Control-Allow-Origin: \\*`));
   assert.ok(fs.existsSync(path.join(distDir, 'LICENSE')));
 
   // Versioned immutable path contains identical reviewed artifact set
@@ -237,4 +244,10 @@ test('T-02 & T-05 built artifact removes standalone AI, pins SHA-256 manifest, a
   assert.ok(fs.existsSync(path.join(versionedDir, 'manifest.json')));
   assert.ok(fs.existsSync(path.join(versionedDir, 'LICENSE')));
   assert.equal(manifest.versioned_entry_path, `${manifest.lab_id}/${manifest.build_version}/index.html`);
+
+  const csvSession = new ExperimentRunSession(new MomentumEngine(), {
+    buildVersion: manifest.build_version,
+    buildSha256: manifest.build_sha256,
+  });
+  assert.match(formatRunToCSV(csvSession.getActiveRun()), new RegExp(`# Build SHA-256: ${manifest.build_sha256}`));
 });

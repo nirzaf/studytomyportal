@@ -16,6 +16,7 @@ import {
 import { usesExternalDb } from '../services/stack.js'
 import { readEnvVar, setEnvVar } from '../utils/env-file.js'
 import { IMAGE_TAG_RE } from '../utils/validators.js'
+import { POSTGRES_CLIENT_IMAGE } from '../constants.js'
 
 // Shared upgrade helpers used by BOTH the Community and Enterprise update paths:
 // a pre-upgrade DB backup, Alembic baseline stamping (for create_all installs),
@@ -50,7 +51,7 @@ function alembic(cwd: string, layout: EditionLayout, args: string): string {
 // pg_dump must be at least the server's major version, and a newer pg_dump can
 // still dump older servers, so pin a recent client image for the external-DB
 // dump path (works for current managed Postgres and older in-container DBs).
-const PG_CLIENT_IMAGE = 'postgres:17'
+const PG_CLIENT_IMAGE = POSTGRES_CLIENT_IMAGE
 
 export { IMAGE_TAG_RE }
 

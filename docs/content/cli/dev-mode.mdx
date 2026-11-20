@@ -72,10 +72,14 @@ The CLI also sets these for the processes it starts:
 | API | `uv run python app.py` | 1338 |
 | Web | `next dev --turbopack` | 3000 |
 | Collab | `tsx watch src/index.ts` | 4000 |
-| PostgreSQL | Docker (`pgvector/pgvector:pg16`) | 5432, bound to `127.0.0.1` |
-| Redis | Docker (`redis:8.6.1-alpine`) | 6379, bound to `127.0.0.1` |
+| PostgreSQL | Docker (digest-pinned PostgreSQL 19 + pgvector 0.8.7) | 5433, bound to `127.0.0.1` |
+| Redis | Docker (`redis:8.6.1-alpine`) | 6380, bound to `127.0.0.1` |
 
-The development database uses user, password and database name `learnhouse`.
+The isolated `learnhouse-dev-pg19` profile uses user, password and database name `learnhouse`, with a separate named volume mounted at `/var/lib/postgresql`. It leaves the previous `learnhouse-dev` PostgreSQL 16 and Redis volumes untouched. Stop the PG19 profile with:
+
+```bash
+docker compose -f .learnhouse/docker-compose.pg19.yml -p learnhouse-dev-pg19 down
+```
 
 ## Interactive Controls
 

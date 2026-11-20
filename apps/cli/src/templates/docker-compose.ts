@@ -1,11 +1,12 @@
-import { APP_IMAGE, CADDY_IMAGE, NGINX_IMAGE, POSTGRES_IMAGE, POSTGRES_AI_IMAGE, REDIS_IMAGE, SOCAT_IMAGE } from '../constants.js'
+import { APP_IMAGE, CADDY_IMAGE, NGINX_IMAGE, POSTGRES_DATA_VOLUME_PATH, POSTGRES_IMAGE, POSTGRES_AI_IMAGE, REDIS_IMAGE, SOCAT_IMAGE } from '../constants.js'
+import type { PostgresComposeSettings } from '../services/postgres-compose.js'
 import type { SetupConfig } from '../types.js'
 
 /**
  * Generates docker-compose.yml with unique deployment ID.
  * External database/redis excluded. Auto SSL uses Caddy instead of nginx.
  */
-export function generateDockerCompose(config: SetupConfig, appImage?: string): string {
+export function generateDockerCompose(config: SetupConfig, appImage?: string, existingDatabase?: PostgresComposeSettings): string {
   const image = appImage || APP_IMAGE
   const id = config.deploymentId
   const useLocalDb = !config.useExternalDb
@@ -83,7 +84,9 @@ export function generateDockerCompose(config: SetupConfig, appImage?: string): s
 `
     : ''
 
-  const dbImage = config.useAiDatabase ? POSTGRES_AI_IMAGE : POSTGRES_IMAGE
+  const dbImage = existingDatabase?.image ?? (config.useAiDatabase ? POSTGRES_AI_IMAGE : POSTGRES_IMAGE)
+  const dbDataVolumePath = existingDatabase?.dataVolumePath ?? POSTGRES_DATA_VOLUME_PATH
+  const dbDataVolumeMount = existingDatabase?.dataVolumeMount ?? `learnhouse_db_data_${id}:${dbDataVolumePath}`
   const dbService = useLocalDb
     ? `
   db:
@@ -97,7 +100,7 @@ export function generateDockerCompose(config: SetupConfig, appImage?: string): s
       - POSTGRES_PASSWORD=\${POSTGRES_PASSWORD:-learnhouse}
       - POSTGRES_DB=\${POSTGRES_DB:-learnhouse}
     volumes:
-      - learnhouse_db_data_${id}:/var/lib/postgresql/data
+      - ${dbDataVolumeMount}
     networks:
       - learnhouse-network-${id}
     healthcheck:
@@ -137,7 +140,13 @@ export function generateDockerCompose(config: SetupConfig, appImage?: string): s
     volumeEntries.push(`  learnhouse_caddy_data_${id}:`)
     volumeEntries.push(`  learnhouse_caddy_config_${id}:`)
   }
-  if (useLocalDb) volumeEntries.push(`  learnhouse_db_data_${id}:`)
+  if (useLocalDb) {
+    if (existingDatabase?.dataVolumeIsBind) {
+      // Bind mounts are declared inline in the service, not at top-level.
+    } else {
+      volumeEntries.push(existingDatabase?.dataVolumeDeclaration ?? `  learnhouse_db_data_${id}:`)
+    }
+  }
   if (useLocalRedis) volumeEntries.push(`  learnhouse_redis_data_${id}:`)
   if (useLocalContent) volumeEntries.push(`  learnhouse_content_${id}:`)
 

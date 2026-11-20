@@ -7,24 +7,25 @@ import * as fs from 'node:fs'
 import { isDockerInstalled, isDockerRunning } from '../services/docker.js'
 import { checkDevEnv } from '../services/env-check.js'
 import { dockerExecFileSync } from '../services/docker-bin.js'
+import { POSTGRES_DATA_VOLUME_PATH, POSTGRES_IMAGE } from '../constants.js'
 
-const PROJECT_NAME = 'learnhouse-dev'
+const PROJECT_NAME = 'learnhouse-dev-pg19'
 
-const DEV_COMPOSE = `name: learnhouse-dev
+export const DEV_COMPOSE = `name: learnhouse-dev-pg19
 
 services:
   db:
-    image: pgvector/pgvector:pg16
-    container_name: learnhouse-db-dev
+    image: ${POSTGRES_IMAGE}
+    container_name: learnhouse-db-dev-pg19
     restart: unless-stopped
     environment:
       - POSTGRES_USER=learnhouse
       - POSTGRES_PASSWORD=learnhouse
       - POSTGRES_DB=learnhouse
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
-      - learnhouse_db_dev_data:/var/lib/postgresql/data
+      - learnhouse_db_dev_pg19_data:${POSTGRES_DATA_VOLUME_PATH}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U learnhouse"]
       interval: 5s
@@ -33,13 +34,13 @@ services:
 
   redis:
     image: redis:8.6.1-alpine
-    container_name: learnhouse-redis-dev
+    container_name: learnhouse-redis-dev-pg19
     restart: unless-stopped
     command: redis-server --appendonly yes
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
-      - learnhouse_redis_dev_data:/data
+      - learnhouse_redis_dev_pg19_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -47,8 +48,8 @@ services:
       retries: 5
 
 volumes:
-  learnhouse_db_dev_data:
-  learnhouse_redis_dev_data:
+  learnhouse_db_dev_pg19_data:
+  learnhouse_redis_dev_pg19_data:
 `
 
 function findProjectRoot(): string | null {
@@ -69,7 +70,7 @@ function findProjectRoot(): string | null {
 function getDevComposePath(root: string): string {
   const dotDir = path.join(root, '.learnhouse')
   if (!fs.existsSync(dotDir)) fs.mkdirSync(dotDir, { recursive: true })
-  const composePath = path.join(dotDir, 'docker-compose.dev.yml')
+  const composePath = path.join(dotDir, 'docker-compose.pg19.yml')
   fs.writeFileSync(composePath, DEV_COMPOSE)
   return composePath
 }
@@ -167,7 +168,7 @@ function isContainerRunning(name: string): boolean {
 }
 
 function isInfraRunning(): boolean {
-  return isContainerRunning('learnhouse-db-dev') && isContainerRunning('learnhouse-redis-dev')
+  return isContainerRunning('learnhouse-db-dev-pg19') && isContainerRunning('learnhouse-redis-dev-pg19')
 }
 
 let serviceEnv: Record<string, string> = {}
@@ -417,6 +418,11 @@ export async function devCommand(opts: { ee?: boolean; adminEmail?: string; admi
     ...(!opts.ee && { LEARNHOUSE_DISABLE_EE: '1' }),
     // Bypass license verification for local dev when --ee is active
     ...(opts.ee && { LEARNHOUSE_FORCE_EE: '1' }),
+    // Use an isolated PG19 profile. The previous learnhouse-dev profile and
+    // its volume remain untouched during the major-version transition.
+    LEARNHOUSE_SQL_CONNECTION_STRING: 'postgresql://learnhouse:learnhouse@127.0.0.1:5433/learnhouse',
+    LEARNHOUSE_REDIS_CONNECTION_STRING: 'redis://127.0.0.1:6380/learnhouse',
+    LEARNHOUSE_REDIS_URL: 'redis://127.0.0.1:6380',
   }
 
   // Health checks
@@ -424,8 +430,8 @@ export async function devCommand(opts: { ee?: boolean; adminEmail?: string; admi
   healthSpinner.start('Waiting for DB and Redis to be healthy...')
 
   const [dbReady, redisReady] = await Promise.all([
-    waitForHealth('DB', 'docker', ['exec', 'learnhouse-db-dev', 'pg_isready', '-U', 'learnhouse']),
-    waitForHealth('Redis', 'docker', ['exec', 'learnhouse-redis-dev', 'redis-cli', 'ping']),
+    waitForHealth('DB', 'docker', ['exec', 'learnhouse-db-dev-pg19', 'pg_isready', '-U', 'learnhouse']),
+    waitForHealth('Redis', 'docker', ['exec', 'learnhouse-redis-dev-pg19', 'redis-cli', 'ping']),
   ])
 
   if (!dbReady || !redisReady) {
@@ -486,7 +492,7 @@ export async function devCommand(opts: { ee?: boolean; adminEmail?: string; admi
     await Promise.all([killProcess(apiProc), killProcess(webProc), killProcess(collabProc)])
 
     console.log(pc.dim('DB and Redis containers are still running for next session.'))
-    console.log(pc.dim('To stop them: docker compose -f .learnhouse/docker-compose.dev.yml -p learnhouse-dev down'))
+    console.log(pc.dim('To stop them: docker compose -f .learnhouse/docker-compose.pg19.yml -p learnhouse-dev-pg19 down'))
     console.log(pc.dim('Thanks for building with LearnHouse!'))
     process.exit(exitCode)
   }
