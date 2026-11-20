@@ -98,10 +98,21 @@ class DiagnosticAccess:
 
     @property
     def available(self) -> bool:
-        return (
-            self.definition.status == "published"
-            and self.curriculum.status == "published"
-        )
+        if self.definition.status != "published":
+            return False
+        if self.curriculum.status == "published":
+            return True
+        if self.release_source is not None and self.curriculum.status == "retired":
+            binding = self.release_source.authorization.release.snapshot.get(
+                "curriculum_binding"
+            )
+            return (
+                isinstance(binding, dict)
+                and binding.get("curriculum_revision_id") == self.curriculum.id
+                and binding.get("curriculum_revision_uuid") == self.curriculum.uuid
+                and binding.get("content_digest") == self.curriculum.content_digest
+            )
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +224,11 @@ async def require_mapped_release_source(
 
     snapshot = authorization.release.snapshot
     if snapshot.get("schema") != "course_content_evidence_v4":
+        raise _unavailable()
+    bound_curriculum = await resolve_release_curriculum_binding(
+        db, org, course_uuid, authorization.release
+    )
+    if bound_curriculum is not None and bound_curriculum[0].id != curriculum.id:
         raise _unavailable()
     activity_rows = snapshot.get("activities")
     activities = (
@@ -362,6 +378,47 @@ async def require_mapped_release_source(
     )
 
 
+async def resolve_release_curriculum_binding(
+    db: AsyncSession,
+    org: Organization,
+    course_uuid: str,
+    release,
+) -> tuple[StudyCurriculumRevision, dict[str, dict]] | None:
+    """Resolve and verify an explicit immutable curriculum binding frozen in a release."""
+    binding = (release.snapshot or {}).get("curriculum_binding")
+    if binding is None:
+        return None
+    if not isinstance(binding, dict):
+        raise _unavailable()
+    rev_id = binding.get("curriculum_revision_id")
+    rev_uuid = binding.get("curriculum_revision_uuid")
+    digest = binding.get("content_digest")
+    activity_concepts = binding.get("activity_concepts")
+    if (
+        type(rev_id) is not int
+        or not isinstance(rev_uuid, str)
+        or not isinstance(digest, str)
+        or not isinstance(activity_concepts, dict)
+    ):
+        raise _unavailable()
+
+    curriculum = (
+        await db.execute(
+            select(StudyCurriculumRevision).where(
+                StudyCurriculumRevision.id == rev_id,
+                StudyCurriculumRevision.uuid == rev_uuid,
+                StudyCurriculumRevision.org_id == org.id,
+                StudyCurriculumRevision.owner_course_uuid == course_uuid,
+                StudyCurriculumRevision.content_digest == digest,
+                StudyCurriculumRevision.status.in_(("published", "retired")),
+            )
+        )
+    ).scalar_one_or_none()
+    if curriculum is None:
+        raise _unavailable()
+    return curriculum, activity_concepts
+
+
 async def resolve_managed_release_lesson_source(
     db: AsyncSession,
     org: Organization,
@@ -371,7 +428,8 @@ async def resolve_managed_release_lesson_source(
     activity_uuid: str,
     now: datetime,
 ) -> ResolvedManagedReleaseSource:
-    """Resolve the one current published curriculum binding for a release lesson."""
+    """Resolve the curriculum binding for a release lesson (explicit binding preferred,
+    falling back to unambiguous legacy resolution when absent)."""
     await lock_organization(db, org.id)
     authorization = await resolve_managed_release_authority(
         db, org, actor, course_uuid, release_uuid, now=now
@@ -403,6 +461,54 @@ async def resolve_managed_release_lesson_source(
         digest = curriculum_activity_snapshot_digest(activity)
     except (TypeError, ValueError):
         raise _unavailable() from None
+
+    bound = await resolve_release_curriculum_binding(
+        db, org, course_uuid, authorization.release
+    )
+    if bound is not None:
+        curriculum, activity_concepts = bound
+        entry = activity_concepts.get(activity_uuid)
+        if not isinstance(entry, dict):
+            raise _unavailable()
+        if (
+            entry.get("activity_id") != activity_id
+            or entry.get("activity_version") != activity_version
+            or entry.get("activity_digest") != digest
+        ):
+            raise _unavailable()
+        raw_concepts = entry.get("concept_uuids")
+        if (
+            not isinstance(raw_concepts, list)
+            or not raw_concepts
+            or not all(isinstance(c, str) and c for c in raw_concepts)
+        ):
+            raise _unavailable()
+        valid_concepts = set(
+            (
+                await db.execute(
+                    select(StudyConcept.uuid).where(
+                        StudyConcept.org_id == org.id,
+                        StudyConcept.curriculum_revision_id == curriculum.id,
+                        StudyConcept.uuid.in_(raw_concepts),
+                        StudyConcept.archived.is_(False),
+                    )
+                )
+            ).scalars().all()
+        )
+        if valid_concepts != set(raw_concepts):
+            raise _unavailable()
+        return await require_mapped_release_source(
+            db,
+            org,
+            actor,
+            authorization.profile,
+            curriculum,
+            tuple(sorted(valid_concepts)),
+            course_uuid,
+            release_uuid,
+            activity_uuid,
+            now,
+        )
 
     rows = (
         await db.execute(

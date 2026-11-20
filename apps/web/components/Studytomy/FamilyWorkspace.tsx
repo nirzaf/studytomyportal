@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import AllocationReview from './AllocationReview'
 import {
   AlertCircle,
@@ -46,9 +46,10 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
   const [items, setItems] = useState<StudyFamilyReviewQueueItem[]>([])
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [reviewResult, setReviewResult] = useState<{
-    key: string
+    subjectKey: string
     review?: StudyRelationshipReview
     evidenceFiles?: StudyEvidenceFileItem[]
+    evidenceError?: string
     error?: string
   } | null>(null)
   const [selectedEvidence, setSelectedEvidence] = useState('')
@@ -62,22 +63,33 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
     ? 'Sign in with an assigned family-services account to view this workspace.'
     : queueError
 
+  const orgSessionKey = `${orgUuid ?? ''}|${accessToken ?? ''}`
+  const orgSessionRef = useRef(orgSessionKey)
+  orgSessionRef.current = orgSessionKey
+
   useEffect(() => {
     let current = true
+    setQueueError(null)
+    setItems([])
+    setSelectedKey(null)
+    setReviewResult(null)
+    setSelectedEvidence('')
+    setDecisionBusy(false)
+    setDecisionNotice(null)
+    setDecisionError(null)
     if (!orgUuid || !accessToken) {
+      setQueueLoading(false)
       return () => { current = false }
     }
 
+    const expectedOrgSession = `${orgUuid}|${accessToken}`
     const loadQueue = async () => {
       await Promise.resolve()
-      if (!current) return
+      if (!current || orgSessionRef.current !== expectedOrgSession) return
       setQueueLoading(true)
-      setQueueError(null)
-      setItems([])
-      setSelectedKey(null)
       try {
         const result = await getFamilyReviewQueue(orgUuid, accessToken)
-        if (!current) return
+        if (!current || orgSessionRef.current !== expectedOrgSession) return
         setItems(result)
         setSelectedKey((existing) =>
           existing && result.some((item) => `${item.learner_uuid}:${item.relationship_uuid}` === existing)
@@ -85,12 +97,12 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
             : result[0] ? `${result[0].learner_uuid}:${result[0].relationship_uuid}` : null
         )
       } catch (error: unknown) {
-        if (current) {
+        if (current && orgSessionRef.current === expectedOrgSession) {
           setItems([])
           setQueueError(error instanceof Error ? error.message : 'Unable to load the family review queue.')
         }
       } finally {
-        if (current) setQueueLoading(false)
+        if (current && orgSessionRef.current === expectedOrgSession) setQueueLoading(false)
       }
     }
     void loadQueue()
@@ -103,47 +115,70 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
   ) ?? items[0] ?? null
   const selectedLearnerUuid = selectedItem?.learner_uuid
   const selectedRelationshipUuid = selectedItem?.relationship_uuid
-  const selectedReviewKey = selectedLearnerUuid && selectedRelationshipUuid
-    ? `${selectedLearnerUuid}:${selectedRelationshipUuid}`
-    : null
-  const currentReviewResult = reviewResult?.key === selectedReviewKey ? reviewResult : null
+  const selectedSubjectKey =
+    orgUuid && accessToken && selectedLearnerUuid && selectedRelationshipUuid
+      ? `${orgUuid}|${accessToken}|${selectedLearnerUuid}|${selectedRelationshipUuid}`
+      : null
+  const selectedSubjectKeyRef = useRef<string | null>(selectedSubjectKey)
+  selectedSubjectKeyRef.current = selectedSubjectKey
+
+  const currentReviewResult =
+    selectedSubjectKey !== null && reviewResult?.subjectKey === selectedSubjectKey ? reviewResult : null
   const review = currentReviewResult?.review ?? null
   const evidenceFiles = currentReviewResult?.evidenceFiles ?? []
+  const evidenceError = currentReviewResult?.evidenceError ?? null
   const reviewError = currentReviewResult?.error ?? null
-  const reviewLoading = selectedReviewKey !== null && currentReviewResult === null
+  const reviewLoading = selectedSubjectKey !== null && currentReviewResult === null
 
   useEffect(() => {
     let current = true
+    setDecisionNotice(null)
+    setDecisionError(null)
+    setDecisionBusy(false)
+    setSelectedEvidence('')
     if (!orgUuid || !accessToken || !selectedLearnerUuid || !selectedRelationshipUuid) {
+      setReviewResult(null)
       return () => { current = false }
     }
 
-    const key = `${selectedLearnerUuid}:${selectedRelationshipUuid}`
-    setDecisionNotice(null)
-    setDecisionError(null)
-    Promise.all([
-      getRelationshipForReview(
-        orgUuid,
-        selectedLearnerUuid,
-        selectedRelationshipUuid,
-        accessToken
-      ),
-      listRelationshipEvidence(orgUuid, selectedRelationshipUuid, accessToken).catch(() => []),
-    ])
-      .then(([result, files]) => {
-        if (current) {
-          setReviewResult({ key, review: result, evidenceFiles: files })
-          setSelectedEvidence(files[0]?.evidence_uuid || '')
-        }
-      })
-      .catch((error: unknown) => {
-        if (current) {
-          setReviewResult({
-            key,
-            error: error instanceof Error ? error.message : 'Unable to load this assigned review.',
-          })
-        }
-      })
+    const expectedSubjectKey = `${orgUuid}|${accessToken}|${selectedLearnerUuid}|${selectedRelationshipUuid}`
+    const loadSelected = async () => {
+      try {
+        const [reviewDetail, filesOutcome] = await Promise.all([
+          getRelationshipForReview(
+            orgUuid,
+            selectedLearnerUuid,
+            selectedRelationshipUuid,
+            accessToken
+          ),
+          listRelationshipEvidence(orgUuid, selectedRelationshipUuid, accessToken)
+            .then((files) => ({ ok: true as const, files }))
+            .catch((error: unknown) => ({
+              ok: false as const,
+              files: [] as StudyEvidenceFileItem[],
+              message:
+                error instanceof Error
+                  ? error.message
+                  : 'Unable to load bound relationship evidence.',
+            })),
+        ])
+        if (!current || selectedSubjectKeyRef.current !== expectedSubjectKey) return
+        setReviewResult({
+          subjectKey: expectedSubjectKey,
+          review: reviewDetail,
+          evidenceFiles: filesOutcome.files,
+          evidenceError: filesOutcome.ok ? undefined : filesOutcome.message,
+        })
+        setSelectedEvidence(filesOutcome.files[0]?.evidence_uuid || '')
+      } catch (error: unknown) {
+        if (!current || selectedSubjectKeyRef.current !== expectedSubjectKey) return
+        setReviewResult({
+          subjectKey: expectedSubjectKey,
+          error: error instanceof Error ? error.message : 'Unable to load this assigned review.',
+        })
+      }
+    }
+    void loadSelected()
 
     return () => { current = false }
   }, [orgUuid, accessToken, selectedLearnerUuid, selectedRelationshipUuid])
@@ -277,7 +312,11 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
                   <div className="rounded-md border border-sky-200 bg-sky-50 p-4">
                     <h3 className="text-sm font-semibold text-sky-950">Assigned evidence reference</h3>
                     <p className="mt-1 break-all font-mono text-sm text-sky-950">{review.request_evidence_reference}</p>
-                    {evidenceFiles.length > 0 ? (
+                    {evidenceError ? (
+                      <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-950" role="alert">
+                        Evidence list unavailable: {evidenceError}
+                      </p>
+                    ) : evidenceFiles.length > 0 ? (
                       <div className="mt-3 space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-sky-900">
                           Bound ready guardian-authority evidence
@@ -315,41 +354,73 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
                         className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-4"
                         onSubmit={async (event) => {
                           event.preventDefault()
-                          if (decisionBusy) return
+                          if (decisionBusy || !orgUuid || !accessToken) return
                           const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
                           const outcome = submitter?.value === 'deny' ? 'deny' : 'accept'
                           const form = new FormData(event.currentTarget)
                           const validDays = Number(form.get('valid_days') || 365)
-                          const nowDate = new Date()
-                          const validTo = new Date(nowDate.getTime() + Math.max(1, validDays) * 86_400_000)
+                          const validTo = new Date(Date.now() + Math.max(1, validDays) * 86_400_000)
+                          const targetLearnerUuid = review.learner_uuid
+                          const targetRelationshipUuid = review.relationship_uuid
+                          const requestSubjectKey = `${orgUuid}|${accessToken}|${targetLearnerUuid}|${targetRelationshipUuid}`
+                          const requestOrgSession = `${orgUuid}|${accessToken}`
                           setDecisionBusy(true)
                           setDecisionError(null)
                           setDecisionNotice(null)
                           try {
                             const updated = await decideRelationship(
                               orgUuid,
-                              review.learner_uuid,
-                              review.relationship_uuid,
+                              targetLearnerUuid,
+                              targetRelationshipUuid,
                               accessToken,
                               crypto.randomUUID(),
                               {
                                 outcome,
                                 expected_version: review.authority_version,
                                 approved_scopes: outcome === 'accept' ? review.requested_scopes : [],
-                                valid_from: outcome === 'accept' ? nowDate.toISOString() : null,
                                 valid_to: outcome === 'accept' ? validTo.toISOString() : null,
                                 evidence_reference: selectedEvidence || evidenceFiles[0].evidence_uuid,
                                 reason_code: outcome === 'accept' ? 'GUARDIAN_VERIFIED' : 'GUARDIAN_DENIED',
                               }
                             )
-                            setReviewResult((prev) =>
-                              prev ? { ...prev, review: updated } : prev
+                            if (orgSessionRef.current === requestOrgSession) {
+                              setItems((prev) =>
+                                prev.map((row) =>
+                                  row.learner_uuid === targetLearnerUuid &&
+                                  row.relationship_uuid === targetRelationshipUuid
+                                    ? {
+                                        ...row,
+                                        status: updated.status,
+                                        approved_scopes: updated.approved_scopes,
+                                        authority_version: updated.authority_version,
+                                        updated_at: updated.updated_at,
+                                      }
+                                    : row
+                                )
+                              )
+                            }
+                            if (selectedSubjectKeyRef.current !== requestSubjectKey) return
+                            const refreshed = await getRelationshipForReview(
+                              orgUuid,
+                              targetLearnerUuid,
+                              targetRelationshipUuid,
+                              accessToken
                             )
-                            setDecisionNotice(`Decision recorded: ${STATUS_LABELS[updated.status]}.`)
+                            if (selectedSubjectKeyRef.current !== requestSubjectKey) return
+                            setReviewResult((prev) =>
+                              prev && prev.subjectKey === requestSubjectKey
+                                ? { ...prev, review: refreshed }
+                                : prev
+                            )
+                            setDecisionNotice(`Decision recorded: ${STATUS_LABELS[refreshed.status]}.`)
                           } catch (error) {
-                            setDecisionError(error instanceof Error ? error.message : 'Unable to record this decision.')
+                            if (selectedSubjectKeyRef.current === requestSubjectKey) {
+                              setDecisionError(error instanceof Error ? error.message : 'Unable to record this decision.')
+                            }
                           } finally {
-                            setDecisionBusy(false)
+                            if (selectedSubjectKeyRef.current === requestSubjectKey) {
+                              setDecisionBusy(false)
+                            }
                           }
                         }}
                       >

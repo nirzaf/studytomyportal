@@ -257,6 +257,79 @@ async def _published_curriculum(
     return pair[0][0], pair[0][1]
 
 
+async def _release_matches_curriculum(
+    db: AsyncSession,
+    org_id: int,
+    course: Course,
+    release,
+    curriculum: StudyCurriculumRevision,
+) -> bool:
+    binding = (release.snapshot or {}).get("curriculum_binding")
+    if binding is not None:
+        return (
+            isinstance(binding, dict)
+            and binding.get("curriculum_revision_id") == curriculum.id
+            and binding.get("curriculum_revision_uuid") == curriculum.uuid
+            and binding.get("content_digest") == curriculum.content_digest
+            and curriculum.org_id == org_id
+            and curriculum.owner_course_uuid == course.course_uuid
+            and curriculum.status in ("published", "retired")
+        )
+    # Legacy pre-binding release: only permit an active published curriculum and
+    # fail closed if multiple curriculum revisions map the released activities.
+    if curriculum.status != "published":
+        return False
+    raw_activities = (release.snapshot or {}).get("activities")
+    if not isinstance(raw_activities, list):
+        return True
+    snap_pairs: set[tuple[int, str, int, str]] = set()
+    for act in raw_activities:
+        if not isinstance(act, dict):
+            continue
+        act_id = act.get("id")
+        act_uuid = act.get("activity_uuid")
+        act_ver = act.get("current_version")
+        if type(act_id) is int and isinstance(act_uuid, str) and type(act_ver) is int:
+            try:
+                snap_pairs.add((act_id, act_uuid, act_ver, curriculum_activity_snapshot_digest(act)))
+            except (TypeError, ValueError):
+                continue
+    if not snap_pairs:
+        return True
+    mapping_rows = (
+        await db.execute(
+            select(
+                StudyConceptActivity.curriculum_revision_id,
+                StudyConceptActivity.activity_id,
+                StudyConceptActivity.activity_uuid,
+                StudyConceptActivity.activity_version,
+                StudyConceptActivity.activity_digest,
+            )
+            .join(
+                StudyCurriculumRevision,
+                StudyCurriculumRevision.id == StudyConceptActivity.curriculum_revision_id,
+            )
+            .where(
+                StudyConceptActivity.org_id == org_id,
+                StudyConceptActivity.course_id == course.id,
+                StudyConceptActivity.course_uuid == course.course_uuid,
+                StudyConceptActivity.archived.is_(False),
+                StudyCurriculumRevision.org_id == org_id,
+                StudyCurriculumRevision.owner_course_uuid == course.course_uuid,
+                StudyCurriculumRevision.status.in_(("published", "retired")),
+            )
+        )
+    ).all()
+    matched_rev_ids = {
+        int(row[0])
+        for row in mapping_rows
+        if (row[1], row[2], row[3], row[4]) in snap_pairs
+    }
+    if not matched_rev_ids:
+        return True
+    return matched_rev_ids == {int(curriculum.id)}
+
+
 async def _published_or_managed_curriculum(
     db: AsyncSession,
     org: Organization,
@@ -264,7 +337,7 @@ async def _published_or_managed_curriculum(
     revision_uuid: str | None,
     now: datetime,
 ) -> tuple[StudyCurriculumRevision, Course]:
-    """Resolve a published curriculum for either a published native course or
+    """Resolve a curriculum revision for either a published native course or
     an intact private managed release that this learner is entitled to."""
     from src.db.studytomy.education import StudyCourseRelease
     from src.services.studytomy.access_policy import (
@@ -282,7 +355,7 @@ async def _published_or_managed_curriculum(
             .where(
                 StudyCurriculumRevision.org_id == org.id,
                 StudyCurriculumRevision.uuid == revision_uuid,
-                StudyCurriculumRevision.status == "published",
+                StudyCurriculumRevision.status.in_(("published", "retired")),
                 Course.org_id == org.id,
             )
             .limit(2)
@@ -293,6 +366,8 @@ async def _published_or_managed_curriculum(
     curriculum, course = pair[0][0], pair[0][1]
 
     if course.published and not course.studytomy_managed:
+        if curriculum.status != "published":
+            raise HTTPException(404, "Curriculum not found.")
         return curriculum, course
 
     if course.studytomy_managed and not course.public and not course.published:
@@ -312,6 +387,10 @@ async def _published_or_managed_curriculum(
                 or snapshot_course.get("id") != course.id
                 or snapshot_course.get("org_id") != org.id
                 or snapshot_course.get("course_uuid") != course.course_uuid
+            ):
+                continue
+            if not await _release_matches_curriculum(
+                db, org.id, course, release, curriculum
             ):
                 continue
             grants = await resolve_active_course_grants(
@@ -611,9 +690,20 @@ async def _managed_release_mappings(
             .order_by(StudyConcept.sequence, StudyConcept.id, mapping.id)
         )
     ).all()
+    binding = (source.authorization.release.snapshot or {}).get("curriculum_binding")
+    bound_activity_concepts = (
+        binding.get("activity_concepts")
+        if isinstance(binding, dict) and isinstance(binding.get("activity_concepts"), dict)
+        else None
+    )
     result = []
     seen: set[str] = set()
     for mapped, concept in rows:
+        if (
+            bound_activity_concepts is not None
+            and mapped.activity_uuid not in bound_activity_concepts
+        ):
+            continue
         activity = activities.get(mapped.activity_uuid)
         if (
             mapped.activity_uuid == source.activity_uuid

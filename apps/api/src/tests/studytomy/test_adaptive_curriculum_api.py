@@ -2442,7 +2442,7 @@ async def _exercise_publication(
             assert decision.json()["allowed_use"] == "independent_diagnostic"
             assert decision.json()["independent_diagnostic_eligible"] is True
             assert "37.42" not in decision.text
-    await _exercise_blueprint(
+    reconciliation_baseline = await _exercise_blueprint(
         client,
         db,
         org,
@@ -2470,6 +2470,15 @@ async def _exercise_publication(
         lesson.activity_uuid,
         native_task,
         concurrent_posts,
+    )
+    await _exercise_forward_only_mastery_reconciliation(
+        client,
+        db,
+        org,
+        base,
+        education_owner,
+        author_headers,
+        reconciliation_baseline,
     )
     course = (
         await db.execute(
@@ -3221,7 +3230,7 @@ async def _exercise_blueprint(
     assert (
         await client.post(f"{endpoint}/publish", json=command, headers=reviewer)
     ).json() == published.json()
-    await _exercise_learner_attempt(
+    reconciliation_baseline = await _exercise_learner_attempt(
         client,
         db,
         org,
@@ -3245,6 +3254,72 @@ async def _exercise_blueprint(
     assert retired.status_code == 200, retired.text
     assert retired.json()["status"] == "retired"
     assert retired.json()["content_digest"] == blueprint["content_digest"]
+    return reconciliation_baseline
+
+
+async def _exercise_forward_only_mastery_reconciliation(
+    client,
+    db,
+    org,
+    base,
+    owner,
+    staff_headers,
+    baseline,
+):
+    # The earlier diagnostic created the concept-A projection. A supported
+    # repair creates a not-assessed projection for concept B at that same
+    # learner-wide evidence watermark. The later native assignment response
+    # advances the journal and refreshes only concept A, leaving B naturally
+    # stale without modifying a projection backwards.
+    await _seed_staff_scope(
+        db,
+        org.id,
+        owner.id,
+        StudytomyCapabilityName.ASSESSMENT_MODERATION,
+        "course",
+        baseline["course_uuid"],
+        owner.user_id,
+    )
+    path = (
+        f"{base}/staff/learners/{baseline['learner_uuid']}/concepts/"
+        f"{baseline['concept_uuid']}/mastery-reconciliation"
+    )
+    params = {"policy_uuid": baseline["policy_uuid"]}
+    mismatch = await client.get(path, params=params, headers=staff_headers)
+    assert mismatch.status_code == 200, mismatch.text
+    assert mismatch.json()["status"] == "mismatch"
+    assert mismatch.json()["evidence_watermark"] > baseline["evidence_watermark"]
+    assert mismatch.json()["projection_version"] == baseline["projection_version"]
+    assert mismatch.json()["projection"] == baseline["projection"]
+
+    repair_path = f"{path}/repair"
+    repair_body = {
+        "expected_evidence_watermark": mismatch.json()["evidence_watermark"],
+        "expected_projection_version": mismatch.json()["projection_version"],
+    }
+    repair_key = f"mastery-repair-forward-{uuid4()}"
+    repair_headers = staff_headers | {"Idempotency-Key": repair_key}
+    repaired = await client.post(
+        repair_path, params=params, json=repair_body, headers=repair_headers
+    )
+    assert repaired.status_code == 200, repaired.text
+    assert repaired.json()["status"] == "repaired"
+    assert repaired.json()["evidence_watermark"] == mismatch.json()["evidence_watermark"]
+    assert repaired.json()["projection_version"] == baseline["projection_version"] + 1
+    assert repaired.json()["projection"] == mismatch.json()["projection"]
+    assert (
+        await client.post(
+            repair_path, params=params, json=repair_body, headers=repair_headers
+        )
+    ).json() == repaired.json()
+    stale_repair = await client.post(
+        repair_path,
+        params=params,
+        json=repair_body,
+        headers=staff_headers | {"Idempotency-Key": f"mastery-repair-stale-{uuid4()}"},
+    )
+    assert stale_repair.status_code == 409
+    assert stale_repair.json()["detail"]["code"] == "STALE_VERSION"
 
 
 async def _exercise_learner_attempt(
@@ -3992,46 +4067,56 @@ async def _exercise_learner_attempt(
     assert preview.status_code == 200, preview.text
     assert preview.json()["status"] == "current"
     assert preview.json()["evidence_watermark"] == 1
-    mastery_row.evidence_watermark = 0
-    await db.flush()
-    mismatch = await client.get(
-        reconciliation_path,
-        params=reconciliation_params,
-        headers=unrelated,
-    )
-    assert mismatch.status_code == 200, mismatch.text
-    assert mismatch.json()["status"] == "mismatch"
-    repair_path = f"{reconciliation_path}/repair"
-    repair_body = {
-        "expected_evidence_watermark": mismatch.json()["evidence_watermark"],
-        "expected_projection_version": mismatch.json()["projection_version"],
-    }
-    repair_key = f"mastery-repair-{uuid4()}"
-    repaired = await client.post(
-        repair_path,
-        params=reconciliation_params,
-        json=repair_body,
-        headers=unrelated | {"Idempotency-Key": repair_key},
-    )
-    assert repaired.status_code == 200, repaired.text
-    assert repaired.json()["status"] == "repaired"
-    assert repaired.json()["evidence_watermark"] == mismatch.json()["evidence_watermark"]
-    assert (
-        await client.post(
-            repair_path,
-            params=reconciliation_params,
-            json=repair_body,
-            headers=unrelated | {"Idempotency-Key": repair_key},
+    unassessed_concept = (
+        await db.execute(
+            select(StudyConcept)
+            .where(
+                StudyConcept.org_id == org.id,
+                StudyConcept.curriculum_revision_id == curriculum.id,
+                StudyConcept.id != mastery_row.concept_id,
+                StudyConcept.archived.is_(False),
+            )
+            .order_by(StudyConcept.sequence, StudyConcept.id)
+            .limit(1)
         )
-    ).json() == repaired.json()
-    stale_repair = await client.post(
-        repair_path,
-        params=reconciliation_params,
-        json=repair_body,
-        headers=unrelated | {"Idempotency-Key": f"mastery-repair-stale-{uuid4()}"},
+    ).scalar_one()
+    unassessed_path = (
+        f"{base}/staff/learners/{profile.learner_uuid}/concepts/"
+        f"{unassessed_concept.uuid}/mastery-reconciliation"
     )
-    assert stale_repair.status_code == 409
-    assert stale_repair.json()["detail"]["code"] == "STALE_VERSION"
+    unassessed_params = {"policy_uuid": mastery_row.mastery_policy_uuid}
+    missing_projection = await client.get(
+        unassessed_path, params=unassessed_params, headers=unrelated
+    )
+    assert missing_projection.status_code == 200, missing_projection.text
+    assert missing_projection.json()["status"] == "missing"
+    assert missing_projection.json()["evidence_watermark"] == 1
+    assert missing_projection.json()["projection_version"] is None
+    assert missing_projection.json()["projection"]["state"] == "not_assessed"
+    missing_repair_body = {
+        "expected_evidence_watermark": missing_projection.json()["evidence_watermark"],
+        "expected_projection_version": 0,
+    }
+    missing_repair = await client.post(
+        f"{unassessed_path}/repair",
+        params=unassessed_params,
+        json=missing_repair_body,
+        headers=unrelated | {"Idempotency-Key": f"mastery-seed-projection-{uuid4()}"},
+    )
+    assert missing_repair.status_code == 200, missing_repair.text
+    assert missing_repair.json()["status"] == "repaired"
+    assert missing_repair.json()["evidence_watermark"] == 1
+    assert missing_repair.json()["projection_version"] == 1
+    assert missing_repair.json()["projection"]["state"] == "not_assessed"
+    reconciliation_baseline = {
+        "course_uuid": curriculum.owner_course_uuid,
+        "learner_uuid": profile.learner_uuid,
+        "concept_uuid": unassessed_concept.uuid,
+        "policy_uuid": mastery_row.mastery_policy_uuid,
+        "evidence_watermark": missing_repair.json()["evidence_watermark"],
+        "projection_version": missing_repair.json()["projection_version"],
+        "projection": missing_repair.json()["projection"],
+    }
     consent = (
         await db.execute(
             select(StudyConsentEvent).where(
@@ -4981,3 +5066,4 @@ async def _exercise_learner_attempt(
         )
         == 1
     )
+    return reconciliation_baseline

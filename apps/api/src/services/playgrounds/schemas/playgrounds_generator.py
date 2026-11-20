@@ -52,7 +52,9 @@ class LearnerAdaptationContext(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    enabled: bool = True
+    # Older API clients and Redis sessions omit this field. Keep their historical
+    # non-adaptive behavior; the current editor sends `enabled=True` explicitly.
+    enabled: bool = False
     levels: list[LearnerSettingLabel] = Field(
         default_factory=list,
         max_length=MAX_LEARNER_LEVELS,

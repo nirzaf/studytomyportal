@@ -63,7 +63,21 @@ class PracticeAccess:
 
     @property
     def available(self) -> bool:
-        return self.curriculum.status == "published" and self.item.status == "published"
+        if self.item.status != "published":
+            return False
+        if self.curriculum.status == "published":
+            return True
+        if self.release_source is not None and self.curriculum.status == "retired":
+            binding = self.release_source.authorization.release.snapshot.get(
+                "curriculum_binding"
+            )
+            return (
+                isinstance(binding, dict)
+                and binding.get("curriculum_revision_id") == self.curriculum.id
+                and binding.get("curriculum_revision_uuid") == self.curriculum.uuid
+                and binding.get("content_digest") == self.curriculum.content_digest
+            )
+        return False
 
     @property
     def manifest_digest(self) -> str:
@@ -118,7 +132,9 @@ async def require_practice_access(
             StudyCurriculumRevision.org_id == org.id,
             StudyConcept.archived.is_(False),
             StudyCurriculumRevision.status.in_(
-                ("published", "retired") if item_id is not None else ("published",)
+                ("published", "retired")
+                if (item_id is not None or course_release_uuid is not None)
+                else ("published",)
             ),
         )
     )

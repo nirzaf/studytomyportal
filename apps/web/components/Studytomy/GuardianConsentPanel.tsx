@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   getGuardianConsentEvents,
@@ -95,9 +95,26 @@ export default function GuardianConsentPanel({
     purpose: StudyConsentPurpose
   } | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
+  const subjectKey = `${accessToken}|${orgUuid}|${selectedLearnerUuid}`
+  const subjectKeyRef = useRef(subjectKey)
+  subjectKeyRef.current = subjectKey
+  const loadEpochRef = useRef(0)
 
   useEffect(() => {
     let active = true
+    loadEpochRef.current += 1
+    setRelationships([])
+    setRelationshipsLoaded(false)
+    setSelectedLearnerUuid('')
+    setNotices([])
+    setNoticesLoading(false)
+    setNoticesError(false)
+    setEvents([])
+    setHistoryReady(false)
+    setHistoryError(false)
+    setPendingPurpose(null)
+    setFeedback(null)
+
     listMyGuardianRelationships(accessToken, orgUuid)
       .then((items) => {
         if (!active) return
@@ -108,11 +125,7 @@ export default function GuardianConsentPanel({
             rel.approved_scopes.includes('consent_management')
         )
         setRelationships(eligible)
-        setSelectedLearnerUuid((current) =>
-          eligible.some((rel) => rel.learner_uuid === current)
-            ? current
-            : eligible[0]?.learner_uuid ?? ''
-        )
+        setSelectedLearnerUuid(eligible[0]?.learner_uuid ?? '')
         setRelationshipsLoaded(true)
       })
       .catch(() => {
@@ -122,11 +135,17 @@ export default function GuardianConsentPanel({
       })
     return () => {
       active = false
+      loadEpochRef.current += 1
     }
   }, [accessToken, orgUuid])
 
   const loadDependentState = useCallback(async () => {
     if (!selectedLearnerUuid) return
+    const requestSubjectKey = `${accessToken}|${orgUuid}|${selectedLearnerUuid}`
+    const epoch = ++loadEpochRef.current
+
+    setNotices([])
+    setEvents([])
     setNoticesLoading(true)
     setNoticesError(false)
     setHistoryReady(false)
@@ -142,6 +161,10 @@ export default function GuardianConsentPanel({
         .then((list) => ({ ok: true as const, list }))
         .catch(() => ({ ok: false as const, list: [] as StudyConsentEventRead[] })),
     ])
+
+    if (subjectKeyRef.current !== requestSubjectKey || loadEpochRef.current !== epoch) {
+      return
+    }
 
     const nextNotices: StudyConsentNoticeRead[] = []
     let hadNoticeError = false
@@ -162,6 +185,14 @@ export default function GuardianConsentPanel({
   }, [accessToken, orgUuid, selectedLearnerUuid])
 
   useEffect(() => {
+    loadEpochRef.current += 1
+    setNotices([])
+    setEvents([])
+    setHistoryReady(false)
+    setNoticesError(false)
+    setHistoryError(false)
+    setFeedback(null)
+    setPendingPurpose(null)
     if (!selectedLearnerUuid) return
     void loadDependentState()
   }, [loadDependentState, selectedLearnerUuid, refreshTick])
@@ -186,13 +217,17 @@ export default function GuardianConsentPanel({
   ) => {
     const notice = noticesByPurpose.get(purpose)
     if (!notice || !historyReady || pendingPurpose) return
+    const learnerUuid = selectedRelationship.learner_uuid
+    const requestSubjectKey = `${accessToken}|${orgUuid}|${learnerUuid}`
+    const epoch = loadEpochRef.current
+
     setPendingPurpose(purpose)
     setFeedback(null)
     try {
       const event = await recordGuardianConsentChoice(
         accessToken,
         orgUuid,
-        selectedRelationship.learner_uuid,
+        learnerUuid,
         {
           purpose,
           choice,
@@ -201,43 +236,63 @@ export default function GuardianConsentPanel({
         },
         `guardian-consent-${crypto.randomUUID()}`
       )
+      if (subjectKeyRef.current !== requestSubjectKey || loadEpochRef.current !== epoch) {
+        return
+      }
       setEvents((current) => [
         event,
         ...current.filter((item) => item.event_uuid !== event.event_uuid),
       ])
       setFeedback({ kind: 'success', purpose })
     } catch (error) {
+      if (subjectKeyRef.current !== requestSubjectKey || loadEpochRef.current !== epoch) {
+        return
+      }
       setFeedback({ kind: 'error', purpose })
       if (error instanceof StudyConsentRequestError && [403, 404, 409].includes(error.status)) {
         setRefreshTick((tick) => tick + 1)
       }
     } finally {
-      setPendingPurpose(null)
+      if (subjectKeyRef.current === requestSubjectKey && loadEpochRef.current === epoch) {
+        setPendingPurpose(null)
+      }
     }
   }
 
   const withdrawChoice = async (purpose: StudyConsentPurpose, eventUuid: string) => {
     if (!historyReady || pendingPurpose) return
+    const learnerUuid = selectedRelationship.learner_uuid
+    const requestSubjectKey = `${accessToken}|${orgUuid}|${learnerUuid}`
+    const epoch = loadEpochRef.current
+
     setPendingPurpose(purpose)
     setFeedback(null)
     try {
       const event = await withdrawGuardianConsentChoice(
         accessToken,
         orgUuid,
-        selectedRelationship.learner_uuid,
+        learnerUuid,
         eventUuid,
         `guardian-withdraw-${crypto.randomUUID()}`
       )
+      if (subjectKeyRef.current !== requestSubjectKey || loadEpochRef.current !== epoch) {
+        return
+      }
       setEvents((current) => [
         event,
         ...current.filter((item) => item.event_uuid !== event.event_uuid),
       ])
       setFeedback({ kind: 'success', purpose })
     } catch {
+      if (subjectKeyRef.current !== requestSubjectKey || loadEpochRef.current !== epoch) {
+        return
+      }
       setFeedback({ kind: 'error', purpose })
       setRefreshTick((tick) => tick + 1)
     } finally {
-      setPendingPurpose(null)
+      if (subjectKeyRef.current === requestSubjectKey && loadEpochRef.current === epoch) {
+        setPendingPurpose(null)
+      }
     }
   }
 

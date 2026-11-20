@@ -174,6 +174,11 @@ async def _check_read_access(
     if await _user_in_playground_usergroup(acting_user_id, playground.playground_uuid, db_session):
         return
 
+    from src.services.studytomy.publication import can_actor_review_playground
+
+    if await can_actor_review_playground(db_session, playground, current_user):
+        return
+
     raise HTTPException(status_code=403, detail="Access denied to this playground")
 
 
@@ -188,21 +193,27 @@ async def _check_draft_access(
     current_user: PublicUser | AnonymousUser | APITokenUser,
     db_session: AsyncSession,
 ) -> None:
-    """Raise 404 if current_user may not see this playground while it is a draft.
+    """Raise 404 if current_user may not inspect a non-deliverable Playground.
 
-    Unpublished (draft) playgrounds must never be exposed by uuid to anyone
-    other than the owner or an org admin. _check_read_access only validates
-    access_type, so without this guard a draft PUBLIC/AUTHENTICATED playground
-    would be readable by anonymous/any authenticated user via its uuid, the
-    same content list_org_playgrounds deliberately hides.
+    Draft playgrounds (and governed StudyTomy playgrounds lacking an independent
+    approved review for their current digest) must never be exposed by uuid to
+    anyone other than the creator, an org admin, or an authorized independent
+    content reviewer.
     """
-    if playground.published:
+    from src.services.studytomy.publication import (
+        can_actor_review_playground,
+        is_playground_deliverable_to_learners,
+    )
+
+    if await is_playground_deliverable_to_learners(db_session, playground):
         return
     if isinstance(current_user, AnonymousUser):
         raise HTTPException(status_code=404, detail="Playground not found")
     acting_user_id = resolve_acting_user_id(current_user)
-    if playground.created_by != acting_user_id and not await _is_org_admin(
-        acting_user_id, playground.org_id, db_session
+    if (
+        playground.created_by != acting_user_id
+        and not await _is_org_admin(acting_user_id, playground.org_id, db_session)
+        and not await can_actor_review_playground(db_session, playground, current_user)
     ):
         raise HTTPException(status_code=404, detail="Playground not found")
 
@@ -362,10 +373,55 @@ async def list_org_playgrounds(
                     if ug_id in member_ug_ids:
                         accessible_restricted_uuids.add(resource_uuid)
 
+    from src.db.studytomy.family import StudyLearnerProfile
+    from src.db.studytomy.governance import StudyPolicyStatus, StudyPolicyVersion
+    from src.services.studytomy.publication import (
+        can_actor_review_playground,
+        is_playground_deliverable_to_learners,
+    )
+
+    org_has_profile = (
+        await db_session.execute(
+            select(StudyLearnerProfile.id)
+            .where(StudyLearnerProfile.org_id == org_id)
+            .limit(1)
+        )
+    ).scalar_one_or_none() is not None
+    org_has_policy = False
+    if not org_has_profile:
+        org_has_policy = (
+            await db_session.execute(
+                select(StudyPolicyVersion.id)
+                .where(
+                    StudyPolicyVersion.org_id == org_id,
+                    StudyPolicyVersion.status == StudyPolicyStatus.APPROVED.value,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none() is not None
+    org_governed = org_has_profile or org_has_policy
+    managed_course_ids: set[int] = set()
+    if not org_governed:
+        course_ids = {int(pg.course_id) for pg in playgrounds if pg.course_id is not None}
+        if course_ids:
+            managed_course_ids = set(
+                (
+                    await db_session.execute(
+                        select(Course.id).where(
+                            Course.id.in_(course_ids),
+                            Course.org_id == org_id,
+                            Course.studytomy_managed.is_(True),
+                        )
+                    )
+                ).scalars().all()
+            )
+
     allowed: list[Playground] = []
     for pg in playgrounds:
+        pg_governed = org_governed or (pg.course_id in managed_course_ids)
         if pg.access_type == PlaygroundAccessType.AUTHENTICATED and is_anon:
             continue
+        is_privileged_or_restricted_member = False
         if pg.access_type == PlaygroundAccessType.RESTRICTED:
             if is_anon:
                 continue
@@ -374,12 +430,22 @@ async def list_org_playgrounds(
                 and pg.created_by != user_id
                 and pg.playground_uuid not in accessible_restricted_uuids
             ):
-                continue
+                if not await can_actor_review_playground(db_session, pg, current_user):
+                    continue
+                is_privileged_or_restricted_member = True
 
-        if not pg.published:
+        deliverable = await is_playground_deliverable_to_learners(
+            db_session, pg, governed=pg_governed
+        )
+        if not deliverable:
             if is_anon:
                 continue
-            if not is_admin and pg.created_by != user_id:
+            if (
+                not is_admin
+                and pg.created_by != user_id
+                and not is_privileged_or_restricted_member
+                and not await can_actor_review_playground(db_session, pg, current_user)
+            ):
                 continue
 
         allowed.append(pg)
@@ -446,16 +512,41 @@ async def update_playground(
     if not can_update:
         raise HTTPException(status_code=403, detail="Insufficient permissions to update playground")
 
+    from src.services.studytomy.policies import lock_organization
     from src.services.studytomy.publication import (
         has_approved_playground_review,
         is_studytomy_governed_playground,
         playground_content_digest,
     )
 
-    was_published = bool(playground.published)
-    previous_digest = playground_content_digest(playground)
-
     update_data = playground_data.model_dump(exclude_unset=True)
+    governed = await is_studytomy_governed_playground(db_session, playground)
+    if not governed and update_data.get("course_uuid"):
+        target_course = (
+            await db_session.execute(
+                select(Course).where(
+                    Course.course_uuid == update_data["course_uuid"],
+                    Course.org_id == playground.org_id,
+                    Course.studytomy_managed.is_(True),
+                )
+            )
+        ).scalars().first()
+        governed = target_course is not None
+
+    if governed:
+        await lock_organization(db_session, playground.org_id)
+        playground = (
+            await db_session.execute(
+                select(Playground)
+                .where(Playground.playground_uuid == playground_uuid)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalars().first()
+        if not playground:
+            raise HTTPException(status_code=404, detail="Playground not found")
+
+    was_published = bool(playground.published)
 
     # Resolve course_id if course_uuid changed
     if "course_uuid" in update_data:
@@ -476,7 +567,7 @@ async def update_playground(
             value = value.model_dump()
         setattr(playground, key, value)
 
-    if await is_studytomy_governed_playground(db_session, playground):
+    if governed or await is_studytomy_governed_playground(db_session, playground):
         next_digest = playground_content_digest(playground)
         if playground.published:
             approved = await has_approved_playground_review(
@@ -495,10 +586,9 @@ async def update_playground(
                             "content_digest": next_digest,
                         },
                     )
-                if next_digest != previous_digest:
-                    # Editing a previously published Playground invalidates the
-                    # prior review receipt; return it to draft until re-reviewed.
-                    playground.published = False
+                # Editing or retaining a stale/rejected governed Playground returns
+                # it to draft atomically until re-reviewed.
+                playground.published = False
 
     playground.update_date = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     db_session.add(playground)

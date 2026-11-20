@@ -11,6 +11,20 @@ export interface PlaygroundLearnerAdaptation {
   target_skills: string[]
 }
 
+export function learnerAdaptationForPlayground(playground: {
+  html_content?: string | null
+  learner_adaptation?: PlaygroundLearnerAdaptation | null
+}): PlaygroundLearnerAdaptation {
+  const saved = playground.learner_adaptation
+  return {
+    // New/empty Playgrounds opt in. Existing HTML without saved settings keeps
+    // its legacy non-adaptive iteration behavior.
+    enabled: saved?.enabled ?? !playground.html_content?.trim(),
+    levels: saved?.levels?.length ? [...saved.levels] : [...DEFAULT_LEARNER_LEVELS],
+    target_skills: saved?.target_skills ? [...saved.target_skills] : [],
+  }
+}
+
 interface PlaygroundContext {
   playground_name: string
   playground_description: string
@@ -112,6 +126,7 @@ async function processStream(
 
   const decoder = new TextDecoder()
   let buffer = ''
+  let terminated = false
 
   try {
     while (true) {
@@ -132,11 +147,19 @@ async function processStream(
             const event: StreamChunk = JSON.parse(jsonStr)
 
             if (event.type === 'chunk' && event.content) {
-              onChunk(event.content)
+              if (!terminated) {
+                onChunk(event.content)
+              }
             } else if (event.type === 'done' && event.session_uuid) {
-              onComplete(event.session_uuid)
-            } else if (event.type === 'error' && event.message) {
-              onError(event.message)
+              if (!terminated) {
+                terminated = true
+                onComplete(event.session_uuid)
+              }
+            } else if (event.type === 'error') {
+              terminated = true
+              await reader.cancel().catch(() => undefined)
+              onError(event.message || 'An internal error occurred.')
+              return
             }
           } catch {
             if (i === lines.length - 1) {
@@ -149,6 +172,11 @@ async function processStream(
           }
         }
       }
+    }
+
+    if (!terminated) {
+      terminated = true
+      onError('Generation stream ended before completion.')
     }
   } finally {
     reader.releaseLock()

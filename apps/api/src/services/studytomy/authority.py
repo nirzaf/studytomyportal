@@ -923,12 +923,26 @@ async def decide_relationship_request(
             },
         )
 
+    resolved_valid_from: Optional[datetime] = None
+    resolved_valid_to: Optional[datetime] = None
     if request.outcome == StudyRelationshipDecisionOutcome.ACCEPT:
-        assert request.valid_from is not None and request.valid_to is not None
-        if _as_utc(request.valid_from) < now or _as_utc(request.valid_to) <= now:
+        assert request.valid_to is not None
+        resolved_valid_to = _as_utc(request.valid_to)
+        if request.valid_from is None:
+            # Server-resolved immediate start prevents client/server clock drift
+            # or network latency from failing ordinary approvals as backdated.
+            resolved_valid_from = now
+        else:
+            resolved_valid_from = _as_utc(request.valid_from)
+            if resolved_valid_from < now:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Accepted authority must begin now or later and end in the future.",
+                )
+        if resolved_valid_to <= now or resolved_valid_to <= resolved_valid_from:
             raise HTTPException(
                 status_code=422,
-                detail="Accepted authority must begin now or later and end in the future.",
+                detail="Accepted authority must end in the future and after its effective start time.",
             )
         overlaps = await db_session.execute(
             select(StudyRelationship)
@@ -947,8 +961,8 @@ async def decide_relationship_request(
             )
             .with_for_update()
         )
-        new_start = _as_utc(request.valid_from)
-        new_end = _as_utc(request.valid_to)
+        new_start = resolved_valid_from
+        new_end = resolved_valid_to
         for current in overlaps.scalars().all():
             if current.status in {
                 StudyRelationshipStatus.RESTRICTED.value,
@@ -1029,8 +1043,8 @@ async def decide_relationship_request(
     if request.outcome == StudyRelationshipDecisionOutcome.ACCEPT:
         relationship.status = StudyRelationshipStatus.ACCEPTED.value
         relationship.approved_scopes = request.approved_scopes
-        relationship.valid_from = request.valid_from
-        relationship.valid_to = request.valid_to
+        relationship.valid_from = resolved_valid_from
+        relationship.valid_to = resolved_valid_to
     else:
         relationship.status = StudyRelationshipStatus.DENIED.value
         relationship.approved_scopes = []

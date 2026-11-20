@@ -761,6 +761,158 @@ async def test_t06_relationship_decision_validates_bound_ev_evidence_file(
 
 
 @pytest.mark.asyncio
+async def test_t01_decide_relationship_omitted_valid_from_resolves_server_time_and_rejects_past(
+    db, org, admin_user, regular_user
+):
+    from src.db.studytomy.family import (
+        StudyRelationshipDecisionCreate,
+        StudyRelationshipDecisionOutcome,
+    )
+    from src.services.studytomy import authority
+
+    now = datetime.now(UTC)
+    policies, owners = await _seed_family_policies(db, org, admin_user.id)
+    owner = owners.get(StudyOwnerFunction.FAMILY_SERVICES) or await _seed_owner_assignment(
+        db, org.id, org.org_uuid, admin_user.id, StudyOwnerFunction.FAMILY_SERVICES
+    )
+    parent = User(
+        username="parent_t01",
+        email="parent_t01@lk.example",
+        first_name="Nimal",
+        last_name="Perera",
+        password=security_hash_password("Pass1234!"),
+        user_uuid="user_parent_t01",
+        email_verified=True,
+    )
+    db.add(parent)
+    await db.flush()
+    db.add(
+        UserOrganization(
+            org_id=org.id,
+            user_id=parent.id,
+            role_id=4,
+            creation_date="2026-01-01",
+            update_date="2026-01-01",
+        )
+    )
+    profile = StudyLearnerProfile(
+        org_id=org.id,
+        user_id=regular_user.id,
+        created_by_user_id=admin_user.id,
+        status="pending",
+        control_mode="dependent",
+        access_version=1,
+    )
+    db.add(profile)
+    await db.flush()
+    await _grant_role_capabilities(db, org.id, admin_user.id, family_authority_review=True)
+    await _seed_staff_scope(
+        db,
+        org.id,
+        owner.id,
+        StudytomyCapabilityName.FAMILY_AUTHORITY_REVIEW,
+        "learner",
+        profile.learner_uuid,
+        admin_user.id,
+    )
+    guardian_policy_ids = [
+        int(policies[k].id) for k in (StudyPolicyKey.D_03, StudyPolicyKey.D_12, StudyPolicyKey.D_13)
+    ]
+    rel = StudyRelationship(
+        org_id=org.id,
+        learner_profile_id=profile.id,
+        adult_user_id=parent.id,
+        requested_by_user_id=parent.id,
+        requested_scopes=["consent_management", "adaptive_report_summary"],
+        status=StudyRelationshipStatus.PENDING.value,
+        request_evidence_reference="REQ-T01",
+        request_policy_version_ids=guardian_policy_ids,
+        authority_version=1,
+    )
+    db.add(rel)
+    await db.commit()
+    await db.refresh(rel)
+
+    # Past valid_from is still rejected (no client backdating).
+    with pytest.raises(HTTPException) as past_exc:
+        await authority.decide_relationship_request(
+            db,
+            org,
+            admin_user,
+            profile.learner_uuid,
+            rel.relationship_uuid,
+            StudyRelationshipDecisionCreate(
+                expected_version=rel.authority_version,
+                outcome=StudyRelationshipDecisionOutcome.ACCEPT,
+                approved_scopes=["consent_management"],
+                valid_from=now - timedelta(seconds=5),
+                valid_to=now + timedelta(days=30),
+                reason_code="GUARDIAN_VERIFIED",
+                evidence_reference="case_valid_t01_past_check",
+            ),
+            "idem-t01-past",
+        )
+    assert past_exc.value.status_code == 422
+
+    # End timestamp in the past is rejected even with omitted valid_from.
+    with pytest.raises(HTTPException) as bad_end_exc:
+        await authority.decide_relationship_request(
+            db,
+            org,
+            admin_user,
+            profile.learner_uuid,
+            rel.relationship_uuid,
+            StudyRelationshipDecisionCreate(
+                expected_version=rel.authority_version,
+                outcome=StudyRelationshipDecisionOutcome.ACCEPT,
+                approved_scopes=["consent_management"],
+                valid_to=now - timedelta(seconds=1),
+                reason_code="GUARDIAN_VERIFIED",
+                evidence_reference="case_valid_t01_end_check",
+            ),
+            "idem-t01-bad-end",
+        )
+    assert bad_end_exc.value.status_code == 422
+
+    # Immediate acceptance omits valid_from; server resolves effective start atomically.
+    immediate_cmd = StudyRelationshipDecisionCreate(
+        expected_version=rel.authority_version,
+        outcome=StudyRelationshipDecisionOutcome.ACCEPT,
+        approved_scopes=["consent_management"],
+        valid_to=now + timedelta(days=30),
+        reason_code="GUARDIAN_VERIFIED",
+        evidence_reference="case_valid_t01_immediate",
+    )
+    assert immediate_cmd.valid_from is None
+    decided = await authority.decide_relationship_request(
+        db,
+        org,
+        admin_user,
+        profile.learner_uuid,
+        rel.relationship_uuid,
+        immediate_cmd,
+        "idem-t01-immediate",
+    )
+    assert decided.status.value == "accepted"
+    assert decided.valid_from is not None
+    assert decided.decided_at is not None
+    assert decided.valid_from == decided.decided_at
+
+    # Idempotent replay preserves original server-resolved valid_from and decision identity.
+    replayed = await authority.decide_relationship_request(
+        db,
+        org,
+        admin_user,
+        profile.learner_uuid,
+        rel.relationship_uuid,
+        immediate_cmd,
+        "idem-t01-immediate",
+    )
+    assert replayed.valid_from == decided.valid_from
+    assert replayed.authority_version == decided.authority_version
+
+
+@pytest.mark.asyncio
 async def test_t17_reconciliation_queue_scans_past_inaccessible_rows_with_cursor(
     db, org, admin_user
 ):

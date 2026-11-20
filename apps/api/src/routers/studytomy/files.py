@@ -48,7 +48,9 @@ from src.services.studytomy.publication import (
     CourseReviewCommand,
     PlaygroundReviewCommand,
     PlaygroundReviewReceipt,
+    PlaygroundReviewStatusRead,
     designate_managed_course,
+    get_playground_review_status,
     record_course_release,
     record_course_review,
     record_playground_review,
@@ -134,6 +136,24 @@ async def api_record_course_review(
     organization = await _organization(org_uuid, db_session)
     response.headers["Cache-Control"] = "private, no-store"
     return await record_course_review(db_session, organization, current_user, course_uuid, command, idempotency_key)
+
+
+@router.get(
+    "/orgs/{org_uuid}/playgrounds/{playground_uuid}/content-review-status",
+    response_model=PlaygroundReviewStatusRead,
+)
+async def api_get_playground_review_status(
+    org_uuid: str,
+    playground_uuid: str,
+    response: Response,
+    current_user: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
+    db_session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> PlaygroundReviewStatusRead:
+    organization = await _organization(org_uuid, db_session)
+    response.headers["Cache-Control"] = "private, no-store"
+    return await get_playground_review_status(
+        db_session, organization, current_user, playground_uuid
+    )
 
 
 @router.post(

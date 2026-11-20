@@ -504,6 +504,19 @@ class PlaygroundReviewReceipt(BaseModel):
     content_digest: str
 
 
+class PlaygroundReviewStatusRead(BaseModel):
+    playground_uuid: str
+    governed: bool
+    published: bool
+    deliverable: bool
+    content_digest: str
+    latest_decision: Literal["approved", "rejected"] | None = None
+    latest_reviewed_digest: str | None = None
+    current_revision_approved: bool
+    can_review: bool
+    is_creator: bool
+
+
 def playground_content_digest(playground) -> str:
     """Canonical SHA-256 digest of all student-visible Playground state."""
     from src.services.studytomy.idempotency import canonical_request_hash
@@ -572,16 +585,13 @@ async def is_studytomy_governed_playground(
     return has_policy is not None
 
 
-async def has_approved_playground_review(
+async def _latest_playground_review_event(
     db: AsyncSession,
     playground,
-    content_digest: str | None = None,
-) -> bool:
-    """Return True only if an independent reviewer approved the exact current digest."""
+):
     from src.db.studytomy.governance import StudyBusinessEvent
 
-    expected = content_digest or playground_content_digest(playground)
-    event = (
+    return (
         await db.execute(
             select(StudyBusinessEvent)
             .where(
@@ -599,14 +609,157 @@ async def has_approved_playground_review(
             .limit(1)
         )
     ).scalar_one_or_none()
-    if event is None:
-        return False
-    if event.action != "studytomy.playground.review_approved":
+
+
+async def has_approved_playground_review(
+    db: AsyncSession,
+    playground,
+    content_digest: str | None = None,
+) -> bool:
+    """Return True only if an independent reviewer approved the exact current digest."""
+    expected = content_digest or playground_content_digest(playground)
+    event = await _latest_playground_review_event(db, playground)
+    if event is None or event.action != "studytomy.playground.review_approved":
         return False
     if playground.created_by is not None and event.actor_user_id == playground.created_by:
         return False
     state = event.after_state if isinstance(event.after_state, dict) else {}
     return state.get("status") == "approved" and state.get("evidence_sha256") == expected
+
+
+async def is_playground_deliverable_to_learners(
+    db: AsyncSession,
+    playground,
+    *,
+    governed: bool | None = None,
+) -> bool:
+    """Single canonical gate for learner visibility & delivery of a Playground."""
+    if not getattr(playground, "published", False):
+        return False
+    is_governed = (
+        governed
+        if governed is not None
+        else await is_studytomy_governed_playground(db, playground)
+    )
+    if not is_governed:
+        return True
+    return await has_approved_playground_review(db, playground)
+
+
+async def can_actor_review_playground(
+    db: AsyncSession,
+    playground,
+    actor,
+    *,
+    organization: Organization | None = None,
+    now: datetime | None = None,
+) -> bool:
+    """True only when actor holds valid independent review authority for this Playground."""
+    from src.db.users import AnonymousUser, APITokenUser
+
+    if isinstance(actor, (AnonymousUser, APITokenUser)) or getattr(actor, "id", None) is None:
+        return False
+    org = organization
+    if org is None:
+        org = (
+            await db.execute(
+                select(Organization).where(Organization.id == playground.org_id)
+            )
+        ).scalar_one_or_none()
+    if org is None:
+        return False
+    excluded = {int(playground.created_by)} if playground.created_by is not None else set()
+    scope_kind = "course" if getattr(playground, "course_uuid", None) else "function"
+    scope_uuid = getattr(playground, "course_uuid", None) or _RESPONSIBILITY.value
+    try:
+        await authorize_studytomy_staff_action(
+            db,
+            actor,
+            org,
+            StudytomyCapabilityName.CONTENT_RELEASE_REVIEW,
+            target_scope_kind=scope_kind,
+            target_resource_uuid=scope_uuid,
+            excluded_user_ids=excluded,
+            hide_existence_on_denial=True,
+            now=now or datetime.now(UTC),
+        )
+        return True
+    except HTTPException:
+        return False
+
+
+async def get_playground_review_status(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    playground_uuid: str,
+) -> PlaygroundReviewStatusRead:
+    """Return narrow governance/review metadata for an authorized editor, admin, or reviewer."""
+    from src.db.playgrounds import Playground
+    from src.services.playgrounds.playgrounds import _get_user_rights, _is_org_admin
+
+    now = datetime.now(UTC)
+    playground = (
+        await db.execute(
+            select(Playground).where(
+                Playground.org_id == org.id,
+                Playground.playground_uuid == playground_uuid,
+            )
+        )
+    ).scalar_one_or_none()
+    if playground is None:
+        raise HTTPException(404, "Playground not found.")
+
+    acting_user_id = int(actor.id)
+    is_creator = playground.created_by == acting_user_id
+    is_admin = await _is_org_admin(acting_user_id, org.id, db)
+    rights = await _get_user_rights(acting_user_id, org.id, db)
+    pg_rights = rights.get("playgrounds", {})
+    can_edit = bool(
+        pg_rights.get("action_update")
+        or (is_creator and pg_rights.get("action_update_own"))
+    )
+    can_review = await can_actor_review_playground(
+        db, playground, actor, organization=org, now=now
+    )
+    if not (is_creator or is_admin or can_edit or can_review):
+        raise HTTPException(404, "Playground not found.")
+
+    governed = await is_studytomy_governed_playground(db, playground)
+    digest = playground_content_digest(playground)
+    event = await _latest_playground_review_event(db, playground)
+    latest_decision: Literal["approved", "rejected"] | None = None
+    latest_reviewed_digest: str | None = None
+    current_revision_approved = False
+    if event is not None:
+        state = event.after_state if isinstance(event.after_state, dict) else {}
+        if event.action == "studytomy.playground.review_approved":
+            latest_decision = "approved"
+        elif event.action == "studytomy.playground.review_rejected":
+            latest_decision = "rejected"
+        raw_digest = state.get("evidence_sha256")
+        if isinstance(raw_digest, str):
+            latest_reviewed_digest = raw_digest
+        not_self = playground.created_by is None or event.actor_user_id != playground.created_by
+        current_revision_approved = (
+            latest_decision == "approved"
+            and state.get("status") == "approved"
+            and latest_reviewed_digest == digest
+            and not_self
+        )
+    deliverable = bool(playground.published) and (not governed or current_revision_approved)
+    return PlaygroundReviewStatusRead(
+        playground_uuid=playground.playground_uuid,
+        governed=governed,
+        published=bool(playground.published),
+        deliverable=deliverable,
+        content_digest=digest,
+        latest_decision=latest_decision,
+        latest_reviewed_digest=latest_reviewed_digest,
+        current_revision_approved=current_revision_approved,
+        can_review=can_review,
+        is_creator=is_creator,
+    )
 
 
 async def record_playground_review(
@@ -706,6 +859,12 @@ async def record_playground_review(
         policy_refs=policy_ids,
         dedupe_key=f"studytomy:playground_review:{playground.playground_uuid}:{current_digest}:{idempotency_key}",
     )
+    if command.decision == "rejected" and playground.published:
+        # Atomically withdraw rejected Playground content so learners cannot read
+        # or list previously published revisions after rejection.
+        playground.published = False
+        playground.update_date = now.replace(tzinfo=None).isoformat()
+        db.add(playground)
     receipt = PlaygroundReviewReceipt(
         review_event_uuid=event.event_uuid,
         playground_uuid=playground.playground_uuid,

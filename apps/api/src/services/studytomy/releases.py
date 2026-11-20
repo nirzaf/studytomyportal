@@ -569,4 +569,119 @@ async def course_candidate_snapshot(
         evidence = await course_grounding_evidence(db, course, activities, tasks)
         if evidence:
             snapshot["grounded_source_evidence"] = evidence
+        curriculum_binding = await _resolve_course_curriculum_binding(
+            db, course, snapshot["activities"]
+        )
+        if curriculum_binding is not None:
+            snapshot["curriculum_binding"] = curriculum_binding
     return snapshot
+
+
+async def _resolve_course_curriculum_binding(
+    db: AsyncSession,
+    course: Course,
+    snapshot_activities: list[dict],
+) -> dict[str, object] | None:
+    """Freeze the single active curriculum revision & concept mappings into the release."""
+    from src.db.studytomy.adaptive import (
+        StudyConcept,
+        StudyConceptActivity,
+        StudyCurriculumRevision,
+    )
+    from src.services.studytomy.adaptive_curriculum import curriculum_activity_snapshot_digest
+
+    published_revs = (
+        await db.execute(
+            select(StudyCurriculumRevision)
+            .where(
+                StudyCurriculumRevision.org_id == course.org_id,
+                StudyCurriculumRevision.owner_course_uuid == course.course_uuid,
+                StudyCurriculumRevision.status == "published",
+            )
+            .order_by(StudyCurriculumRevision.revision.desc(), StudyCurriculumRevision.id.desc())
+        )
+    ).scalars().all()
+    if not published_revs:
+        return None
+
+    snapshot_by_uuid: dict[str, tuple[int, int, str]] = {}
+    for act in snapshot_activities:
+        if not isinstance(act, dict):
+            continue
+        act_uuid = act.get("activity_uuid")
+        act_id = act.get("id")
+        act_ver = act.get("current_version")
+        if (
+            isinstance(act_uuid, str)
+            and type(act_id) is int
+            and type(act_ver) is int
+            and act.get("published") is True
+        ):
+            try:
+                act_digest = curriculum_activity_snapshot_digest(act)
+            except (TypeError, ValueError):
+                continue
+            snapshot_by_uuid[act_uuid] = (act_id, act_ver, act_digest)
+
+    rev_ids = [int(rev.id) for rev in published_revs]
+    mapping_rows = (
+        await db.execute(
+            select(StudyConceptActivity, StudyConcept.uuid)
+            .join(StudyConcept, StudyConcept.id == StudyConceptActivity.concept_id)
+            .where(
+                StudyConceptActivity.org_id == course.org_id,
+                StudyConceptActivity.curriculum_revision_id.in_(rev_ids),
+                StudyConceptActivity.course_id == course.id,
+                StudyConceptActivity.course_uuid == course.course_uuid,
+                StudyConceptActivity.archived.is_(False),
+                StudyConcept.org_id == course.org_id,
+                StudyConcept.archived.is_(False),
+            )
+        )
+    ).all()
+
+    by_rev: dict[int, dict[str, tuple[int, int, str, set[str]]]] = {}
+    for mapping, concept_uuid in mapping_rows:
+        snap = snapshot_by_uuid.get(mapping.activity_uuid)
+        if snap is None:
+            continue
+        act_id, act_ver, act_digest = snap
+        if (
+            mapping.activity_id != act_id
+            or mapping.activity_version != act_ver
+            or mapping.activity_digest != act_digest
+        ):
+            continue
+        rev_entries = by_rev.setdefault(int(mapping.curriculum_revision_id), {})
+        if mapping.activity_uuid not in rev_entries:
+            rev_entries[mapping.activity_uuid] = (act_id, act_ver, act_digest, set())
+        rev_entries[mapping.activity_uuid][3].add(str(concept_uuid))
+
+    matched_revs = [rev for rev in published_revs if by_rev.get(int(rev.id))]
+    if len(matched_revs) > 1 or (len(published_revs) > 1 and not matched_revs):
+        raise studytomy_http_error(
+            409,
+            "AMBIGUOUS_CURRICULUM_BINDING",
+            "Multiple published curriculum revisions exist for this course. Retire prior revisions before freezing a course release.",
+        )
+
+    selected = matched_revs[0] if len(matched_revs) == 1 else published_revs[0]
+    selected_entries = by_rev.get(int(selected.id), {})
+    return {
+        "curriculum_revision_id": int(selected.id),
+        "curriculum_revision_uuid": selected.uuid,
+        "curriculum_key": selected.curriculum_key,
+        "revision": int(selected.revision),
+        "content_digest": str(selected.content_digest),
+        "activity_concepts": {
+            act_uuid: {
+                "activity_id": int(act_id),
+                "activity_version": int(act_ver),
+                "activity_digest": str(act_digest),
+                "concept_uuids": sorted(concepts),
+            }
+            for act_uuid, (act_id, act_ver, act_digest, concepts) in sorted(
+                selected_entries.items()
+            )
+        },
+    }

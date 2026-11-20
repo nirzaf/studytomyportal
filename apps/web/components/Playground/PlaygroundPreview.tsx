@@ -1,15 +1,14 @@
 'use client'
 
-import React, { useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowsOutSimple, ArrowsInSimple, CircleNotch } from '@phosphor-icons/react'
-import {
-  buildSandboxedPlaygroundHtml,
-  PLAYGROUND_IFRAME_SANDBOX,
-} from './sandboxHtml'
+import type { PlaygroundLearnerAdaptation } from '@services/playgrounds/generator'
+import SafePlaygroundFrame from './SafePlaygroundFrame'
 
 interface PlaygroundPreviewProps {
   html: string | null
+  adaptation?: PlaygroundLearnerAdaptation | null
   isStreaming?: boolean
   isFullscreen?: boolean
   onToggleFullscreen?: () => void
@@ -17,52 +16,30 @@ interface PlaygroundPreviewProps {
 
 export default function PlaygroundPreview({
   html,
+  adaptation,
   isStreaming,
   isFullscreen,
   onToggleFullscreen,
 }: PlaygroundPreviewProps) {
   const { t } = useTranslation()
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const lastRenderedRef = useRef<string | null>(null)
-  const writeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // srcdoc, not document.write(): the frame is sandboxed onto an opaque
-  // origin with a zero-egress CSP injected into the document head.
-  const writeToIframe = useCallback((content: string) => {
-    const iframe = iframeRef.current
-    if (!iframe) return
-    iframe.srcdoc = buildSandboxedPlaygroundHtml(content)
-  }, [])
+  const [renderedHtml, setRenderedHtml] = useState<string | null>(null)
+  const [renderedAdaptation, setRenderedAdaptation] =
+    useState<PlaygroundLearnerAdaptation | null>(null)
 
   useEffect(() => {
-    if (!html) {
-      if (iframeRef.current) iframeRef.current.srcdoc = ''
-      lastRenderedRef.current = null
-      return
-    }
-
-    if (isStreaming) {
-      // Throttle live writes to ~every 300ms so the iframe doesn't thrash
-      if (writeTimeoutRef.current) clearTimeout(writeTimeoutRef.current)
-      writeTimeoutRef.current = setTimeout(() => {
-        if (html !== lastRenderedRef.current) {
-          lastRenderedRef.current = html
-          writeToIframe(html)
-        }
-      }, 300)
-    } else {
-      // Final render: write immediately
-      if (writeTimeoutRef.current) clearTimeout(writeTimeoutRef.current)
-      if (html !== lastRenderedRef.current) {
-        lastRenderedRef.current = html
-        writeToIframe(html)
+    // Keep the previous ~300ms live-preview throttle; final content updates on
+    // the next task so iframe writes do not run during React's effect flush.
+    const writeTimeout = setTimeout(() => {
+      if (!html) {
+        setRenderedHtml(null)
+        setRenderedAdaptation(adaptation ?? null)
+      } else {
+        setRenderedHtml(html)
+        setRenderedAdaptation(adaptation ?? null)
       }
-    }
-
-    return () => {
-      if (writeTimeoutRef.current) clearTimeout(writeTimeoutRef.current)
-    }
-  }, [html, isStreaming, writeToIframe])
+    }, isStreaming ? 300 : 0)
+    return () => clearTimeout(writeTimeout)
+  }, [html, adaptation, isStreaming])
 
   return (
     <div className="flex-1 relative bg-gray-50/50">
@@ -104,13 +81,12 @@ export default function PlaygroundPreview({
         </button>
       )}
 
-      {/* iframe, always mounted so writes take effect */}
-      <iframe
-        ref={iframeRef}
-        className="w-full h-full border-0"
-        sandbox={PLAYGROUND_IFRAME_SANDBOX}
-        referrerPolicy="no-referrer"
+      <SafePlaygroundFrame
+        html={renderedHtml}
+        adaptation={renderedAdaptation}
         title={t('playgrounds.preview.iframe_title')}
+        className="absolute inset-0"
+        controlsClassName="pe-10"
       />
     </div>
   )

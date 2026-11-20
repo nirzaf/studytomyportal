@@ -13,6 +13,7 @@ from src.db.courses.courses import Course
 from src.db.playground_reactions import PlaygroundReactionSummary, ReactionUser
 from src.db.playgrounds import Playground, PlaygroundRead
 from src.db.users import APITokenUser
+from src.services.playgrounds.adaptive_widget_contract import AdaptiveWidgetValidationError
 from src.routers.playgrounds.playgrounds import router as playgrounds_router
 from src.routers.playgrounds.playgrounds_generator import router as playgrounds_generator_router
 from src.routers.playgrounds.playgrounds_generator import (
@@ -31,6 +32,11 @@ async def _single_chunk_stream():
 async def _failing_stream():
     yield "chunk"
     raise RuntimeError("boom")
+
+
+async def _invalid_adaptive_stream():
+    raise AdaptiveWidgetValidationError("missing a required variant")
+    yield "unreachable"
 
 
 @pytest.fixture
@@ -155,6 +161,17 @@ class TestPlaygroundsRouter:
         assert json.loads(events[-1].removeprefix("data: ").strip()) == {
             "type": "error",
             "message": "An internal error occurred.",
+        }
+
+        adaptive_events = [
+            item
+            async for item in playground_event_generator(
+                _invalid_adaptive_stream(), "session-adaptive-error"
+            )
+        ]
+        assert json.loads(adaptive_events[-1].removeprefix("data: ").strip()) == {
+            "type": "error",
+            "message": "The generated widget did not meet the level and skill adaptation checks. Try again or turn adaptation off.",
         }
 
         with patch(
@@ -929,7 +946,7 @@ class TestPlaygroundsRouter:
             session_holder["session"] = sess
             return sess
 
-        # 1. Start without learner_adaptation -> defaults enabled=True and persists on Playground
+        # 1. Legacy API clients omitting learner_adaptation keep the old non-adaptive behavior.
         with patch("src.routers.playgrounds.playgrounds_generator.reserve_ai_credit"), patch(
             "src.routers.playgrounds.playgrounds_generator.get_org_ai_model",
             return_value="gemini-test",
@@ -958,10 +975,10 @@ class TestPlaygroundsRouter:
                 },
             )
         assert start_resp.status_code == 200
-        assert session_holder["session"].context.learner_adaptation.enabled is True
+        assert session_holder["session"].context.learner_adaptation.enabled is False
         await db.refresh(playground)
         assert playground.learner_adaptation == {
-            "enabled": True,
+            "enabled": False,
             "levels": [],
             "target_skills": [],
         }
@@ -1010,3 +1027,56 @@ class TestPlaygroundsRouter:
             "levels": ["Support", "Mastery"],
             "target_skills": ["Equivalent fractions"],
         }
+
+        # 3. In a governed organization, generator metadata mutation atomically withdraws published=True (T-04)
+        from src.db.studytomy.family import StudyLearnerProfile
+
+        db.add(
+            StudyLearnerProfile(
+                learner_uuid="learner_pg_gen_withdraw",
+                org_id=org.id,
+                user_id=admin_user.id,
+                created_by_user_id=admin_user.id,
+                status="active",
+                control_mode="dependent",
+            )
+        )
+        playground.published = True
+        db.add(playground)
+        await db.commit()
+
+        with patch(
+            "src.routers.playgrounds.playgrounds_generator.get_playground_session",
+            return_value=session_holder["session"],
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator.get_playground_session_owner",
+            return_value=admin_user.id,
+        ), patch("src.routers.playgrounds.playgrounds_generator.reserve_ai_credit"), patch(
+            "src.routers.playgrounds.playgrounds_generator.get_org_ai_model",
+            return_value="gemini-test",
+        ), patch(
+            "src.services.playgrounds.playgrounds._get_user_rights",
+            return_value={"playgrounds": {"action_update": True}},
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator._get_course_context",
+            return_value=(None, None),
+        ), patch(
+            "src.routers.playgrounds.playgrounds_generator.generate_playground_stream",
+            return_value=_single_chunk_stream(),
+        ):
+            withdraw_resp = await client.post(
+                "/api/v1/playgrounds/generate/iterate",
+                json={
+                    "session_uuid": "session_adapt",
+                    "playground_uuid": "playground_adapt",
+                    "message": "Change adaptation settings",
+                    "learner_adaptation": {
+                        "enabled": True,
+                        "level_labels": ["Foundation", "Extension"],
+                        "focus_skills": ["Linear graphs"],
+                    },
+                },
+            )
+        assert withdraw_resp.status_code == 200
+        await db.refresh(playground)
+        assert playground.published is False

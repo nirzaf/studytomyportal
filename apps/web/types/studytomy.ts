@@ -204,25 +204,68 @@ export interface StudyFamilyReviewQueueItem {
   updated_at: string
 }
 
-export interface StudyRelationshipReview extends StudyFamilyReviewQueueItem {
+export interface StudyRelationshipRead extends StudyFamilyReviewQueueItem {
   relationship_type: 'guardian'
   valid_from: string | null
   valid_to: string | null
+  decided_at: string | null
+}
+
+export interface StudyRelationshipReview extends StudyRelationshipRead {
   adult_user_uuid: string
   request_evidence_reference: string
   request_policy_version_ids: number[]
   decision_policy_version_ids: number[] | null
   decision_evidence_reference: string | null
   decision_reason_code: string | null
-  decided_at: string | null
 }
 
 export interface StudyRelationshipDecisionCreate {
   outcome: 'accept' | 'deny'
   expected_version: number
   approved_scopes: string[]
-  valid_from: string | null
+  valid_from?: string | null
   valid_to: string | null
   evidence_reference: string
   reason_code: string
+}
+
+export type StudyLearnerControlMode = 'unresolved' | 'dependent' | 'independent'
+export type StudyLearnerProfileStatus = 'pending' | 'active' | 'suspended' | 'closed'
+export type StudyEligibilityKind = 'learning' | 'independent_participation' | 'purchase'
+export type StudyEligibilityOutcome = 'eligible' | 'ineligible' | 'review_required'
+
+export interface StudyEligibilityDecisionCreate {
+  eligibility_kind: StudyEligibilityKind
+  outcome: StudyEligibilityOutcome
+  evidence_reference: string
+  effective_to?: string | null
+  review_due_at?: string | null
+  control_mode?: StudyLearnerControlMode | null
+}
+
+export interface StudyEligibilityDecisionRead {
+  decision_uuid: string
+  eligibility_kind: StudyEligibilityKind
+  outcome: StudyEligibilityOutcome
+  policy_version_ids: number[]
+  evidence_reference: string
+  effective_from: string
+  effective_to: string | null
+  review_due_at: string | null
+  policy_current: boolean
+  currently_eligible: boolean
+  created_at: string
+}
+
+export interface StudyLearnerProfileRead {
+  learner_uuid: string
+  user_uuid: string
+  status: StudyLearnerProfileStatus
+  control_mode: StudyLearnerControlMode
+  time_zone: string | null
+  access_version: number
+  eligibility_decisions: StudyEligibilityDecisionRead[]
+  created_at: string
+  updated_at: string
 }

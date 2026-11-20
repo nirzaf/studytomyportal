@@ -23,12 +23,20 @@ import PlaygroundOptionsModal from './PlaygroundOptionsModal'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query/keys'
 import {
-  DEFAULT_LEARNER_LEVELS,
+  learnerAdaptationForPlayground,
   startPlaygroundSession,
   iteratePlayground,
   type PlaygroundLearnerAdaptation,
 } from '@services/playgrounds/generator'
-import { updatePlayground, Playground } from '@services/playgrounds/playgrounds'
+import {
+  updatePlayground,
+  getPlayground,
+  getPlaygroundReviewStatus,
+  submitPlaygroundReviewDecision,
+  PlaygroundReviewError,
+  type Playground,
+  type PlaygroundReviewStatus,
+} from '@services/playgrounds/playgrounds'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 
 interface Course {
@@ -93,6 +101,7 @@ export default function PlaygroundEditor({
   const [title, setTitle] = useState(initialPlayground.name)
   const [html, setHtml] = useState<string>(initialPlayground.html_content || '')
   const [streamingHtml, setStreamingHtml] = useState<string>('')
+  const [generationError, setGenerationError] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [sessionUuid, setSessionUuid] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -100,19 +109,22 @@ export default function PlaygroundEditor({
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle')
   const [publishError, setPublishError] = useState<string | null>(null)
+  const [reviewStatus, setReviewStatus] = useState<PlaygroundReviewStatus | null>(null)
+  const [reviewStatusTick, setReviewStatusTick] = useState(0)
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const [reviewError, setReviewError] = useState<{ message: string; stale?: boolean } | null>(null)
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null)
+  const [rightsConfirmed, setRightsConfirmed] = useState(false)
+  const [accessibilityConfirmed, setAccessibilityConfirmed] = useState(false)
+  const [ageSuitabilityConfirmed, setAgeSuitabilityConfirmed] = useState(false)
+  const [evidenceReference, setEvidenceReference] = useState('')
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [selectedCourseUuid, setSelectedCourseUuid] = useState<string>('')
-  const [learnerAdaptation, setLearnerAdaptation] = useState<PlaygroundLearnerAdaptation>(() => ({
-    enabled: initialPlayground.learner_adaptation?.enabled ?? true,
-    levels:
-      initialPlayground.learner_adaptation?.levels && initialPlayground.learner_adaptation.levels.length > 0
-        ? [...initialPlayground.learner_adaptation.levels]
-        : [...DEFAULT_LEARNER_LEVELS],
-    target_skills: initialPlayground.learner_adaptation?.target_skills
-      ? [...initialPlayground.learner_adaptation.target_skills]
-      : [],
-  }))
+  const [learnerAdaptation, setLearnerAdaptation] = useState<PlaygroundLearnerAdaptation>(
+    () => learnerAdaptationForPlayground(initialPlayground)
+  )
   const [titleFocused, setTitleFocused] = useState(false)
   const [isSavingTitle, setIsSavingTitle] = useState(false)
   const [titleSaveStatus, setTitleSaveStatus] = useState<'idle' | 'saved'>('idle')
@@ -123,6 +135,7 @@ export default function PlaygroundEditor({
   const titleDirty = title !== playground.name
 
   const selectedCourse = orgCourses.find((c) => c.course_uuid === selectedCourseUuid) || null
+  const savedLearnerAdaptation = learnerAdaptationForPlayground(playground)
 
   // Auto-save title on blur
   const handleTitleBlur = useCallback(async () => {
@@ -151,22 +164,103 @@ export default function PlaygroundEditor({
     setPlayground(initialPlayground)
     setTitle(initialPlayground.name)
     setHtml(initialPlayground.html_content || '')
-    setLearnerAdaptation({
-      enabled: initialPlayground.learner_adaptation?.enabled ?? true,
-      levels:
-        initialPlayground.learner_adaptation?.levels && initialPlayground.learner_adaptation.levels.length > 0
-          ? [...initialPlayground.learner_adaptation.levels]
-          : [...DEFAULT_LEARNER_LEVELS],
-      target_skills: initialPlayground.learner_adaptation?.target_skills
-        ? [...initialPlayground.learner_adaptation.target_skills]
-        : [],
-    })
+    setLearnerAdaptation(learnerAdaptationForPlayground(initialPlayground))
   }, [initialPlayground.playground_uuid])
 
   // Reset title dirty state when playground updates externally (e.g. via modal)
   useEffect(() => {
     setTitle(playground.name)
   }, [playground.name])
+
+  // Load StudyTomy independent governance/review status for the saved revision
+  useEffect(() => {
+    const orgUuid = playground.org_uuid
+    if (!orgUuid || !accessToken) {
+      setReviewStatus(null)
+      return
+    }
+    let active = true
+    getPlaygroundReviewStatus(orgUuid, playground.playground_uuid, accessToken)
+      .then((status) => {
+        if (active) setReviewStatus(status)
+      })
+      .catch(() => {
+        if (active) setReviewStatus(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [playground.org_uuid, playground.playground_uuid, playground.update_date, accessToken, reviewStatusTick])
+
+  const reloadPlaygroundRevision = useCallback(async () => {
+    try {
+      const latest = await getPlayground(playground.playground_uuid, accessToken)
+      setPlayground(latest)
+      setTitle(latest.name)
+      setHtml(latest.html_content || '')
+      setLearnerAdaptation(learnerAdaptationForPlayground(latest))
+      setReviewError(null)
+      setReviewStatusTick((n) => n + 1)
+    } catch (err) {
+      setReviewError({
+        message: err instanceof Error ? err.message : 'Unable to reload Playground revision.',
+      })
+    }
+  }, [playground.playground_uuid, accessToken])
+
+  const handleSubmitReview = async (decision: 'approved' | 'rejected') => {
+    if (!playground.org_uuid || !reviewStatus || reviewBusy) return
+    const trimmedEvidence = evidenceReference.trim()
+    if (trimmedEvidence.length < 4) {
+      setReviewError({ message: 'Enter an evidence reference (at least 4 characters).' })
+      return
+    }
+    if (
+      decision === 'approved' &&
+      !(rightsConfirmed && accessibilityConfirmed && ageSuitabilityConfirmed)
+    ) {
+      setReviewError({
+        message: 'Confirm rights, accessibility, and age suitability before approving.',
+      })
+      return
+    }
+    setReviewBusy(true)
+    setReviewError(null)
+    setReviewNotice(null)
+    try {
+      const receipt = await submitPlaygroundReviewDecision(
+        playground.org_uuid,
+        playground.playground_uuid,
+        {
+          expected_digest: reviewStatus.content_digest,
+          decision,
+          rights_confirmed: rightsConfirmed,
+          accessibility_confirmed: accessibilityConfirmed,
+          age_suitability_confirmed: ageSuitabilityConfirmed,
+          evidence_reference: trimmedEvidence,
+        },
+        accessToken,
+        crypto.randomUUID()
+      )
+      setReviewNotice(
+        decision === 'approved'
+          ? `Approved revision ${receipt.content_digest.slice(0, 12)}.`
+          : `Rejected revision ${receipt.content_digest.slice(0, 12)}; learner delivery withdrawn.`
+      )
+      setReviewModalOpen(false)
+      await reloadPlaygroundRevision()
+      queryClient.invalidateQueries({ queryKey: queryKeys.playgrounds.detail(playground.playground_uuid) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.playgrounds.list(orgslug) })
+    } catch (err) {
+      const stale = err instanceof PlaygroundReviewError && err.code === 'PLAYGROUND_REVIEW_STALE'
+      setReviewError({
+        message: err instanceof Error ? err.message : 'Unable to record content review.',
+        stale,
+      })
+    } finally {
+      setReviewBusy(false)
+    }
+  }
 
   // Keep title in sync if playground name changes via modal
   const handleUpdated = (updated: Playground) => {
@@ -183,6 +277,7 @@ export default function PlaygroundEditor({
 
       setIsStreaming(true)
       setStreamingHtml('')
+      setGenerationError(null)
       setMessages((prev) => [...prev, { role: 'user' as const, content: prompt }])
 
       track(AnalyticsEvent.PlaygroundGenerationStarted, {
@@ -214,6 +309,7 @@ export default function PlaygroundEditor({
       const onError = (error: string) => {
         setIsStreaming(false)
         setStreamingHtml('')
+        setGenerationError(error)
         setMessages((prev) => prev.slice(0, -1))
         track(AnalyticsEvent.PlaygroundGenerationFailed, {
           error_message: error,
@@ -392,6 +488,39 @@ export default function PlaygroundEditor({
         {/* Right controls */}
         <div className="flex items-center gap-2 flex-shrink-0">
 
+          {reviewStatus?.governed && (
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  reviewStatus.current_revision_approved
+                    ? 'bg-emerald-100 text-emerald-900'
+                    : reviewStatus.latest_decision === 'rejected'
+                      ? 'bg-red-100 text-red-900'
+                      : 'bg-amber-100 text-amber-900'
+                }`}
+                title={`Saved digest ${reviewStatus.content_digest}`}
+              >
+                {reviewStatus.current_revision_approved
+                  ? 'Review approved'
+                  : reviewStatus.latest_decision === 'rejected'
+                    ? 'Review rejected'
+                    : 'Review required'}
+              </span>
+              {reviewStatus.can_review && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewError(null)
+                    setReviewModalOpen(true)
+                  }}
+                  className="flex items-center gap-1.5 h-9 px-3 py-2 font-black text-sm nice-shadow rounded-lg transition-all ease-linear hover:cursor-pointer bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  Review
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Options */}
           <button
             onClick={() => setOptionsOpen(true)}
@@ -466,6 +595,23 @@ export default function PlaygroundEditor({
         </div>
       )}
 
+      {reviewNotice && (
+        <div
+          role="status"
+          style={{ margin: '0 40px 12px' }}
+          className="flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950"
+        >
+          <span>{reviewNotice}</span>
+          <button
+            type="button"
+            onClick={() => setReviewNotice(null)}
+            className="text-xs font-semibold text-emerald-800 underline hover:text-emerald-950"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* ── Main split panel ── */}
       <div
         style={{
@@ -489,6 +635,7 @@ export default function PlaygroundEditor({
         >
           <PlaygroundPreview
             html={previewHtml || null}
+            adaptation={learnerAdaptation}
             isStreaming={isStreaming}
             isFullscreen={isFullscreen}
             onToggleFullscreen={toggleFullscreen}
@@ -502,6 +649,7 @@ export default function PlaygroundEditor({
               key={playground.playground_uuid}
               messages={messages}
               isGenerating={isStreaming}
+              generationError={generationError}
               iterationCount={iterationCount}
               maxIterations={MAX_ITERATIONS}
               onSend={handleSend}
@@ -525,6 +673,138 @@ export default function PlaygroundEditor({
         orgslug={orgslug}
         onUpdated={handleUpdated}
       />
+
+      {reviewModalOpen && reviewStatus?.governed && reviewStatus.can_review && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="playground-review-dialog-title"
+        >
+          <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 shadow-xl space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="playground-review-dialog-title" className="text-lg font-semibold text-gray-900">
+                  Independent Playground Review
+                </h2>
+                <p className="mt-1 text-xs text-gray-600">
+                  Reviewing saved revision for <span className="font-medium text-gray-800">{playground.name}</span>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewModalOpen(false)}
+                className="rounded px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="rounded-md bg-gray-50 p-3 text-xs space-y-1.5">
+              <div>
+                <span className="font-semibold text-gray-700">Saved digest: </span>
+                <span className="font-mono break-all text-gray-900">{reviewStatus.content_digest}</span>
+              </div>
+              <div>
+                <span className="font-semibold text-gray-700">Saved adaptation: </span>
+                <span className="text-gray-800">
+                  {savedLearnerAdaptation.enabled
+                    ? `Enabled (${savedLearnerAdaptation.levels.join(', ')})`
+                    : 'Disabled'}
+                </span>
+              </div>
+              {reviewStatus.latest_decision && (
+                <div>
+                  <span className="font-semibold text-gray-700">Latest decision: </span>
+                  <span className="text-gray-800">
+                    {reviewStatus.latest_decision}
+                    {reviewStatus.latest_reviewed_digest
+                      ? ` (${reviewStatus.latest_reviewed_digest.slice(0, 12)})`
+                      : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {html !== (playground.html_content || '') && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+                Unsaved editor changes are not included in this review; save first if you intend to review them.
+              </p>
+            )}
+
+            <div className="space-y-2 text-sm text-gray-800">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={rightsConfirmed}
+                  onChange={(e) => setRightsConfirmed(e.target.checked)}
+                />
+                <span>Rights & syllabus attribution confirmed</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={accessibilityConfirmed}
+                  onChange={(e) => setAccessibilityConfirmed(e.target.checked)}
+                />
+                <span>Accessibility requirements confirmed</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={ageSuitabilityConfirmed}
+                  onChange={(e) => setAgeSuitabilityConfirmed(e.target.checked)}
+                />
+                <span>Age suitability for target learner cohort confirmed</span>
+              </label>
+              <label className="block pt-1 text-xs font-medium text-gray-700">
+                Review evidence / rationale reference
+                <input
+                  type="text"
+                  value={evidenceReference}
+                  onChange={(e) => setEvidenceReference(e.target.value)}
+                  placeholder="REVIEW-LK-PG-01"
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                />
+              </label>
+            </div>
+
+            {reviewError && (
+              <div className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900 space-y-2" role="alert">
+                <p>{reviewError.message}</p>
+                {reviewError.stale && (
+                  <button
+                    type="button"
+                    onClick={() => void reloadPlaygroundRevision()}
+                    className="rounded border border-red-400 bg-white px-2.5 py-1 font-semibold text-red-800 hover:bg-red-100"
+                  >
+                    Reload revision
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={reviewBusy}
+                onClick={() => void handleSubmitReview('rejected')}
+                className="rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                Reject revision
+              </button>
+              <button
+                type="button"
+                disabled={reviewBusy}
+                onClick={() => void handleSubmitReview('approved')}
+                className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+              >
+                Approve revision
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

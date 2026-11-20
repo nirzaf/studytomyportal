@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
@@ -15,6 +16,7 @@ from src.security.auth import get_current_user, resolve_acting_user_id
 from src.security.features_utils.usage import reserve_ai_credit
 from src.security.features_utils.dependencies import require_playgrounds_feature
 from src.services.ai.llm import model_for_tier
+from src.services.playgrounds.adaptive_widget_contract import AdaptiveWidgetValidationError
 from src.services.playgrounds.playgrounds_generator import (
     get_playground_session,
     get_playground_session_owner,
@@ -38,9 +40,51 @@ async def event_generator(generator, session_uuid: str):
         async for chunk in generator:
             yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
         yield f"data: {json.dumps({'type': 'done', 'session_uuid': session_uuid})}\n\n"
+    except AdaptiveWidgetValidationError as exc:
+        logging.info("Rejected adaptive Playground output: %s", exc)
+        yield f"data: {json.dumps({'type': 'error', 'message': 'The generated widget did not meet the level and skill adaptation checks. Try again or turn adaptation off.'})}\n\n"
     except Exception:
         logging.exception("Error in playground event stream for session %s", session_uuid)
         yield f"data: {json.dumps({'type': 'error', 'message': 'An internal error occurred.'})}\n\n"
+
+
+async def _persist_playground_adaptation_with_governance(
+    db_session: AsyncSession,
+    playground: Playground,
+    adaptation_payload: dict,
+) -> Playground:
+    from src.services.studytomy.policies import lock_organization
+    from src.services.studytomy.publication import (
+        has_approved_playground_review,
+        is_studytomy_governed_playground,
+        playground_content_digest,
+    )
+
+    governed = await is_studytomy_governed_playground(db_session, playground)
+    if governed:
+        await lock_organization(db_session, playground.org_id)
+        locked = (
+            await db_session.execute(
+                select(Playground)
+                .where(Playground.playground_uuid == playground.playground_uuid)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalars().first()
+        if not locked:
+            raise HTTPException(status_code=404, detail="Playground not found")
+        playground = locked
+
+    playground.learner_adaptation = adaptation_payload
+    if governed and playground.published:
+        next_digest = playground_content_digest(playground)
+        if not await has_approved_playground_review(db_session, playground, next_digest):
+            playground.published = False
+            playground.update_date = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+    db_session.add(playground)
+    await db_session.commit()
+    return playground
 
 
 async def get_org_ai_model(org_id: int, db_session: AsyncSession) -> str:
@@ -155,9 +199,11 @@ async def start_playground_session(
         session_request.prompt,
     )
 
-    playground.learner_adaptation = session_request.context.learner_adaptation.model_dump()
-    db_session.add(playground)
-    await db_session.commit()
+    playground = await _persist_playground_adaptation_with_governance(
+        db_session,
+        playground,
+        session_request.context.learner_adaptation.model_dump(),
+    )
 
     session = create_playground_session(
         playground_uuid=session_request.playground_uuid,
@@ -273,9 +319,11 @@ async def iterate_playground_session(
 
     if message_request.learner_adaptation is not None:
         session.context.learner_adaptation = message_request.learner_adaptation
-        playground.learner_adaptation = message_request.learner_adaptation.model_dump()
-        db_session.add(playground)
-        await db_session.commit()
+        playground = await _persist_playground_adaptation_with_governance(
+            db_session,
+            playground,
+            message_request.learner_adaptation.model_dump(),
+        )
 
     html_to_iterate = message_request.current_html or session.current_html
 

@@ -3,6 +3,7 @@ import type { PlaygroundLearnerAdaptation } from '@services/playgrounds/generato
 import {
   RequestBodyWithAuthHeader,
   errorHandling,
+  secureFetch,
 } from '@services/utils/ts/requests'
 
 export type PlaygroundAccessType = 'public' | 'authenticated' | 'restricted'
@@ -204,4 +205,97 @@ export async function togglePlaygroundReaction(
     RequestBodyWithAuthHeader('POST', { emoji }, null, access_token)
   )
   return errorHandling(result)
+}
+
+// ── Studytomy independent content review ────────────────────────────────────
+
+export interface PlaygroundReviewStatus {
+  playground_uuid: string
+  governed: boolean
+  published: boolean
+  deliverable: boolean
+  content_digest: string
+  latest_decision: 'approved' | 'rejected' | null
+  latest_reviewed_digest: string | null
+  current_revision_approved: boolean
+  can_review: boolean
+  is_creator: boolean
+}
+
+export interface PlaygroundReviewDecisionRequest {
+  expected_digest: string
+  decision: 'approved' | 'rejected'
+  rights_confirmed: boolean
+  accessibility_confirmed: boolean
+  age_suitability_confirmed: boolean
+  evidence_reference: string
+}
+
+export interface PlaygroundReviewReceipt {
+  review_event_uuid: string
+  playground_uuid: string
+  decision: 'approved' | 'rejected'
+  content_digest: string
+}
+
+export class PlaygroundReviewError extends Error {
+  readonly status: number
+  readonly code?: string
+
+  constructor(status: number, message: string, code?: string) {
+    super(message)
+    this.name = 'PlaygroundReviewError'
+    this.status = status
+    this.code = code
+  }
+}
+
+export async function getPlaygroundReviewStatus(
+  orgUuid: string,
+  playgroundUuid: string,
+  accessToken: string
+): Promise<PlaygroundReviewStatus> {
+  const response = await secureFetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/playgrounds/${encodeURIComponent(playgroundUuid)}/content-review-status`,
+    { ...RequestBodyWithAuthHeader('GET', null, null, accessToken), cache: 'no-store' }
+  )
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    const detail = body?.detail
+    throw new PlaygroundReviewError(
+      response.status,
+      typeof detail === 'string'
+        ? detail
+        : detail?.message || 'Content review status is unavailable.',
+      typeof detail === 'object' ? detail?.code : undefined
+    )
+  }
+  return response.json()
+}
+
+export async function submitPlaygroundReviewDecision(
+  orgUuid: string,
+  playgroundUuid: string,
+  command: PlaygroundReviewDecisionRequest,
+  accessToken: string,
+  idempotencyKey: string
+): Promise<PlaygroundReviewReceipt> {
+  const url = `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/playgrounds/${encodeURIComponent(playgroundUuid)}/content-review-decisions`
+  const options = RequestBodyWithAuthHeader('POST', command, null, accessToken)
+  const headers = new Headers(options.headers)
+  headers.set('Idempotency-Key', idempotencyKey)
+  options.headers = headers
+  const response = await secureFetch(url, options)
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    const detail = body?.detail
+    throw new PlaygroundReviewError(
+      response.status,
+      typeof detail === 'string'
+        ? detail
+        : detail?.message || 'Unable to record this content review decision.',
+      typeof detail === 'object' ? detail?.code : undefined
+    )
+  }
+  return response.json()
 }

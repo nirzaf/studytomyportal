@@ -19,12 +19,10 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 import GeneralWrapperStyled from '@components/Objects/StyledElements/Wrappers/GeneralWrapper'
 import { Breadcrumbs } from '@components/Objects/Breadcrumbs/Breadcrumbs'
 import { PlaygroundReactionButton } from '@components/Playground/PlaygroundReactionButton'
-import {
-  buildSandboxedPlaygroundHtml,
-  PLAYGROUND_IFRAME_SANDBOX,
-} from '@components/Playground/sandboxHtml'
+import SafePlaygroundFrame from '@components/Playground/SafePlaygroundFrame'
 import UserAvatar from '@components/Objects/UserAvatar'
 import { Playground } from '@services/playgrounds/playgrounds'
+import { learnerAdaptationForPlayground } from '@services/playgrounds/generator'
 import { getPlaygroundThumbnailMediaDirectory, getUserAvatarMediaDirectory } from '@services/media/media'
 import { useTrackView, AnalyticsEvent } from '@services/analytics'
 import ThumbnailImage from '@components/Objects/Thumbnails/ThumbnailImage'
@@ -247,13 +245,12 @@ export default function PlaygroundViewClient({
 
             {/* Iframe / empty state */}
             {playground.html_content ? (
-              <iframe
-                srcDoc={buildSandboxedPlaygroundHtml(playground.html_content)}
-                // srcDoc content runs on an opaque origin with zero-egress CSP
-                sandbox={PLAYGROUND_IFRAME_SANDBOX}
-                referrerPolicy="no-referrer"
-                className="w-full h-full border-0"
+              <SafePlaygroundFrame
+                html={playground.html_content}
+                adaptation={learnerAdaptationForPlayground(playground)}
                 title={playground.name}
+                className="absolute inset-0"
+                controlsClassName="pe-40 pt-12"
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center text-center px-6">

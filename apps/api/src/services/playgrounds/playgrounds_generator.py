@@ -12,6 +12,11 @@ from src.services.playgrounds.schemas.playgrounds_generator import (
     PlaygroundSessionData,
     PlaygroundMessage,
 )
+from src.services.playgrounds.adaptive_widget_contract import (
+    AdaptiveWidgetValidationError,
+    remove_adaptive_runtime,
+    validate_and_install_adaptive_runtime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,10 @@ PLAYGROUND_SESSION_KEY = "playground_session:{session_uuid}"
 PLAYGROUND_OWNER_KEY = "playground_session_owner:{session_uuid}"
 SESSION_TTL = 2160000  # 25 days
 MAX_ITERATIONS = 10
+
+
+class PlaygroundGenerationError(RuntimeError):
+    """Raised when streaming Playground HTML fails safely after logging."""
 
 
 def get_redis_connection():
@@ -144,7 +153,12 @@ CONTEXT:
         base_prompt += f"""
 
 LEARNER-CHOSEN ADAPTATION (enabled by the educator):
-- Build visible, learner-facing interactive controls inside the widget so learners can freely choose a level (using the exact level labels below) and select or toggle focus skills at any time.
+- Build the exact machine-readable contract the platform validates:
+  - One `<select data-study-level-selector>` with one `<option value="LABEL">LABEL</option>` for every level below, in the supplied order.
+  - One `<select data-study-skill-selector>` with one option for every target skill. Include every supplied target skill exactly; if fewer than two were supplied, add at least one closely related, clearly named skill so learners can switch focus.
+  - One `<article data-study-adaptation-variant data-level="LEVEL" data-skill="SKILL">` for every level/skill pair.
+  - Inside every article, include non-empty `<div data-study-scaffolding>` and `<div data-study-challenge>` content. Vary scaffold detail across levels and challenge content across skills; each pair must have useful, distinct content.
+- Do not implement selector event handlers. The platform adds a deterministic, offline switcher after validating every option and level/skill variant.
 - Available level labels (plain labels supplied by the educator):
 {level_labels}
 - Focus skills (plain labels supplied by the educator):
@@ -152,7 +166,7 @@ LEARNER-CHOSEN ADAPTATION (enabled by the educator):
 - Meaningful pedagogical adaptation — changing the selected level or focus skill MUST visibly and functionally adapt BOTH:
   - Scaffolding: adjust explanation depth, worked examples, step-by-step guidance, hints, conceptual cues, and cognitive load (more structured scaffolding at earlier levels vs. minimal hints at advanced levels) while preserving the same core learning objective.
   - Challenges: adjust problem complexity, multi-step tasks, edge cases, open-ended prompts, and skill-specific practice scenarios tied directly to the chosen focus skills.
-- Smooth runtime switching: learners must be able to switch levels and focus skills freely at any time without breaking the widget layout or crashing state. Keep question keys, calculations, and answer checks deterministic and correct; do not ask an LLM to calculate or decide a grade at runtime.
+- Keep question keys, calculations, and answer checks deterministic and correct; do not ask an LLM to calculate or decide a grade at runtime.
 - Strict local & self-selected state boundary: keep the learner's level and skill choices strictly in local component/page memory only. Do not read or claim to use learner history, mastery, identity, or other profile data. Do not persist choices to a backend, send telemetry or analytics, or couple to any server-side adaptive engine or gating/placement logic; the generated widget must not call external APIs or use browser storage.
 - Include an accessible reset, keyboard-operable controls, and a brief note that choices are self-selected for this activity and are not a measured mastery result."""
 
@@ -260,7 +274,8 @@ async def generate_playground_stream(
             for msg in session.message_history
         ]
 
-        if current_html and session.iteration_count > 0:
+        if current_html and current_html.strip():
+            current_html = remove_adaptive_runtime(current_html)
             user_prompt = f"""The user wants to modify the existing interactive element.
 
 CURRENT HTML CODE:
@@ -284,7 +299,18 @@ Please modify the HTML code above according to the user's request. Output ONLY t
             timeout=300.0,
         ):
             full_response += chunk
-            yield chunk
+            if not session.context.learner_adaptation.enabled:
+                yield chunk
+
+        generated_html = extract_html_from_response(full_response)
+        if session.context.learner_adaptation.enabled:
+            generated_html = validate_and_install_adaptive_runtime(
+                generated_html,
+                session.context.learner_adaptation,
+            )
+            # Adaptive content is held until the complete matrix is validated;
+            # never present a partial or non-adaptive widget as successful.
+            yield generated_html
 
         session.message_history.append(
             PlaygroundMessage(role="user", content=prompt)
@@ -292,7 +318,7 @@ Please modify the HTML code above according to the user's request. Output ONLY t
         session.message_history.append(
             PlaygroundMessage(role="model", content=full_response)
         )
-        session.current_html = extract_html_from_response(full_response)
+        session.current_html = generated_html
         session.iteration_count += 1
 
         if len(session.message_history) > 12:
@@ -300,12 +326,17 @@ Please modify the HTML code above according to the user's request. Output ONLY t
 
         save_playground_session(session)
 
-    except Exception:
-        # Never surface raw exception text to the client stream: it can contain
-        # internal details (provider error bodies, keys, stack context). Log it
-        # server-side and emit a generic message instead.
+    except AdaptiveWidgetValidationError:
+        # This is a safe, user-correctable output-contract failure. Let the SSE
+        # layer return its message without storing a broken adaptive result.
+        raise
+    except Exception as exc:
+        # Never yield raw error text as a content chunk or emit a subsequent
+        # done event; propagate a terminal failure to the SSE stream handler.
         logger.exception("Playground generation stream failed")
-        yield "Error: An internal error occurred while generating content."
+        raise PlaygroundGenerationError(
+            "An internal error occurred while generating content."
+        ) from exc
 
 
 def extract_html_from_response(response: str) -> str:

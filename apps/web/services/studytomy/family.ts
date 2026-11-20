@@ -3,6 +3,7 @@ import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/reque
 import type {
   StudyFamilyReviewQueueItem,
   StudyRelationshipDecisionCreate,
+  StudyRelationshipRead,
   StudyRelationshipReview,
 } from '@/types/studytomy'
 
@@ -154,7 +155,7 @@ export async function decideRelationship(
   accessToken: string,
   idempotencyKey: string,
   decision: StudyRelationshipDecisionCreate
-): Promise<StudyRelationshipReview> {
+): Promise<StudyRelationshipRead> {
   const url = `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learners/${encodeURIComponent(learnerUuid)}/relationships/${encodeURIComponent(relationshipUuid)}/decisions`
   const options = RequestBodyWithAuthHeader('POST', decision, null, accessToken)
   const headers = new Headers(options.headers)

@@ -630,9 +630,9 @@ class StudyRelationshipDecisionCreate(BaseModel):
     @model_validator(mode="after")
     def outcome_has_consistent_scope_and_period(self):
         if self.outcome == StudyRelationshipDecisionOutcome.ACCEPT:
-            if not self.approved_scopes or self.valid_from is None or self.valid_to is None:
-                raise ValueError("Accepted authority requires explicit scopes and a validity period")
-            if self.valid_to <= self.valid_from:
+            if not self.approved_scopes or self.valid_to is None:
+                raise ValueError("Accepted authority requires explicit scopes and a validity end time")
+            if self.valid_from is not None and self.valid_to <= self.valid_from:
                 raise ValueError("valid_to must be later than valid_from")
         elif self.approved_scopes or self.valid_from is not None or self.valid_to is not None:
             raise ValueError("Denied authority cannot contain scopes or a validity period")

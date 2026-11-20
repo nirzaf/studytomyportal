@@ -10,9 +10,17 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from src.db.courses.courses import Course
+from src.db.courses.activities import Activity, ActivityTypeEnum
+from src.db.courses.chapters import Chapter
+from src.db.courses.course_chapters import CourseChapter
+from src.db.courses.chapter_activities import ChapterActivity
 from src.db.playgrounds import Playground, PlaygroundAccessType, PlaygroundUpdate
 from src.db.studytomy.access import StudyCourseAccessGrant
-from src.db.studytomy.adaptive import StudyConcept, StudyCurriculumRevision
+from src.db.studytomy.adaptive import (
+    StudyConcept,
+    StudyConceptActivity,
+    StudyCurriculumRevision,
+)
 from src.db.studytomy.education import StudyCourseRelease, StudyCourseReview
 from src.db.studytomy.family import (
     StudyEligibilityDecision,
@@ -36,8 +44,14 @@ from src.db.user_organizations import UserOrganization
 from src.db.users import PublicUser, User
 from src.security.security import security_hash_password
 from src.security.studytomy_access import StudytomyCapabilityName
-from src.services.playgrounds.playgrounds import update_playground
+from src.services.playgrounds.playgrounds import (
+    get_playground,
+    list_org_playgrounds,
+    update_playground,
+)
 from src.services.studytomy import (
+    adaptive_attempt_access,
+    adaptive_curriculum,
     adaptive_guidance,
     adaptive_objective_scoring,
     adaptive_progress,
@@ -45,6 +59,7 @@ from src.services.studytomy import (
     adaptive_teaching,
     consents,
     publication,
+    releases,
 )
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.policies import POLICY_REQUIRED_RESPONSIBILITIES
@@ -318,6 +333,114 @@ async def test_task04_governed_playground_publish_requires_independent_review_an
                 db,
             )
         assert stale_pub.value.status_code == 409
+
+    # Approve and publish v2, then test T-04/T-05 rejection withdrawal + review status + learner visibility
+    v2_digest = publication.playground_content_digest(edited)
+    learner = await _make_user(db, org.id, "pg_learner", "pglearner@lk.test", "user_pg_learner")
+
+    with patch(
+        "src.services.playgrounds.playgrounds._get_user_rights",
+        new_callable=AsyncMock,
+        return_value={"playgrounds": {"action_update": True}},
+    ):
+        await publication.record_playground_review(
+            db,
+            org,
+            admin_user,
+            governed_pg.playground_uuid,
+            publication.PlaygroundReviewCommand(
+                expected_digest=v2_digest,
+                decision="approved",
+                rights_confirmed=True,
+                accessibility_confirmed=True,
+                age_suitability_confirmed=True,
+                evidence_reference="REVIEW-LK-PG-02",
+            ),
+            "idem-pg-indep-v2",
+        )
+        await update_playground(
+            SimpleNamespace(),
+            governed_pg.playground_uuid,
+            PlaygroundUpdate(published=True),
+            regular_user,
+            db,
+        )
+
+    # Learner can now read and list approved governed Playground
+    assert (await get_playground(SimpleNamespace(), governed_pg.playground_uuid, learner, db)).published is True
+    assert governed_pg.playground_uuid in {
+        p.playground_uuid for p in await list_org_playgrounds(SimpleNamespace(), org.id, learner, db)
+    }
+
+    # Check independent review status projection (T-05)
+    reviewer_status = await publication.get_playground_review_status(
+        db, org, admin_user, governed_pg.playground_uuid
+    )
+    assert reviewer_status.governed is True
+    assert reviewer_status.can_review is True
+    assert reviewer_status.deliverable is True
+    assert reviewer_status.current_revision_approved is True
+
+    with patch(
+        "src.services.playgrounds.playgrounds._get_user_rights",
+        new_callable=AsyncMock,
+        return_value={"playgrounds": {"action_update_own": True}},
+    ):
+        creator_status = await publication.get_playground_review_status(
+            db, org, regular_user, governed_pg.playground_uuid
+        )
+        assert creator_status.is_creator is True
+        assert creator_status.can_review is False
+
+    with patch(
+        "src.services.playgrounds.playgrounds._get_user_rights",
+        new_callable=AsyncMock,
+        return_value={"playgrounds": {}},
+    ), pytest.raises(HTTPException) as learner_status_exc:
+        await publication.get_playground_review_status(
+            db, org, learner, governed_pg.playground_uuid
+        )
+    assert learner_status_exc.value.status_code == 404
+
+    # Rejection atomically sets published=False and removes learner read & list access
+    rejected = await publication.record_playground_review(
+        db,
+        org,
+        admin_user,
+        governed_pg.playground_uuid,
+        publication.PlaygroundReviewCommand(
+            expected_digest=v2_digest,
+            decision="rejected",
+            rights_confirmed=False,
+            accessibility_confirmed=False,
+            age_suitability_confirmed=False,
+            evidence_reference="REJECT-LK-PG-02",
+        ),
+        "idem-pg-reject-v2",
+    )
+    assert rejected.decision == "rejected"
+    await db.refresh(governed_pg)
+    assert governed_pg.published is False
+
+    with pytest.raises(HTTPException) as hidden_after_reject:
+        await get_playground(SimpleNamespace(), governed_pg.playground_uuid, learner, db)
+    assert hidden_after_reject.value.status_code == 404
+    assert governed_pg.playground_uuid not in {
+        p.playground_uuid for p in await list_org_playgrounds(SimpleNamespace(), org.id, learner, db)
+    }
+
+    # Independent reviewer can still inspect rejected/draft governed Playground to review
+    assert (
+        await get_playground(SimpleNamespace(), governed_pg.playground_uuid, admin_user, db)
+    ).playground_uuid == governed_pg.playground_uuid
+
+    # Legacy unreviewed published item (published=True before org became governed) fails closed for learners
+    assert ce_pub.playground_uuid not in {
+        p.playground_uuid for p in await list_org_playgrounds(SimpleNamespace(), org.id, learner, db)
+    }
+    with pytest.raises(HTTPException) as legacy_blocked:
+        await get_playground(SimpleNamespace(), ce_pub.playground_uuid, learner, db)
+    assert legacy_blocked.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -730,3 +853,418 @@ async def test_task12_task14_objective_math_scoring_and_tutor_injection_fallback
     assert output.fallback_used is True
     assert output.teaching_action == "explain"
     assert output.source_refs == ["current_lesson"]
+
+
+@pytest.mark.asyncio
+async def test_t06_t07_immutable_release_curriculum_binding_survives_ab_publish_and_retirement(
+    db, org, admin_user, regular_user
+):
+    now = datetime.now(UTC)
+    learner_b_user = await _make_user(db, org.id, "ab_learner_b", "abb@lk.test", "user_ab_b")
+
+    course = Course(
+        org_id=org.id,
+        name="Grade 11 Physics (NIE)",
+        description="Managed A/B test course",
+        public=False,
+        published=False,
+        studytomy_managed=True,
+        open_to_contributors=False,
+        course_uuid="course_ab_binding_t06",
+        creation_date="2026-01-01",
+        update_date="2026-01-01",
+    )
+    db.add(course)
+    await db.flush()
+
+    chapter = Chapter(
+        org_id=org.id,
+        course_id=course.id,
+        chapter_uuid="chap_ab_t06",
+        name="Mechanics",
+        description="Mechanics",
+        creation_date="2026-01-01",
+        update_date="2026-01-01",
+    )
+    db.add(chapter)
+    await db.flush()
+    db.add(
+        CourseChapter(
+            org_id=org.id,
+            course_id=course.id,
+            chapter_id=chapter.id,
+            order=1,
+            creation_date="2026-01-01",
+            update_date="2026-01-01",
+        )
+    )
+    lesson = Activity(
+        org_id=org.id,
+        course_id=course.id,
+        activity_uuid="act_ab_physics_1",
+        name="Newton Laws",
+        activity_type=ActivityTypeEnum.TYPE_DYNAMIC,
+        activity_sub_type="SUBTYPE_DYNAMIC_PAGE",
+        content={"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "F = ma"}]}]},
+        details={},
+        published=True,
+        current_version=1,
+        creation_date="2026-01-01",
+        update_date="2026-01-01",
+    )
+    db.add(lesson)
+    await db.flush()
+    db.add(
+        ChapterActivity(
+            org_id=org.id,
+            course_id=course.id,
+            chapter_id=chapter.id,
+            activity_id=lesson.id,
+            order=1,
+            creation_date="2026-01-01",
+            update_date="2026-01-01",
+        )
+    )
+
+    policies, owners = await _seed_policies_with_approvals(
+        db,
+        org,
+        admin_user.id,
+        {
+            StudyPolicyKey.D_01: {"markets": ["LK"], "learner_age_limits": {"grades": "6-13"}, "independent_participation": {"verified": True}},
+            StudyPolicyKey.D_02: {"subjects": ["Physics"], "learner_levels": ["Grade 11"], "languages": ["en"], "curriculum_claims": {"adaptive_curriculum_keys": ["LK-PHY-G11"]}},
+            StudyPolicyKey.D_03: {"guardian_authority": {"verification": "human"}, "adult_transition": {"review": "human"}},
+            StudyPolicyKey.D_05: {"prices": {"currency": "LKR"}, "access_periods": {"term_days": 90}, "learner_allocation": {"single_named_learner": True}},
+            StudyPolicyKey.D_08: {"assessment": {"passing_score": 50}, "assistance": {"adaptive_guidance": {"enabled": True}}},
+            StudyPolicyKey.D_09: {"release_schedule": {"mode": "frozen", "ungated_text_activities": {course.course_uuid: [lesson.activity_uuid]}}, "completion_prerequisites": {"required": False}, "mastery_gate": {"separate": True}},
+            StudyPolicyKey.D_10: {"learner_eligibility": {"grades": "6-13"}, "supervision": {"educator_reviewed": True}, "materials": {"local_only": True}, "usage_limits": {"daily_cap": 100}, "review": {"independent": True}},
+            StudyPolicyKey.D_11: {"community_audiences": {"restricted": True}, "adult_contact_boundaries": {"moderated": True}, "moderation": {"enabled": True}},
+            StudyPolicyKey.D_12: {"information_uses": {"learning_terms": ["course_release", "adaptive_mastery", "adaptive_guidance"]}, "consent": {"notice_versions": {"learning_terms": "v1"}, "notice_texts": {"learning_terms": "Approved"}}, "parent_report_scope": ["consent_management", "adaptive_report_summary"]},
+            StudyPolicyKey.D_13: {"retention": {"learner_evidence_retention_category": "education_7y"}, "record_access": {"assigned_reviewer_only": True}},
+            StudyPolicyKey.D_15: {"accessibility_standard": {"wcag": "2.1-AA"}, "supported_formats": {"media_types": ["text/html"]}, "service_recovery": {"fallback": "draft"}},
+            StudyPolicyKey.D_16: {"content_rights": {"verified": True}, "review_approvals": {"independent_reviewer": True}, "certificate_presentation": {"none": True}},
+            StudyPolicyKey.D_18: {"customer_terms": {"version": "v1"}, "selected_market_requirements": {"jurisdiction": "LK"}},
+        },
+    )
+    edu_owner = owners[StudyOwnerFunction.EDUCATION]
+
+    curr_a = StudyCurriculumRevision(
+        org_id=org.id,
+        owner_course_uuid=course.course_uuid,
+        curriculum_key="LK-PHY-G11",
+        revision=1,
+        subject="Physics",
+        level="Grade 11",
+        language="en",
+        source_reference="NIE-PHY-11",
+        rights_reference="RIGHTS-PHY-1",
+        status="published",
+        version=2,
+        content_digest="a" * 64,
+        reviewer_id=admin_user.id,
+        approved_at=now,
+    )
+    db.add(curr_a)
+    await db.flush()
+    concept_a = StudyConcept(
+        org_id=org.id,
+        curriculum_revision_id=curr_a.id,
+        code="NEWTON_1",
+        title="Newton's Second Law A",
+        objective="Apply F = ma",
+        sequence=1,
+    )
+    db.add(concept_a)
+    await db.flush()
+    lesson_digest = adaptive_curriculum.curriculum_activity_digest(lesson)
+    db.add(
+        StudyConceptActivity(
+            org_id=org.id,
+            curriculum_revision_id=curr_a.id,
+            concept_id=concept_a.id,
+            course_id=course.id,
+            course_uuid=course.course_uuid,
+            activity_id=lesson.id,
+            activity_uuid=lesson.activity_uuid,
+            activity_version=lesson.current_version,
+            activity_digest=lesson_digest,
+            usage="teach",
+        )
+    )
+    await db.flush()
+
+    # Freeze Release A while Curriculum A is published -> curriculum_binding captures A
+    snap_a = await releases.course_candidate_snapshot(db, course)
+    assert snap_a["curriculum_binding"]["curriculum_revision_id"] == curr_a.id
+    assert snap_a["curriculum_binding"]["curriculum_revision_uuid"] == curr_a.uuid
+    assert snap_a["curriculum_binding"]["activity_concepts"][lesson.activity_uuid]["concept_uuids"] == [concept_a.uuid]
+
+    sha_a = canonical_request_hash(snap_a)
+    rev_a = StudyCourseReview(
+        org_id=org.id,
+        course_uuid=course.course_uuid,
+        revision_sha256=sha_a,
+        owner_user_id=regular_user.id,
+        reviewer_user_id=admin_user.id,
+        reviewer_assignment_id=edu_owner.id,
+        rights_evidence_id=1,
+        accessibility_evidence_id=2,
+        policy_version_ids=[int(policies[StudyPolicyKey.D_09].id)],
+        decision="approved",
+        accessibility_confirmed=True,
+        assessment_confirmed=True,
+    )
+    db.add(rev_a)
+    await db.flush()
+    rel_a = StudyCourseRelease(
+        org_id=org.id,
+        course_uuid=course.course_uuid,
+        review_id=rev_a.id,
+        assessment_policy_id=policies[StudyPolicyKey.D_08].id,
+        progression_policy_id=policies[StudyPolicyKey.D_09].id,
+        retention_policy_id=policies[StudyPolicyKey.D_13].id,
+        rights_policy_id=policies[StudyPolicyKey.D_16].id,
+        retention_category="education_7y",
+        policy_binding={"policy_version_ids": [int(policies[StudyPolicyKey.D_09].id)]},
+        snapshot=snap_a,
+        snapshot_sha256=sha_a,
+        media_manifest={},
+        released_by_user_id=admin_user.id,
+    )
+    db.add(rel_a)
+    await db.flush()
+
+    # Publish Curriculum B mapping the exact same unchanged lesson activity & digest
+    curr_b = StudyCurriculumRevision(
+        org_id=org.id,
+        owner_course_uuid=course.course_uuid,
+        curriculum_key="LK-PHY-G11",
+        revision=2,
+        subject="Physics",
+        level="Grade 11",
+        language="en",
+        source_reference="NIE-PHY-11-B",
+        rights_reference="RIGHTS-PHY-2",
+        status="published",
+        version=2,
+        content_digest="b" * 64,
+        reviewer_id=admin_user.id,
+        approved_at=now,
+    )
+    db.add(curr_b)
+    await db.flush()
+    concept_b = StudyConcept(
+        org_id=org.id,
+        curriculum_revision_id=curr_b.id,
+        code="NEWTON_1_B",
+        title="Newton's Second Law B",
+        objective="Apply F = ma (rev B)",
+        sequence=1,
+    )
+    db.add(concept_b)
+    await db.flush()
+    db.add(
+        StudyConceptActivity(
+            org_id=org.id,
+            curriculum_revision_id=curr_b.id,
+            concept_id=concept_b.id,
+            course_id=course.id,
+            course_uuid=course.course_uuid,
+            activity_id=lesson.id,
+            activity_uuid=lesson.activity_uuid,
+            activity_version=lesson.current_version,
+            activity_digest=lesson_digest,
+            usage="teach",
+        )
+    )
+    await db.flush()
+
+    # While BOTH A and B are published simultaneously, taking a new snapshot fails closed (409 ambiguous)
+    with pytest.raises(HTTPException) as ambig_exc:
+        await releases.course_candidate_snapshot(db, course)
+    assert ambig_exc.value.status_code == 409
+    assert ambig_exc.value.detail["code"] == "AMBIGUOUS_CURRICULUM_BINDING"
+
+    # Retire A -> now B is uniquely published -> Release B pins B cleanly
+    curr_a.status = "retired"
+    db.add(curr_a)
+    await db.flush()
+    snap_b = await releases.course_candidate_snapshot(db, course)
+    assert snap_b["curriculum_binding"]["curriculum_revision_id"] == curr_b.id
+    sha_b = canonical_request_hash(snap_b)
+    rev_b = StudyCourseReview(
+        org_id=org.id,
+        course_uuid=course.course_uuid,
+        revision_sha256=sha_b,
+        owner_user_id=regular_user.id,
+        reviewer_user_id=admin_user.id,
+        reviewer_assignment_id=edu_owner.id,
+        rights_evidence_id=1,
+        accessibility_evidence_id=2,
+        policy_version_ids=[int(policies[StudyPolicyKey.D_09].id)],
+        decision="approved",
+        accessibility_confirmed=True,
+        assessment_confirmed=True,
+    )
+    db.add(rev_b)
+    await db.flush()
+    rel_b = StudyCourseRelease(
+        org_id=org.id,
+        course_uuid=course.course_uuid,
+        review_id=rev_b.id,
+        assessment_policy_id=policies[StudyPolicyKey.D_08].id,
+        progression_policy_id=policies[StudyPolicyKey.D_09].id,
+        retention_policy_id=policies[StudyPolicyKey.D_13].id,
+        rights_policy_id=policies[StudyPolicyKey.D_16].id,
+        retention_category="education_7y",
+        policy_binding={"policy_version_ids": [int(policies[StudyPolicyKey.D_09].id)]},
+        snapshot=snap_b,
+        snapshot_sha256=sha_b,
+        media_manifest={},
+        released_by_user_id=admin_user.id,
+    )
+    db.add(rel_b)
+    await db.flush()
+
+    profile_a = StudyLearnerProfile(
+        learner_uuid="learner_ab_a",
+        org_id=org.id,
+        user_id=regular_user.id,
+        created_by_user_id=admin_user.id,
+        status="active",
+        control_mode="independent",
+    )
+    profile_b = StudyLearnerProfile(
+        learner_uuid="learner_ab_b",
+        org_id=org.id,
+        user_id=learner_b_user.id,
+        created_by_user_id=admin_user.id,
+        status="active",
+        control_mode="independent",
+    )
+    db.add_all([profile_a, profile_b])
+    await db.flush()
+
+    el_policy_ids = [int(policies[k].id) for k in (StudyPolicyKey.D_01, StudyPolicyKey.D_02, StudyPolicyKey.D_12)]
+    indep_policy_ids = [int(policies[k].id) for k in (StudyPolicyKey.D_01, StudyPolicyKey.D_03, StudyPolicyKey.D_12)]
+    c_policy_ids = [int(policies[k].id) for k in (StudyPolicyKey.D_01, StudyPolicyKey.D_03, StudyPolicyKey.D_12, StudyPolicyKey.D_05, StudyPolicyKey.D_18)]
+    for prof, tok in ((profile_a, "a"), (profile_b, "b")):
+        db.add(
+            StudyEligibilityDecision(
+                org_id=org.id,
+                learner_profile_id=prof.id,
+                eligibility_kind="learning",
+                outcome="eligible",
+                evidence_reference=f"ELIG-AB-{tok}",
+                policy_version_ids=el_policy_ids,
+                reviewer_user_id=admin_user.id,
+                owner_assignment_id=edu_owner.id,
+                effective_from=now - timedelta(hours=1),
+            )
+        )
+        db.add(
+            StudyEligibilityDecision(
+                org_id=org.id,
+                learner_profile_id=prof.id,
+                eligibility_kind="independent_participation",
+                outcome="eligible",
+                evidence_reference=f"ELIG-INDEP-AB-{tok}",
+                policy_version_ids=indep_policy_ids,
+                reviewer_user_id=admin_user.id,
+                owner_assignment_id=edu_owner.id,
+                effective_from=now - timedelta(hours=1),
+            )
+        )
+        from src.db.studytomy.privacy import StudyConsentEvent
+
+        db.add(
+            StudyConsentEvent(
+                org_id=org.id,
+                learner_profile_id=prof.id,
+                actor_user_id=prof.user_id,
+                subject_user_id=prof.user_id,
+                purpose_code="learning_terms",
+                choice="accept",
+                notice_version="v1",
+                scope_codes=["course_release", "adaptive_mastery", "adaptive_guidance"],
+                policy_version_ids=c_policy_ids,
+                effective_at=now - timedelta(hours=1),
+            )
+        )
+
+    db.add_all([
+        StudyCourseAccessGrant(
+            org_id=org.id,
+            learner_profile_id=profile_a.id,
+            course_uuid=course.course_uuid,
+            release_id=rel_a.id,
+            source_kind="order_line",
+            source_uuid="ord_ab_a",
+            start_basis="fixed_period",
+            starts_at=now - timedelta(hours=1),
+            ends_at=now + timedelta(days=30),
+            created_at=now - timedelta(hours=1),
+        ),
+        StudyCourseAccessGrant(
+            org_id=org.id,
+            learner_profile_id=profile_b.id,
+            course_uuid=course.course_uuid,
+            release_id=rel_b.id,
+            source_kind="order_line",
+            source_uuid="ord_ab_b",
+            start_basis="fixed_period",
+            starts_at=now - timedelta(hours=1),
+            ends_at=now + timedelta(days=30),
+            created_at=now - timedelta(hours=1),
+        ),
+    ])
+    await db.commit()
+
+    # Learner A (Release A) still resolves retired Curriculum A & concept A cleanly, NEVER B!
+    src_a = await adaptive_attempt_access.resolve_managed_release_lesson_source(
+        db, org, regular_user, course.course_uuid, rel_a.uuid, lesson.activity_uuid, now
+    )
+    assert src_a.curriculum.id == curr_a.id
+    assert src_a.concept_uuids == (concept_a.uuid,)
+
+    resolved_curr_a, _ = await adaptive_progress._published_or_managed_curriculum(
+        db, org, profile_a, curr_a.uuid, now
+    )
+    assert resolved_curr_a.id == curr_a.id
+    with pytest.raises(HTTPException) as wrong_b:
+        await adaptive_progress._published_or_managed_curriculum(
+            db, org, profile_a, curr_b.uuid, now
+        )
+    assert wrong_b.value.status_code == 404
+
+    # Learner B (Release B) resolves Curriculum B & concept B, NEVER A!
+    src_b = await adaptive_attempt_access.resolve_managed_release_lesson_source(
+        db, org, learner_b_user, course.course_uuid, rel_b.uuid, lesson.activity_uuid, now
+    )
+    assert src_b.curriculum.id == curr_b.id
+    assert src_b.concept_uuids == (concept_b.uuid,)
+
+    resolved_curr_b, _ = await adaptive_progress._published_or_managed_curriculum(
+        db, org, profile_b, curr_b.uuid, now
+    )
+    assert resolved_curr_b.id == curr_b.id
+    with pytest.raises(HTTPException) as wrong_a:
+        await adaptive_progress._published_or_managed_curriculum(
+            db, org, profile_b, curr_a.uuid, now
+        )
+    assert wrong_a.value.status_code == 404
+
+    # Tampered curriculum_binding fails closed (404)
+    tampered_snap = {
+        **snap_a,
+        "curriculum_binding": {**snap_a["curriculum_binding"], "content_digest": "f" * 64},
+    }
+    rel_a.snapshot = tampered_snap
+    rel_a.snapshot_sha256 = canonical_request_hash(tampered_snap)
+    db.add(rel_a)
+    await db.commit()
+    with pytest.raises(HTTPException) as tampered_exc:
+        await adaptive_attempt_access.resolve_managed_release_lesson_source(
+            db, org, regular_user, course.course_uuid, rel_a.uuid, lesson.activity_uuid, now
+        )
+    assert tampered_exc.value.status_code == 404
