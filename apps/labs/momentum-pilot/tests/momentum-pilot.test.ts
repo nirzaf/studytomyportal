@@ -229,4 +229,12 @@ test('T-02 & T-05 built artifact removes standalone AI, pins SHA-256 manifest, a
   assert.match(headerText, /frame-ancestors 'self' https:\/\/lms\.studytomy\.com/);
   assert.match(headerText, /connect-src 'none'/);
   assert.ok(fs.existsSync(path.join(distDir, 'LICENSE')));
+
+  // Versioned immutable path contains identical reviewed artifact set
+  const versionedDir = path.join(distDir, manifest.lab_id, manifest.build_version);
+  assert.ok(fs.existsSync(path.join(versionedDir, 'index.html')));
+  assert.ok(fs.existsSync(path.join(versionedDir, manifest.bundle_asset)));
+  assert.ok(fs.existsSync(path.join(versionedDir, 'manifest.json')));
+  assert.ok(fs.existsSync(path.join(versionedDir, 'LICENSE')));
+  assert.equal(manifest.versioned_entry_path, `${manifest.lab_id}/${manifest.build_version}/index.html`);
 });

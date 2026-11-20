@@ -32,6 +32,7 @@ from src.db.studytomy.adaptive_evidence import (
     StudyLearningEvidence,
 )
 from src.db.studytomy.adaptive_items import StudyItemRevision
+from src.db.studytomy.education import StudyCourseRelease
 from src.db.studytomy.family import StudyLearnerProfile
 from src.db.studytomy.governance import (
     StudyBusinessEvent,
@@ -878,6 +879,39 @@ async def ensure_native_source_deletable(
                 "message": "This source has retained managed assessment attempts.",
             },
         )
+
+    releases = (
+        await db.execute(
+            select(StudyCourseRelease).where(StudyCourseRelease.org_id == org_id)
+        )
+    ).scalars().all()
+    for rel in releases:
+        snap = rel.snapshot if isinstance(rel.snapshot, dict) else {}
+        if scope == "course" and rel.course_uuid == resource_uuid:
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "MANAGED_ASSESSMENT_SOURCE_RETAINED",
+                    "message": "This course is retained in a course release.",
+                },
+            )
+        if scope in ("activity", "assignment", "task"):
+            snap_key = {
+                "activity": ("activities", "activity_uuid"),
+                "assignment": ("assignments", "assignment_uuid"),
+                "task": ("assignment_tasks", "assignment_task_uuid"),
+            }[scope]
+            if any(
+                isinstance(row, dict) and row.get(snap_key[1]) == resource_uuid
+                for row in snap.get(snap_key[0], [])
+            ):
+                raise HTTPException(
+                    409,
+                    detail={
+                        "code": "MANAGED_ASSESSMENT_SOURCE_RETAINED",
+                        "message": "This source is retained in a course release snapshot.",
+                    },
+                )
 
     query = select(StudyLearningAttempt.id).where(
         StudyLearningAttempt.org_id == org_id,

@@ -2597,7 +2597,11 @@ async def handle_assignment_task_submission(
                     status_code=409,
                     detail="The learner must hand in the attempt before it can be marked.",
                 )
-            from src.services.studytomy.grading import APPEAL_CORRECTION_REASON, latest_assessment_result
+            from src.services.studytomy.grading import (
+                APPEAL_CORRECTION_REASON,
+                latest_assessment_result,
+                resolve_submission_assessment_scope,
+            )
 
             recorded_result = await latest_assessment_result(db_session, assignment, attempt)
             if recorded_result and recorded_result.reason == APPEAL_CORRECTION_REASON:
@@ -2605,13 +2609,25 @@ async def handle_assignment_task_submission(
                     status_code=409,
                     detail="This result was corrected on appeal and requires independent review.",
                 )
+            _, eff_tasks, _, _, _ = await resolve_submission_assessment_scope(
+                db_session, assignment, attempt, [assignment_task]
+            )
+            eff_task = next(
+                (t for t in eff_tasks if t.assignment_task_uuid == assignment_task.assignment_task_uuid),
+                None,
+            )
+            if eff_task is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This task is not part of the learner's bound assignment release.",
+                )
             assignment_task_submission = (await db_session.execute(
                 statement.execution_options(populate_existing=True)
             )).scalar_one_or_none()
             if assignment_task_submission is None:
                 raise HTTPException(status_code=409, detail="The task response changed before marking.")
             grade = assignment_task_submission_object.grade
-            if grade is not None and not 0 <= grade <= assignment_task.max_grade_value:
+            if grade is not None and not 0 <= grade <= eff_task.max_grade_value:
                 raise HTTPException(status_code=422, detail="The mark is outside the task score range.")
             if (grade is not None) != (assignment_task_submission_object.manually_graded is True):
                 raise HTTPException(status_code=422, detail="A manual mark requires an explicit task score.")
@@ -2637,7 +2653,7 @@ async def handle_assignment_task_submission(
                         course.org_id, attempt.assignmentusersubmission_uuid, attempt.attempt_number
                     ),
                     before_state={"score_points": previous_score},
-                    after_state={"score_points": grade, "maximum_points": assignment_task.max_grade_value},
+                    after_state={"score_points": grade, "maximum_points": eff_task.max_grade_value},
                 )
             # The educator client may echo the answer alongside the mark.
             # Preserve the stored learner response.
@@ -3635,10 +3651,12 @@ async def read_assignment_submissions(
     submissions = (await db_session.execute(statement)).scalars().all()
     managed_course = course.studytomy_managed is True
     if managed_course:
-        from src.services.studytomy.grading import grading_contract_digest, latest_assessment_results
+        from src.services.studytomy.grading import (
+            latest_assessment_results,
+            resolve_submission_assessment_scope,
+        )
 
         managed_results = await latest_assessment_results(db_session, assignment, submissions)
-        contract_digest = grading_contract_digest(assignment, assignment_tasks)
 
     # Per-task breakdown for the whole page in ONE query, keyed by (user, task).
     # The analytics "task difficulty" chart reads grade_display.tasks, but this
@@ -3648,13 +3666,17 @@ async def read_assignment_submissions(
     task_ids = [t.id for t in assignment_tasks if t.id is not None]
     user_ids = [s.user_id for s in submissions if s.user_id is not None]
     submissions_by_user_task: dict = {}
-    if task_ids and user_ids:
-        task_sub_rows = (await db_session.execute(
-            select(AssignmentTaskSubmission).where(
-                AssignmentTaskSubmission.assignment_task_id.in_(task_ids),  # type: ignore[attr-defined]
-                AssignmentTaskSubmission.user_id.in_(user_ids),  # type: ignore[attr-defined]
+    if user_ids and (task_ids or managed_course):
+        ts_query = select(AssignmentTaskSubmission).where(
+            AssignmentTaskSubmission.user_id.in_(user_ids),  # type: ignore[attr-defined]
+        )
+        if managed_course:
+            ts_query = ts_query.where(AssignmentTaskSubmission.activity_id == assignment.activity_id)
+        else:
+            ts_query = ts_query.where(
+                AssignmentTaskSubmission.assignment_task_id.in_(task_ids)  # type: ignore[attr-defined]
             )
-        )).scalars().all()
+        task_sub_rows = (await db_session.execute(ts_query)).scalars().all()
         for ts in task_sub_rows:
             submissions_by_user_task.setdefault(ts.user_id, {})[ts.assignment_task_id] = ts
 
@@ -3663,13 +3685,21 @@ async def read_assignment_submissions(
         row = AssignmentUserSubmissionRead.model_validate(sub).model_dump()
         if managed_course:
             result = managed_results.get(sub.id)
-            grade_display = _managed_grade_display(
-                assignment,
-                assignment_tasks,
-                submissions_by_user_task.get(sub.user_id, {}),
-                contract_digest,
-                result.after_state,
-            ) if result is not None else None
+            grade_display = None
+            if result is not None:
+                try:
+                    eff_asg, eff_tasks, eff_digest, _, _ = await resolve_submission_assessment_scope(
+                        db_session, assignment, sub, assignment_tasks
+                    )
+                    grade_display = _managed_grade_display(
+                        eff_asg,
+                        eff_tasks,
+                        submissions_by_user_task.get(sub.user_id, {}),
+                        eff_digest,
+                        result.after_state,
+                    )
+                except HTTPException:
+                    grade_display = None
             row["grade_display"] = grade_display
             row["grade"] = grade_display["grade"] if grade_display is not None else 0
             if grade_display is None and sub.submission_status == AssignmentUserSubmissionStatus.GRADED:
@@ -4202,11 +4232,15 @@ async def _apply_grade_and_finalize(
             AssignmentTask.assignment_id == assignment.id
         )
         assignment_tasks = (await db_session.execute(tasks_statement)).scalars().all()
+    effective_assignment = assignment
     managed_course = course.studytomy_managed is True
     if managed_course:
         from src.services.studytomy.grading import (
-            APPEAL_CORRECTION_REASON, assessment_responses_match_hand_in,
-            latest_assessment_result, matching_grading_contract,
+            APPEAL_CORRECTION_REASON,
+            assessment_responses_match_hand_in,
+            latest_assessment_result,
+            matching_grading_contract,
+            resolve_submission_assessment_scope,
         )
 
         locked_attempt = (await db_session.execute(
@@ -4234,6 +4268,14 @@ async def _apply_grade_and_finalize(
         )
         if grading_contract is None:
             return {"finalized": False, "reason": "managed_assessment_contract_unverified"}
+        effective_assignment, assignment_tasks, _, _, _ = await resolve_submission_assessment_scope(
+            db_session, assignment, locked_attempt, assignment_tasks
+        )
+        if effective_assignment.ungraded:
+            raise HTTPException(
+                status_code=400,
+                detail="This assignment is ungraded (formative) and cannot be graded.",
+            )
         if not await assessment_responses_match_hand_in(db_session, assignment, locked_attempt):
             return {"finalized": False, "reason": "managed_assessment_responses_unverified"}
 
@@ -4336,9 +4378,9 @@ async def _apply_grade_and_finalize(
     computed = compute_assignment_grade(
         raw_grade,
         max_grade,
-        assignment.grading_type,
+        effective_assignment.grading_type,
         overall_feedback=assignment_user_submission.overall_feedback,
-        pass_threshold_percentage=assignment.pass_threshold_percentage,
+        pass_threshold_percentage=effective_assignment.pass_threshold_percentage,
     )
 
     computed["tasks"] = _build_tasks_breakdown(
@@ -4364,7 +4406,7 @@ async def _apply_grade_and_finalize(
         from src.services.studytomy.grading import record_assessment_result
 
         await record_assessment_result(
-            db_session, assignment, assignment_user_submission, grading_contract, computed, reviewer
+            db_session, effective_assignment, assignment_user_submission, grading_contract, computed, reviewer
         )
     assignment_user_submission.grade = computed["grade"]
     assignment_user_submission.submission_status = AssignmentUserSubmissionStatus.GRADED
@@ -4618,7 +4660,10 @@ async def get_grade_assignment_submission(
     # Managed grades use the reviewed result. Legacy grades use current tasks.
     managed_result = None
     if course.studytomy_managed is True:
-        from src.services.studytomy.grading import latest_assessment_result
+        from src.services.studytomy.grading import (
+            latest_assessment_result,
+            resolve_submission_assessment_scope,
+        )
 
         if assignment_user_submission.submission_status != AssignmentUserSubmissionStatus.GRADED:
             raise HTTPException(status_code=409, detail="The assessment is awaiting a finalized result.")
@@ -4631,6 +4676,12 @@ async def get_grade_assignment_submission(
         AssignmentTask.assignment_id == assignment.id
     )
     assignment_tasks = (await db_session.execute(tasks_statement)).scalars().all()
+    managed_digest = ""
+    effective_assignment: Assignment | object = assignment
+    if managed_result is not None:
+        effective_assignment, assignment_tasks, managed_digest, _, _ = await resolve_submission_assessment_scope(
+            db_session, assignment, assignment_user_submission, assignment_tasks
+        )
     max_grade = 0
     for task in assignment_tasks:
         max_grade += int(task.max_grade_value or 0)
@@ -4649,13 +4700,11 @@ async def get_grade_assignment_submission(
             task_submissions_by_task_id[ts.assignment_task_id] = ts
 
     if managed_result is not None:
-        from src.services.studytomy.grading import grading_contract_digest
-
         grade_obj = _managed_grade_display(
-            assignment,
+            effective_assignment,
             assignment_tasks,
             task_submissions_by_task_id,
-            grading_contract_digest(assignment, assignment_tasks),
+            managed_digest,
             managed_result,
             assignment_user_submission.overall_feedback,
         )

@@ -34,6 +34,10 @@ const hashedJsName = `momentum-lab.${jsSha.slice(0, 12)}.js`;
 fs.renameSync(bundleOut, path.join(assetsDir, hashedJsName));
 
 const buildVersion = '1.0.0-pilot.1';
+const labId = 'conservation-momentum';
+const versionedDir = path.join(distDir, labId, buildVersion);
+const versionedAssetsDir = path.join(versionedDir, 'assets');
+fs.mkdirSync(versionedAssetsDir, { recursive: true });
 
 const html = `<!DOCTYPE html>
 <html lang="en">
@@ -85,6 +89,12 @@ fs.writeFileSync(path.join(distDir, 'index.html'), html, 'utf8');
 fs.copyFileSync(path.join(rootDir, 'public', '_headers'), path.join(distDir, '_headers'));
 fs.copyFileSync(path.join(rootDir, 'LICENSE'), path.join(distDir, 'LICENSE'));
 
+// Mirror immutable, versioned hosting directory under dist/<lab_id>/<build_version>/
+fs.writeFileSync(path.join(versionedDir, 'index.html'), html, 'utf8');
+fs.copyFileSync(path.join(assetsDir, hashedJsName), path.join(versionedAssetsDir, hashedJsName));
+fs.copyFileSync(path.join(rootDir, 'public', '_headers'), path.join(versionedDir, '_headers'));
+fs.copyFileSync(path.join(rootDir, 'LICENSE'), path.join(versionedDir, 'LICENSE'));
+
 // Compute deterministic build digest over index.html + bundled JS + _headers
 const combinedDigest = crypto
   .createHash('sha256')
@@ -93,14 +103,21 @@ const combinedDigest = crypto
   .update(fs.readFileSync(path.join(distDir, '_headers')))
   .digest('hex');
 
+const licenseSha = crypto
+  .createHash('sha256')
+  .update(fs.readFileSync(path.join(distDir, 'LICENSE')))
+  .digest('hex');
+
 const manifest = {
   schema: 'studytomy_virtual_lab_manifest_v1',
-  lab_id: 'conservation-momentum',
-  experiment_id: 'conservation-momentum',
+  lab_id: labId,
+  experiment_id: labId,
   build_version: buildVersion,
+  versioned_entry_path: `${labId}/${buildVersion}/index.html`,
   build_sha256: combinedDigest,
   bundle_asset: `assets/${hashedJsName}`,
   bundle_sha256: jsSha,
+  license_sha256: licenseSha,
   upstream_source: {
     repository: 'https://github.com/danielw-sudo/agentuto',
     commit: '697025a14aabbd391072fbedc522d1d68bebcbc4',
@@ -114,6 +131,8 @@ const manifest = {
   },
 };
 
-fs.writeFileSync(path.join(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
-fs.writeFileSync(path.join(rootDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+const manifestJson = JSON.stringify(manifest, null, 2) + '\n';
+fs.writeFileSync(path.join(distDir, 'manifest.json'), manifestJson, 'utf8');
+fs.writeFileSync(path.join(versionedDir, 'manifest.json'), manifestJson, 'utf8');
+fs.writeFileSync(path.join(rootDir, 'manifest.json'), manifestJson, 'utf8');
 console.log(`Built curated momentum pilot ${buildVersion} (${combinedDigest})`);

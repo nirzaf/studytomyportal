@@ -1,7 +1,9 @@
 """Capture the grading contract for a managed native assessment round."""
 
 from collections.abc import Sequence
+import copy
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -14,11 +16,14 @@ from src.db.courses.assignments import (
     Assignment,
     AssignmentTask,
     AssignmentTaskSubmission,
+    AssignmentTaskTypeEnum,
     AssignmentUserSubmission,
     AssignmentUserSubmissionStatus,
+    GradingTypeEnum,
 )
 from src.db.organizations import Organization
 from src.db.studytomy.assessment_archive import StudyAssessmentResponseArchive
+from src.db.studytomy.education import StudyCourseRelease
 from src.db.studytomy.governance import (
     StudyBusinessEvent,
     StudyPolicyBody,
@@ -97,6 +102,126 @@ async def _assessed_release_binding(
     return {"assessment_release_uuid": release.uuid, "assessment_release_sha256": release.snapshot_sha256}
 
 
+def release_assignment_scope(
+    assignment: Assignment,
+    release: StudyCourseRelease,
+) -> tuple[SimpleNamespace, list[SimpleNamespace], str]:
+    """Reconstruct immutable assignment and task definitions from a StudyCourseRelease snapshot."""
+    snapshot = release.snapshot
+    if not isinstance(snapshot, dict) or canonical_request_hash(snapshot) != release.snapshot_sha256:
+        raise ValueError("The course release snapshot integrity verification failed.")
+    retained = [
+        row
+        for row in snapshot.get("assignments", [])
+        if isinstance(row, dict)
+        and row.get("assignment_uuid") == assignment.assignment_uuid
+        and row.get("id") == assignment.id
+        and row.get("activity_id") == assignment.activity_id
+    ]
+    if len(retained) != 1:
+        raise ValueError("The assignment is not retained in this course release snapshot.")
+    asg_row = retained[0]
+    task_rows = [
+        row
+        for row in snapshot.get("assignment_tasks", [])
+        if isinstance(row, dict) and row.get("assignment_id") == asg_row.get("id")
+    ]
+    digest = retained_grading_contract_digest(asg_row, task_rows)
+    eff_assignment = SimpleNamespace(
+        id=int(asg_row["id"]),
+        org_id=assignment.org_id,
+        activity_id=int(asg_row["activity_id"]),
+        course_id=int(asg_row["course_id"]),
+        chapter_id=int(asg_row["chapter_id"]),
+        assignment_uuid=str(asg_row["assignment_uuid"]),
+        title=str(asg_row.get("title") or assignment.title),
+        description=str(asg_row.get("description") or ""),
+        due_date=asg_row.get("due_date"),
+        grading_type=GradingTypeEnum(asg_row["grading_type"]),
+        pass_threshold_percentage=asg_row.get("pass_threshold_percentage"),
+        ungraded=bool(asg_row.get("ungraded", False)),
+        auto_grading=bool(asg_row.get("auto_grading", False)),
+        allow_retries=bool(asg_row.get("allow_retries", False)),
+        max_retries=int(asg_row.get("max_retries", 0) or 0),
+        show_correct_answers=bool(asg_row.get("show_correct_answers", False)),
+        published=bool(asg_row.get("published", False)),
+    )
+    eff_tasks = [
+        SimpleNamespace(
+            id=int(row["id"]),
+            org_id=assignment.org_id,
+            assignment_id=int(row["assignment_id"]),
+            assignment_task_uuid=str(row["assignment_task_uuid"]),
+            assignment_type=AssignmentTaskTypeEnum(row["assignment_type"]),
+            max_grade_value=int(row["max_grade_value"]),
+            contents=copy.deepcopy(row.get("contents") or {}),
+            title=str(row.get("title") or "Task"),
+            description=str(row.get("description") or ""),
+            reference_file=row.get("reference_file"),
+            order=row.get("order"),
+        )
+        for row in sorted(task_rows, key=lambda r: (r.get("order") is None, r.get("order") or 0, r.get("id") or 0))
+    ]
+    return eff_assignment, eff_tasks, digest
+
+
+async def submission_contract_event(
+    db: AsyncSession,
+    assignment: Assignment,
+    submission: AssignmentUserSubmission,
+) -> StudyBusinessEvent | None:
+    round_uuid = native_round_uuid(
+        assignment.org_id,
+        submission.assignmentusersubmission_uuid,
+        submission.attempt_number,
+    )
+    return (
+        await db.execute(
+            select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == assignment.org_id,
+                StudyBusinessEvent.action == CONTRACT_FROZEN_ACTION,
+                StudyBusinessEvent.resource_kind == "assignment_round",
+                StudyBusinessEvent.resource_uuid == round_uuid,
+                StudyBusinessEvent.dedupe_key == f"assessment_contract:{round_uuid}",
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def resolve_submission_assessment_scope(
+    db: AsyncSession,
+    assignment: Assignment,
+    submission: AssignmentUserSubmission | None,
+    live_tasks: Sequence[AssignmentTask],
+) -> tuple[Assignment | SimpleNamespace, Sequence[AssignmentTask | SimpleNamespace], str, str | None, StudyBusinessEvent | None]:
+    """Return the immutable release-bound assignment scope when recorded, else live definitions."""
+    live_digest = grading_contract_digest(assignment, live_tasks)
+    if submission is None:
+        return assignment, live_tasks, live_digest, None, None
+    contract = await submission_contract_event(db, assignment, submission)
+    if contract is None or not isinstance(contract.after_state, dict):
+        return assignment, live_tasks, live_digest, None, None
+    release_uuid = contract.after_state.get("assessment_release_uuid")
+    release_sha256 = contract.after_state.get("assessment_release_sha256")
+    if not isinstance(release_uuid, str) or not isinstance(release_sha256, str):
+        return assignment, live_tasks, live_digest, None, contract
+    release = (
+        await db.execute(
+            select(StudyCourseRelease).where(
+                StudyCourseRelease.org_id == assignment.org_id,
+                StudyCourseRelease.uuid == release_uuid,
+            )
+        )
+    ).scalar_one_or_none()
+    if release is None or release.snapshot_sha256 != release_sha256:
+        raise HTTPException(409, detail="The assessment release snapshot could not be verified.")
+    try:
+        eff_assignment, eff_tasks, release_digest = release_assignment_scope(assignment, release)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(409, detail="The retained assessment contract could not be verified.") from exc
+    return eff_assignment, eff_tasks, release_digest, release.uuid, contract
+
+
 async def record_grading_contract(
     db: AsyncSession,
     assignment: Assignment,
@@ -104,6 +229,7 @@ async def record_grading_contract(
     actor: PublicUser | APITokenUser,
     *,
     issued: bool = False,
+    release: StudyCourseRelease | None = None,
 ) -> bool:
     round_uuid = native_round_uuid(
         assignment.org_id,
@@ -119,24 +245,34 @@ async def record_grading_contract(
     )
     if existing is not None:
         return False
-    tasks = (
-        (
-            await db.execute(
-                select(AssignmentTask).where(
-                    AssignmentTask.assignment_id == assignment.id
+    token = isinstance(actor, APITokenUser)
+    if release is not None:
+        try:
+            _, _, digest = release_assignment_scope(assignment, release)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(409, detail="The release assignment contract is invalid.") from exc
+        release_binding = {
+            "assessment_release_uuid": release.uuid,
+            "assessment_release_sha256": release.snapshot_sha256,
+        }
+    else:
+        tasks = (
+            (
+                await db.execute(
+                    select(AssignmentTask).where(
+                        AssignmentTask.assignment_id == assignment.id
+                    )
                 )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    token = isinstance(actor, APITokenUser)
-    digest = grading_contract_digest(assignment, tasks)
-    release_binding = (
-        await _assessed_release_binding(db, assignment, actor, digest)
-        if issued and isinstance(actor, PublicUser) and actor.id == submission.user_id
-        else {}
-    )
+        digest = grading_contract_digest(assignment, tasks)
+        release_binding = (
+            await _assessed_release_binding(db, assignment, actor, digest)
+            if issued and isinstance(actor, PublicUser) and actor.id == submission.user_id
+            else {}
+        )
     await append_business_event(
         db,
         org_id=assignment.org_id,
@@ -227,26 +363,16 @@ async def matching_grading_contract(
     submission: AssignmentUserSubmission,
     tasks: Sequence[AssignmentTask],
 ) -> StudyBusinessEvent | None:
-    round_uuid = native_round_uuid(
-        assignment.org_id,
-        submission.assignmentusersubmission_uuid,
-        submission.attempt_number,
-    )
-    contract = (
-        await db.execute(
-            select(StudyBusinessEvent).where(
-                StudyBusinessEvent.org_id == assignment.org_id,
-                StudyBusinessEvent.action == CONTRACT_FROZEN_ACTION,
-                StudyBusinessEvent.resource_kind == "assignment_round",
-                StudyBusinessEvent.resource_uuid == round_uuid,
-                StudyBusinessEvent.dedupe_key == f"assessment_contract:{round_uuid}",
-            )
+    try:
+        _, _, expected_digest, _, contract = await resolve_submission_assessment_scope(
+            db, assignment, submission, tasks
         )
-    ).scalar_one_or_none()
+    except HTTPException:
+        return None
     if (
         contract is not None
         and isinstance(contract.after_state, dict)
-        and contract.after_state.get("source_snapshot_digest") == grading_contract_digest(assignment, tasks)
+        and contract.after_state.get("source_snapshot_digest") == expected_digest
         and contract.after_state.get("evaluator_version") == NATIVE_GRADING_CONTRACT_VERSION
     ):
         return contract

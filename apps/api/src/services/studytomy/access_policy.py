@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
 from tempfile import TemporaryFile
-from typing import BinaryIO, Literal
+from types import SimpleNamespace
+from typing import Any, BinaryIO, Literal
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import Select, and_, case, or_
 from sqlmodel import select
@@ -112,19 +113,29 @@ class ManagedAssignmentTaskSummary(BaseModel):
     max_grade_value: int | None = None
     student_grade: int | None = None
     teacher_feedback: str | None = None
+    contents: dict[str, Any] = Field(default_factory=dict)
+    submitted_answer: dict[str, Any] | None = None
 
 
 class ManagedLinkedAssignment(ManagedReleaseOverview):
     activity_uuid: str
     assignment_uuid: str
+    submission_uuid: str | None = None
     title: str
     description: str
     due_date: str | None = None
     grading_type: str
     submission_status: str | None = None
     grade: int | None = None
+    max_grade: int = 0
     overall_feedback: str | None = None
     attempt_number: int | None = None
+    past_due: bool = False
+    can_submit: bool = False
+    can_retry: bool = False
+    allow_retries: bool = False
+    max_retries: int = 0
+    release_conflict_uuid: str | None = None
     tasks: list[ManagedAssignmentTaskSummary] = Field(default_factory=list)
     accepted_file_formats: list[str] = Field(
         default_factory=lambda: ["PDF", "ZIP", "PNG", "JPG", "DOCX", "XLSX", "PPTX"]
@@ -132,6 +143,18 @@ class ManagedLinkedAssignment(ManagedReleaseOverview):
     manual_review_note: str = (
         "Practical lab reports are reviewed manually by your teacher and do not automatically award independent mastery."
     )
+
+
+class ManagedTaskFileUploadReceipt(BaseModel):
+    file_uuid: str
+    assignment_task_uuid: str
+
+
+class ManagedSubmissionDownload(BaseModel):
+    filename: str
+    media_type: str
+    directory: str
+    org_uuid: str
 
 
 @dataclass(slots=True)
@@ -1649,17 +1672,20 @@ async def read_managed_virtual_lab(
     return result
 
 
-async def read_managed_linked_assignment(
+async def _resolve_managed_assignment_target(
     db: AsyncSession,
     org: Organization,
     actor: PublicUser,
     course_uuid: str,
     release_uuid: str,
     activity_uuid: str,
-) -> ManagedLinkedAssignment:
-    """Authorize and project a retained assignment linked to an approved managed lab (T-08)."""
-    from src.db.courses.assignments import AssignmentTaskSubmission, AssignmentUserSubmission
-
+) -> tuple[
+    StudyCourseRelease,
+    StudyPolicyVersion,
+    dict[str, Any],
+    dict[str, Any],
+    list[dict[str, Any]],
+]:
     release, policy, profile_id = await _authorized_release(
         db, org, actor, course_uuid, release_uuid, require_active_grant=False,
     )
@@ -1742,6 +1768,83 @@ async def read_managed_linked_assignment(
         if isinstance(row, dict) and row.get("assignment_id") == asg_row.get("id")
     ]
     retained_tasks.sort(key=lambda r: (r.get("order") is None, r.get("order") or 0, r.get("id") or 0))
+    return release, policy, act_row, asg_row, retained_tasks
+
+
+async def _managed_assignment_deadline_state(
+    db: AsyncSession,
+    org_id: int,
+    assignment_id: int,
+    asg_row: dict[str, Any],
+    learner_id: int,
+) -> tuple[bool, str | None]:
+    from src.db.courses.assignments import Assignment
+    from src.services.courses.activities.assignments import _assignment_deadline, _is_assignment_past_due
+    from src.services.studytomy.assessment_reviews import assessment_deadline_extension
+
+    eff_stub = SimpleNamespace(id=assignment_id, org_id=org_id, due_date=asg_row.get("due_date"))
+    base_due = _assignment_deadline(eff_stub)
+    live_asg = await db.get(Assignment, assignment_id)
+    extension = (
+        await assessment_deadline_extension(db, live_asg, learner_id)
+        if live_asg is not None
+        else None
+    )
+    if extension is not None:
+        past_due = datetime.now(UTC) > extension
+        effective_due = extension.isoformat() if base_due is None or extension > (
+            base_due.replace(tzinfo=UTC) if base_due.tzinfo is None else base_due.astimezone(UTC)
+        ) else str(asg_row.get("due_date"))
+        return past_due, effective_due
+    return _is_assignment_past_due(eff_stub), (str(asg_row["due_date"]) if asg_row.get("due_date") else None)
+
+
+_SAFE_MANAGED_TASK_CONTENT_KEYS = frozenset({
+    "prompt",
+    "question",
+    "instructions",
+    "description",
+    "hint",
+    "unit",
+    "units",
+    "tolerance",
+    "placeholder",
+    "min",
+    "max",
+    "step",
+})
+
+
+def _sanitize_managed_task_contents(
+    raw_contents: Any, task_type: str, keep_answer_keys: bool
+) -> dict[str, Any]:
+    from src.services.courses.activities.assignments import _strip_answer_key
+
+    if not isinstance(raw_contents, dict):
+        return {}
+    stripped = _strip_answer_key(raw_contents, keep_answer_keys=keep_answer_keys)
+    if not isinstance(stripped, dict):
+        return {}
+    allowed_keys = set(_SAFE_MANAGED_TASK_CONTENT_KEYS)
+    if task_type in ("QUIZ", "FORM"):
+        allowed_keys.add("questions")
+    if keep_answer_keys:
+        allowed_keys.update({"correct_value", "correct_answers"})
+    return {k: v for k, v in stripped.items() if k in allowed_keys}
+
+
+async def _project_managed_linked_assignment(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    release: StudyCourseRelease,
+    act_row: dict[str, Any],
+    asg_row: dict[str, Any],
+    retained_tasks: list[dict[str, Any]],
+) -> ManagedLinkedAssignment:
+    from src.db.courses.assignments import Assignment, AssignmentTaskSubmission, AssignmentUserSubmission
+    from src.services.studytomy.assessment_reviews import resolve_assessment_retry_grant
+    from src.services.studytomy.grading import latest_assessment_result, submission_contract_event
 
     user_sub = (
         await db.execute(
@@ -1751,29 +1854,94 @@ async def read_managed_linked_assignment(
             )
         )
     ).scalar_one_or_none()
-    task_subs = (
-        await db.execute(
-            select(AssignmentTaskSubmission).where(
-                AssignmentTaskSubmission.activity_id == act_row["id"],
-                AssignmentTaskSubmission.user_id == actor.id,
-            )
-        )
-    ).scalars().all()
-    task_sub_by_id = {sub.assignment_task_id: sub for sub in task_subs}
+    live_asg = await db.get(Assignment, asg_row["id"])
+    bound_release_uuid: str | None = None
+    if user_sub is not None and live_asg is not None:
+        contract = await submission_contract_event(db, live_asg, user_sub)
+        if contract is not None and isinstance(contract.after_state, dict):
+            raw_bound = contract.after_state.get("assessment_release_uuid")
+            if isinstance(raw_bound, str):
+                bound_release_uuid = raw_bound
 
-    is_graded = user_sub is not None and str(user_sub.submission_status) in {
-        "GRADED",
-        "AssignmentUserSubmissionStatus.GRADED",
-    }
+    release_conflict_uuid = (
+        bound_release_uuid
+        if bound_release_uuid is not None and bound_release_uuid != release.uuid
+        else None
+    )
+    visible_user_sub = None if release_conflict_uuid is not None else user_sub
+
+    task_sub_by_id: dict[int, AssignmentTaskSubmission] = {}
+    if release_conflict_uuid is None:
+        task_subs = (
+            await db.execute(
+                select(AssignmentTaskSubmission).where(
+                    AssignmentTaskSubmission.activity_id == act_row["id"],
+                    AssignmentTaskSubmission.user_id == actor.id,
+                )
+            )
+        ).scalars().all()
+        task_sub_by_id = {sub.assignment_task_id: sub for sub in task_subs}
+
+    status_value: str | None = None
+    if visible_user_sub is not None:
+        raw_status = visible_user_sub.submission_status
+        status_value = raw_status.value if hasattr(raw_status, "value") else str(raw_status)
+        if status_value.startswith("AssignmentUserSubmissionStatus."):
+            status_value = status_value.split(".", 1)[1]
+
+    is_graded = visible_user_sub is not None and status_value == "GRADED"
+    show_keys = bool(is_graded and asg_row.get("show_correct_answers"))
+    max_grade = sum(int(row.get("max_grade_value") or 0) for row in retained_tasks)
+
+    verified_score = visible_user_sub.grade if is_graded else None
+    if is_graded and live_asg is not None and visible_user_sub is not None:
+        recorded_result = await latest_assessment_result(db, live_asg, visible_user_sub)
+        if recorded_result is not None and isinstance(recorded_result.after_state, dict):
+            score_val = recorded_result.after_state.get("score_points")
+            if isinstance(score_val, int):
+                verified_score = score_val
+
+    past_due, effective_due = await _managed_assignment_deadline_state(
+        db, org.id, asg_row["id"], asg_row, actor.id
+    )
+    editable_status = status_value in (None, "PENDING", "NOT_SUBMITTED")
+    can_submit = (
+        release_conflict_uuid is None
+        and editable_status
+        and not past_due
+        and bool(retained_tasks)
+    )
+
+    allow_retries = bool(asg_row.get("allow_retries", False))
+    max_retries = int(asg_row.get("max_retries", 0) or 0)
+    can_retry = False
+    if release_conflict_uuid is None and visible_user_sub is not None and live_asg is not None:
+        retryable = (
+            status_value in ("SUBMITTED", "GRADED")
+            if asg_row.get("ungraded")
+            else status_value == "GRADED"
+        )
+        if retryable:
+            grant = await resolve_assessment_retry_grant(db, live_asg, visible_user_sub)
+            if grant is not None:
+                can_retry = True
+            elif allow_retries and not past_due:
+                current_attempt = int(visible_user_sub.attempt_number or 1)
+                can_retry = (max_retries == 0) or (current_attempt < max_retries)
+
     task_summaries: list[ManagedAssignmentTaskSummary] = []
     for task_row in retained_tasks:
         t_sub = task_sub_by_id.get(task_row.get("id"))
+        t_type = str(task_row.get("assignment_type") or "FILE_SUBMISSION")
+        sanitized_contents = _sanitize_managed_task_contents(
+            task_row.get("contents"), t_type, show_keys
+        )
         task_summaries.append(
             ManagedAssignmentTaskSummary(
                 assignment_task_uuid=str(task_row["assignment_task_uuid"]),
                 title=str(task_row.get("title") or "Task"),
                 description=str(task_row.get("description") or ""),
-                assignment_type=str(task_row.get("assignment_type") or "FILE_SUBMISSION"),
+                assignment_type=t_type,
                 max_grade_value=task_row.get("max_grade_value"),
                 student_grade=t_sub.grade if (is_graded and t_sub is not None) else None,
                 teacher_feedback=(
@@ -1781,27 +1949,706 @@ async def read_managed_linked_assignment(
                     if (is_graded and t_sub is not None and t_sub.task_submission_grade_feedback)
                     else None
                 ),
+                contents=sanitized_contents,
+                submitted_answer=dict(t_sub.task_submission) if (t_sub is not None and isinstance(t_sub.task_submission, dict)) else None,
             )
         )
-
-    status_value: str | None = None
-    if user_sub is not None:
-        raw_status = user_sub.submission_status
-        status_value = raw_status.value if hasattr(raw_status, "value") else str(raw_status)
 
     return ManagedLinkedAssignment(
         course_uuid=release.course_uuid,
         release_uuid=release.uuid,
         name=str(act_row.get("name") or asg_row.get("title") or "Practical Assignment"),
-        activity_uuid=activity_uuid,
+        activity_uuid=str(act_row["activity_uuid"]),
         assignment_uuid=str(asg_row["assignment_uuid"]),
+        submission_uuid=visible_user_sub.assignmentusersubmission_uuid if visible_user_sub is not None else None,
         title=str(asg_row.get("title") or act_row.get("name") or "Practical Assignment"),
         description=str(asg_row.get("description") or ""),
-        due_date=str(asg_row["due_date"]) if asg_row.get("due_date") else None,
+        due_date=effective_due,
         grading_type=str(asg_row.get("grading_type") or "ALPHABET"),
         submission_status=status_value,
-        grade=user_sub.grade if is_graded else None,
-        overall_feedback=user_sub.overall_feedback if is_graded else None,
-        attempt_number=user_sub.attempt_number if user_sub is not None else None,
+        grade=verified_score,
+        max_grade=max_grade,
+        overall_feedback=visible_user_sub.overall_feedback if is_graded else None,
+        attempt_number=visible_user_sub.attempt_number if visible_user_sub is not None else None,
+        past_due=past_due,
+        can_submit=can_submit,
+        can_retry=can_retry,
+        allow_retries=allow_retries,
+        max_retries=max_retries,
+        release_conflict_uuid=release_conflict_uuid,
         tasks=task_summaries,
+    )
+
+
+async def read_managed_linked_assignment(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+) -> ManagedLinkedAssignment:
+    """Authorize and project a retained assignment linked to an approved managed lab (T-08)."""
+    release, _, act_row, asg_row, retained_tasks = await _resolve_managed_assignment_target(
+        db, org, actor, course_uuid, release_uuid, activity_uuid
+    )
+    return await _project_managed_linked_assignment(
+        db, org, actor, release, act_row, asg_row, retained_tasks
+    )
+
+
+async def _ensure_managed_round_writable(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    release: StudyCourseRelease,
+    asg_row: dict[str, Any],
+) -> tuple[Any, Any, Any]:
+    from src.db.courses.activities import Activity
+    from src.db.courses.assignments import Assignment, AssignmentUserSubmissionStatus
+    from src.services.studytomy.grading import lock_or_reserve_native_round, submission_contract_event
+
+    course = (
+        await db.execute(
+            select(Course).where(Course.org_id == org.id, Course.course_uuid == release.course_uuid)
+        )
+    ).scalar_one_or_none()
+    assignment = await db.get(Assignment, asg_row["id"])
+    activity = await db.get(Activity, asg_row["activity_id"])
+    if (
+        course is None
+        or course.studytomy_managed is not True
+        or assignment is None
+        or assignment.org_id != org.id
+        or assignment.assignment_uuid != asg_row.get("assignment_uuid")
+        or activity is None
+    ):
+        raise _unavailable()
+
+    attempt = await lock_or_reserve_native_round(db, assignment, actor.id)
+    bound_contract = await submission_contract_event(db, assignment, attempt)
+    if bound_contract is not None and isinstance(bound_contract.after_state, dict):
+        bound_uuid = bound_contract.after_state.get("assessment_release_uuid")
+        if isinstance(bound_uuid, str) and bound_uuid != release.uuid:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "MANAGED_ASSESSMENT_RELEASE_CONFLICT",
+                    "message": "Your existing attempt on this assignment is bound to another course release.",
+                },
+            )
+    if attempt.submission_status not in (
+        AssignmentUserSubmissionStatus.PENDING,
+        AssignmentUserSubmissionStatus.NOT_SUBMITTED,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This assignment has already been handed in. Use retry to attempt it again.",
+        )
+    past_due, _ = await _managed_assignment_deadline_state(db, org.id, assignment.id, asg_row, actor.id)
+    if past_due:
+        raise HTTPException(status_code=403, detail="Assignment deadline has passed")
+    return course, assignment, attempt
+
+
+def _validate_managed_task_payload(
+    task_row: dict[str, Any],
+    task_submission: dict[str, Any],
+    actor_id: int,
+) -> dict[str, Any]:
+    from src.db.courses.assignments import AssignmentTaskTypeEnum
+    from src.security.submission_file_access import submission_file_owner, submission_files_belong_to
+    from src.services.courses.activities.assignments import _check_number_answer
+
+    task_type = str(task_row.get("assignment_type") or "")
+    if not isinstance(task_submission, dict):
+        raise HTTPException(status_code=422, detail="Submission payload must be an object.")
+
+    if task_type == AssignmentTaskTypeEnum.NUMBER_ANSWER.value:
+        if set(task_submission.keys()) - {"answer"}:
+            raise HTTPException(status_code=422, detail="Unexpected fields in numeric answer submission.")
+        raw_answer = task_submission.get("answer")
+        if isinstance(raw_answer, bool) or not isinstance(raw_answer, (str, int, float)):
+            raise HTTPException(status_code=422, detail="Numeric answer must be a finite number.")
+        text = str(raw_answer).strip()
+        if not text or len(text) > 64:
+            raise HTTPException(status_code=422, detail="Enter a numeric answer (up to 64 characters).")
+        # Reuse the normalized finite-number parser from _check_number_answer via tolerance check on non-NaN parsing.
+        if not _check_number_answer(text, 0, float("inf")):
+            raise HTTPException(status_code=422, detail="Enter a valid finite numeric value.")
+        return {"answer": text}
+
+    if task_type == AssignmentTaskTypeEnum.FILE_SUBMISSION.value:
+        if set(task_submission.keys()) - {"fileUUID"}:
+            raise HTTPException(status_code=422, detail="Unexpected fields in file submission.")
+        file_uuid = task_submission.get("fileUUID")
+        if (
+            not isinstance(file_uuid, str)
+            or not file_uuid.strip()
+            or file_uuid != file_uuid.strip()
+            or len(file_uuid) > 255
+            or "/" in file_uuid
+            or "\\" in file_uuid
+            or ".." in file_uuid
+            or "\x00" in file_uuid
+        ):
+            raise HTTPException(status_code=422, detail="A valid uploaded file identifier is required.")
+        if not submission_files_belong_to(task_submission, actor_id) or submission_file_owner(file_uuid) != int(actor_id):
+            raise HTTPException(status_code=403, detail="You may only attach your own uploaded submission file.")
+        if file_uuid.lower().endswith(".csv"):
+            raise HTTPException(status_code=415, detail="Direct CSV uploads are not accepted; package exported CSVs in a ZIP or submit a PDF.")
+        return {"fileUUID": file_uuid}
+
+    raise HTTPException(status_code=422, detail="This task type is not supported for managed online submission.")
+
+
+async def upload_managed_assignment_task_file(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    task_uuid: str,
+    sub_file: UploadFile,
+    *,
+    idempotency_key: str | None = None,
+) -> ManagedTaskFileUploadReceipt:
+    from src.db.courses.assignments import AssignmentTaskTypeEnum
+    from src.services.courses.activities.uploads.sub_file import upload_submission_file
+    from src.services.studytomy.idempotency import claim_idempotency, complete_idempotency
+
+    org = await lock_organization(db, org.id)
+    release, _, act_row, asg_row, retained_tasks = await _resolve_managed_assignment_target(
+        db, org, actor, course_uuid, release_uuid, activity_uuid
+    )
+    task_row = next((row for row in retained_tasks if row.get("assignment_task_uuid") == task_uuid), None)
+    if task_row is None:
+        raise HTTPException(status_code=404, detail="Assignment task not found")
+    if str(task_row.get("assignment_type")) != AssignmentTaskTypeEnum.FILE_SUBMISSION.value:
+        raise HTTPException(status_code=422, detail="Files can only be uploaded for file-submission tasks.")
+
+    replay = await claim_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation="studytomy.managed_assignment_upload",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "course_uuid": course_uuid,
+            "release_uuid": release_uuid,
+            "activity_uuid": activity_uuid,
+            "task_uuid": task_uuid,
+            "filename": sub_file.filename or "",
+        },
+    )
+    if replay is not None and isinstance(replay.response_projection, dict):
+        return ManagedTaskFileUploadReceipt.model_validate(replay.response_projection)
+
+    await _ensure_managed_round_writable(db, org, actor, release, asg_row)
+    if not sub_file or not sub_file.filename:
+        raise HTTPException(status_code=422, detail="A submission file is required.")
+
+    file_uuid = await upload_submission_file(
+        sub_file,
+        str(act_row["activity_uuid"]),
+        org.org_uuid,
+        course_uuid,
+        str(asg_row["assignment_uuid"]),
+        task_uuid,
+        actor.id,
+    )
+    receipt = ManagedTaskFileUploadReceipt(file_uuid=file_uuid, assignment_task_uuid=task_uuid)
+    await complete_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation="studytomy.managed_assignment_upload",
+        idempotency_key=idempotency_key,
+        resource_kind="managed_assignment_file",
+        resource_uuid=file_uuid,
+        response_status=200,
+        response_projection=receipt.model_dump(mode="json"),
+    )
+    return receipt
+
+
+async def save_managed_assignment_task_draft(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    task_uuid: str,
+    task_submission_payload: dict[str, Any],
+    *,
+    idempotency_key: str | None = None,
+) -> ManagedLinkedAssignment:
+    from uuid import uuid4
+    from src.db.courses.assignments import AssignmentTask, AssignmentTaskSubmission, AssignmentTaskTypeEnum
+    from src.services.studytomy.grading import record_grading_contract
+    from src.services.studytomy.idempotency import claim_idempotency, complete_idempotency
+
+    org = await lock_organization(db, org.id)
+    release, _, act_row, asg_row, retained_tasks = await _resolve_managed_assignment_target(
+        db, org, actor, course_uuid, release_uuid, activity_uuid
+    )
+    task_row = next((row for row in retained_tasks if row.get("assignment_task_uuid") == task_uuid), None)
+    if task_row is None:
+        raise HTTPException(status_code=404, detail="Assignment task not found")
+    cleaned_payload = _validate_managed_task_payload(task_row, task_submission_payload, actor.id)
+
+    replay = await claim_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation="studytomy.managed_assignment_draft",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "course_uuid": course_uuid,
+            "release_uuid": release_uuid,
+            "activity_uuid": activity_uuid,
+            "task_uuid": task_uuid,
+            "task_submission": cleaned_payload,
+        },
+    )
+    if replay is not None and isinstance(replay.response_projection, dict):
+        return ManagedLinkedAssignment.model_validate(replay.response_projection)
+
+    _, assignment, attempt = await _ensure_managed_round_writable(db, org, actor, release, asg_row)
+    live_task = await db.get(AssignmentTask, task_row["id"])
+    if live_task is None or live_task.assignment_id != assignment.id:
+        raise _unavailable()
+
+    if not asg_row.get("ungraded"):
+        await record_grading_contract(db, assignment, attempt, actor, issued=True, release=release)
+
+    now_str = str(datetime.now())
+    existing_ts = (
+        await db.execute(
+            select(AssignmentTaskSubmission)
+            .where(
+                AssignmentTaskSubmission.assignment_task_id == live_task.id,
+                AssignmentTaskSubmission.user_id == actor.id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if existing_ts is not None:
+        existing_ts.task_submission = cleaned_payload
+        existing_ts.grade = 0
+        existing_ts.task_submission_grade_feedback = ""
+        existing_ts.manually_graded = False
+        existing_ts.update_date = now_str
+        db.add(existing_ts)
+    else:
+        db.add(
+            AssignmentTaskSubmission(
+                assignment_task_submission_uuid=f"assignmenttasksubmission_{uuid4()}",
+                task_submission=cleaned_payload,
+                grade=0,
+                task_submission_grade_feedback="",
+                manually_graded=False,
+                assignment_task_id=live_task.id,
+                assignment_type=AssignmentTaskTypeEnum(task_row["assignment_type"]),
+                activity_id=act_row["id"],
+                course_id=asg_row["course_id"],
+                chapter_id=asg_row["chapter_id"],
+                user_id=actor.id,
+                creation_date=now_str,
+                update_date=now_str,
+            )
+        )
+    await db.flush()
+    projection = await _project_managed_linked_assignment(
+        db, org, actor, release, act_row, asg_row, retained_tasks
+    )
+    await complete_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation="studytomy.managed_assignment_draft",
+        idempotency_key=idempotency_key,
+        resource_kind="managed_assignment_draft",
+        resource_uuid=attempt.assignmentusersubmission_uuid,
+        response_status=200,
+        response_projection=projection.model_dump(mode="json"),
+    )
+    return projection
+
+
+async def submit_managed_linked_assignment(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    *,
+    idempotency_key: str | None = None,
+) -> ManagedLinkedAssignment:
+    from src.db.courses.assignments import (
+        AssignmentTaskSubmission,
+        AssignmentUserSubmissionStatus,
+    )
+    from src.db.trail_steps import TrailStep
+    from src.db.trails import Trail
+    from src.services.courses.activities.assignments import (
+        AUTO_GRADABLE_TASK_TYPES,
+        _apply_grade_and_finalize,
+    )
+    from src.services.studytomy.assignment_adapter import freeze_native_assignment_answers
+    from src.services.studytomy.grading import (
+        record_assessment_responses,
+        record_grading_contract,
+        release_assignment_scope,
+    )
+    from src.services.studytomy.idempotency import claim_idempotency, complete_idempotency
+
+    org = await lock_organization(db, org.id)
+    release, _, act_row, asg_row, retained_tasks = await _resolve_managed_assignment_target(
+        db, org, actor, course_uuid, release_uuid, activity_uuid
+    )
+    if not retained_tasks:
+        raise HTTPException(status_code=422, detail="This assignment has no retained tasks to submit.")
+
+    replay = await claim_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation="studytomy.managed_assignment_submit",
+        idempotency_key=idempotency_key,
+        request_payload={
+            "course_uuid": course_uuid,
+            "release_uuid": release_uuid,
+            "activity_uuid": activity_uuid,
+        },
+    )
+    if replay is not None and isinstance(replay.response_projection, dict):
+        return ManagedLinkedAssignment.model_validate(replay.response_projection)
+
+    course, assignment, attempt = await _ensure_managed_round_writable(db, org, actor, release, asg_row)
+
+    task_ids = [int(row["id"]) for row in retained_tasks if row.get("id") is not None]
+    task_subs = (
+        await db.execute(
+            select(AssignmentTaskSubmission).where(
+                AssignmentTaskSubmission.user_id == actor.id,
+                AssignmentTaskSubmission.assignment_task_id.in_(task_ids),
+            )
+        )
+    ).scalars().all()
+    sub_by_task_id = {sub.assignment_task_id: sub for sub in task_subs}
+    for task_row in retained_tasks:
+        t_sub = sub_by_task_id.get(task_row.get("id"))
+        if t_sub is None or not isinstance(t_sub.task_submission, dict) or not t_sub.task_submission:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Complete task '{task_row.get('title') or task_row.get('assignment_task_uuid')}' before submitting.",
+            )
+        cleaned = _validate_managed_task_payload(task_row, t_sub.task_submission, actor.id)
+        t_sub.task_submission = cleaned
+        t_sub.grade = 0
+        t_sub.task_submission_grade_feedback = ""
+        t_sub.manually_graded = False
+        db.add(t_sub)
+
+    await freeze_native_assignment_answers(db, assignment, attempt, direct_learner=True)
+    now_str = str(datetime.now())
+    attempt.submission_status = AssignmentUserSubmissionStatus.SUBMITTED
+    attempt.grade = 0
+    attempt.creation_date = now_str
+    attempt.update_date = now_str
+    db.add(attempt)
+
+    eff_assignment, eff_tasks, _ = release_assignment_scope(assignment, release)
+    if not eff_assignment.ungraded:
+        await record_grading_contract(db, assignment, attempt, actor, issued=True, release=release)
+    await record_assessment_responses(db, assignment, attempt, actor)
+
+    # Record trail step completion on assignment hand-in without touching lab or mastery credit.
+    trail = (
+        await db.execute(
+            select(Trail).where(Trail.org_id == org.id, Trail.user_id == actor.id)
+        )
+    ).scalar_one_or_none()
+    if trail is None:
+        trail = Trail(
+            org_id=org.id,
+            user_id=actor.id,
+            trail_uuid=f"trail_{org.id}_{actor.id}",
+            creation_date=now_str,
+            update_date=now_str,
+        )
+        db.add(trail)
+        await db.flush()
+    trailrun = (
+        await db.execute(
+            select(TrailRun).where(
+                TrailRun.trail_id == trail.id,
+                TrailRun.course_id == course.id,
+                TrailRun.user_id == actor.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if trailrun is None:
+        trailrun = TrailRun(
+            trail_id=trail.id,
+            course_id=course.id,
+            org_id=org.id,
+            user_id=actor.id,
+            status=StatusEnum.STATUS_IN_PROGRESS,
+            creation_date=now_str,
+            update_date=now_str,
+        )
+        db.add(trailrun)
+        await db.flush()
+    trailstep = (
+        await db.execute(
+            select(TrailStep).where(
+                TrailStep.trailrun_id == trailrun.id,
+                TrailStep.activity_id == act_row["id"],
+                TrailStep.user_id == actor.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if trailstep is None:
+        db.add(
+            TrailStep(
+                trailrun_id=trailrun.id,
+                activity_id=act_row["id"],
+                course_id=course.id,
+                trail_id=trail.id,
+                org_id=org.id,
+                complete=True,
+                teacher_verified=False,
+                grade="",
+                user_id=actor.id,
+                creation_date=now_str,
+                update_date=now_str,
+            )
+        )
+    else:
+        trailstep.complete = True
+        trailstep.update_date = now_str
+        db.add(trailstep)
+    await db.flush()
+
+    all_auto_gradable = all(t.assignment_type in AUTO_GRADABLE_TASK_TYPES for t in eff_tasks)
+    if eff_assignment.auto_grading and not eff_assignment.ungraded and all_auto_gradable:
+        await _apply_grade_and_finalize(
+            assignment=assignment,
+            course=course,
+            user_id=actor.id,
+            assignment_user_submission=attempt,
+            db_session=db,
+            overall_feedback=None,
+            auto_graded=True,
+            assignment_tasks=eff_tasks,
+        )
+
+    projection = await _project_managed_linked_assignment(
+        db, org, actor, release, act_row, asg_row, retained_tasks
+    )
+    await complete_idempotency(
+        db,
+        org_id=org.id,
+        actor_user_id=actor.id,
+        operation="studytomy.managed_assignment_submit",
+        idempotency_key=idempotency_key,
+        resource_kind="managed_assignment_submission",
+        resource_uuid=attempt.assignmentusersubmission_uuid,
+        response_status=200,
+        response_projection=projection.model_dump(mode="json"),
+    )
+    return projection
+
+
+async def retry_managed_linked_assignment(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+) -> ManagedLinkedAssignment:
+    from src.db.courses.assignments import (
+        Assignment,
+        AssignmentTask,
+        AssignmentTaskSubmission,
+        AssignmentUserSubmission,
+        AssignmentUserSubmissionStatus,
+    )
+    from src.db.trail_steps import TrailStep
+    from src.services.studytomy.assessment_reviews import resolve_assessment_retry_grant
+    from src.services.studytomy.assignment_adapter import ensure_native_retry_round_frozen
+    from src.services.studytomy.grading import (
+        archive_assessment_responses_before_retry,
+        submission_contract_event,
+    )
+
+    org = await lock_organization(db, org.id)
+    release, _, act_row, asg_row, retained_tasks = await _resolve_managed_assignment_target(
+        db, org, actor, course_uuid, release_uuid, activity_uuid
+    )
+    assignment = await db.get(Assignment, asg_row["id"])
+    if assignment is None or assignment.org_id != org.id:
+        raise _unavailable()
+    attempt = (
+        await db.execute(
+            select(AssignmentUserSubmission)
+            .where(
+                AssignmentUserSubmission.assignment_id == assignment.id,
+                AssignmentUserSubmission.user_id == actor.id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status_code=404, detail="Assignment User Submission not found")
+    bound_contract = await submission_contract_event(db, assignment, attempt)
+    if bound_contract is not None and isinstance(bound_contract.after_state, dict):
+        bound_uuid = bound_contract.after_state.get("assessment_release_uuid")
+        if isinstance(bound_uuid, str) and bound_uuid != release.uuid:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "MANAGED_ASSESSMENT_RELEASE_CONFLICT",
+                    "message": "Your existing attempt on this assignment is bound to another course release.",
+                },
+            )
+    ungraded = bool(asg_row.get("ungraded", False))
+    allowed_statuses = (
+        (AssignmentUserSubmissionStatus.SUBMITTED, AssignmentUserSubmissionStatus.GRADED)
+        if ungraded
+        else (AssignmentUserSubmissionStatus.GRADED,)
+    )
+    if attempt.submission_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail="Only submitted assignments can be retried" if ungraded else "Only graded submissions can be retried",
+        )
+    grant = await resolve_assessment_retry_grant(db, assignment, attempt)
+    if grant is None and not bool(asg_row.get("allow_retries", False)):
+        raise HTTPException(status_code=403, detail="Retries are not enabled for this assignment")
+    past_due, _ = await _managed_assignment_deadline_state(db, org.id, assignment.id, asg_row, actor.id)
+    if grant is None and past_due:
+        raise HTTPException(status_code=403, detail="Assignment deadline has passed")
+    current_attempt = int(attempt.attempt_number or 1)
+    max_attempts = int(asg_row.get("max_retries", 0) or 0)
+    if grant is None and max_attempts and current_attempt >= max_attempts:
+        raise HTTPException(status_code=403, detail="No retry attempts remaining")
+
+    await ensure_native_retry_round_frozen(db, assignment, attempt)
+    await archive_assessment_responses_before_retry(db, assignment, attempt)
+
+    task_ids = [
+        tid
+        for tid in (
+            await db.execute(select(AssignmentTask.id).where(AssignmentTask.assignment_id == assignment.id))
+        ).scalars().all()
+        if tid is not None
+    ]
+    if task_ids:
+        existing_subs = (
+            await db.execute(
+                select(AssignmentTaskSubmission).where(
+                    AssignmentTaskSubmission.user_id == actor.id,
+                    AssignmentTaskSubmission.assignment_task_id.in_(task_ids),
+                )
+            )
+        ).scalars().all()
+        for ts in existing_subs:
+            await db.delete(ts)
+
+    trailstep = (
+        await db.execute(
+            select(TrailStep).where(
+                TrailStep.activity_id == assignment.activity_id,
+                TrailStep.user_id == actor.id,
+            )
+        )
+    ).scalar_one_or_none()
+    now_str = str(datetime.now())
+    if trailstep is not None:
+        trailstep.complete = False
+        trailstep.teacher_verified = False
+        trailstep.grade = ""
+        trailstep.update_date = now_str
+        db.add(trailstep)
+
+    attempt.submission_status = AssignmentUserSubmissionStatus.PENDING
+    attempt.grade = 0
+    attempt.overall_feedback = None
+    attempt.attempt_number = current_attempt + 1
+    attempt.update_date = now_str
+    db.add(attempt)
+    await db.flush()
+    return await _project_managed_linked_assignment(
+        db, org, actor, release, act_row, asg_row, retained_tasks
+    )
+
+
+async def read_managed_submission_file_download(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    task_uuid: str,
+    filename: str,
+) -> ManagedSubmissionDownload:
+    from src.db.courses.assignments import AssignmentTaskSubmission
+    from src.security.submission_file_access import _submission_references_file, submission_file_owner
+
+    if (
+        not filename
+        or "/" in filename
+        or "\\" in filename
+        or ".." in filename
+        or "\x00" in filename
+    ):
+        raise HTTPException(status_code=400, detail="Invalid file name")
+
+    _, _, act_row, asg_row, retained_tasks = await _resolve_managed_assignment_target(
+        db, org, actor, course_uuid, release_uuid, activity_uuid
+    )
+    task_row = next((row for row in retained_tasks if row.get("assignment_task_uuid") == task_uuid), None)
+    if task_row is None:
+        raise HTTPException(status_code=404, detail="Assignment task not found")
+    owner = submission_file_owner(filename)
+    if owner is not None and owner != int(actor.id):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    t_sub = (
+        await db.execute(
+            select(AssignmentTaskSubmission).where(
+                AssignmentTaskSubmission.assignment_task_id == task_row["id"],
+                AssignmentTaskSubmission.user_id == actor.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if t_sub is None or not _submission_references_file(t_sub.task_submission, filename):
+        raise HTTPException(status_code=404, detail="Submission file not found")
+
+    ext = PurePosixPath(filename).suffix.lower()
+    media_type = {
+        ".pdf": "application/pdf",
+        ".zip": "application/zip",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+    }.get(ext, "application/octet-stream")
+    directory = (
+        f"courses/{course_uuid}/activities/{act_row['activity_uuid']}/assignments/{asg_row['assignment_uuid']}/tasks/{task_uuid}/subs"
+    )
+    return ManagedSubmissionDownload(
+        filename=filename,
+        media_type=media_type,
+        directory=directory,
+        org_uuid=org.org_uuid,
     )

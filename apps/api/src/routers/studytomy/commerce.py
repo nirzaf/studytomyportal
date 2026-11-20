@@ -1,17 +1,19 @@
 """Session-authenticated checkout for explicitly approved pilot offers."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     Header,
     HTTPException,
     Path,
     Query,
     Request,
     Response,
+    UploadFile,
 )
 from fastapi.responses import StreamingResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool
@@ -37,6 +39,7 @@ from src.services.studytomy.access_policy import (
     ManagedLinkedAssignment,
     ManagedReleaseCatalog,
     ManagedReleaseOverview,
+    ManagedTaskFileUploadReceipt,
     ManagedTextLesson,
     ManagedVirtualLabLesson,
     acknowledge_managed_text_completion,
@@ -47,9 +50,15 @@ from src.services.studytomy.access_policy import (
     read_managed_activity_media,
     read_managed_linked_assignment,
     read_managed_release_overview,
+    read_managed_submission_file_download,
     read_managed_text_lesson,
     read_managed_virtual_lab,
+    retry_managed_linked_assignment,
+    save_managed_assignment_task_draft,
+    submit_managed_linked_assignment,
+    upload_managed_assignment_task_file,
 )
+from src.services.utils.upload_content import open_content_stream
 from src.services.studytomy.allocations import (
     AllocationCorrectionCommand,
     AllocationCorrectionReceipt,
@@ -444,6 +453,11 @@ async def open_managed_virtual_lab(
     return lab
 
 
+class ManagedTaskDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_submission: dict[str, Any]
+
+
 @router.get("/learning/courses/{course_uuid}/releases/{release_uuid}/assignments/{activity_uuid}")
 async def get_managed_linked_assignment(
     org_uuid: str, course_uuid: str, release_uuid: str, activity_uuid: str,
@@ -453,6 +467,124 @@ async def get_managed_linked_assignment(
     assignment = await read_managed_linked_assignment(
         db, org, actor, course_uuid, release_uuid, activity_uuid,
     )
+    response.headers["Cache-Control"] = "private, no-store"
+    return assignment
+
+
+@router.post("/learning/courses/{course_uuid}/releases/{release_uuid}/assignments/{activity_uuid}/tasks/{task_uuid}/files")
+async def upload_managed_assignment_file(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    task_uuid: str,
+    response: Response,
+    actor: Purchaser,
+    db: Session,
+    sub_file: UploadFile = File(...),
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> ManagedTaskFileUploadReceipt:
+    org = await _member_org(org_uuid, actor, db)
+    receipt = await upload_managed_assignment_task_file(
+        db, org, actor, course_uuid, release_uuid, activity_uuid, task_uuid, sub_file,
+        idempotency_key=idempotency_key,
+    )
+    await db.commit()
+    response.headers["Cache-Control"] = "private, no-store"
+    return receipt
+
+
+@router.get(
+    "/learning/courses/{course_uuid}/releases/{release_uuid}/assignments/{activity_uuid}/tasks/{task_uuid}/files/{filename}",
+    response_class=StreamingResponse,
+)
+async def download_managed_assignment_file(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    task_uuid: str,
+    filename: str,
+    actor: Purchaser,
+    db: Session,
+) -> StreamingResponse:
+    org = await _member_org(org_uuid, actor, db)
+    download = await read_managed_submission_file_download(
+        db, org, actor, course_uuid, release_uuid, activity_uuid, task_uuid, filename,
+    )
+    stream = await open_content_stream(
+        download.directory, "orgs", download.org_uuid, download.filename
+    )
+    return StreamingResponse(
+        stream,
+        media_type=download.media_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{download.filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.put("/learning/courses/{course_uuid}/releases/{release_uuid}/assignments/{activity_uuid}/tasks/{task_uuid}/draft")
+async def put_managed_assignment_task_draft(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    task_uuid: str,
+    body: ManagedTaskDraftRequest,
+    response: Response,
+    actor: Purchaser,
+    db: Session,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> ManagedLinkedAssignment:
+    org = await _member_org(org_uuid, actor, db)
+    assignment = await save_managed_assignment_task_draft(
+        db, org, actor, course_uuid, release_uuid, activity_uuid, task_uuid,
+        body.task_submission, idempotency_key=idempotency_key,
+    )
+    await db.commit()
+    response.headers["Cache-Control"] = "private, no-store"
+    return assignment
+
+
+@router.post("/learning/courses/{course_uuid}/releases/{release_uuid}/assignments/{activity_uuid}/submit")
+async def post_managed_linked_assignment_submit(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    response: Response,
+    actor: Purchaser,
+    db: Session,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> ManagedLinkedAssignment:
+    org = await _member_org(org_uuid, actor, db)
+    assignment = await submit_managed_linked_assignment(
+        db, org, actor, course_uuid, release_uuid, activity_uuid,
+        idempotency_key=idempotency_key,
+    )
+    await db.commit()
+    response.headers["Cache-Control"] = "private, no-store"
+    return assignment
+
+
+@router.post("/learning/courses/{course_uuid}/releases/{release_uuid}/assignments/{activity_uuid}/retry")
+async def post_managed_linked_assignment_retry(
+    org_uuid: str,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    response: Response,
+    actor: Purchaser,
+    db: Session,
+) -> ManagedLinkedAssignment:
+    org = await _member_org(org_uuid, actor, db)
+    assignment = await retry_managed_linked_assignment(
+        db, org, actor, course_uuid, release_uuid, activity_uuid,
+    )
+    await db.commit()
     response.headers["Cache-Control"] = "private, no-store"
     return assignment
 

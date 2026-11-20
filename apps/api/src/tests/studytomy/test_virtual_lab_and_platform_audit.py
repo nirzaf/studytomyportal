@@ -73,7 +73,7 @@ from src.tests.studytomy.test_current_head_audit_remediations import _seed_polic
 def _valid_lab_content(
     *,
     linked_assignment_activity_uuid: str | None = None,
-    entry_url: str = "https://labs.studytomy.com/conservation-momentum/v1/index.html",
+    entry_url: str = "https://labs.studytomy.com/conservation-momentum/1.0.0-pilot.1/index.html",
 ) -> dict:
     return {
         "virtual_lab": {

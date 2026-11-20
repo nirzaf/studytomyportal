@@ -11,6 +11,10 @@ import type { LessonRecommendation } from '@components/Objects/Activities/Adapti
 import { LessonTutorContent, useLessonTutor } from '@components/Objects/Activities/AI/LessonTutorPanel'
 import DocumentPdfActivity from '@components/Objects/Activities/DocumentPdf/DocumentPdf'
 import LearnHousePlayer from '@components/Objects/Activities/Video/LearnHousePlayer'
+import {
+  type LinkedAssignment,
+  ManagedLinkedAssignmentPanel,
+} from '@components/Objects/Account/subpages/ManagedLinkedAssignmentPanel'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
 import { formatDateTime } from '@/lib/format'
 import { getAPIUrl } from '@services/config/config'
@@ -47,30 +51,6 @@ type VirtualLabLesson = Release & {
   units_system: string
   submission_formats_note?: string | null
   linked_assignment?: LinkedAssignmentSummary | null
-}
-type LinkedAssignmentTask = {
-  assignment_task_uuid: string
-  title: string
-  description: string
-  assignment_type: string
-  max_grade_value: number | null
-  student_grade: number | null
-  teacher_feedback: string | null
-}
-type LinkedAssignment = Release & {
-  activity_uuid: string
-  assignment_uuid: string
-  title: string
-  description: string
-  due_date: string | null
-  grading_type: string
-  submission_status: string | null
-  grade: number | null
-  overall_feedback: string | null
-  attempt_number: number | null
-  tasks: LinkedAssignmentTask[]
-  accepted_file_formats: string[]
-  manual_review_note: string
 }
 type CertificatePage = {
   awards: {
@@ -589,46 +569,14 @@ function LearningView({
             </Button>
           )}
         </div>
-        {assignment.description && <p className="max-w-prose text-sm leading-relaxed">{assignment.description}</p>}
-        <div className="rounded-lg border p-4 space-y-2 text-sm">
-          <p>
-            <strong>Status:</strong> {assignment.submission_status ?? 'Not submitted yet'}
-            {assignment.attempt_number ? ` · Attempt ${assignment.attempt_number}` : ''}
-            {assignment.due_date ? ` · Due ${assignment.due_date}` : ''}
-          </p>
-          {assignment.grade !== null && (
-            <p><strong>Grade:</strong> {assignment.grade}</p>
-          )}
-          {assignment.overall_feedback && (
-            <p className="rounded bg-muted p-3"><strong>Teacher feedback:</strong> {assignment.overall_feedback}</p>
-          )}
-          <p className="text-muted-foreground">
-            <strong>Accepted practical upload formats:</strong> {assignment.accepted_file_formats.join(', ')} (max 50 MiB).
-            Package exported CSV files inside a ZIP archive or include measurements in a PDF report.
-          </p>
-          <p className="text-xs text-muted-foreground">{assignment.manual_review_note}</p>
-        </div>
-        <ol className="space-y-3">
-          {assignment.tasks.map((task, idx) => (
-            <li key={task.assignment_task_uuid} className="rounded-lg border p-4 space-y-1 text-sm">
-              <h3 className="font-semibold">
-                {idx + 1}. {task.title}{' '}
-                <span className="font-normal text-xs text-muted-foreground">({task.assignment_type})</span>
-              </h3>
-              {task.description && <p className="text-muted-foreground">{task.description}</p>}
-              {task.max_grade_value !== null && (
-                <p className="text-xs text-muted-foreground">
-                  {task.student_grade !== null ? `Score: ${task.student_grade} / ${task.max_grade_value}` : `Max points: ${task.max_grade_value}`}
-                </p>
-              )}
-              {task.teacher_feedback && (
-                <p className="mt-2 rounded bg-muted p-2.5 text-sm">
-                  <strong>Task feedback:</strong> {task.teacher_feedback}
-                </p>
-              )}
-            </li>
-          ))}
-        </ol>
+        <ManagedLinkedAssignmentPanel
+          orgUuid={orgUuid}
+          token={token}
+          assignment={assignment}
+          onAssignmentUpdated={nextAssignment =>
+            setView({ kind: 'assignment', release: view.release, assignment: nextAssignment, returnLab })
+          }
+        />
       </>
       break
     }
