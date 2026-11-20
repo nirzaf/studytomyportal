@@ -36,21 +36,21 @@ class _AdaptiveWidgetParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = dict(attrs)
-        if tag == "select":
-            selector = "data-study-level-selector" if "data-study-level-selector" in values else (
-                "data-study-skill-selector" if "data-study-skill-selector" in values else None
-            )
-            if selector is not None:
-                if self._variant is not None or "disabled" in values or "hidden" in values:
-                    raise AdaptiveWidgetValidationError("Adaptive selectors must remain visible and enabled.")
-            if "data-study-level-selector" in values:
-                if self._control is not None:
-                    raise AdaptiveWidgetValidationError("Adaptive selector markup is nested.")
+        has_level_selector = "data-study-level-selector" in values
+        has_skill_selector = "data-study-skill-selector" in values
+        if has_level_selector or has_skill_selector:
+            if tag != "select":
+                raise AdaptiveWidgetValidationError("Adaptive selector markers are only valid on <select> controls.")
+            if has_level_selector and has_skill_selector:
+                raise AdaptiveWidgetValidationError("Level and skill selectors must use separate <select> controls.")
+            if self._variant is not None or "disabled" in values or "hidden" in values:
+                raise AdaptiveWidgetValidationError("Adaptive selectors must remain visible and enabled.")
+            if self._control is not None:
+                raise AdaptiveWidgetValidationError("Adaptive selector markup is nested.")
+            if has_level_selector:
                 self.level_selector_count += 1
                 self._control = "level"
-            elif "data-study-skill-selector" in values:
-                if self._control is not None:
-                    raise AdaptiveWidgetValidationError("Adaptive selector markup is nested.")
+            else:
                 self.skill_selector_count += 1
                 self._control = "skill"
         elif tag == "option" and self._control is not None:

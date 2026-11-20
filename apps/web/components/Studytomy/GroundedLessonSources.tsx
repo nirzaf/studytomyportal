@@ -84,7 +84,23 @@ function DraftMaterials({ route, token, version }: { route: string; token: strin
     event.preventDefault()
     if (upload.current) return
     const form = event.currentTarget
-    const data = new FormData(form)
+    const rawData = new FormData(form)
+    const data = new FormData()
+    for (const [key, value] of rawData.entries()) {
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (!trimmed) continue
+        data.append(key, trimmed)
+      } else {
+        data.append(key, value)
+      }
+    }
+    // Only attach optional defaults if the author entered primary provenance identity.
+    if (!data.has('parent_book_title') && !data.has('publisher_authority')) {
+      data.delete('resource_type')
+      data.delete('source_language')
+      data.delete('rights_status')
+    }
     const controller = new AbortController()
     upload.current = controller
     setUploadState({ token, busy: true })
@@ -130,6 +146,59 @@ function DraftMaterials({ route, token, version }: { route: string; token: strin
           <input type="file" name="file" accept=".pdf,application/pdf" required disabled={state?.busy}
             aria-describedby="grounded-source-limits" className="block w-full text-sm" />
         </label>
+        <details className="rounded-md border p-3 text-sm">
+          <summary className="cursor-pointer font-medium">Official syllabus &amp; source provenance (optional)</summary>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Record the official book title, authority, syllabus edition, and rights status for traceable review. Entering metadata does not itself grant distribution rights.
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <label className="grid gap-1 text-xs font-medium">
+              Parent book / source title
+              <input name="parent_book_title" maxLength={200} disabled={state?.busy} className="rounded border px-2 py-1.5 text-sm" />
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Publisher / authority (e.g. NIE Sri Lanka)
+              <input name="publisher_authority" maxLength={120} disabled={state?.busy} className="rounded border px-2 py-1.5 text-sm" />
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Syllabus edition
+              <input name="syllabus_edition" maxLength={64} disabled={state?.busy} className="rounded border px-2 py-1.5 text-sm" />
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Printed page range
+              <input name="printed_page_range" maxLength={64} disabled={state?.busy} className="rounded border px-2 py-1.5 text-sm" />
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Resource type
+              <select name="resource_type" defaultValue="unit_extract" disabled={state?.busy} className="rounded border bg-background px-2 py-1.5 text-sm">
+                <option value="unit_extract">Unit extract</option>
+                <option value="textbook">Textbook</option>
+                <option value="practical_handbook">Practical handbook</option>
+                <option value="teacher_guide">Teacher guide</option>
+                <option value="syllabus">Syllabus</option>
+                <option value="resource_book">Resource book</option>
+                <option value="workbook">Workbook</option>
+                <option value="supplementary">Supplementary</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Rights status
+              <select name="rights_status" defaultValue="unverified" disabled={state?.busy} className="rounded border bg-background px-2 py-1.5 text-sm">
+                <option value="unverified">Unverified</option>
+                <option value="verified_permitted">Verified permitted</option>
+                <option value="restricted">Restricted</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Source language
+              <input name="source_language" defaultValue="en" maxLength={32} disabled={state?.busy} className="rounded border px-2 py-1.5 text-sm" />
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Source revision (optional)
+              <input name="source_revision" maxLength={120} disabled={state?.busy} className="rounded border px-2 py-1.5 text-sm" />
+            </label>
+          </div>
+        </details>
         <p id="grounded-source-limits" className="max-w-prose text-sm text-muted-foreground">
           Searchable PDFs only; scanned PDFs need OCR first. Each file is limited to 4 MiB, 200 pages, and 100,000
           extracted characters. Topic search uses shared words without synonym expansion and sends up to six matching

@@ -3,7 +3,8 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.core.events.database import get_db_session
@@ -13,7 +14,7 @@ from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.services.studytomy.grounding import (
     DraftMaterialPage, DraftMaterialReceipt, GroundedLessonPreview, GroundedLessonRequest, GroundedQuizPreview,
     GroundedLessonSave, GroundedLessonSources, GroundedQuizSave, GroundedQuizSources,
-    SaveGroundedLessonRequest, SaveGroundedQuizRequest,
+    SaveGroundedLessonRequest, SaveGroundedQuizRequest, SourceProvenance,
     preview_grounded_lesson,
     preview_grounded_quiz, read_grounded_lesson_sources, read_grounded_quiz_sources, revoke_draft_material, save_grounded_lesson,
     list_draft_materials, save_grounded_quiz, upload_draft_material,
@@ -41,8 +42,51 @@ async def upload_source(
     actor: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     file: Annotated[UploadFile, File()],
+    parent_book_title: Annotated[str | None, Form()] = None,
+    publisher_authority: Annotated[str | None, Form()] = None,
+    syllabus_edition: Annotated[str | None, Form()] = None,
+    source_revision: Annotated[str | None, Form()] = None,
+    resource_type: Annotated[str | None, Form()] = None,
+    source_language: Annotated[str | None, Form()] = None,
+    printed_page_range: Annotated[str | None, Form()] = None,
+    physical_page_offset: Annotated[int | None, Form()] = None,
+    rights_status: Annotated[str | None, Form()] = None,
 ) -> DraftMaterialReceipt:
-    receipt = await upload_draft_material(db, request, actor, org_uuid, course_uuid, lesson_uuid, file)
+    raw_provenance = {
+        "parent_book_title": parent_book_title,
+        "publisher_authority": publisher_authority,
+        "syllabus_edition": syllabus_edition,
+        "source_revision": source_revision,
+        "resource_type": resource_type,
+        "source_language": source_language,
+        "printed_page_range": printed_page_range,
+        "physical_page_offset": physical_page_offset,
+        "rights_status": rights_status,
+    }
+    provided = {
+        key: value
+        for key, value in raw_provenance.items()
+        if value is not None and (not isinstance(value, str) or value.strip() != "")
+    }
+    source_provenance: SourceProvenance | None = None
+    if provided:
+        try:
+            source_provenance = SourceProvenance.model_validate(provided)
+        except ValidationError as exc:
+            raise HTTPException(
+                422,
+                f"Invalid source provenance metadata: {exc.errors()[0].get('msg', 'validation failed')}",
+            ) from None
+    receipt = await upload_draft_material(
+        db,
+        request,
+        actor,
+        org_uuid,
+        course_uuid,
+        lesson_uuid,
+        file,
+        source_provenance=source_provenance,
+    )
     await db.commit()
     response.headers.update(PRIVATE_HEADERS)
     return receipt

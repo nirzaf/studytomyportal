@@ -360,8 +360,34 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
     event.preventDefault()
     const form = event.currentTarget
     const fields = Object.fromEntries(new FormData(form))
+    const pmAuthority = String(fields.programme_authority ?? '').trim()
+    const pmEdition = String(fields.programme_syllabus_edition ?? '').trim()
+    const pmCohort = String(fields.programme_effective_cohort ?? '').trim()
+    const pmStage = String(fields.programme_stage ?? 'other').trim()
+    const pmCoverage = String(fields.programme_coverage_status ?? 'unverified').trim()
+    const pmLanguage = String(fields.programme_source_language ?? '').trim()
+    const hasProgramme = Boolean(pmAuthority || pmEdition || pmCohort)
+    const programme_metadata = hasProgramme
+      ? {
+          authority: pmAuthority,
+          syllabus_edition: pmEdition,
+          effective_cohort: pmCohort,
+          stage: pmStage || 'other',
+          coverage_status: pmCoverage || 'unverified',
+          source_language: pmLanguage || null,
+        }
+      : null
     save('curriculum-revisions', 'POST', {
-      ...fields, revision: Number(fields.revision), owner_course_uuid: courseUuid, jurisdiction: fields.jurisdiction || null,
+      curriculum_key: fields.curriculum_key,
+      revision: Number(fields.revision),
+      subject: fields.subject,
+      level: fields.level,
+      language: fields.language,
+      owner_course_uuid: courseUuid,
+      jurisdiction: String(fields.jurisdiction ?? '').trim() || null,
+      source_reference: fields.source_reference,
+      rights_reference: fields.rights_reference,
+      ...(programme_metadata ? { programme_metadata } : {}),
     }, t('adaptive.curriculumSaved', 'Curriculum draft saved.'), result => {
       form.reset()
       const createdUuid = (result as { uuid?: string } | null)?.uuid
@@ -392,6 +418,31 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
           <Field name="source_reference" label="Curriculum source reference" />
           <Field name="rights_reference" label="Rights reference" />
         </div>
+        <details className="mt-3 rounded-md border p-3 text-sm">
+          <summary className="cursor-pointer font-medium">Official programme metadata (optional, e.g. NIE Sri Lanka)</summary>
+          <div className={`mt-2 ${grid}`}>
+            <Field name="programme_authority" label="Syllabus authority"><Input name="programme_authority" maxLength={120} className="min-h-11" /></Field>
+            <Field name="programme_syllabus_edition" label="Syllabus edition"><Input name="programme_syllabus_edition" maxLength={64} className="min-h-11" /></Field>
+            <Field name="programme_effective_cohort" label="Effective cohort"><Input name="programme_effective_cohort" maxLength={64} className="min-h-11" /></Field>
+            <Field name="programme_stage" label="School stage">
+              <select name="programme_stage" defaultValue="other" className={selectClass}>
+                <option value="other">Other</option>
+                <option value="junior_secondary">Junior Secondary (Grades 6–9)</option>
+                <option value="gce_ol">G.C.E. O/L (Grades 10–11)</option>
+                <option value="gce_al">G.C.E. A/L (Grades 12–13)</option>
+              </select>
+            </Field>
+            <Field name="programme_coverage_status" label="Coverage status">
+              <select name="programme_coverage_status" defaultValue="unverified" className={selectClass}>
+                <option value="unverified">Unverified</option>
+                <option value="partial">Partial</option>
+                <option value="supplementary_only">Supplementary only</option>
+                <option value="verified_complete">Verified complete</option>
+              </select>
+            </Field>
+            <Field name="programme_source_language" label="Source language"><Input name="programme_source_language" defaultValue="en" maxLength={32} className="min-h-11" /></Field>
+          </div>
+        </details>
         <Button disabled={busy} className="mt-4 min-h-11">{t('adaptive.saveCurriculum', 'Save curriculum draft')}</Button>
       </form>
     </details>}

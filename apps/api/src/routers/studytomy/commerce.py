@@ -34,17 +34,21 @@ from src.services.studytomy.access_policy import (
     ManagedActivityMedia,
     ManagedCompletionReceipt,
     ManagedLessonIndex,
+    ManagedLinkedAssignment,
     ManagedReleaseCatalog,
     ManagedReleaseOverview,
     ManagedTextLesson,
+    ManagedVirtualLabLesson,
     acknowledge_managed_text_completion,
     list_managed_text_lessons,
     list_my_managed_access_history,
     list_my_managed_releases,
     read_managed_access_history,
     read_managed_activity_media,
+    read_managed_linked_assignment,
     read_managed_release_overview,
     read_managed_text_lesson,
+    read_managed_virtual_lab,
 )
 from src.services.studytomy.allocations import (
     AllocationCorrectionCommand,
@@ -412,6 +416,45 @@ async def complete_managed_text_lesson(
     await db.commit()
     response.headers["Cache-Control"] = "private, no-store"
     return receipt
+
+
+@router.get("/learning/courses/{course_uuid}/releases/{release_uuid}/labs/{activity_uuid}")
+async def get_managed_virtual_lab(
+    org_uuid: str, course_uuid: str, release_uuid: str, activity_uuid: str,
+    response: Response, actor: Purchaser, db: Session,
+) -> ManagedVirtualLabLesson:
+    org = await _member_org(org_uuid, actor, db)
+    lab = await read_managed_virtual_lab(db, org, actor, course_uuid, release_uuid, activity_uuid)
+    await db.commit()
+    response.headers["Cache-Control"] = "private, no-store"
+    return lab
+
+
+@router.post("/learning/courses/{course_uuid}/releases/{release_uuid}/labs/{activity_uuid}/open")
+async def open_managed_virtual_lab(
+    org_uuid: str, course_uuid: str, release_uuid: str, activity_uuid: str,
+    response: Response, actor: Purchaser, db: Session,
+) -> ManagedVirtualLabLesson:
+    org = await _member_org(org_uuid, actor, db)
+    lab = await read_managed_virtual_lab(
+        db, org, actor, course_uuid, release_uuid, activity_uuid, start_first_use=True,
+    )
+    await db.commit()
+    response.headers["Cache-Control"] = "private, no-store"
+    return lab
+
+
+@router.get("/learning/courses/{course_uuid}/releases/{release_uuid}/assignments/{activity_uuid}")
+async def get_managed_linked_assignment(
+    org_uuid: str, course_uuid: str, release_uuid: str, activity_uuid: str,
+    response: Response, actor: Purchaser, db: Session,
+) -> ManagedLinkedAssignment:
+    org = await _member_org(org_uuid, actor, db)
+    assignment = await read_managed_linked_assignment(
+        db, org, actor, course_uuid, release_uuid, activity_uuid,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return assignment
 
 
 class _ManagedMediaResponse(StreamingResponse):

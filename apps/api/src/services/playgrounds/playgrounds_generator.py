@@ -193,64 +193,33 @@ CRITICAL DESIGN PHILOSOPHY:
 - Prefer a neutral or light background (white, gray-50, slate-50) with one or two accent colors max.
 
 DESIGN RULES:
-1. Generate a COMPLETE, 100% self-contained HTML document with inline <style> CSS and inline vanilla JavaScript (plus inline SVG or HTML5 <canvas> when visuals or charts help).
-2. DO NOT load external scripts, external stylesheets, external fonts, external images, iframes, or CDNs: the preview sandbox enforces a strict zero-egress Content Security Policy (`connect-src 'none'`, no remote scripts/styles/images/forms/popups). Everything must work completely offline inside the single HTML document.
-3. Use LIGHT backgrounds, no dark full-page themes
-4. Centered, card-style layout; the interactive content is the star
-5. Responsive with proper spacing, rounded corners, subtle shadows on cards
-6. Highly interactive: buttons, sliders, inputs, drag, click, animations, visual feedback
-7. Clear instructions so learners know what to do
+1. Generate a COMPLETE, 100% self-contained, script-free HTML document using semantic HTML, inline <style> CSS, inline SVG diagrams, and native declarative interactivity (<details>/<summary> reveal panels, CSS :checked radio/checkbox tabs and flip cards, labeled SVG callouts, and structured comparison tables).
+2. DO NOT rely on JavaScript or <canvas>: the portal preview sandbox intentionally runs with scripts disabled (`script-src 'none'`, empty iframe sandbox) and strips `<script>` tags and inline event handlers (`onclick`, `onload`, etc.). Any content that requires `<script>` or `<canvas>` painting will appear blank or inert.
+3. DO NOT load external scripts, external stylesheets, external fonts, external images, iframes, or CDNs: the preview sandbox enforces a strict zero-egress Content Security Policy (`connect-src 'none'`, `script-src 'none'`, no remote assets/forms/popups). Everything must render completely offline inside the single HTML document.
+4. Use LIGHT backgrounds, no dark full-page themes.
+5. Centered, card-style layout; the learning content and clear declarative controls are the star.
+6. Responsive with proper spacing, rounded corners, subtle shadows on cards, and accessible keyboard focus styles.
+7. Clear instructions so learners know how to explore each card, hint, worked example, and self-check answer.
 
-GOOD EXAMPLES (build these kinds of things):
-- Flashcard deck with smooth flip animation and progress counter
-- Multiple-choice quiz with instant feedback, explanations, and score tracker
-- Drag-and-drop sorting, ranking, or matching exercise
-- Interactive slider to explore a concept (change a variable, see the live effect on a chart or diagram)
-- Step-by-step simulation with Next/Back controls and progress indicator
-- Math or science formula explorer with live calculation and visual output
-- Memory card matching game
-- Timeline with clickable events that reveal detail panels
-- Fill-in-the-blank or word scramble with hints
-- Physics simulation (pendulum, projectile, gravity, collisions)
-- Chemistry molecule builder or periodic table explorer
-- Concept map or mind map with expandable/collapsible nodes
-- Progress-tracked multi-step learning flow with completion state
-- Animated bar, pie, or line chart that responds to user input
-- Countdown timer quiz: answer before time runs out
-- Word cloud that builds as user types associations
-- Venn diagram with draggable items to sort into regions
-- Hotspot image: click zones on a diagram to reveal labels/info
-- Code snippet runner with editable input and live output preview
-- Branching scenario / decision tree: choose your path story
-- Kanban-style board to categorize concepts into columns
-- Animated number line or coordinate plane explorer
-- Spinning wheel or random picker for classroom activities
-- True/False card swiper (Tinder-style) for quick review
-- Analogy builder: match left column to right column
-- Fraction or percentage visual (pie slice, bar fill) that updates live
-- Color mixer / RGB/HSL explorer with live preview
-- Sound frequency or wave visualizer with sliders
-- Typing speed / accuracy mini-game
-- Vocabulary builder: definition shown, user types the word
-- Binary / hex / decimal converter with animated bit display
-- Gravity or orbital simulation with adjustable mass/speed
-- Anatomy diagram with labeled clickable regions
-- Budget / resource allocation tool with live bar charts
-- Reaction-time game to illustrate human reflex concepts
-- Morse code encoder/decoder with audio playback
-- World map quiz: click the correct country
-- Crossword puzzle generator from given word list
-- Matching pairs: term on left, definition on right, draw connecting lines
+GOOD EXAMPLES (build script-free declarative widgets like these):
+- Flashcard deck using CSS `:checked` toggles or `<details>/<summary>` flip/reveal cards
+- Self-check practice cards with progressive `<details>` hints, worked steps, and model answers
+- Labeled inline SVG concept diagrams, timelines, coordinate planes, and comparison matrices
+- Step-by-step worked example walkthroughs using CSS radio tabs (Step 1 / Step 2 / Step 3)
+- Concept map or structured study guide with expandable `<details>` nodes
+- Formula reference card with worked numerical substitutions and common misconception callouts
+- Side-by-side comparison panels (e.g., elastic vs. inelastic collisions, mitosis vs. meiosis)
+- Vocabulary & definition matcher with expandable self-check key
+- Structured case-study / branching explanation cards using CSS tabs
 
 BAD EXAMPLES (do NOT build these):
-- A website with a hero, sections and a footer
-- A landing page or marketing page
-- A multi-page app with routing
-- A dashboard with a left sidebar nav
+- Anything requiring `<script>`, `onclick`, `oninput`, or `<canvas>` rendering (will be stripped/inert in the script-free sandbox)
+- Scientifically validated physics or chemistry simulators (those belong in curated Virtual Labs, not generated HTML)
+- A website with a hero, sections and a footer, landing page, or multi-page app with routing
 
 CONTAINMENT & NETWORK SAFETY:
-- Never include external `<script src=...>`, `<link href=...>`, remote `<img>`, `fetch()`, `XMLHttpRequest`, `navigator.sendBeacon()`, `WebSocket`, `<form action=...>`, `window.open()`, or top-level navigation.
-- Render styling with clean inline `<style>` CSS, and build charts, diagrams, math layouts, and physics visuals using inline SVG, HTML5 `<canvas>`, Unicode/HTML formatting, and deterministic vanilla JavaScript.
+- Never include `<script>`, inline event handlers (`on*`), `<canvas>`, external `<link href=...>`, remote `<img>`, `fetch()`, `XMLHttpRequest`, `navigator.sendBeacon()`, `WebSocket`, `<form action=...>`, `window.open()`, or top-level navigation.
+- Render all visuals and interactions strictly with semantic HTML, inline `<style>` CSS (including `:checked` / `<details>` / `<summary>`), inline SVG, and Unicode/HTML math formatting. Host-provided learner-level and focus-skill selectors switch among the declarative `data-study-adaptation-variant` blocks without executing widget scripts.
 
 OUTPUT FORMAT:
 Return ONLY the HTML code, starting with <!DOCTYPE html> and ending with </html>.

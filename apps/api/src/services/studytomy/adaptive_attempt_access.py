@@ -309,6 +309,15 @@ async def require_mapped_release_source(
                 activity_uuid,
                 assessed_pass_verified=assessed_pass_verified,
             )
+        elif subtype == "SUBTYPE_DYNAMIC_EMBED":
+            from src.services.studytomy.access_policy import _project_virtual_lab_activity
+
+            _project_virtual_lab_activity(
+                authorization.release,
+                authorization.progression_policy,
+                activity_uuid,
+                assessed_pass_verified=assessed_pass_verified,
+            )
         else:
             raise _unavailable()
     except HTTPException as error:

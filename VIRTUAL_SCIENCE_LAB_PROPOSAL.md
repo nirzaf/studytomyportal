@@ -1,6 +1,6 @@
 # Studytomy Virtual Science Lab — Agentuto Integration Proposal
 
-**Status**: Proposed (documentation only; not yet implemented or deployed).
+**Status**: Pilot specification and bounded local integration (local development only; awaiting qualified Sri Lankan NIE educator sign-off and deployment authorization).
 
 ## Recommended for integration
 
@@ -80,7 +80,7 @@ flowchart TD
 6. Submit measurements and explanations through an assignment.
 7. Receive teacher feedback or supported objective-question grading.
 
-Agentuto already contains a [conservation-momentum simulation](https://github.com/danielw-sudo/agentuto/tree/697025a14aabbd391072fbedc522d1d68bebcbc4/src/simulations/physics/conservation-momentum). Curriculum mapping and assessment rubrics must still be approved for the selected Australian year level.
+Agentuto already contains a [conservation-momentum simulation](https://github.com/danielw-sudo/agentuto/tree/697025a14aabbd391072fbedc522d1d68bebcbc4/src/simulations/physics/conservation-momentum). Curriculum mapping, syllabus edition provenance, and assessment rubrics must be approved by a qualified educator for the selected Sri Lankan National School Syllabus grade (NIE / Ministry of Education, Grades 6–13, English instruction; pilot target: Grade 12 G.C.E. A/L Physics Mechanics — see [docs/studytomy/VIRTUAL-LAB-MOMENTUM-PILOT-SPEC.md](docs/studytomy/VIRTUAL-LAB-MOMENTUM-PILOT-SPEC.md)).
 
 ---
 
@@ -113,7 +113,7 @@ Agentuto's [routing implementation](https://github.com/danielw-sudo/agentuto/blo
 2. The iframe's sandbox and browser-storage behavior must allow the simulation to function.
 3. The existing Embed activity uses a relatively compact frame; a full-screen lab option is preferable for serious experiments.
 
-At this stage, lab data is not automatically saved in Studytomy; students export CSV files and submit them through an existing assignment.
+At this stage, lab data is not automatically saved in Studytomy; students export single-condition CSV files and submit their practical report (PDF or ZIP containing CSV + written observations) plus numerical answers through an existing authorized Studytomy assignment for manual teacher review. Simulation completion or CSV export is never treated as independent mastery or physical-laboratory equivalence.
 
 ### Stage B — Native Studytomy integration
 
@@ -146,7 +146,7 @@ Scientific calculations stay in the simulator. The Studytomy FastAPI backend val
 | **Experiment-specific automated marking** | Not integrated | Add deterministic scoring rules |
 | **Context-aware AI lab assistance** | Agentuto has optional client-side AI | Integrate with Studytomy's protected FastAPI AI services |
 | **Tutor experiment review** | Generic assignment review exists | Add experiment-specific review only when needed |
-| **Curriculum validation** | Not established for Australian courses | Educator review and reference-case testing |
+| **Curriculum validation** | Draft Sri Lankan NIE syllabus specification pending qualified educator sign-off | Educator review, provenance recording, and reference-case testing (see [VIRTUAL-LAB-MOMENTUM-PILOT-SPEC.md](docs/studytomy/VIRTUAL-LAB-MOMENTUM-PILOT-SPEC.md)) |
 
 Studytomy's current [assignment model](apps/api/src/db/courses/assignments.py) supports `CUSTOM` tasks, which store custom JSON submissions without automatically grading them—offering a useful future integration point without creating a separate grading system.
 
@@ -161,13 +161,14 @@ Studytomy's current [assignment model](apps/api/src/db/courses/assignments.py) s
 
 | Field | Specification |
 |---|---|
+| **Syllabus target** | Sri Lankan National School Syllabus (NIE / MoE, Grades 6–13, English instruction) — Draft pilot target: Grade 12 (G.C.E. A/L) Physics, Mechanics: Conservation of Linear Momentum *(pending qualified educator sign-off)* |
 | **Subject** | Physics |
-| **Topic** | Conservation of Momentum |
-| **Simulation** | Agentuto `conservation-momentum` |
-| **Integration** | Existing Embed activity |
-| **Assessment** | Existing assignment with numerical questions and a lab report |
-| **Student output** | Measurements, CSV data, observations, conclusions |
-| **Review** | Tutor evaluates submitted work |
+| **Topic** | Conservation of Linear Momentum |
+| **Simulation** | Curated pinned Agentuto `conservation-momentum` (`apps/labs/momentum-pilot/`, derived from `697025a14aabbd391072fbedc522d1d68bebcbc4`, standalone AI disabled, temporary notebook, single-condition runs) |
+| **Integration** | Governed retained `virtual_lab` descriptor in managed course releases (not arbitrary external embeds) |
+| **Assessment** | Existing authorized assignment with numerical questions and a PDF/ZIP practical report |
+| **Student output** | Measurements, single-condition CSV inside ZIP or PDF lab report, observations, conclusions |
+| **Review** | Tutor evaluates submitted work manually (manual grades do not auto-promote to independent mastery) |
 
 **Pilot acceptance criteria**:
 - A student can open the laboratory from an authorized course, change parameters, observe scientifically correct outcomes for agreed reference cases, export results, submit an assignment, and receive feedback.

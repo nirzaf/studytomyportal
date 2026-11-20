@@ -73,7 +73,7 @@ def test_empty_schema_bootstrap_serializes_and_installs_integrity_guards():
             reports = list(workers.map(lambda _: ensure_schema(database_url), range(2)))
 
         expected_heads = head_revisions()
-        assert expected_heads == ["e7f2c9a4b138"]
+        assert expected_heads == ["b7c2e9a4d1f0"]
         assert all(report.after == expected_heads for report in reports)
         assert {report.state for report in reports} == {"empty", "stamped"}
 
@@ -199,12 +199,12 @@ def test_interrupted_upgrade_rolls_back_ddl_and_preserves_revision():
 def test_supported_prior_revision_upgrades_through_application_bootstrap():
     with _isolated_database() as (database_url, database):
         initial = ensure_schema(database_url)
-        assert initial.after == ["e7f2c9a4b138"]
+        assert initial.after == ["b7c2e9a4d1f0"]
 
         head = migrations.ScriptDirectory.from_config(migrations.alembic_config()).get_revision(
             initial.after[0]
         )
-        assert head.down_revision == "c4e8a1b7d209"
+        assert head.down_revision == "e7f2c9a4b138"
 
         token = uuid4().hex
         engine = create_engine(database_url)
@@ -240,16 +240,11 @@ def test_supported_prior_revision_upgrades_through_application_bootstrap():
                     migrations.alembic_config(connection), head.down_revision
                 )
                 assert migrations.current_revisions(connection) == [head.down_revision]
-                evidence_columns = {
+                playground_columns = {
                     column["name"]
-                    for column in inspect(connection).get_columns("st_evidence_file")
+                    for column in inspect(connection).get_columns("playground")
                 }
-                curriculum_columns = {
-                    column["name"]
-                    for column in inspect(connection).get_columns("st_curriculum_revision")
-                }
-                assert "relationship_uuid" not in evidence_columns
-                assert "programme_metadata" not in curriculum_columns
+                assert "thumbnail_content_sha256" not in playground_columns
                 assert connection.execute(
                     text("SELECT count(*) FROM st_business_event WHERE event_uuid=:id"),
                     {"id": event_uuid},
@@ -260,22 +255,65 @@ def test_supported_prior_revision_upgrades_through_application_bootstrap():
             # the path under test: it upgrades the prior revision through ensure_schema().
             upgraded = ensure_schema(database_url)
             assert upgraded.before == [head.down_revision]
-            assert upgraded.after == ["e7f2c9a4b138"]
+            assert upgraded.after == ["b7c2e9a4d1f0"]
 
             with engine.connect() as connection:
-                evidence_columns = {
+                playground_columns = {
                     column["name"]
-                    for column in inspect(connection).get_columns("st_evidence_file")
+                    for column in inspect(connection).get_columns("playground")
                 }
-                curriculum_columns = {
-                    column["name"]
-                    for column in inspect(connection).get_columns("st_curriculum_revision")
-                }
-                assert "relationship_uuid" in evidence_columns
-                assert "programme_metadata" in curriculum_columns
+                assert "thumbnail_content_sha256" in playground_columns
                 assert connection.execute(
                     text("SELECT count(*) FROM st_business_event WHERE event_uuid=:id"),
                     {"id": event_uuid},
                 ).scalar_one() == 1
+        finally:
+            engine.dispose()
+
+
+@pytest.mark.studytomy_postgres
+def test_lossy_downgrade_of_dependent_and_provenance_revision_is_refused():
+    """T-18: Downgrade past e7f2c9a4b138 refuses to drop populated provenance/dependent data."""
+    with _isolated_database() as (database_url, _database):
+        ensure_schema(database_url)
+        token = uuid4().hex
+        engine = create_engine(database_url)
+        try:
+            with Session(engine, expire_on_commit=False) as session:
+                organization = Organization(
+                    name="T18 Guard Org",
+                    slug=f"t18-{token}",
+                    org_uuid=f"org_{token}",
+                    email=f"{token}@example.invalid",
+                )
+                session.add(organization)
+                session.commit()
+                org_id = organization.id
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO st_curriculum_revision "
+                        "(uuid, org_id, owner_course_uuid, curriculum_key, revision, subject, level, language, source_reference, rights_reference, programme_metadata, policy_version_ids, status, version, created_at, updated_at) "
+                        "VALUES (:uuid, :org_id, :course_uuid, 'LK-PHY-G12', 1, 'Physics', 'Grade 12', 'en', 'NIE-REF', 'RIGHTS-REF', :meta, '[]'::json, 'draft', 1, now(), now())"
+                    ),
+                    {
+                        "uuid": f"curr_{token}",
+                        "org_id": org_id,
+                        "course_uuid": f"course_{token}",
+                        "meta": '{"authority":"NIE Sri Lanka","syllabus_edition":"2017","effective_cohort":"2026"}',
+                    },
+                )
+
+            with pytest.raises(RuntimeError, match="Refusing lossy downgrade of revision e7f2c9a4b138"):
+                with engine.begin() as connection:
+                    command.downgrade(migrations.alembic_config(connection), "c4e8a1b7d209")
+
+            # Verify transaction rolled back cleanly and revision + data remain intact
+            with engine.connect() as connection:
+                assert migrations.current_revisions(connection) == ["b7c2e9a4d1f0"]
+                kept = connection.execute(
+                    text("SELECT count(*) FROM st_curriculum_revision WHERE programme_metadata IS NOT NULL")
+                ).scalar_one()
+                assert kept == 1
         finally:
             engine.dispose()

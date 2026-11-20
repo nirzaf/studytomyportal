@@ -841,15 +841,20 @@ async def upload_draft_material(
     ).where(
         material.course_id == course.id, material.activity_id == lesson.id, material.sha256 == digest,
     ))).one_or_none()
+    provenance_dump = source_provenance.model_dump(mode="json") if source_provenance is not None else None
     if found is not None:
         source_uuid, label, saved_pages, revoked_at, saved_provenance = found
         if revoked_at is not None:
             raise HTTPException(409, "This source version was revoked for this lesson.")
+        if provenance_dump is not None and saved_provenance != provenance_dump:
+            raise HTTPException(
+                409,
+                "This PDF source already exists for this lesson with different provenance metadata. Revoke the prior source before re-uploading with updated provenance.",
+            )
         return _draft_material_receipt(source_uuid, digest, label, saved_pages, saved_provenance)
 
     filename = re.split(r"[/\\]", file.filename or "")[-1]
     label = re.sub(r"[\x00-\x1f\x7f]", "", filename).strip()[:160] or "PDF source"
-    provenance_dump = source_provenance.model_dump(mode="json") if source_provenance is not None else None
     source = StudyDraftMaterial(
         course_id=course.id, activity_id=lesson.id, uploaded_by_user_id=actor.id, label=label,
         sha256=digest, original_pdf=data, pages=pages, source_provenance=provenance_dump,

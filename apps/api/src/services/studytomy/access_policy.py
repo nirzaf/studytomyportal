@@ -86,6 +86,54 @@ class ManagedTextLesson(ManagedReleaseOverview):
     completion: ManagedCompletionReceipt | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
+class ManagedLinkedAssignmentSummary(BaseModel):
+    activity_uuid: str
+    assignment_uuid: str
+    title: str
+
+
+class ManagedVirtualLabLesson(ManagedReleaseOverview):
+    activity_uuid: str
+    lab_id: str
+    experiment_id: str
+    build_version: str
+    build_sha256: str
+    entry_url: str
+    units_system: str
+    submission_formats_note: str | None = None
+    linked_assignment: ManagedLinkedAssignmentSummary | None = None
+
+
+class ManagedAssignmentTaskSummary(BaseModel):
+    assignment_task_uuid: str
+    title: str
+    description: str
+    assignment_type: str
+    max_grade_value: int | None = None
+    student_grade: int | None = None
+    teacher_feedback: str | None = None
+
+
+class ManagedLinkedAssignment(ManagedReleaseOverview):
+    activity_uuid: str
+    assignment_uuid: str
+    title: str
+    description: str
+    due_date: str | None = None
+    grading_type: str
+    submission_status: str | None = None
+    grade: int | None = None
+    overall_feedback: str | None = None
+    attempt_number: int | None = None
+    tasks: list[ManagedAssignmentTaskSummary] = Field(default_factory=list)
+    accepted_file_formats: list[str] = Field(
+        default_factory=lambda: ["PDF", "ZIP", "PNG", "JPG", "DOCX", "XLSX", "PPTX"]
+    )
+    manual_review_note: str = (
+        "Practical lab reports are reviewed manually by your teacher and do not automatically award independent mastery."
+    )
+
+
 @dataclass(slots=True)
 class ManagedActivityMedia:
     file: BinaryIO
@@ -137,13 +185,15 @@ class ManagedLessonSummary(BaseModel):
     activity_uuid: str
     name: str
     position: int
-    format: Literal["text", "pdf", "video", "unsupported"]
+    format: Literal["text", "pdf", "video", "virtual_lab", "unsupported"]
     media_type: str | None
     available: bool
     caption_codes: list[str] = Field(default_factory=list, exclude_if=lambda codes: not codes)
+    linked_assignment_activity_uuid: str | None = Field(default=None, exclude_if=lambda value: value is None)
     unavailable_reason: Literal[
         "release_content_unavailable",
         "release_media_unavailable",
+        "release_lab_unavailable",
         "unsupported_release_format",
         "release_format_conflict",
         "assessment_pass_required",
@@ -1251,13 +1301,20 @@ async def list_managed_text_lessons(
     media_schedule = (
         schedule.get("ungated_media_activities") if isinstance(schedule, dict) else None
     )
+    lab_schedule = (
+        schedule.get("ungated_lab_activities") if isinstance(schedule, dict) else None
+    )
     text_ids = text_schedule.get(course_uuid) if isinstance(text_schedule, dict) else None
     media_ids = media_schedule.get(course_uuid) if isinstance(media_schedule, dict) else None
+    lab_ids = lab_schedule.get(course_uuid) if isinstance(lab_schedule, dict) else None
     authorized_text = set(text_ids) if isinstance(text_ids, list) and all(
         isinstance(value, str) for value in text_ids
     ) else set()
     authorized_media = set(media_ids) if isinstance(media_ids, list) and all(
         isinstance(value, str) for value in media_ids
+    ) else set()
+    authorized_labs = set(lab_ids) if isinstance(lab_ids, list) and all(
+        isinstance(value, str) for value in lab_ids
     ) else set()
 
     media_policy: StudyPolicyVersion | None = None
@@ -1292,7 +1349,8 @@ async def list_managed_text_lessons(
             continue
         is_text = activity_uuid in authorized_text
         is_media = activity_uuid in authorized_media
-        if not is_text and not is_media:
+        is_lab = activity_uuid in authorized_labs
+        if not is_text and not is_media and not is_lab:
             continue
 
         name = row.get("name")
@@ -1301,7 +1359,7 @@ async def list_managed_text_lessons(
             name = "Unavailable activity"
         position = len(lessons) + 1
 
-        if is_text and is_media:
+        if sum((is_text, is_media, is_lab)) > 1:
             lessons.append(ManagedLessonSummary(
                 activity_uuid=activity_uuid,
                 name=name,
@@ -1316,6 +1374,38 @@ async def list_managed_text_lessons(
         assessed_pass_verified, pass_status = await _assessed_pass_delivery(
             db, release, policy, actor.id, activity_uuid,
         )
+        if is_lab:
+            try:
+                lab = _project_virtual_lab_activity(
+                    release, policy, activity_uuid, assessed_pass_verified=assessed_pass_verified,
+                )
+            except HTTPException as error:
+                if error.status_code != 404:
+                    raise
+                lessons.append(ManagedLessonSummary(
+                    activity_uuid=activity_uuid,
+                    name=name,
+                    position=position,
+                    format="virtual_lab",
+                    media_type=None,
+                    available=False,
+                    unavailable_reason=(pass_status if not assessed_pass_verified else None)
+                    or "release_lab_unavailable",
+                ))
+                continue
+            lessons.append(ManagedLessonSummary(
+                activity_uuid=lab.activity_uuid,
+                name=lab.name,
+                position=position,
+                format="virtual_lab",
+                media_type=None,
+                available=True,
+                linked_assignment_activity_uuid=(
+                    lab.linked_assignment.activity_uuid if lab.linked_assignment else None
+                ),
+                unavailable_reason=None,
+            ))
+            continue
         if is_text:
             try:
                 lesson = _project_text_lesson(
@@ -1395,4 +1485,323 @@ async def list_managed_text_lessons(
         ))
     return ManagedLessonIndex(
         requires_first_use=all(grant.starts_at is None for grant in grants), lessons=lessons,
+    )
+
+
+def _project_virtual_lab_activity(
+    release: StudyCourseRelease,
+    policy: StudyPolicyVersion,
+    activity_uuid: str,
+    *,
+    assessed_pass_verified: bool = False,
+) -> ManagedVirtualLabLesson:
+    """Project an authorized governed virtual lab from an immutable course release snapshot (T-06)."""
+    from src.services.studytomy.virtual_labs import validate_governed_virtual_lab_content
+
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
+    schedule = body.specified_value("release_schedule") if body else None
+    allowed = schedule.get("ungated_lab_activities") if isinstance(schedule, dict) else None
+    activities = allowed.get(release.course_uuid) if isinstance(allowed, dict) else None
+    if (
+        policy.id != release.progression_policy_id
+        or body is None
+        or any(blockers.values())
+        or (
+            not assessed_pass_verified
+            and not ungated_by_assessed_pass(body, release.course_uuid, activity_uuid)
+        )
+        or not isinstance(activities, list)
+        or activity_uuid not in activities
+    ):
+        raise _unavailable()
+    snapshot = release.snapshot
+    course = snapshot.get("course")
+    if (
+        not isinstance(course, dict)
+        or course.get("drip_settings") is not None
+        or snapshot.get("schema") != "course_content_evidence_v4"
+    ):
+        raise _unavailable()
+    matches = [
+        row
+        for row in snapshot.get("activities", [])
+        if isinstance(row, dict) and row.get("activity_uuid") == activity_uuid
+    ]
+    if len(matches) != 1:
+        raise _unavailable()
+    activity = matches[0]
+    if (
+        activity.get("published") is not True
+        or activity.get("activity_sub_type") != "SUBTYPE_DYNAMIC_EMBED"
+        or activity.get("lock_type") not in ("public", "authenticated")
+        or not isinstance(activity.get("name"), str)
+        or not activity["name"].strip()
+    ):
+        raise _unavailable()
+    parents = [
+        row[0]
+        for row in snapshot.get("activity_order", [])
+        if isinstance(row, list) and len(row) == 3 and row[1] == activity.get("id")
+    ]
+    if len(parents) != 1:
+        raise _unavailable()
+    chapters = [
+        row
+        for row in snapshot.get("chapters", [])
+        if isinstance(row, dict) and row.get("id") == parents[0]
+    ]
+    if (
+        len(chapters) != 1
+        or chapters[0].get("lock_type") not in ("public", "authenticated")
+        or chapters[0].get("drip_rule") is not None
+    ):
+        raise _unavailable()
+
+    try:
+        descriptor = validate_governed_virtual_lab_content(
+            activity.get("content"), snapshot=snapshot
+        )
+    except HTTPException:
+        raise _unavailable() from None
+
+    linked_summary: ManagedLinkedAssignmentSummary | None = None
+    if descriptor.linked_assignment_activity_uuid is not None:
+        linked_act = next(
+            (
+                row
+                for row in snapshot.get("activities", [])
+                if isinstance(row, dict)
+                and row.get("activity_uuid") == descriptor.linked_assignment_activity_uuid
+                and row.get("activity_sub_type") == "SUBTYPE_ASSIGNMENT_ANY"
+                and row.get("published") is True
+            ),
+            None,
+        )
+        linked_asg = (
+            next(
+                (
+                    row
+                    for row in snapshot.get("assignments", [])
+                    if isinstance(row, dict) and row.get("activity_id") == linked_act.get("id")
+                ),
+                None,
+            )
+            if linked_act is not None
+            else None
+        )
+        if linked_act is not None and linked_asg is not None:
+            linked_summary = ManagedLinkedAssignmentSummary(
+                activity_uuid=str(linked_act["activity_uuid"]),
+                assignment_uuid=str(linked_asg["assignment_uuid"]),
+                title=str(linked_asg.get("title") or linked_act.get("name") or "Practical Assignment"),
+            )
+
+    return ManagedVirtualLabLesson(
+        course_uuid=release.course_uuid,
+        release_uuid=release.uuid,
+        activity_uuid=activity_uuid,
+        name=activity["name"].strip(),
+        lab_id=descriptor.lab_id,
+        experiment_id=descriptor.experiment_id,
+        build_version=descriptor.build_version,
+        build_sha256=descriptor.build_sha256,
+        entry_url=descriptor.entry_url,
+        units_system=descriptor.units_system,
+        submission_formats_note=descriptor.submission_formats_note,
+        linked_assignment=linked_summary,
+    )
+
+
+async def read_managed_virtual_lab(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+    *,
+    start_first_use: bool = False,
+) -> ManagedVirtualLabLesson:
+    """Authorize and deliver one pinned virtual lab descriptor without granting mastery (T-06)."""
+    org = await lock_organization(db, org.id)
+    release, policy, profile_id = await _authorized_release(
+        db, org, actor, course_uuid, release_uuid, require_active_grant=False,
+    )
+    assessed_pass_verified, _ = await _assessed_pass_delivery(
+        db, release, policy, actor.id, activity_uuid, lock_result=True,
+    )
+    result = _project_virtual_lab_activity(
+        release, policy, activity_uuid, assessed_pass_verified=assessed_pass_verified,
+    )
+    now = datetime.now(UTC)
+    grants = await resolve_active_course_grants(
+        db,
+        org_id=org.id,
+        learner_profile_id=profile_id,
+        course_uuid=course_uuid,
+        release_id=release.id,
+        now=now,
+        claim_first_use=start_first_use,
+    )
+    if not grants:
+        raise _unavailable()
+    await _retain_allocation_delivery(db, org, actor, grants, now)
+    return result
+
+
+async def read_managed_linked_assignment(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    course_uuid: str,
+    release_uuid: str,
+    activity_uuid: str,
+) -> ManagedLinkedAssignment:
+    """Authorize and project a retained assignment linked to an approved managed lab (T-08)."""
+    from src.db.courses.assignments import AssignmentTaskSubmission, AssignmentUserSubmission
+
+    release, policy, profile_id = await _authorized_release(
+        db, org, actor, course_uuid, release_uuid, require_active_grant=False,
+    )
+    grants = await resolve_active_course_grants(
+        db,
+        org_id=org.id,
+        learner_profile_id=profile_id,
+        course_uuid=course_uuid,
+        release_id=release.id,
+        now=datetime.now(UTC),
+        include_unstarted=False,
+    )
+    if not grants:
+        raise _unavailable()
+
+    snapshot = release.snapshot
+    if snapshot.get("schema") != "course_content_evidence_v4":
+        raise _unavailable()
+
+    body, blockers = inspect_study_policy_body(StudyPolicyKey.D_09, policy.body)
+    if body is None or any(blockers.values()) or policy.id != release.progression_policy_id:
+        raise _unavailable()
+    schedule = body.specified_value("release_schedule")
+    lab_ids = (
+        schedule.get("ungated_lab_activities", {}).get(course_uuid)
+        if isinstance(schedule, dict) and isinstance(schedule.get("ungated_lab_activities"), dict)
+        else None
+    )
+    asg_ids = (
+        schedule.get("ungated_assignment_activities", {}).get(course_uuid)
+        if isinstance(schedule, dict) and isinstance(schedule.get("ungated_assignment_activities"), dict)
+        else None
+    )
+    authorized_asg_uuids: set[str] = (
+        set(asg_ids)
+        if isinstance(asg_ids, list) and all(isinstance(v, str) for v in asg_ids)
+        else set()
+    )
+    if isinstance(lab_ids, list):
+        for lab_act_uuid in lab_ids:
+            if not isinstance(lab_act_uuid, str):
+                continue
+            try:
+                projected_lab = _project_virtual_lab_activity(release, policy, lab_act_uuid)
+            except HTTPException:
+                continue
+            if projected_lab.linked_assignment is not None:
+                authorized_asg_uuids.add(projected_lab.linked_assignment.activity_uuid)
+
+    if activity_uuid not in authorized_asg_uuids:
+        raise _unavailable()
+
+    act_row = next(
+        (
+            row
+            for row in snapshot.get("activities", [])
+            if isinstance(row, dict)
+            and row.get("activity_uuid") == activity_uuid
+            and row.get("activity_sub_type") == "SUBTYPE_ASSIGNMENT_ANY"
+            and row.get("published") is True
+        ),
+        None,
+    )
+    if act_row is None:
+        raise _unavailable()
+    asg_row = next(
+        (
+            row
+            for row in snapshot.get("assignments", [])
+            if isinstance(row, dict) and row.get("activity_id") == act_row.get("id")
+        ),
+        None,
+    )
+    if asg_row is None:
+        raise _unavailable()
+
+    retained_tasks = [
+        row
+        for row in snapshot.get("assignment_tasks", [])
+        if isinstance(row, dict) and row.get("assignment_id") == asg_row.get("id")
+    ]
+    retained_tasks.sort(key=lambda r: (r.get("order") is None, r.get("order") or 0, r.get("id") or 0))
+
+    user_sub = (
+        await db.execute(
+            select(AssignmentUserSubmission).where(
+                AssignmentUserSubmission.assignment_id == asg_row["id"],
+                AssignmentUserSubmission.user_id == actor.id,
+            )
+        )
+    ).scalar_one_or_none()
+    task_subs = (
+        await db.execute(
+            select(AssignmentTaskSubmission).where(
+                AssignmentTaskSubmission.activity_id == act_row["id"],
+                AssignmentTaskSubmission.user_id == actor.id,
+            )
+        )
+    ).scalars().all()
+    task_sub_by_id = {sub.assignment_task_id: sub for sub in task_subs}
+
+    is_graded = user_sub is not None and str(user_sub.submission_status) in {
+        "GRADED",
+        "AssignmentUserSubmissionStatus.GRADED",
+    }
+    task_summaries: list[ManagedAssignmentTaskSummary] = []
+    for task_row in retained_tasks:
+        t_sub = task_sub_by_id.get(task_row.get("id"))
+        task_summaries.append(
+            ManagedAssignmentTaskSummary(
+                assignment_task_uuid=str(task_row["assignment_task_uuid"]),
+                title=str(task_row.get("title") or "Task"),
+                description=str(task_row.get("description") or ""),
+                assignment_type=str(task_row.get("assignment_type") or "FILE_SUBMISSION"),
+                max_grade_value=task_row.get("max_grade_value"),
+                student_grade=t_sub.grade if (is_graded and t_sub is not None) else None,
+                teacher_feedback=(
+                    t_sub.task_submission_grade_feedback
+                    if (is_graded and t_sub is not None and t_sub.task_submission_grade_feedback)
+                    else None
+                ),
+            )
+        )
+
+    status_value: str | None = None
+    if user_sub is not None:
+        raw_status = user_sub.submission_status
+        status_value = raw_status.value if hasattr(raw_status, "value") else str(raw_status)
+
+    return ManagedLinkedAssignment(
+        course_uuid=release.course_uuid,
+        release_uuid=release.uuid,
+        name=str(act_row.get("name") or asg_row.get("title") or "Practical Assignment"),
+        activity_uuid=activity_uuid,
+        assignment_uuid=str(asg_row["assignment_uuid"]),
+        title=str(asg_row.get("title") or act_row.get("name") or "Practical Assignment"),
+        description=str(asg_row.get("description") or ""),
+        due_date=str(asg_row["due_date"]) if asg_row.get("due_date") else None,
+        grading_type=str(asg_row.get("grading_type") or "ALPHABET"),
+        submission_status=status_value,
+        grade=user_sub.grade if is_graded else None,
+        overall_feedback=user_sub.overall_feedback if is_graded else None,
+        attempt_number=user_sub.attempt_number if user_sub is not None else None,
+        tasks=task_summaries,
     )

@@ -28,7 +28,11 @@ from src.db.courses.drip import DripReleaseMode
 from src.db.courses.drip_notifications import DripNotification
 from src.db.organization_config import OrganizationConfig
 from src.db.organizations import Organization
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.trail_runs import TrailRun
+from src.db.user_organizations import UserOrganization
+from src.db.usergroup_resources import UserGroupResource
+from src.db.usergroup_user import UserGroupUser
 from src.db.users import User
 from src.services.courses.drip import (
     _ordered_chapters,
@@ -70,6 +74,66 @@ async def _claim(db_session: AsyncSession, course: Course, user_id: int, chapter
         return False
 
 
+async def _is_authorized_drip_recipient(
+    db_session: AsyncSession,
+    course: Course,
+    learner: User,
+    course_usergroup_ids: list[int],
+) -> bool:
+    """Reauthorize a historical TrailRun learner immediately before claiming/sending (T-15).
+
+    - Managed Studytomy courses do not use legacy drip notifications.
+    - Protected Studytomy learner profiles are suppressed unless a separately approved
+      direct communication purpose exists (fail closed here).
+    - Unpublished courses do not disclose chapter titles to learners.
+    - Non-public courses require current organization membership; any course gated by
+      UserGroupResource rows requires current membership in at least one linked UserGroup.
+    """
+    if getattr(course, "studytomy_managed", False):
+        return False
+    if not getattr(course, "published", False):
+        return False
+
+    protected = (
+        await db_session.execute(
+            select(StudyLearnerProfile.id)
+            .where(StudyLearnerProfile.user_id == learner.id)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if protected is not None:
+        return False
+
+    org_member = (
+        await db_session.execute(
+            select(UserOrganization.id)
+            .where(
+                UserOrganization.org_id == course.org_id,
+                UserOrganization.user_id == learner.id,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if org_member is None:
+        return False
+
+    if course_usergroup_ids:
+        group_member = (
+            await db_session.execute(
+                select(UserGroupUser.id)
+                .where(
+                    UserGroupUser.user_id == learner.id,
+                    UserGroupUser.usergroup_id.in_(course_usergroup_ids),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if group_member is None:
+            return False
+
+    return True
+
+
 async def run_drip_notifications(db_session: AsyncSession, now: Optional[datetime] = None) -> DripNotifyStats:
     now = now or datetime.now(timezone.utc)
     stats = DripNotifyStats()
@@ -82,12 +146,23 @@ async def run_drip_notifications(db_session: AsyncSession, now: Optional[datetim
         settings = course_drip_settings(course)
         if settings is None or not settings.notify_email:
             continue
+        if getattr(course, "studytomy_managed", False) or not getattr(course, "published", False):
+            continue
         chapters = await _ordered_chapters(course.id, db_session)
         timed = {c.id for c in chapters if _timed(c.rule)}
         if not timed:
             continue
         stats.courses += 1
 
+        course_usergroup_ids = list(
+            (
+                await db_session.execute(
+                    select(UserGroupResource.usergroup_id).where(
+                        UserGroupResource.resource_uuid == course.course_uuid
+                    )
+                )
+            ).scalars().all()
+        )
         names = dict((await db_session.execute(
             select(Chapter.id, Chapter.name).where(Chapter.id.in_(timed))  # type: ignore[attr-defined]
         )).all())
@@ -118,6 +193,8 @@ async def run_drip_notifications(db_session: AsyncSession, now: Optional[datetim
         cta_url = public_course_url(await org_base_url(org.slug, db_session, org.id), course.course_uuid)
 
         for learner in learners:
+            if not await _is_authorized_drip_recipient(db_session, course, learner, course_usergroup_ids):
+                continue
             states = await drip_states_for_user(course, settings, chapters, activity_ids, learner.id, db_session, now)
             opened = [
                 c.id for c in chapters

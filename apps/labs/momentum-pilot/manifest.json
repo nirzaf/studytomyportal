@@ -1,0 +1,20 @@
+{
+  "schema": "studytomy_virtual_lab_manifest_v1",
+  "lab_id": "conservation-momentum",
+  "experiment_id": "conservation-momentum",
+  "build_version": "1.0.0-pilot.1",
+  "build_sha256": "43c4a9668f9a9ed2a56954286a2141bae452f9c48af3a631b2b24e4db1e64181",
+  "bundle_asset": "assets/momentum-lab.7450b7806d99.js",
+  "bundle_sha256": "7450b7806d99c8f2d043fcf00fcd96417e8849712b9110136ed774b08a03ec2d",
+  "upstream_source": {
+    "repository": "https://github.com/danielw-sudo/agentuto",
+    "commit": "697025a14aabbd391072fbedc522d1d68bebcbc4",
+    "license": "MIT"
+  },
+  "security_guarantees": {
+    "standalone_browser_ai_removed": true,
+    "temporary_in_memory_notebook_only": true,
+    "single_condition_run_recording": true,
+    "service_worker_registered": false
+  }
+}

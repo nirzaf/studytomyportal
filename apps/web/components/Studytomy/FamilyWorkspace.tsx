@@ -9,11 +9,18 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import {
+  activateLearnerProfile,
+  createLearnerProfile,
   decideRelationship,
+  fetchRelationshipEvidenceContent,
   getFamilyReviewQueue,
+  getLearnerProfile,
   getRelationshipForReview,
   listRelationshipEvidence,
+  recordLearnerEligibilityDecision,
+  uploadRelationshipEvidence,
   type StudyEvidenceFileItem,
+  type StudyLearnerProfileItem,
 } from '@services/studytomy/family'
 import type {
   StudyFamilyReviewQueueItem,
@@ -53,6 +60,9 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
     error?: string
   } | null>(null)
   const [selectedEvidence, setSelectedEvidence] = useState('')
+  const [evidenceActionBusy, setEvidenceActionBusy] = useState(false)
+  const [evidenceActionNotice, setEvidenceActionNotice] = useState<string | null>(null)
+  const [evidenceActionError, setEvidenceActionError] = useState<string | null>(null)
   const [decisionBusy, setDecisionBusy] = useState(false)
   const [decisionNotice, setDecisionNotice] = useState<string | null>(null)
   const [decisionError, setDecisionError] = useState<string | null>(null)
@@ -74,6 +84,9 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
     setSelectedKey(null)
     setReviewResult(null)
     setSelectedEvidence('')
+    setEvidenceActionBusy(false)
+    setEvidenceActionNotice(null)
+    setEvidenceActionError(null)
     setDecisionBusy(false)
     setDecisionNotice(null)
     setDecisionError(null)
@@ -309,30 +322,155 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
                     </div>
                   )}
 
-                  <div className="rounded-md border border-sky-200 bg-sky-50 p-4">
-                    <h3 className="text-sm font-semibold text-sky-950">Assigned evidence reference</h3>
-                    <p className="mt-1 break-all font-mono text-sm text-sky-950">{review.request_evidence_reference}</p>
+                  <div className="rounded-md border border-sky-200 bg-sky-50 p-4 space-y-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-sky-950">Assigned evidence reference</h3>
+                      <p className="mt-1 break-all font-mono text-sm text-sky-950">{review.request_evidence_reference}</p>
+                      {review.request_evidence_reference.startsWith('case_') && (
+                        <p className="mt-1 text-xs text-sky-900">
+                          Opaque external case reference — not an uploaded file verified inside Studytomy storage.
+                        </p>
+                      )}
+                    </div>
                     {evidenceError ? (
-                      <p className="mt-2 rounded border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-950" role="alert">
+                      <p className="rounded border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-950" role="alert">
                         Evidence list unavailable: {evidenceError}
                       </p>
                     ) : evidenceFiles.length > 0 ? (
-                      <div className="mt-3 space-y-2">
+                      <div className="space-y-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-sky-900">
                           Bound ready guardian-authority evidence
                         </p>
-                        <ul className="space-y-1">
+                        <ul className="space-y-1.5">
                           {evidenceFiles.map((item) => (
-                            <li key={item.evidence_uuid} className="flex items-center justify-between gap-2 rounded bg-white px-2.5 py-1.5 text-xs text-gray-800">
+                            <li key={item.evidence_uuid} className="flex flex-wrap items-center justify-between gap-2 rounded bg-white px-2.5 py-2 text-xs text-gray-800">
                               <span className="font-mono break-all">{item.evidence_uuid}</span>
-                              <span>{item.media_type}</span>
+                              <div className="flex items-center gap-2">
+                                <span>{item.media_type}</span>
+                                <button
+                                  type="button"
+                                  disabled={evidenceActionBusy || !orgUuid || !accessToken}
+                                  onClick={async () => {
+                                    if (!orgUuid || !accessToken || evidenceActionBusy) return
+                                    const targetKey = `${orgUuid}|${accessToken}|${review.learner_uuid}|${review.relationship_uuid}`
+                                    setEvidenceActionBusy(true)
+                                    setEvidenceActionError(null)
+                                    setEvidenceActionNotice(null)
+                                    try {
+                                      const { blob } = await fetchRelationshipEvidenceContent(
+                                        orgUuid,
+                                        review.relationship_uuid,
+                                        item.evidence_uuid,
+                                        accessToken
+                                      )
+                                      if (selectedSubjectKeyRef.current !== targetKey) return
+                                      const objectUrl = URL.createObjectURL(blob)
+                                      window.open(objectUrl, '_blank', 'noopener,noreferrer')
+                                      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+                                      setEvidenceActionNotice(`Opened original evidence ${item.evidence_uuid}.`)
+                                    } catch (error) {
+                                      if (selectedSubjectKeyRef.current === targetKey) {
+                                        setEvidenceActionError(
+                                          error instanceof Error ? error.message : 'Unable to open original evidence file.'
+                                        )
+                                      }
+                                    } finally {
+                                      if (selectedSubjectKeyRef.current === targetKey) {
+                                        setEvidenceActionBusy(false)
+                                      }
+                                    }
+                                  }}
+                                  className="rounded border border-sky-300 bg-sky-50 px-2 py-1 font-semibold text-sky-900 hover:bg-sky-100 disabled:opacity-50"
+                                >
+                                  Open original file
+                                </button>
+                              </div>
                             </li>
                           ))}
                         </ul>
                       </div>
                     ) : (
-                      <p className="mt-2 text-sm leading-6 text-sky-950">
+                      <p className="text-sm leading-6 text-sky-950">
                         No ready guardian-authority evidence file is attached to this relationship yet.
+                      </p>
+                    )}
+                    {orgUuid && accessToken && (
+                      <form
+                        className="flex flex-wrap items-end gap-2 border-t border-sky-200 pt-3"
+                        onSubmit={async (event) => {
+                          event.preventDefault()
+                          if (evidenceActionBusy || !orgUuid || !accessToken) return
+                          const form = event.currentTarget
+                          const fileInput = form.elements.namedItem('evidence_file') as HTMLInputElement | null
+                          const file = fileInput?.files?.[0]
+                          if (!file) return
+                          const targetKey = `${orgUuid}|${accessToken}|${review.learner_uuid}|${review.relationship_uuid}`
+                          setEvidenceActionBusy(true)
+                          setEvidenceActionError(null)
+                          setEvidenceActionNotice(null)
+                          try {
+                            const uploaded = await uploadRelationshipEvidence(
+                              orgUuid,
+                              review.relationship_uuid,
+                              file,
+                              accessToken,
+                              crypto.randomUUID()
+                            )
+                            const refreshedList = await listRelationshipEvidence(
+                              orgUuid,
+                              review.relationship_uuid,
+                              accessToken
+                            )
+                            if (selectedSubjectKeyRef.current !== targetKey) return
+                            setReviewResult((prev) =>
+                              prev && prev.subjectKey === targetKey
+                                ? { ...prev, evidenceFiles: refreshedList, evidenceError: undefined }
+                                : prev
+                            )
+                            setSelectedEvidence(uploaded.evidence_uuid)
+                            form.reset()
+                            setEvidenceActionNotice(`Uploaded bound evidence ${uploaded.evidence_uuid}.`)
+                          } catch (error) {
+                            if (selectedSubjectKeyRef.current === targetKey) {
+                              setEvidenceActionError(
+                                error instanceof Error ? error.message : 'Unable to upload guardian-authority evidence.'
+                              )
+                            }
+                          } finally {
+                            if (selectedSubjectKeyRef.current === targetKey) {
+                              setEvidenceActionBusy(false)
+                            }
+                          }
+                        }}
+                      >
+                        <label className="grid gap-1 text-xs font-medium text-sky-950">
+                          Upload bound evidence file (PDF / image)
+                          <input
+                            type="file"
+                            name="evidence_file"
+                            accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*"
+                            required
+                            disabled={evidenceActionBusy}
+                            className="text-xs"
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          disabled={evidenceActionBusy}
+                          className="rounded-md bg-sky-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-900 disabled:opacity-50"
+                        >
+                          {evidenceActionBusy ? 'Uploading…' : 'Upload evidence'}
+                        </button>
+                      </form>
+                    )}
+                    {evidenceActionNotice && (
+                      <p className="rounded border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-950" role="status">
+                        {evidenceActionNotice}
+                      </p>
+                    )}
+                    {evidenceActionError && (
+                      <p className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900" role="alert">
+                        {evidenceActionError}
                       </p>
                     )}
                   </div>
@@ -498,8 +636,264 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
         </section>
       </div>
       {orgUuid && accessToken && !queueLoading && !visibleQueueError && (
-        <AllocationReview key={`${orgUuid}:${accessToken}`} orgUuid={orgUuid} accessToken={accessToken} />
+        <>
+          <LearnerLifecyclePanel
+            key={`lifecycle:${orgUuid}:${accessToken}`}
+            orgUuid={orgUuid}
+            accessToken={accessToken}
+            initialLearnerUuid={selectedLearnerUuid}
+          />
+          <AllocationReview key={`${orgUuid}:${accessToken}`} orgUuid={orgUuid} accessToken={accessToken} />
+        </>
       )}
     </main>
+  )
+}
+
+function LearnerLifecyclePanel({
+  orgUuid,
+  accessToken,
+  initialLearnerUuid,
+}: {
+  orgUuid: string
+  accessToken: string
+  initialLearnerUuid?: string
+}) {
+  const [lookupUuid, setLookupUuid] = useState(initialLearnerUuid ?? '')
+  const [profile, setProfile] = useState<StudyLearnerProfileItem | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function loadProfile(learnerUuid: string) {
+    if (!learnerUuid.trim() || busy) return
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const loaded = await getLearnerProfile(orgUuid, learnerUuid.trim(), accessToken)
+      setProfile(loaded)
+      setLookupUuid(loaded.learner_uuid)
+    } catch (err) {
+      setProfile(null)
+      setError(err instanceof Error ? err.message : 'Unable to load learner profile.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <details className="rounded-lg border border-gray-200 bg-white p-5">
+      <summary className="cursor-pointer text-base font-semibold text-gray-900">
+        Learner intake, eligibility &amp; activation
+      </summary>
+      <p className="mt-2 text-xs text-gray-600">
+        School grade does not establish learner age, legal capacity, or guardian consent. Activating a learner profile does not grant consent or course access.
+      </p>
+      {notice && <p className="mt-3 rounded border border-emerald-300 bg-emerald-50 p-2.5 text-sm text-emerald-950" role="status">{notice}</p>}
+      {error && <p className="mt-3 rounded border border-red-300 bg-red-50 p-2.5 text-sm text-red-900" role="alert">{error}</p>}
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <form
+          className="space-y-2 rounded-md border border-gray-200 p-3"
+          onSubmit={async (event) => {
+            event.preventDefault()
+            if (busy) return
+            const form = event.currentTarget
+            const fd = new FormData(form)
+            const user_uuid = String(fd.get('user_uuid') ?? '').trim()
+            const time_zone = String(fd.get('time_zone') ?? '').trim() || null
+            if (!user_uuid) return
+            setBusy(true)
+            setError(null)
+            setNotice(null)
+            try {
+              const created = await createLearnerProfile(orgUuid, accessToken, crypto.randomUUID(), {
+                user_uuid,
+                time_zone,
+              })
+              setProfile(created)
+              setLookupUuid(created.learner_uuid)
+              form.reset()
+              setNotice(`Created pending learner profile ${created.learner_uuid}.`)
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Unable to create learner profile.')
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          <h3 className="text-sm font-semibold text-gray-900">Create pending learner profile</h3>
+          <label className="block text-xs font-medium text-gray-700">
+            User UUID
+            <input name="user_uuid" required maxLength={100} disabled={busy} className="mt-1 block w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm" />
+          </label>
+          <label className="block text-xs font-medium text-gray-700">
+            IANA Time Zone (optional, e.g. Asia/Colombo)
+            <input name="time_zone" maxLength={64} placeholder="Asia/Colombo" disabled={busy} className="mt-1 block w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm" />
+          </label>
+          <button type="submit" disabled={busy} className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 disabled:opacity-50">
+            Create pending profile
+          </button>
+        </form>
+
+        <form
+          className="space-y-2 rounded-md border border-gray-200 p-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void loadProfile(lookupUuid)
+          }}
+        >
+          <h3 className="text-sm font-semibold text-gray-900">Inspect learner profile</h3>
+          <label className="block text-xs font-medium text-gray-700">
+            Learner UUID
+            <input
+              value={lookupUuid}
+              onChange={(e) => setLookupUuid(e.target.value)}
+              required
+              maxLength={100}
+              disabled={busy}
+              className="mt-1 block w-full rounded border border-gray-300 px-2.5 py-1.5 text-sm"
+            />
+          </label>
+          <button type="submit" disabled={busy || !lookupUuid.trim()} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50">
+            Load learner profile
+          </button>
+        </form>
+      </div>
+
+      {profile && (
+        <div className="mt-4 space-y-4 rounded-md border border-gray-200 bg-gray-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <div>
+              <p className="font-mono font-semibold text-gray-900">{profile.learner_uuid}</p>
+              <p className="text-xs text-gray-700">
+                Status: <strong>{profile.status}</strong> · Control mode: <strong>{profile.control_mode}</strong> · Access version: <strong>{profile.access_version}</strong>
+              </p>
+            </div>
+            {profile.status === 'pending' && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  if (busy) return
+                  setBusy(true)
+                  setError(null)
+                  setNotice(null)
+                  try {
+                    const activated = await activateLearnerProfile(
+                      orgUuid,
+                      profile.learner_uuid,
+                      accessToken,
+                      crypto.randomUUID(),
+                      {
+                        expected_access_version: profile.access_version,
+                        reason_code: 'STAFF_LEARNER_ACTIVATED',
+                      }
+                    )
+                    setProfile(activated)
+                    setNotice(`Learner profile ${activated.learner_uuid} activated (version ${activated.access_version}).`)
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Unable to activate learner profile.')
+                  } finally {
+                    setBusy(false)
+                  }
+                }}
+                className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+              >
+                Activate learner profile
+              </button>
+            )}
+          </div>
+
+          <form
+            className="grid gap-2 rounded border border-gray-200 bg-white p-3 sm:grid-cols-2"
+            onSubmit={async (event) => {
+              event.preventDefault()
+              if (busy) return
+              const form = event.currentTarget
+              const fd = new FormData(form)
+              const eligibility_kind = String(fd.get('eligibility_kind')) as 'participation_eligibility' | 'independent_control_eligibility'
+              const outcome = String(fd.get('outcome')) as 'eligible' | 'ineligible' | 'renewal_required'
+              const evidence_reference = String(fd.get('evidence_reference') ?? '').trim()
+              const control_mode_raw = String(fd.get('control_mode') ?? '').trim()
+              const control_mode = control_mode_raw === 'dependent' || control_mode_raw === 'independent' ? control_mode_raw : null
+              if (!evidence_reference) return
+              setBusy(true)
+              setError(null)
+              setNotice(null)
+              try {
+                await recordLearnerEligibilityDecision(
+                  orgUuid,
+                  profile.learner_uuid,
+                  accessToken,
+                  crypto.randomUUID(),
+                  {
+                    eligibility_kind,
+                    outcome,
+                    evidence_reference,
+                    control_mode,
+                  }
+                )
+                const refreshed = await getLearnerProfile(orgUuid, profile.learner_uuid, accessToken)
+                setProfile(refreshed)
+                form.reset()
+                setNotice('Eligibility decision recorded and learner profile refreshed.')
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Unable to record eligibility decision.')
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            <h4 className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-gray-700">
+              Record human eligibility decision
+            </h4>
+            <label className="text-xs font-medium text-gray-700">
+              Eligibility kind
+              <select name="eligibility_kind" className="mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                <option value="participation_eligibility">Participation eligibility</option>
+                <option value="independent_control_eligibility">Independent control eligibility</option>
+              </select>
+            </label>
+            <label className="text-xs font-medium text-gray-700">
+              Outcome
+              <select name="outcome" className="mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                <option value="eligible">Eligible</option>
+                <option value="renewal_required">Renewal required</option>
+                <option value="ineligible">Ineligible</option>
+              </select>
+            </label>
+            <label className="text-xs font-medium text-gray-700">
+              Control mode (optional)
+              <select name="control_mode" defaultValue="" className="mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                <option value="">Unchanged</option>
+                <option value="dependent">Dependent</option>
+                <option value="independent">Independent</option>
+              </select>
+            </label>
+            <label className="text-xs font-medium text-gray-700">
+              Evidence reference
+              <input name="evidence_reference" required maxLength={500} placeholder="ev_... or case_..." className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+            </label>
+            <div className="sm:col-span-2">
+              <button type="submit" disabled={busy} className="rounded-md bg-sky-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-900 disabled:opacity-50">
+                Record eligibility decision
+              </button>
+            </div>
+          </form>
+
+          {profile.eligibility_decisions.length > 0 && (
+            <ul className="space-y-1 text-xs text-gray-700">
+              {profile.eligibility_decisions.map((decision) => (
+                <li key={decision.decision_uuid} className="rounded bg-white px-2.5 py-1.5">
+                  <strong>{decision.eligibility_kind}</strong>: {decision.outcome} ({decision.currently_eligible ? 'currently eligible' : 'not currently eligible'}) · ref <code className="font-mono">{decision.evidence_reference}</code>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </details>
   )
 }

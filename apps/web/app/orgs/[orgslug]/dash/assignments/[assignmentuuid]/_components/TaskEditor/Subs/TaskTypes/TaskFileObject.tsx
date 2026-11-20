@@ -86,7 +86,26 @@ export default function TaskFileObject({ view, user_id, assignmentTaskUUID, onGr
             return;
         }
 
-        const file = event.target.files[0]
+        const file = event.target.files?.[0]
+        if (!file) {
+            return
+        }
+        if (file.name.toLowerCase().endsWith('.csv') || file.type === 'text/csv') {
+            setError(
+                t('dashboard.assignments.editor.task_editor.file.csv_bundle_required', {
+                    defaultValue: 'Direct .csv uploads are not accepted. Package exported CSV files in a .zip archive or submit a .pdf practical report.',
+                })
+            )
+            return
+        }
+        if (file.size > 50 * 1024 * 1024) {
+            setError(
+                t('dashboard.assignments.editor.task_editor.file.max_size_exceeded', {
+                    defaultValue: 'File exceeds the 50 MiB submission limit.',
+                })
+            )
+            return
+        }
 
         setLocalUploadFile(file)
         setIsLoading(true)
@@ -342,7 +361,14 @@ export default function TaskFileObject({ view, user_id, assignmentTaskUUID, onGr
                         {error && (
                             <div className='rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700'>{error}</div>
                         )}
-                        <input type='file' id={inputId} className='hidden' onChange={handleFileChange} disabled={!canUpload} />
+                        <input
+                            type='file'
+                            id={inputId}
+                            className='hidden'
+                            accept='.pdf,.zip,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf,application/zip,image/*'
+                            onChange={handleFileChange}
+                            disabled={!canUpload}
+                        />
 
                         {fileName && !isLoading ? (
                             // Uploaded: one row with the file and a way to replace it.

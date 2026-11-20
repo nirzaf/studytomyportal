@@ -144,8 +144,12 @@ export default function StaffReportReview({ client, courseUuid, curricula }: {
   const report = review?.report
   return <details className="rounded-lg border bg-card p-4 sm:p-6">
     <summary className="flex min-h-11 cursor-pointer items-center font-semibold">{t('adaptive.staffReport.title', 'Progress report review')}</summary>
-    <StaffReportDirectory client={client} curricula={curricula.filter(row => row.status === 'published')}
-      disabled={busy} open={uuid => { void run(uuid) }} />
+    <StaffReportDirectory
+      client={client}
+      curricula={curricula.filter(row => row.status === 'published' || row.status === 'retired')}
+      disabled={busy}
+      open={uuid => { void run(uuid) }}
+    />
     <form onSubmit={open} className="my-3 flex flex-wrap items-end gap-3">
       <label className="grid min-w-0 flex-1 gap-1 text-sm font-medium">
         {t('adaptive.staffReport.reference', 'Report reference')}
@@ -603,10 +607,16 @@ function StaffReportDirectory({ client, curricula, disabled, open }: {
         <Input required maxLength={100} className="min-h-11" value={scope.learner} disabled={locked}
           onChange={event => { setScope({ ...scope, learner: event.target.value }); setResult(undefined); setError('') }} />
       </label>
-      <label className="grid gap-1 text-sm font-medium">{t('adaptive.staffReport.curriculum', 'Published curriculum')}
+      <label className="grid gap-1 text-sm font-medium">{t('adaptive.staffReport.curriculum', 'Curriculum revision')}
         <select className="min-h-11 rounded-md border bg-background px-3" value={revision} disabled={locked}
           onChange={event => { setScope({ ...scope, revision: event.target.value }); setResult(undefined); setError('') }}>
-          {curricula.map(row => <option key={row.uuid} value={row.uuid}>{row.label}</option>)}
+          {curricula.map(row => (
+            <option key={row.uuid} value={row.uuid}>
+              {row.label} ({row.status === 'retired'
+                ? t('adaptive.status.retired', 'Retired')
+                : t('adaptive.status.published', 'Published')})
+            </option>
+          ))}
         </select>
       </label>
       <Button type="submit" variant="outline" className="min-h-11 justify-self-start" disabled={locked || !learner}>

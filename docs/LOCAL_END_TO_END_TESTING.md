@@ -545,3 +545,69 @@ no external provider call, real account/data, production release, or production
 acceptance was involved. The reviewer path was not exercised in this ungoverned
 synthetic organization; this run does not qualify review policy or governed
 content publication. Only resources created for these checks were removed.
+
+### Governed Playground reviewer browser slice (20 November 2026)
+
+Verified against a clean source archive of commit
+`8961a925423354fa7fd32d73f9256a1ebe364823`, using real local Chromium, a
+native reviewer login, and disposable loopback PostgreSQL and Redis. A
+separate synthetic teacher created and edited the Playground through
+authenticated API requests; teacher editing was not a browser assertion.
+
+**Synthetic setup through supported product APIs**
+
+1. Migrate and provision fresh native test accounts as in sections 2–4.
+   Sign in normally. Use only the generated identities in this fixture.
+2. As the teacher, create a private synthetic course. As the administrator,
+   create an organization-local Instructor-derived role with
+   `studytomy.content_release_review=true` via `POST /api/v1/roles/org/{org_id}`
+   and assign it only to the distinct reviewer with
+   `PUT /api/v1/orgs/{org_id}/users/{reviewer_id}/role/{role_uuid}`.
+   Under `/api/v1/studytomy/orgs/{org_uuid}`, create the time-limited Education
+   service-owner assignment and add a `content_release_review` scope with
+   `scope_kind=course` and the exact synthetic course UUID. Do not grant
+   organization-wide review scope.
+3. Use the native `POST .../policies` and
+   `POST .../policies/{policy_uuid}/approvals` operations and their typed
+   decision areas, effective periods and idempotency keys. The synthetic
+   administrator proposes; the fixture's Education owner approves
+   D-02 and D-16, Education and Service approve D-15, and Education and
+   Safeguarding approve D-10. For D-10 the Safeguarding owner was a different
+   synthetic account, created and signed in through native user APIs and
+   assigned a short-lived responsibility without a resource scope. Use
+   expressly synthetic evidence and rationales and do not copy those test
+   decisions into a real organization.
+4. As the teacher, create an authenticated Playground linked to that exact
+   course with `POST /api/v1/playgrounds/?org_id={org_id}`. As the reviewer,
+   read `GET .../playgrounds/{uuid}/content-review-status`; require HTTP 200
+   with `governed=true` and `can_review=true`. Record the initial rejection for
+   the returned digest through `POST .../playgrounds/{uuid}/content-review-decisions`
+   using the separate reviewer's session. The observed response was HTTP 201.
+
+The initial attempt had approved only D-15 and D-16. Teacher readback was 200
+with a governed draft; reviewer login, organization role, and exact course
+scope were confirmed, but the reviewer draft and review-status reads returned
+404. The shared [staff authorization check](../apps/api/src/security/studytomy_access.py)
+also requires D-02 and D-10 for `content_release_review`. With those two
+missing fixture policies independently approved through the native workflow,
+the same reviewer could read the draft and record the rejection. The initial
+404 was not evidence of a rendering defect or a reason to widen reviewer access.
+
+**Observed in the signed-in reviewer browser**
+
+- The rejected revision showed **Review rejected**. After the teacher changed
+  the saved revision, the reviewer saw **Review required**, not a rejection of
+  the new digest.
+- **Approve revision** was disabled with none and with only two of the
+  rights, accessibility, and age-suitability confirmations checked. It became
+  available with all three.
+- The teacher changed the revision again while the reviewer held the previous
+  digest. Native submission produced the stale-review conflict, cleared all
+  three confirmations, and disabled approval. **Reload revision** did not
+  carry assent forward; fresh confirmations were still required.
+
+The [review routes](../apps/api/src/routers/studytomy/files.py) and
+[editor](../apps/web/components/Playground/PlaygroundEditor.tsx) were unchanged
+for this check. No learner journey, real account or data, provider generation,
+successful publication, production policy, or deployment was tested. The
+owned API, Next.js, PostgreSQL and Redis services were stopped.

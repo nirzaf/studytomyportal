@@ -255,6 +255,8 @@ class TestPlaygroundsGeneratorService:
 
     def test_adaptive_widget_contract_covers_every_pair_and_installs_local_switcher(self):
         raw_html = _adaptive_widget_html()
+        assert raw_html.count('<select data-study-level-selector>') == 1
+        assert raw_html.count('<select data-study-skill-selector>') == 1
         adaptation = LearnerAdaptationContext(
             enabled=True,
             levels=["Foundation", "Extension"],
@@ -266,6 +268,46 @@ class TestPlaygroundsGeneratorService:
         assert 'id="studytomy-adaptive-runtime"' in prepared
         assert "addEventListener('change', update)" in prepared
         assert remove_adaptive_runtime(prepared) == raw_html
+
+    @pytest.mark.parametrize(
+        ("old_markup", "new_markup", "message"),
+        [
+            (
+                "<label>Level ",
+                '<label data-study-level-selector>Level ',
+                "only valid on <select> controls",
+            ),
+            (
+                '<select data-study-skill-selector>',
+                '<select data-study-level-selector data-study-skill-selector>',
+                "must use separate <select> controls",
+            ),
+        ],
+    )
+    def test_adaptive_widget_contract_rejects_misplaced_or_shared_selector_markers(
+        self, old_markup, new_markup, message
+    ):
+        html = _adaptive_widget_html()
+        assert old_markup in html
+        html = html.replace(old_markup, new_markup, 1)
+
+        with pytest.raises(AdaptiveWidgetValidationError, match=message):
+            validate_and_install_adaptive_runtime(
+                html,
+                LearnerAdaptationContext(
+                    enabled=True,
+                    levels=["Foundation", "Extension"],
+                    target_skills=["Calculate mean", "Find median"],
+                ),
+            )
+
+    def test_adaptive_widget_contract_leaves_nonadaptive_markup_unchanged(self):
+        raw_html = '<div data-study-level-selector>Legacy content</div>'
+
+        assert validate_and_install_adaptive_runtime(
+            raw_html,
+            LearnerAdaptationContext(enabled=False),
+        ) == raw_html
 
     def test_adaptive_widget_contract_rejects_missing_or_undifferentiated_variants(self):
         adaptation = LearnerAdaptationContext(

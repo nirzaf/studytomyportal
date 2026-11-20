@@ -102,6 +102,11 @@ def validate_release_media_coverage(snapshot: dict) -> None:
             )
         if subtype in {*_NATIVE_ACTIVITY_MEDIA, "SUBTYPE_ASSIGNMENT_ANY"}:
             continue
+        if subtype == "SUBTYPE_DYNAMIC_EMBED":
+            from src.services.studytomy.virtual_labs import validate_governed_virtual_lab_content
+
+            validate_governed_virtual_lab_content(activity.get("content"), snapshot=snapshot)
+            continue
         if subtype != "SUBTYPE_DYNAMIC_PAGE":
             raise _release_media_unsupported()
         pending = [activity["content"]] if activity["content"] else []

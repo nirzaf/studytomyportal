@@ -1,0 +1,20 @@
+# Studytomy Curated Virtual Lab — Static Hosting Security & Cache Headers (T-05)
+# Permits embedding strictly from approved Studytomy portal ancestors via CSP frame-ancestors
+# and blocks all external network connections (zero browser AI / zero third-party telemetry).
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self' https://lms.studytomy.com http://localhost:3000
+
+# Immutable cache for content-hashed assets
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Always revalidate pinned manifest and HTML entry
+/manifest.json
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate

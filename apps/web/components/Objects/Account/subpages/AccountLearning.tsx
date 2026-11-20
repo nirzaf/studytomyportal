@@ -21,16 +21,57 @@ type Lesson = {
   activity_uuid: string
   name: string
   position: number
-  format: 'text' | 'pdf' | 'video' | 'unsupported'
+  format: 'text' | 'pdf' | 'video' | 'virtual_lab' | 'unsupported'
   media_type: string | null
   available: boolean
   caption_codes?: string[]
+  linked_assignment_activity_uuid?: string | null
   unavailable_reason: string | null
 }
 type Catalog = { releases: Release[]; next_cursor: string | null }
 type Index = { lessons: Lesson[]; requires_first_use: boolean }
 type Completion = { activity_uuid: string; activity_completed: boolean; course_completed: boolean }
 type TextLesson = Lesson & { paragraphs: string[]; completion?: Completion }
+type LinkedAssignmentSummary = {
+  activity_uuid: string
+  assignment_uuid: string
+  title: string
+}
+type VirtualLabLesson = Release & {
+  activity_uuid: string
+  lab_id: string
+  experiment_id: string
+  build_version: string
+  build_sha256: string
+  entry_url: string
+  units_system: string
+  submission_formats_note?: string | null
+  linked_assignment?: LinkedAssignmentSummary | null
+}
+type LinkedAssignmentTask = {
+  assignment_task_uuid: string
+  title: string
+  description: string
+  assignment_type: string
+  max_grade_value: number | null
+  student_grade: number | null
+  teacher_feedback: string | null
+}
+type LinkedAssignment = Release & {
+  activity_uuid: string
+  assignment_uuid: string
+  title: string
+  description: string
+  due_date: string | null
+  grading_type: string
+  submission_status: string | null
+  grade: number | null
+  overall_feedback: string | null
+  attempt_number: number | null
+  tasks: LinkedAssignmentTask[]
+  accepted_file_formats: string[]
+  manual_review_note: string
+}
 type CertificatePage = {
   awards: {
     award_uuid: string
@@ -68,6 +109,19 @@ type View =
   | { kind: 'lessons'; release: Release; index: Index }
   | { kind: 'lesson'; release: Release; lesson: TextLesson; completionRequest?: 'saving' | 'failed' }
   | { kind: 'media'; release: Release; lesson: Lesson }
+  | { kind: 'virtual_lab'; release: Release; lab: VirtualLabLesson }
+  | { kind: 'assignment'; release: Release; assignment: LinkedAssignment; returnLab?: VirtualLabLesson }
+
+function isApprovedLabEntryUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.username || parsed.password || parsed.search) return false
+    if (parsed.protocol === 'https:') return true
+    return parsed.protocol === 'http:' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+  } catch {
+    return false
+  }
+}
 
 export default function AccountLearning({ orgUuid }: { orgUuid: string }) {
   const session = useLHSession()
@@ -155,6 +209,24 @@ function LearningView({
       firstUse ? `${path}/open` : path,
       data => ({ kind: 'lesson', release, lesson: data }),
       firstUse ? 'POST' : 'GET',
+    )
+  }
+
+  function showVirtualLab(release: Release, lesson: Lesson, firstUse: boolean) {
+    const path = `${pathFor(release)}/labs/${encodeURIComponent(lesson.activity_uuid)}`
+    return load<VirtualLabLesson>(
+      firstUse ? `${path}/open` : path,
+      data => ({ kind: 'virtual_lab', release, lab: data }),
+      firstUse ? 'POST' : 'GET',
+    )
+  }
+
+  function showLinkedAssignment(release: Release, activityUuid: string, returnLab?: VirtualLabLesson) {
+    const path = `${pathFor(release)}/assignments/${encodeURIComponent(activityUuid)}`
+    return load<LinkedAssignment>(
+      path,
+      data => ({ kind: 'assignment', release, assignment: data, returnLab }),
+      'GET',
     )
   }
 
@@ -381,11 +453,21 @@ function LearningView({
                 disabled={!lesson.available}
                 onClick={() => act(() => lesson.format === 'text'
                   ? showLesson(view.release, lesson, view.index.requires_first_use)
-                  : showMedia(view.release, lesson, view.index.requires_first_use))}
+                  : lesson.format === 'virtual_lab'
+                    ? showVirtualLab(view.release, lesson, view.index.requires_first_use)
+                    : showMedia(view.release, lesson, view.index.requires_first_use))}
               >
                 {lesson.available && view.index.requires_first_use ? `Open ${lesson.name}` : lesson.name}
                 <span className="ms-auto shrink-0 text-xs font-normal text-muted-foreground">
-                  {lesson.format === 'text' ? 'Text' : lesson.format === 'pdf' ? 'PDF' : lesson.format === 'video' ? 'Video' : 'Unsupported'}
+                  {lesson.format === 'text'
+                    ? 'Text'
+                    : lesson.format === 'pdf'
+                      ? 'PDF'
+                      : lesson.format === 'video'
+                        ? 'Video'
+                        : lesson.format === 'virtual_lab'
+                          ? 'Virtual Lab'
+                          : 'Unsupported'}
                 </span>
               </Button>
               {!lesson.available && <p className="px-3 text-sm text-muted-foreground">
@@ -397,8 +479,10 @@ function LearningView({
                       ? 'This resource format or size is not approved for delivery.'
                       : lesson.unavailable_reason === 'captions_or_text_alternative_not_retained'
                         ? 'Video is unavailable until captions or an approved accessible alternative are included in the release.'
-                        : lesson.unavailable_reason === 'unsupported_release_format'
-                          ? 'This activity format is not supported in the managed lesson player.'
+                        : lesson.unavailable_reason === 'release_lab_unavailable'
+                          ? 'This virtual laboratory build is not currently authorized in this release.'
+                          : lesson.unavailable_reason === 'unsupported_release_format'
+                            ? 'This activity format is not supported in the managed lesson player.'
                           : lesson.unavailable_reason === 'release_format_conflict'
                             ? 'This activity has conflicting release-format metadata.'
                             : lesson.unavailable_reason === 'assessment_pass_required'
@@ -450,6 +534,101 @@ function LearningView({
           mediaUrl={mediaUrl}
           refreshSession={refreshSession}
         />
+      </>
+      break
+    }
+    case 'virtual_lab': {
+      const { lab } = view
+      title = lab.name
+      const safeUrl = isApprovedLabEntryUrl(lab.entry_url)
+      content = <>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" className="min-h-11" onClick={() => act(() => showLessons(view.release))}>
+            Back to lessons
+          </Button>
+          {lab.linked_assignment && (
+            <Button
+              className="min-h-11"
+              onClick={() => act(() => showLinkedAssignment(view.release, lab.linked_assignment!.activity_uuid, lab))}
+            >
+              Open practical assignment: {lab.linked_assignment.title}
+            </Button>
+          )}
+        </div>
+        <div className="space-y-2 rounded-lg border p-3 text-sm text-muted-foreground">
+          <p>
+            Pinned build <code className="font-mono text-xs">{lab.build_version}</code> · SHA-256{' '}
+            <code className="font-mono text-xs">{lab.build_sha256.slice(0, 12)}</code> · Units: {lab.units_system}
+          </p>
+          <p>
+            Opening or closing this virtual laboratory does not automatically record course completion or independent mastery.
+            {lab.submission_formats_note ? ` ${lab.submission_formats_note}` : ''}
+          </p>
+        </div>
+        {safeUrl ? (
+          <ManagedVirtualLabFrame lab={lab} />
+        ) : (
+          <p role="alert" className="rounded-lg border border-destructive p-4 text-sm text-destructive">
+            This virtual laboratory entry URL did not pass client safety verification.
+          </p>
+        )}
+      </>
+      break
+    }
+    case 'assignment': {
+      const { assignment, returnLab } = view
+      title = assignment.title
+      content = <>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" className="min-h-11" onClick={() => act(() => showLessons(view.release))}>
+            Back to lessons
+          </Button>
+          {returnLab && (
+            <Button variant="outline" className="min-h-11" onClick={() => setView({ kind: 'virtual_lab', release: view.release, lab: returnLab })}>
+              Back to virtual lab
+            </Button>
+          )}
+        </div>
+        {assignment.description && <p className="max-w-prose text-sm leading-relaxed">{assignment.description}</p>}
+        <div className="rounded-lg border p-4 space-y-2 text-sm">
+          <p>
+            <strong>Status:</strong> {assignment.submission_status ?? 'Not submitted yet'}
+            {assignment.attempt_number ? ` · Attempt ${assignment.attempt_number}` : ''}
+            {assignment.due_date ? ` · Due ${assignment.due_date}` : ''}
+          </p>
+          {assignment.grade !== null && (
+            <p><strong>Grade:</strong> {assignment.grade}</p>
+          )}
+          {assignment.overall_feedback && (
+            <p className="rounded bg-muted p-3"><strong>Teacher feedback:</strong> {assignment.overall_feedback}</p>
+          )}
+          <p className="text-muted-foreground">
+            <strong>Accepted practical upload formats:</strong> {assignment.accepted_file_formats.join(', ')} (max 50 MiB).
+            Package exported CSV files inside a ZIP archive or include measurements in a PDF report.
+          </p>
+          <p className="text-xs text-muted-foreground">{assignment.manual_review_note}</p>
+        </div>
+        <ol className="space-y-3">
+          {assignment.tasks.map((task, idx) => (
+            <li key={task.assignment_task_uuid} className="rounded-lg border p-4 space-y-1 text-sm">
+              <h3 className="font-semibold">
+                {idx + 1}. {task.title}{' '}
+                <span className="font-normal text-xs text-muted-foreground">({task.assignment_type})</span>
+              </h3>
+              {task.description && <p className="text-muted-foreground">{task.description}</p>}
+              {task.max_grade_value !== null && (
+                <p className="text-xs text-muted-foreground">
+                  {task.student_grade !== null ? `Score: ${task.student_grade} / ${task.max_grade_value}` : `Max points: ${task.max_grade_value}`}
+                </p>
+              )}
+              {task.teacher_feedback && (
+                <p className="mt-2 rounded bg-muted p-2.5 text-sm">
+                  <strong>Task feedback:</strong> {task.teacher_feedback}
+                </p>
+              )}
+            </li>
+          ))}
+        </ol>
       </>
       break
     }
@@ -550,4 +729,43 @@ function ManagedReleaseMedia({
       </div>}
     </>}
   </div>
+}
+
+function ManagedVirtualLabFrame({ lab }: { lab: VirtualLabLesson }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [expanded, setExpanded] = useState(false)
+
+  function toggleFullscreen() {
+    if (typeof document === 'undefined') return
+    if (!document.fullscreenElement) {
+      void containerRef.current?.requestFullscreen?.().then(() => setExpanded(true)).catch(() => {})
+    } else {
+      void document.exitFullscreen?.().then(() => setExpanded(false)).catch(() => {})
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="space-y-2 rounded-lg border bg-card p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <span className="text-xs font-medium text-muted-foreground">
+          Isolated simulation frame ({lab.lab_id})
+        </span>
+        <Button type="button" variant="outline" size="sm" className="min-h-10" onClick={toggleFullscreen}>
+          {expanded ? 'Exit fullscreen' : 'Fullscreen lab'}
+        </Button>
+      </div>
+      <div className="relative h-[70vh] min-h-[480px] w-full overflow-hidden rounded-md bg-slate-950">
+        <iframe
+          key={`${lab.release_uuid}:${lab.activity_uuid}:${lab.build_sha256}`}
+          src={lab.entry_url}
+          title={lab.name}
+          className="h-full w-full border-0"
+          sandbox="allow-scripts allow-downloads"
+          allow="fullscreen"
+          allowFullScreen
+          referrerPolicy="no-referrer"
+        />
+      </div>
+    </div>
+  )
 }

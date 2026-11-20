@@ -120,6 +120,22 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    checks = (
+        ("st_draft_material", "source_provenance IS NOT NULL"),
+        ("st_curriculum_revision", "programme_metadata IS NOT NULL"),
+        ("st_report_recipient", "sharing_grant_id IS NULL OR relationship_id IS NOT NULL"),
+        ("st_consent_event", "relationship_id IS NOT NULL OR actor_user_id <> subject_user_id"),
+        ("st_evidence_file", "relationship_uuid IS NOT NULL OR purpose = 'guardian_authority'"),
+    )
+    for table_name, predicate in checks:
+        count = bind.execute(sa.text(f"SELECT COUNT(*) FROM {table_name} WHERE {predicate}")).scalar_one()
+        if count:
+            raise RuntimeError(
+                f"Refusing lossy downgrade of revision e7f2c9a4b138: {count} populated row(s) in "
+                f"{table_name} match ({predicate}). Restore from a verified backup or apply a forward repair."
+            )
+
     op.drop_column("st_draft_material", "source_provenance")
     op.drop_column("st_curriculum_revision", "programme_metadata")
 
