@@ -81,6 +81,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
   const [confirmDiscard, setConfirmDiscard] = React.useState(false)
   const [closing, setClosing] = React.useState(false)
   const [closeBlocked, setCloseBlocked] = React.useState(false)
+  const [thumbnailRestoreFailed, setThumbnailRestoreFailed] = React.useState(false)
 
   const validationSchema = Yup.object().shape({
     name: Yup.string()
@@ -108,8 +109,38 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
     onSubmit: async (values, { setSubmitting }) => {
       // Exactly one create request: ignore re-submits while one is running.
       if (submitLock.current) return
+      if (thumbnailRestoreFailed) {
+        toast.error(
+          t('courses.draft_thumbnail_restore_blocked', {
+            defaultValue: 'Resolve the saved thumbnail error before creating the course.',
+          })
+        )
+        setSubmitting(false)
+        return
+      }
       submitLock.current = true
       let created = false
+      // Persist the draft first so a stable server draft_uuid is always
+      // established as the idempotency key before POST /courses/ is sent.
+      syncRef.current?.schedule({
+        name: values.name,
+        description: values.description,
+        learnings: values.learnings,
+        tags: values.tags,
+        public: values.visibility,
+      })
+      const flushed = (await syncRef.current?.flush()) ?? false
+      const draftUuid = syncRef.current?.currentDraftUuid() ?? null
+      if (!flushed || !draftUuid) {
+        submitLock.current = false
+        setSubmitting(false)
+        toast.error(
+          t('courses.draft_save_before_create_failed', {
+            defaultValue: 'Could not save your draft before creating the course. Resolve the error and try again.',
+          })
+        )
+        return
+      }
       // Stop autosave so no draft write can land after the draft is discarded.
       await syncRef.current?.pause()
       const toast_loading = toast.loading(t('courses.creating_course'))
@@ -126,7 +157,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
           },
           values.thumbnail,
           session.data?.tokens?.access_token,
-          syncRef.current?.currentDraftUuid()
+          draftUuid
         )
 
         if (res.success) {
@@ -227,19 +258,26 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
     )
   }
 
-  const applyDraft = async (draft: CourseDraft) => {
-    applyFields(draftFieldsOf(draft))
-    if (!draft.has_thumbnail) return
+  const restoreDraftThumbnail = async () => {
+    setThumbnailRestoreFailed(false)
     try {
       const file = await fetchCourseDraftThumbnail(orgId, tokenRef.current)
       if (file) formik.setFieldValue('thumbnail', file, false)
     } catch (_e) {
+      setThumbnailRestoreFailed(true)
       toast.error(
         t('courses.draft_thumbnail_restore_failed', {
-          defaultValue: 'The saved thumbnail could not be loaded. Please add it again.',
+          defaultValue: 'The saved thumbnail could not be loaded. Retry loading it, upload a new image, or explicitly continue without it.',
         })
       )
     }
+  }
+
+  const applyDraft = async (draft: CourseDraft) => {
+    setThumbnailRestoreFailed(false)
+    applyFields(draftFieldsOf(draft))
+    if (!draft.has_thumbnail) return
+    await restoreDraftThumbnail()
   }
 
   const loadDraft = React.useCallback(async () => {
@@ -304,6 +342,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
   }, [])
 
   const setThumbnail = (file: File) => {
+    setThumbnailRestoreFailed(false)
     formik.setFieldValue('thumbnail', file)
     syncRef.current?.setThumbnail(file)
   }
@@ -592,6 +631,31 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
             </div>
           </div>
         </div>
+        {thumbnailRestoreFailed && (
+          <div role="alert" className="mt-2 rounded-md bg-amber-50 outline outline-1 outline-amber-300 p-3 text-sm text-amber-900">
+            <p>
+              {t('courses.draft_thumbnail_restore_warning', {
+                defaultValue: 'Your saved thumbnail failed to load. Retry loading it, upload a replacement, or continue without it before creating the course.',
+              })}
+            </p>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => void restoreDraftThumbnail()}
+                className="px-3 py-1 border border-amber-400 font-bold rounded-md"
+              >
+                {t('courses.draft_retry_thumbnail', { defaultValue: 'Retry loading thumbnail' })}
+              </button>
+              <button
+                type="button"
+                onClick={() => setThumbnailRestoreFailed(false)}
+                className="px-3 py-1 border border-amber-400 font-bold rounded-md"
+              >
+                {t('courses.draft_continue_without_thumbnail', { defaultValue: 'Continue without thumbnail' })}
+              </button>
+            </div>
+          </div>
+        )}
       </FormField>
 
       <FormField name="learnings">

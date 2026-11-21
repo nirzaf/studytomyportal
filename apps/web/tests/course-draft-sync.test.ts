@@ -188,3 +188,28 @@ test('thumbnail upload failures are reported and retried without losing the file
   expect(server.draft?.has_thumbnail).toBe(true)
   expect(isBlankDraft(server.draft as CourseDraft)).toBe(false)
 })
+
+test('reverting back to A while B is in flight still reconciles server state to A', async () => {
+  const server = fakeServer()
+  const sync = make(server)
+  sync.schedule(fields({ name: 'A' }))
+  expect(await sync.flush()).toBe(true)
+  expect(server.draft?.name).toBe('A')
+
+  // Hold the write for B in flight while the user reverts the form back to A.
+  let releaseB: () => void = () => {}
+  server.gate = new Promise<void>((resolve) => (releaseB = resolve))
+  sync.schedule(fields({ name: 'B' }))
+  await new Promise((r) => setTimeout(r, 15))
+  expect(server.calls.length).toBe(2) // B is now in flight
+
+  sync.schedule(fields({ name: 'A' }))
+  expect(sync.hasUnsaved()).toBe(true)
+
+  server.gate = null
+  releaseB()
+  expect(await sync.flush()).toBe(true)
+  expect(server.draft?.name).toBe('A')
+  expect(server.draft?.revision).toBe(3)
+  expect(sync.state.status).toBe('saved')
+})

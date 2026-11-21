@@ -51,3 +51,46 @@ async def test_concurrent_updates_from_same_revision_yield_one_winner(postgres_t
         async with rows.session_factory() as session:
             await session.execute(delete(CourseCreationDraft).where(CourseCreationDraft.org_id == rows.org_id))
             await session.commit()
+
+
+async def test_atomic_revision_delete_cannot_wipe_concurrent_update(postgres_test_rows):
+    """A revision-checked DELETE racing an UPDATE on revision 1 must either
+    delete revision 1 before the update, or fail with 409 and preserve revision 2."""
+    rows = postgres_test_rows
+    try:
+        assert (await _attempt(rows.session_factory, rows.org_id, rows.user_id, None, "v1"))[0] == "ok"
+
+        async def _atomic_delete():
+            async with rows.session_factory() as session:
+                existing = await svc._fetch(session, rows.org_id, rows.user_id)
+                assert existing is not None
+                stmt = (
+                    delete(CourseCreationDraft)
+                    .where(
+                        CourseCreationDraft.id == existing.id,  # type: ignore[arg-type]
+                        CourseCreationDraft.revision == 1,  # type: ignore[arg-type]
+                    )
+                )
+                result = await session.execute(stmt)
+                if result.rowcount != 1:  # type: ignore[attr-defined]
+                    await session.rollback()
+                    return ("conflict", None)
+                await session.commit()
+                return ("deleted", None)
+
+        update_outcome, delete_outcome = await asyncio.gather(
+            _attempt(rows.session_factory, rows.org_id, rows.user_id, 1, "v2-newer"),
+            _atomic_delete(),
+        )
+        # Exactly one of update or delete can succeed; never both.
+        assert {update_outcome[0], delete_outcome[0]} in ({"ok", "conflict"}, {"conflict", "deleted"})
+        async with rows.session_factory() as session:
+            remaining = await svc._fetch(session, rows.org_id, rows.user_id)
+            if update_outcome[0] == "ok":
+                assert remaining is not None and remaining.name == "v2-newer" and remaining.revision == 2
+            else:
+                assert remaining is None
+    finally:
+        async with rows.session_factory() as session:
+            await session.execute(delete(CourseCreationDraft).where(CourseCreationDraft.org_id == rows.org_id))
+            await session.commit()

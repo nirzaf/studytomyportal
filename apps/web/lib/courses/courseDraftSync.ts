@@ -70,6 +70,7 @@ export class CourseDraftSync {
   private draftUuid: string | null = null
   private revision: number | null = null
   private lastSaved: DraftFields | null = null
+  private inFlightFields: DraftFields | null = null
   private pendingFields: DraftFields | null = null
   private pendingThumb: File | null = null
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -126,11 +127,14 @@ export class CourseDraftSync {
 
   /** Queue the current form values; a blank form never creates a draft. */
   schedule(fields: DraftFields) {
-    if (this.lastSaved && sameDraftFields(fields, this.lastSaved)) {
+    // Only skip when no field write is in flight: if an older write (e.g. B) is
+    // still in flight and the user reverts back to lastSaved (A), we MUST keep
+    // A queued so it is written after B acknowledges.
+    if (!this.inFlightFields && this.lastSaved && sameDraftFields(fields, this.lastSaved)) {
       this.pendingFields = null
       return
     }
-    if (this.revision === null && isBlankDraftFields(fields)) {
+    if (!this.inFlightFields && this.revision === null && isBlankDraftFields(fields)) {
       this.pendingFields = null
       return
     }
@@ -170,6 +174,7 @@ export class CourseDraftSync {
       try {
         if (this.pendingFields) {
           sentFields = this.pendingFields
+          this.inFlightFields = sentFields
           result = await this.api.saveFields(sentFields, this.revision)
         } else {
           sentThumb = this.pendingThumb as File
@@ -177,13 +182,20 @@ export class CourseDraftSync {
         }
       } catch (_e) {
         result = { ok: false, conflict: false, error: 'Network error' }
+      } finally {
+        this.inFlightFields = null
       }
       if (result.ok) {
         this.draftUuid = result.draft.draft_uuid
         this.revision = result.draft.revision
         if (sentFields) {
           this.lastSaved = sentFields
-          if (this.pendingFields === sentFields) this.pendingFields = null
+          if (
+            this.pendingFields === sentFields ||
+            (this.pendingFields !== null && sameDraftFields(this.pendingFields, sentFields))
+          ) {
+            this.pendingFields = null
+          }
         } else if (this.pendingThumb === sentThumb) {
           this.pendingThumb = null
         }

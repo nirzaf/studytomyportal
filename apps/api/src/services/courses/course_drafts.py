@@ -282,7 +282,8 @@ async def get_my_draft_thumbnail(
 async def delete_my_draft(
     db_session: AsyncSession, org_id: int, current_user: PublicUser, base_revision: Optional[int]
 ) -> None:
-    """Discard the draft. With ``base_revision`` the delete refuses stale callers."""
+    """Discard the draft atomically. With ``base_revision`` the DELETE itself
+    checks the revision so a concurrent update cannot be silently wiped."""
     await _authorize(current_user, org_id, db_session)
     existing = await _fetch(db_session, org_id, current_user.id)
     if existing is None:
@@ -291,10 +292,14 @@ async def delete_my_draft(
         raise _conflict(existing)
     old_uuid = existing.draft_uuid
     old_filename = existing.thumbnail_filename
-    await db_session.execute(
-        delete(CourseCreationDraft).where(CourseCreationDraft.id == existing.id)  # type: ignore[arg-type]
-    )
+    stmt = delete(CourseCreationDraft).where(CourseCreationDraft.id == existing.id)  # type: ignore[arg-type]
+    if base_revision is not None:
+        stmt = stmt.where(CourseCreationDraft.revision == base_revision)  # type: ignore[arg-type]
+    result = await db_session.execute(stmt)
+    if base_revision is not None and result.rowcount != 1:  # type: ignore[attr-defined]
+        await db_session.rollback()
+        raise _conflict(await _fetch(db_session, org_id, current_user.id))
     await db_session.commit()
-    if old_filename:
+    if result.rowcount == 1 and old_filename:  # type: ignore[attr-defined]
         org_uuid = await _org_uuid(db_session, org_id)
         await _best_effort_delete_thumbnail(org_uuid, old_uuid, old_filename)
