@@ -211,6 +211,7 @@ async def test_duplicate_course_creation_for_same_draft_is_idempotent(db, org, a
         thumbnail_image="",
         thumbnail_video="",
         about="Mechanics",
+        open_to_contributors=False,
     )
 
     with (

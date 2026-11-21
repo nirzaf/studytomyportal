@@ -40,7 +40,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint("uq_course_creation_draft_uuid", "course", type_="unique")
     op.drop_column("course", "creation_draft_uuid")
     op.drop_index("ix_course_creation_draft_user_id", table_name="course_creation_draft")
     op.drop_index("ix_course_creation_draft_org_id", table_name="course_creation_draft")
