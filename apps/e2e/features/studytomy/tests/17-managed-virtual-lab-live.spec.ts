@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { test, expect } from '../../../core/fixtures'
 import { API_URL, BASE_URL } from '../../../core/instance'
+import { blockNonLoopbackRequests } from '../../../core/browser-egress-guard'
 import { login, req } from '../../../core/client'
 
 type LiveScenario = {
@@ -103,16 +104,11 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
       storageState: sc.learnerStorageState,
       viewport: { width: 1280, height: 800 },
       acceptDownloads: true,
+      serviceWorkers: 'block',
     })
-    const page = await desktopContext.newPage()
-
     const egressViolations: string[] = []
-    page.on('request', r => {
-      const url = r.url()
-      if (/generativelanguage\.googleapis\.com|openai\.com|anthropic\.com/i.test(url)) {
-        egressViolations.push(url)
-      }
-    })
+    await blockNonLoopbackRequests(desktopContext, egressViolations)
+    const page = await desktopContext.newPage()
 
     // Navigate cleanly to My Learning on real Next.js app
     await page.goto('/account/learning', { waitUntil: 'domcontentloaded' })
@@ -359,7 +355,9 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     const mobileContext = await browser.newContext({
       storageState: sc.learnerStorageState,
       viewport: { width: 390, height: 844 },
+      serviceWorkers: 'block',
     })
+    await blockNonLoopbackRequests(mobileContext, egressViolations)
     const mobilePage = await mobileContext.newPage()
     await mobilePage.goto('/account/learning', { waitUntil: 'domcontentloaded' })
     await mobilePage.getByRole('button', { name: sc.releaseName, exact: true }).click()
@@ -404,5 +402,6 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
       expect(afterWithdraw.status()).toBe(404)
     }
     await mobileContext.close()
+    expect(egressViolations).toEqual([])
   })
 })

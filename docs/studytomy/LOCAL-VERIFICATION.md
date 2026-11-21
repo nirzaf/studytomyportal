@@ -1,5 +1,109 @@
 # AUD-18 local verification record
 
+## Synthetic managed Virtual Lab Chromium journey (21 November 2026)
+
+The live Playwright case `17-managed-virtual-lab-live.spec.ts` passed once against a fresh synthetic scenario on PostgreSQL `19.0`, pgvector `0.8.7`, Alembic head `b7c2e9a4d1f0`. It used the named-volume loopback service documented in [the PG19 completion record](POSTGRESQL-19-UPGRADE.md), the real FastAPI and Next.js apps, and the static lab build. The synthetic scenario was prepared through ordinary API routes with a separate author/reviewer, course-scoped authority, synthetic policy decisions, review evidence, release, learner consent and first-use access grant.
+
+Chromium signed in normally, opened the released lab and used the mass slider. The exported CSV and calculation HUD matched. The journey then exercised practical assignment access, raw CSV and grade-injection rejection, offline draft retry, ZIP upload/submission, duplicate and late-write denial, cross-organization/stranger/release/deadline denial, teacher file review and grading, mobile layout and consent withdrawal. PostgreSQL confirmed final `GRADED` status, overall grade `9`, a manual file-task grade `7`, and an automatic numeric-task grade `2`; consent acceptance and withdrawal records both persisted. The sandboxed iframe stayed opaque and sandboxed.
+
+The dedicated Playwright config and normal-login state helper were checked separately: one intended test was discovered, the synthetic learner logged in through the local UI, browser state was saved under owner-only permissions, and non-loopback browser requests were blocked. No AI/OpenAI provider call occurred. API logs show an attempted Resend notification to a synthetic reviewer was rejected for invalid provider credentials; no successful delivery was observed. API egress was not blocked in this run, so it was not fully offline. A local RAG indexing task also logged a missing-provider-configuration error without blocking the lab test.
+
+This is synthetic technical acceptance only. Grade 12 Physics educator, safeguarding, content-rights, curriculum and real release approvals remain outstanding. It does not verify AI generation, real learner data, external storage, hosted deployment, a full production-population migration, production rollback or production performance.
+
+## PostgreSQL 19 completion follow-up (21 November 2026)
+
+The work started at `main` commit `99209c77a177dd99f4377f68af007c7ecb7a3dc1` with a clean tree. The local PG19 pin was verified against PostgreSQL's current-version list and Docker Hub's published pgvector PG19 image index digest. PostgreSQL 19.0 is the current supported minor as of this check; the pinned arm64 index is `sha256:89879f41d564f67b0c1462a491d16fcbc6de39ac10db17e7a4bba2138a5e0ba5` ([version policy](https://www.postgresql.org/support/versioning/), [image digest](https://hub.docker.com/layers/pgvector/pgvector/pg19/images/sha256-4544950632b50c7484ce33b906e2eee185c3619f889eeaa7baef11b1dc0162f4)). No production or existing PG16 database was targeted.
+
+### Fresh CLI install and persistent-volume proof
+
+The built CLI created a new install with `setup --ci --no-start --channel dev`. Its Compose project was `learnhouse-9688427a`; the `db` service selected `pgvector/pgvector:0.8.7-pg19@sha256:89879f41d564f67b0c1462a491d16fcbc6de39ac10db17e7a4bba2138a5e0ba5`, published only at `127.0.0.1:49169`, with physical volume `learnhouse-9688427a_learnhouse_db_data_9688427a` mounted at `/var/lib/postgresql`. The server reported PostgreSQL `19.0-1.pgdg12+1`, `PGDATA=/var/lib/postgresql/19/docker`, and pgvector `0.8.7` after `ensure_schema()`.
+
+The new `apps/api/src/tests/core/test_pg19_volume_persistence_postgres.py` probe passed its seed and verify phases. It wrote a synthetic vector row and HNSW index through the API's normal schema-bootstrap/test path, recreated only the `db` service using `up -d --force-recreate --no-deps --wait --pull never db`, then verified the same row, revision, extension and nearest-vector result without running migrations again. Container ID changed from `20d06a8864c17c1922ab0e581e336ebc7e321199ae324e039ec4a456433a04c4` to `d69bd40e7713bc6eaac9faa58f8baa6b95f4b8680130d1ab6c732c55f2b2fe29`; physical volume and mount target were unchanged. The synthetic row returned vector `[1,0,0]`, revision `1`, distance `0.0`, Alembic head `b7c2e9a4d1f0`, and vector `0.8.7`.
+
+### Separate PG16-to-PG19 restore proof
+
+Compose project `stpg19-restore-67e5f25e1c` created two distinct named volumes: `st-pg16-src-67e5f25e1c` at `/var/lib/postgresql/data` and `st-pg19-dst-67e5f25e1c` at `/var/lib/postgresql`. The isolated source was PostgreSQL `16.16`; the target was the pinned PG19 image. Their only published ports were loopback ephemeral ports `50308` and `50307`. Each database name ended in `_test`.
+
+The API's `ensure_schema()` initialized the synthetic source at single Alembic head `b7c2e9a4d1f0`. The source then received one synthetic organization, one immutable business event and one vector/HNSW probe row. PostgreSQL 19 `pg_dump` produced a custom-format, mode-`0600` archive (SHA-256 `52c8626869d3ce85810480cb1f6c9ddc3615179810df3e07a58f60a81218b056`); `pg_restore --exit-on-error --single-transaction` restored it into a new PG19 test database on the separate target volume. PG16 remained intact. Read-only comparison after restore matched all 138 public tables and row counts, 729 structural constraint signatures, 468 index signatures, 1,581 column signatures, 42 non-internal trigger definitions, the Alembic revision, synthetic organization/event and vector lookup. Both source and target used pgvector `0.8.7`; target version was PostgreSQL `19.0`. This is evidence for a small synthetic logical migration only, not the full learner, guardian, finance, file or external-object-store acceptance matrix.
+
+### Test results and remaining gaps
+
+| Check | Result |
+|---|---|
+| `apps/cli` `bun run typecheck` and `bun run build` | Passed |
+| CLI setup/command/unit/EE preflight suites | 586 passed |
+| CLI backup/restore and update-EE suites | 67 passed after correcting mock isolation in three restore tests |
+| API migration and startup unit tests (`test_migrations.py`, `test_events_database.py`, current-head assertion) | 62 passed |
+| PG19 core migration and volume persistence tests | 5 passed |
+| Full `apps/api/src/tests/studytomy` on isolated PG19 | 417 passed, 3 failed in 64.61s |
+| Actual CLI database-only PG19 backup then `restore --yes` | Succeeded; archive metadata and dump header both reported PostgreSQL `19.0`; persistence probe passed again afterward |
+
+### Fresh-database FastAPI runtime smoke (21 November 2026)
+
+The installed API venv launched the real Uvicorn application and lifespan against a newly created synthetic database on the retained PG19 restore volume. The database bootstrap used `LEARNHOUSE_AUTO_MIGRATE=true`, a generated one-run admin password, a reserved synthetic email, AI disabled and a separate temporary Redis 7 container. FastAPI listened only on `127.0.0.1:1338`; the PostgreSQL bridge listened only on `127.0.0.1:45439`. `GET /api/v1/health` returned HTTP 200 with body `true`. PostgreSQL reported `19.0-1.pgdg12+1`, `PGDATA=/var/lib/postgresql/19/docker`, pgvector `0.8.7`, Alembic revision `b7c2e9a4d1f0`, and exactly one synthetic organization created by the normal auto-install path. The effective Uvicorn command was `apps/api/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 1338 --log-level warning`, from a temporary working directory with the API source on `PYTHONPATH`.
+
+Initial bootstrap attempts halted at the expected local prerequisites: the first lacked the required initial-admin password; the next was rejected because the reserved `.test` email domain is invalid for this validator. Each partially seeded probe database was dropped before retry. The passing run supplied only an ephemeral password and a synthetic `example.com` address; AI was disabled, no provider credentials were inherited, and no email or AI-provider operation was invoked. Afterward the probe database and temporary runtime files were removed, the Redis and bridge containers were stopped, and the PG19 service returned to its prior stopped state. The named PG19 volume was retained. This verifies fresh FastAPI startup and database health; it does not exercise Next.js or satisfy the rights-reviewed Virtual Lab journey.
+
+### PG19 migration interruption recovery rerun (21 November 2026)
+
+From `apps/api`, `./.venv/bin/pytest -q src/tests/core/test_migrations_postgres.py` ran against PostgreSQL `19.0` with pgvector `0.8.7` on the isolated PG19 restore service. Result: **4 passed in 4.59 seconds**. Coverage included concurrent empty-schema bootstrap and integrity guards, a supported prior-revision upgrade, refusal of a lossy downgrade, and a synthetic upgrade interruption. In the interruption case Alembic was made to create a table and raise inside the migration transaction; the test confirmed the DDL rolled back and the original Alembic revision remained. The suite created and dropped only its unique loopback `_test` databases. Its temporary base database and TCP bridge were removed afterward; the PG19 service was stopped and its named volume retained. This verifies migration transaction recovery on the isolated PG19 fixture, not recovery of a populated deployment.
+
+The refreshed local E2E runbook's pinned PG19 image and tmpfs mount syntax passed a Docker CLI check with `--network none --pull=never`; the check ran `/bin/true`, so it validated mount parsing without starting a database. The separate `docs` workspace has no installed `node_modules`, so its Fumadocs/MDX build was not run and no dependencies were installed. `git diff --check` passed.
+
+The three remaining StudyTOMY failures are existing behavior questions, not PG19-specific regressions: two adaptive-retention tests expect `ADAPTIVE_RETENTION_REVIEW_REQUIRED` but receive `MANAGED_ASSESSMENT_SOURCE_RETAINED`; one service-case test expects `assigned` but receives `acknowledged`. The same three expectations failed on an isolated PG16 database. Their owner rulings remain open in the prior verification record. The outdated test pin for Alembic head `b91d2f6a08c3` was updated to current head `b7c2e9a4d1f0`; its focused test passed.
+
+An initial attempt at the actual CLI backup used local filesystem content mode, so `docker compose run` began pulling `ghcr.io/learnhouse/app:dev` for the content archive. I interrupted that command before an app container started. Compose had created only this fresh project's named Redis/content volumes; they were retained. The temporary install was then set to database-only backup mode, and backup/restore passed without another app-image pull. No app UI was booted. After verification, only the three database services created for these tests were stopped; all five named volumes remain, and no volume removal or prune ran. The Playwright live lab journey remains unrun because the checked-in harness needs a teacher/reviewer/learner scenario and an approved rights-reviewed release; Grade 12 Physics educator and safeguarding sign-offs remain pending. No production optimization was applied; the small synthetic profile below is not a representative workload. No production cutover or hosted migration is authorized.
+
+### Continuation: PostgreSQL 19 suite and retrieval profile (21 November 2026)
+
+The PostgreSQL-backed `apps/api/src/tests/studytomy` selection was repeated against the loopback PG19 restore target `studytomy_pg19_restore_67e5f25e1c_test`: **417 passed, 3 failed in 63.30 seconds**. The two adaptive-retention precedence failures and service-case status failure match the PG16 run. The selection includes PostgreSQL grounded-retrieval, authorization, grading, idempotency and concurrency cases; it is an in-process API test, not a live Uvicorn/Next.js workflow.
+
+A fixed-seed, connection-scoped synthetic profile compared PostgreSQL 16.16 and 19.0 with pgvector 0.8.7. It used 3,000 generated 768-dimensional rows and 66 authorized rows in the selected course scope. After two warmups, median `EXPLAIN ANALYZE` execution times over five queries were: exact authorized cosine ranking **0.203 ms / 0.202 ms** (PG16/PG19), explicitly selected HNSW **3.317 ms / 4.422 ms**, and the test-fixture vector/full-text RRF query **0.268 ms / 0.334 ms**. HNSW recall@10 was `[1.0, 1.0, 1.0, 0.8, 1.0]` on PG16 and `[1.0, 0.9, 1.0, 0.9, 1.0]` on PG19, with no underfilled result. Benchmark tables and indexes were temporary and disappeared when each connection closed. These measurements do not establish production performance or justify tuning; full plans and runtime details are in [the PostgreSQL 19 upgrade note](POSTGRESQL-19-UPGRADE.md).
+
+The PG19 database reported libc locale provider `c`, `en_US.utf8` collation/ctype and collation version `2.36`; it had no public `tsvector` columns/indexes and no `pg_trgm` extension. The autovacuum score view exists, but its synthetic schema does not model real maintenance pressure. The REPACK safety procedure and remaining P0 E2E gates are documented in the PostgreSQL 19 upgrade note. The PG16 and PG19 restore-test containers were stopped after the checks; their named volumes were retained.
+
+### Full API suite on the isolated PG19 target (21 November 2026)
+
+After the focused PostgreSQL-backed selection, the full API suite ran against only `studytomy_pg19_restore_67e5f25e1c_test` with PostgreSQL `19.0`, pgvector `0.8.7`, and Alembic head `b7c2e9a4d1f0`:
+
+```sh
+./.venv/bin/pytest -q src/tests --tb=short
+```
+
+Result: **10,589 passed, 14 failed, 23 skipped, 250 warnings in 259.88 seconds**. The 14 failures were five logout-credential tests still patching/asserting `revoke_user_sessions_before` although the current route uses `advance_session_generation`, five link-preview tests whose mock factory supplied a transport in addition to the production pinned transport, one Bedrock test reaching the optional CRT-backed login provider with no credentials, the same two adaptive-retention precedence expectations, and the same service-case `assigned` versus `acknowledged` expectation documented above. The stale Alembic-head assertion from the earlier full-suite record now passes after the expected head was updated to `b7c2e9a4d1f0`. No test failures were hidden or reclassified as passes. This run improves PG19 API coverage but does not replace the still-pending live Playwright workflow.
+
+### Full API rerun after test-harness corrections (21 November 2026)
+
+The five logout-credential tests were stale against the current route, which calls `advance_session_generation(db, user_id)`, and the link-preview mock factory supplied a second `transport` keyword after the production code began using its pinned SSRF transport. The focused logout and response-cap files now pass: **28 passed**. Only test code changed; production logout and SSRF transport behavior were left intact.
+
+The Bedrock model-construction test also needed deterministic offline credentials: without them, botocore selected its optional CRT-backed login provider before any model call. The test now supplies synthetic environment credentials and disables metadata lookup; the focused test passed without a provider call or dependency change.
+
+The complete API suite then ran against a fresh clone of the synthetic PG19 restore database named `studytomy_pg19_fullapi_67e5f25e1c_test` on the loopback-only isolated service:
+
+```sh
+./.venv/bin/pytest -q src/tests --tb=short
+```
+
+Result: **10,599 passed, 4 failed, 23 skipped, 251 warnings in 228.79 seconds**. The resolved ten logout/link-preview test failures no longer occur. The remaining failures are the Bedrock model test, whose declared environment lacks `botocore[crt]`, two adaptive-retention precedence expectations, and the service-case `assigned` versus `acknowledged` expectation. The three behavior expectations still need owner rulings; no product semantics were changed to force them green. The fresh API-suite database was a clone on the disposable PG19 volume; its service was stopped after the run and the volume was retained.
+
+After the Bedrock test correction, the full suite ran again against a second fresh clone, `studytomy_pg19_fullapi2_67e5f25e1c_test`, on the same loopback-only PG19 target. Result: **10,600 passed, 3 failed, 23 skipped, 251 warnings in 228.81 seconds**. Only the two adaptive-retention precedence cases and one service-case status expectation remain. The container is stopped; the PG19 named volume remains.
+
+### Globals-only role handoff and frontend checks (21 November 2026)
+
+To exercise the PG16 globals handoff without touching a prior database, the stopped synthetic PG16 source was started read-only and `pg_dumpall --globals-only --no-role-passwords` was piped into a new PostgreSQL 19 container. The destination used `--network none`, tmpfs at `/var/lib/postgresql`, and no named volume. The PG16 custom-format database dump was restored with PostgreSQL 19 `pg_restore --exit-on-error --single-transaction`. The destination database owner was the restored synthetic `st_test` superuser; PostgreSQL `19.0`, pgvector `0.8.7`, Alembic head `b7c2e9a4d1f0`, and 138 public tables were confirmed. The source database received no writes; both containers were stopped, and the separate named PG16/PG19 evidence volumes remain. This is a globals/restore smoke check for one synthetic superuser, not least-privilege role or production-grant verification.
+
+From `apps/web`, `bun ./node_modules/typescript/bin/tsc --noEmit` exited 0 and `bun run test` passed **761 tests across 81 files (2,246 assertions)**. From `apps/e2e`, `bun run typecheck` exited 0. The installed Bun was `1.4.2` while the repository declares `1.4.4`; no runtime was installed. These checks do not constitute the live Playwright educator/reviewer/learner acceptance.
+
+### Continuation: retention contracts and full API suite (21 November 2026)
+
+The three failure records above describe earlier runs. Current code inspection and focused PostgreSQL 19 tests confirmed their expectations were stale: course deletion first reports the retained frozen-release guard, account deletion reports adaptive retention, and narrative safeguarding reports remain acknowledged until independent triage. The test fixtures now assert those existing contracts without changing runtime code. The adaptive tests directly exercise both adaptive-retention guards; the deletion cases verify the frozen task and evidence remain. The safeguarding fixture verifies that a conflicted triager cannot expose the narrative or leave an ownerless case marked assigned.
+
+The focused suite passed **3 tests** on the isolated PostgreSQL 19 target, and the SQLite-backed adaptive test passed separately. `ruff check` passed for both changed test files. The complete API suite then ran on fresh cloned database `studytomy_pg19_completionfull_20261121_test` using `./.venv/bin/pytest -q src/tests --tb=short --show-capture=no`, against PostgreSQL `19.0`, pgvector `0.8.7` and Alembic head `b7c2e9a4d1f0`: **10,603 passed, 0 failed, 23 skipped, 251 warnings in 233.03 seconds** (exit 0). The skips are reported separately, not counted as passes. The test subprocess had AI disabled and external provider-key variables removed; synthetic AWS credentials were supplied only for deterministic offline model-construction coverage.
+
+After verification, the exact isolated PG19 test container was stopped; its named target volume remains intact. No other database service or volume was stopped or removed.
+
+This closes the current full API-suite failures on the disposable PG19 database. It does not close the live Playwright lab acceptance: `E2E_LIVE_VLAB_SCENARIO`, `BASE_URL` and `API_URL` were unset, no supported full-scenario seed utility is present, and Grade 12 Physics educator and safeguarding approvals remain pending. No real learner journey or approved release was created for this run.
+
 ## Documentation-refresh verification sweep (20 November 2026)
 
 Reviewed primary `main` at `ef6b730d`. Ten in-flight files were left untouched: nine under `apps/cli/` and `docs/studytomy/POSTGRESQL-19-UPGRADE.md`. The sweep changed no application code; it is the evidence behind the 2026-11-20 documentation corrections.

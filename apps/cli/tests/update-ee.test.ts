@@ -13,7 +13,7 @@ const ctl = vi.hoisted(() => ({
   loginThrows: false, pullThrows: false, upThrows: false, upRetryCb: false,
   eeReady: 'ee' as string,
 }))
-const cp = vi.hoisted(() => ({ cid: 'abc123', dumpBytes: 4096 }))
+const cp = vi.hoisted(() => ({ cid: 'abc123', dumpBytes: 4096, pgSpawnArgs: [] as string[] }))
 import { expectMode } from './platform.js'
 vi.mock('../src/services/docker.js', () => ({
   dockerComposeExec: (_cwd: string, _svc: string, _cmd: string) =>
@@ -36,7 +36,8 @@ vi.mock('../src/services/health.js', () => ({ waitForEeReady: async () => ctl.ee
 
 // External-DB dump: `docker run ... pg_dump` with stdout pointed at the output file
 vi.mock('node:child_process', () => ({
-  spawnSync: vi.fn((_f: string, _a: string[], opts: { stdio: [unknown, number, unknown] }) => {
+  spawnSync: vi.fn((_f: string, args: string[], opts: { stdio: [unknown, number, unknown] }) => {
+    cp.pgSpawnArgs = args
     fs.writeSync(opts.stdio[1], Buffer.alloc(cp.dumpBytes, 65))
     return { status: 0 }
   }),
@@ -49,6 +50,7 @@ import {
   readEnvVar, setEnvVar, isExternalDbInstall, backupDatabase,
   ensureAlembicBaseline, runAlembicUpgrade, updateEnterprise,
 } from '../src/commands/update-ee.js'
+import { POSTGRES_CLIENT_IMAGE } from '../src/constants.js'
 
 const LAYOUT = { appService: 'api', alembicCwd: '/app', dbService: 'db' }
 const ui = { log: () => {}, ok: () => {}, warn: () => {} }
@@ -61,7 +63,7 @@ describe('update-ee shared upgrade helpers', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lh-uee-'))
     ctl.composeExec = ''; ctl.loginThrows = false; ctl.pullThrows = false
     ctl.upThrows = false; ctl.upRetryCb = false; ctl.eeReady = 'ee'
-    cp.cid = 'abc123'; cp.dumpBytes = 4096
+    cp.cid = 'abc123'; cp.dumpBytes = 4096; cp.pgSpawnArgs = []
     vi.spyOn(console, 'log').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -125,6 +127,10 @@ describe('update-ee shared upgrade helpers', () => {
     expect(isExternalDbInstall(dir)).toBe(true)
     const out = await backupDatabase({ installDir: dir } as never, LAYOUT, ui) // 69-81
     expect(fs.existsSync(out)).toBe(true)
+    expect(cp.pgSpawnArgs).toEqual([
+      'run', '--rm', '--network', 'container:abc123', '-e', 'PGCONN',
+      POSTGRES_CLIENT_IMAGE, 'sh', '-c', 'pg_dump "$PGCONN"',
+    ])
   })
 
   it('backupDatabase throws when the app container is not running (external)', async () => {

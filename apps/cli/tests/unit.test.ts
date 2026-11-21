@@ -135,7 +135,7 @@ volumes:
     const compose = `services:\n  db:\n    image: postgres:16\n    env_file:\n      - .env\n    volumes:\n      - pgdata:/var/lib/postgresql\n`
     const existing = readPostgresComposeSettings(compose, 'PGDATA=/var/lib/postgresql/custom\n')
     expect(existing?.pgData).toBe('/var/lib/postgresql/custom')
-    expect(generateDockerCompose(baseConfig, 'app:old', existing!).toContain('- PGDATA=/var/lib/postgresql/custom'))
+    expect(generateDockerCompose(baseConfig, 'app:old', existing!)).toContain('- PGDATA=/var/lib/postgresql/custom')
   })
 
   it('keeps an unnamed existing project on Compose directory/environment defaults', () => {

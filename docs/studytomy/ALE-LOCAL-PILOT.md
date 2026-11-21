@@ -9,7 +9,7 @@ Use PowerShell from `apps/api` after installing the locked dependencies. The tes
 ```powershell
 $name = 'studytomy-ale-runbook-pg'
 $db = 'studytomy_ale_runbook_test'
-docker run -d --rm --name $name --label studytomy.purpose=ale-runbook-tests -e POSTGRES_HOST_AUTH_METHOD=trust -e "POSTGRES_DB=$db" -p 127.0.0.1::5432 pgvector/pgvector:pg16
+docker run -d --rm --name $name --label studytomy.purpose=ale-runbook-tests -e POSTGRES_HOST_AUTH_METHOD=trust -e "POSTGRES_DB=$db" -p 127.0.0.1::5432 pgvector/pgvector:0.8.7-pg19@sha256:89879f41d564f67b0c1462a491d16fcbc6de39ac10db17e7a4bba2138a5e0ba5
 if ($LASTEXITCODE) { throw 'Disposable PostgreSQL did not start' }
 try {
     $port = docker port $name 5432/tcp

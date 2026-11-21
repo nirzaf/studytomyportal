@@ -98,11 +98,13 @@ function readExistingInstall(dir: string): ExistingInstall | null {
     return null
   }
   const envFile = fs.readFileSync(envPath, 'utf-8')
-  const database = hasLocalDatabase
-    ? readPostgresComposeSettings(compose, envFile, process.env.COMPOSE_PROJECT_NAME)
-    : undefined
-  if (hasLocalDatabase && !database) {
-    throw new Error(`Cannot safely reconfigure ${dir}: the local database image, volume, project name, or PGDATA could not be read safely from docker-compose.yml/.env. Preserve the current files and inspect them manually.`)
+  let database: PostgresComposeSettings | undefined
+  if (hasLocalDatabase) {
+    const parsedDatabase = readPostgresComposeSettings(compose, envFile, process.env.COMPOSE_PROJECT_NAME)
+    if (!parsedDatabase) {
+      throw new Error(`Cannot safely reconfigure ${dir}: the local database image, volume, project name, or PGDATA could not be read safely from docker-compose.yml/.env. Preserve the current files and inspect them manually.`)
+    }
+    database = parsedDatabase
   }
   return {
     edition: config.edition || 'community',

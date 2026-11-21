@@ -224,6 +224,15 @@ describe('backup / restore: real tar, stubbed database', () => {
     expect(restoreDirs()).toEqual([])
   })
 
+  it('accepts a PostgreSQL 16 backup on a PostgreSQL 19 target', async () => {
+    await backupCommand()
+    const archive = latestArchive()
+    dockerMock.dockerExec.mockReturnValue('19.0')
+
+    await expect(restoreCommand(archive, { yes: true })).resolves.toBeUndefined()
+    expect(dockerMock.dockerExecFromFile).toHaveBeenCalledTimes(1)
+  })
+
   it('refuses a PostgreSQL 19 dump on a PostgreSQL 16 target before stopping services or running psql', async () => {
     await backupCommand()
     const archive = latestArchive()
@@ -274,6 +283,7 @@ describe('backup / restore: real tar, stubbed database', () => {
 
   it('non-TTY restore without --yes exits 1 and never touches the database; with --yes it proceeds', async () => {
     await backupCommand()
+    dockerMock.dockerComposeStop.mockClear()
     const archive = latestArchive()
     const error = vi.spyOn(promptStub.log, 'error')
     const confirm = vi.spyOn(promptStub, 'confirm')
@@ -389,6 +399,7 @@ describe('backup / restore: real tar, stubbed database', () => {
 
   it('backupCommand --restore exits when the database container is not running', async () => {
     await backupCommand()
+    dockerMock.dockerComposeStop.mockClear()
     const archive = latestArchive()
     dockerMock.composeServiceContainer.mockImplementation((_dir: string, svc: string) => svc === 'db' ? '' : `cid-${svc}`)
     dockerMock.dockerExecFromFile.mockClear()
@@ -401,6 +412,7 @@ describe('backup / restore: real tar, stubbed database', () => {
 
   it('backupCommand --restore cancels cleanly (exit 0) when the confirmation is declined', async () => {
     await backupCommand()
+    dockerMock.dockerComposeStop.mockClear()
     const archive = latestArchive()
     setTTY(true)
     promptStub._s.confirmValue = false // decline the "are you sure" prompt → exit(0)

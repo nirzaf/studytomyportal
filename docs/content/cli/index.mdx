@@ -38,11 +38,13 @@ The CLI handles two main workflows:
 The [setup wizard](/cli/setup-wizard) generates a complete Docker Compose deployment in `~/.learnhouse/<name>` with:
 
 - **LearnHouse app** container (`ghcr.io/learnhouse/app`, which bundles the Next.js web app, the FastAPI backend and the collaboration server)
-- **PostgreSQL 16** with pgvector (unless you use an external database)
+- **PostgreSQL 19.0** with **pgvector 0.8.7** for new bundled installs (unless you use an external database)
 - **Redis** (unless you use an external Redis)
 - **Caddy** (automatic SSL) or **nginx** reverse proxy
 
 Each deployment gets a unique ID, so you can run several installations on the same machine. The wizard can also deploy the Enterprise Edition, which uses a different set of images and a license key.
+
+New CLI-managed local databases use the pinned `pgvector/pgvector:0.8.7-pg19` image and mount the parent data directory at `/var/lib/postgresql`; the image's default `PGDATA` is `/var/lib/postgresql/19/docker`. Reconfiguring an existing installation preserves its database image and mount. Moving PostgreSQL 16 data to PostgreSQL 19 requires the separate backup-and-restore migration procedure documented in `docs/studytomy/POSTGRESQL-19-UPGRADE.md`.
 
 ### Local Development
 

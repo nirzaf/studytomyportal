@@ -50,6 +50,10 @@ For local comparison, `LEARNHOUSE_RAG_SMALL_COURSE_EXACT=true` enables an exact 
 
 Row-level security remains deferred. Any future local evaluation should use a non-owner role without `BYPASSRLS`, test default denial and cross-tenant access, and account for transaction and connection reuse. No shared roles or policies changed. [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
 
+### PostgreSQL 19 comparison (21 November 2026)
+
+The same checkout's PostgreSQL-backed retrieval tests passed in the local PG19 API selection. A separate fixed-seed, connection-scoped synthetic benchmark compared exact authorized ranking, an explicitly selected HNSW path, and the existing test-fixture reciprocal-rank-fusion query on PG16.16 and PG19.0. It used 3,000 generated 768-dimensional rows and is a query-path smoke measurement, not a representative curriculum dataset or proof of production latency/recall. Plans, measurements, collation checks and limitations are recorded in the [PostgreSQL 19 upgrade note](POSTGRESQL-19-UPGRADE.md). No runtime hybrid search or index/configuration change was adopted.
+
 The existing MCP OAuth path uses the requested MCP resource in its token lookup and cache partition. The grounded preview tools delegate to the same service as the HTTP routes and keep inbound tokens out of downstream credentials. Teacher review and release approval remain required. [MCP draft authoring](MCP-DRAFT-AUTHORING.md) · [Current MCP middleware](../../apps/api/src/security/mcp_auth.py) · [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
 
 ## Lesson-source excerpt characterization (AUD-17)

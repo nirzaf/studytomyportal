@@ -15,7 +15,7 @@ The LearnHouse backend is a **FastAPI** application written in Python, located a
 - **Python 3.14**
 - **SQLModel**: ORM for database interactions (built on SQLAlchemy and Pydantic)
 - **Alembic**: Database migration management
-- **PostgreSQL 16** with **pgvector** extension: Primary relational database
+- **PostgreSQL 19.0** with **pgvector 0.8.7**: Primary relational database for new CLI-managed local installs
 - **redis-py**: Python Redis client
 - **Uvicorn**: ASGI server
 - **uv**: Python package manager
@@ -67,7 +67,7 @@ The backend handles all core platform operations:
 
 ## Database Layer
 
-SQLModel is used as the ORM, connecting to a PostgreSQL 16 database with the pgvector extension for AI embeddings. Database models define the schema for all entities: organizations, users, courses, chapters, activities, folders, and more. Migrations are managed with **Alembic** and applied by `cli.py migrate` or on API startup.
+SQLModel is used as the ORM, connecting to PostgreSQL with the pgvector extension for AI embeddings. New CLI-managed local installs in this repository use the pinned PostgreSQL 19.0 / pgvector 0.8.7 image. Its data volume mounts at `/var/lib/postgresql`, with default `PGDATA=/var/lib/postgresql/19/docker`. Existing PostgreSQL 16 data stays on its original volume until it is migrated through a separately initialized PostgreSQL 19 cluster and verified logical restore; setup reconfiguration does not repoint it. Database models define the schema for all entities: organizations, users, courses, chapters, activities, folders, and more. Migrations are managed with **Alembic** and applied by `cli.py migrate` or on API startup.
 
 ## Caching
 

@@ -2,6 +2,11 @@
 
 **Status:** local engineering guidance; not production approval.
 
+For a PostgreSQL 16 to 19 logical migration, use the dedicated [PostgreSQL 19
+upgrade and recovery procedure](POSTGRESQL-19-UPGRADE.md). The historical
+PostgreSQL 16 rehearsals below remain evidence for their recorded revisions;
+they do not define the current fresh-install database image.
+
 Business decisions D-13 and D-15 remain unapproved. Do not apply these migrations
 to production, backfill learner or family records, or activate Studytomy flows
 until the applicable decisions and release gates are approved.

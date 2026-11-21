@@ -115,6 +115,9 @@ def _mock_transport_client_factory(handler):
     """Replacement for ``httpx.AsyncClient`` that routes through a mock transport."""
 
     def _factory(**kwargs):
+        # The production call supplies its pinned SSRF transport. These tests
+        # replace it with an in-memory handler and patch peer validation above.
+        kwargs.pop("transport", None)
         return _REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler), **kwargs)
 
     return _factory

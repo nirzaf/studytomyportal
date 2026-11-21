@@ -25,6 +25,11 @@ for account in fixture["accounts"]:
             "org_slug": fixture["org_slug"],
         })
         assert response.status_code == 200, "Synthetic sign-in failed"
+        access_token = response.json().get("tokens", {}).get("access_token")
+        assert access_token, "Synthetic sign-in returned no access token"
+        # The API marks session cookies Secure outside dev mode. The direct
+        # loopback HTTP smoke client therefore uses the normal bearer token.
+        client.headers["Authorization"] = f"Bearer {access_token}"
         me = client.get("/api/v1/auth/me")
         assert me.status_code == 200
         assert me.json()["username"] == "demo-" + account["label"]

@@ -476,6 +476,25 @@ export default async function proxy(req: NextRequest) {
     return response
   }
 
+  // The short public auth URLs rewrite to these actual app routes. Proxy runs
+  // again for that rewritten destination, so pass it through with the same
+  // trusted tenant context instead of treating it as an ordinary org page.
+  const internalAuthPages = [
+    '/auth/login',
+    '/auth/signup',
+    '/auth/reset',
+    '/auth/forgot',
+    '/auth/verify-email',
+  ]
+  if (internalAuthPages.includes(pathname)) {
+    const resolved = await resolveTenant(req, instance)
+    const requestHeaders = tenantRequestHeaders(req, resolved, instance)
+    const response = NextResponse.next({ request: { headers: requestHeaders } })
+    setOrgCookies(req, response, resolved, instance)
+    setInstanceCookies(req, response, instance)
+    return response
+  }
+
   // -------------------------------------------------------------------------
   // 4. Auth callbacks: pass through without org rewrite
   // -------------------------------------------------------------------------
@@ -503,10 +522,7 @@ export default async function proxy(req: NextRequest) {
   if (pathname === '/auth/magic') {
     const resolved = await resolveTenant(req, instance)
     const requestHeaders = tenantRequestHeaders(req, resolved, instance)
-    const response = NextResponse.rewrite(
-      new URL(`${pathname}${search}`, req.url),
-      { request: { headers: requestHeaders } },
-    )
+    const response = NextResponse.next({ request: { headers: requestHeaders } })
     setOrgCookies(req, response, resolved, instance)
     setInstanceCookies(req, response, instance)
     return response
@@ -657,6 +673,23 @@ export default async function proxy(req: NextRequest) {
   // -------------------------------------------------------------------------
   // 11. Tenant-scoped rewrite: the catch-all that puts us under /orgs/{slug}
   // -------------------------------------------------------------------------
+  // Next invokes Proxy for the rewritten destination too. Pass a URL that is
+  // already scoped to the tenant resolved for this host through to the route
+  // instead of prefixing it with /orgs/{slug} again. Rebuild the trusted
+  // request headers here as well, so direct /orgs/{slug}/ requests cannot
+  // supply their own tenant context.
+  const scopedOrgPath = pathname.match(/^\/orgs\/([^/]+)(?:\/|$)/)
+  if (scopedOrgPath) {
+    const resolved = await resolveTenant(req, instance)
+    if (scopedOrgPath[1] === resolved.slug) {
+      const requestHeaders = tenantRequestHeaders(req, resolved, instance)
+      const response = NextResponse.next({ request: { headers: requestHeaders } })
+      setOrgCookies(req, response, resolved, instance)
+      setInstanceCookies(req, response, instance)
+      return response
+    }
+  }
+
   const resolved = await resolveTenant(req, instance)
   const requestHeaders = tenantRequestHeaders(req, resolved, instance)
   // `${search}` is load-bearing: a rewrite destination built from an absolute

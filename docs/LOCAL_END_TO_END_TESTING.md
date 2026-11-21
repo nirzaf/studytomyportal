@@ -1,13 +1,13 @@
 # Local end-to-end testing on Mac
 
-Reviewed 19 November 2026 against `bc7b70027e08769b044a59e534c63ad8cc5d90ec`.
+Runbook refreshed 21 November 2026 against `99209c77a177dd99f4377f68af007c7ecb7a3dc1`. The verification notes below preserve the historical 19 November checkpoint at `bc7b70027e08769b044a59e534c63ad8cc5d90ec`.
 This is a **local-only** operator runbook, not deployment or real-learner approval.
 Do not push, open a PR, deploy, configure CI/CD, or use a VPS as part of it.
 
 ## Evidence and limits
 
-Fresh verification for this document:
-- Supported `python cli.py migrate` on a new disposable PostgreSQL database: `schema empty: none -> 9b7d4c2a1e6f, 0 reconciled`.
+Historical verification recorded on 19 November:
+- Supported `python cli.py migrate` on a new disposable PostgreSQL 16 database: `schema empty: none -> 9b7d4c2a1e6f, 0 reconciled`.
 - Current-source Luna/provider unit tests plus PostgreSQL grounded material/retrieval tests: **40 passed, 1 deselected in 3.69 seconds**. Bedrock was excluded because the existing environment lacks its optional `botocore[crt]` dependency.
 - No new model request or browser acceptance run was performed for this document.
 - Initial setup attempts exposed a startup-readiness race and an incorrect assumed database username. The fresh successful run used readiness polling, the actual configured username and a fail-fast shell. Only that final fresh run is bootstrap evidence.
@@ -42,6 +42,8 @@ Keep `$RUN` in a local shell. Never copy `.env`, API credentials, real uploads o
 
 Example reserved ports: PostgreSQL `59458`, Redis `59459`, API `1342`, web `3042`. First use `lsof -nP -iTCP:<port> -sTCP:LISTEN` for each; choose other unused ports consistently if occupied. Do not stop an unrelated listener.
 
+The current disposable database command below uses the same pinned PostgreSQL 19 image as new CLI installs. This temporary test container has no persistent PostgreSQL volume; the PG19 named-volume layout is exercised by the separate CLI persistence acceptance test.
+
 Use unique container names and local synthetic secrets. These example commands create only disposable resources:
 
 ```sh
@@ -52,7 +54,9 @@ REDIS="$TAG-redis"
 umask 077
 python3 -c 'import secrets; print("POSTGRES_USER=demo"); print("POSTGRES_DB=studytomy_demo_accounts_test"); print("POSTGRES_PASSWORD="+secrets.token_hex(24))' > "$RUN/postgres.env"
 docker run -d --name "$PG" --env-file "$RUN/postgres.env" \
-  -p 127.0.0.1:59458:5432 pgvector/pgvector:pg16
+  --mount type=tmpfs,destination=/var/lib/postgresql \
+  -p 127.0.0.1:59458:5432 \
+  pgvector/pgvector:0.8.7-pg19@sha256:89879f41d564f67b0c1462a491d16fcbc6de39ac10db17e7a4bba2138a5e0ba5
 docker run -d --name "$REDIS" -p 127.0.0.1:59459:6379 redis:7-alpine
 for i in $(seq 1 30); do
   docker exec "$PG" pg_isready -U demo -d studytomy_demo_accounts_test >/dev/null 2>&1 && break
@@ -77,7 +81,7 @@ cd "$RUN/apps/api"
 .venv/bin/python cli.py migrate --status
 ```
 
-Do not use raw Alembic alone to bootstrap an empty database: the supported CLI coordinates initial model/schema creation. Expected revision at the inspected commit is `9b7d4c2a1e6f`; reread the current migration head after any code change. The `pg16` image above is this rehearsal's own disposable container; the committed CLI default for managed installs is now the pinned `pgvector/pgvector:0.8.7-pg19` image (`apps/cli/src/constants.ts:10`), and [PostgreSQL 19 upgrade notes](studytomy/POSTGRESQL-19-UPGRADE.md) records that verification.
+Do not use raw Alembic alone to bootstrap an empty database: the supported CLI coordinates initial model/schema creation. The historical 19 November run expected revision `9b7d4c2a1e6f`; this checkout's current single head is `b7c2e9a4d1f0`. Reread the current migration head after any code change. The command above uses the pinned `pgvector/pgvector:0.8.7-pg19` image. The API migration/startup tests and the synthetic live lab journey passed on isolated PG19; qualified educator/safeguarding/content-rights approval and hosted acceptance remain open in [the PostgreSQL 19 upgrade notes](studytomy/POSTGRESQL-19-UPGRADE.md).
 
 ## 3. Accounts and repeatable baseline
 
@@ -138,7 +142,7 @@ For repeatable automated role/access cases, use the synthetic actors and explici
 
 These are tests, **not a supported persistent demo-account seeder**. They include destructive-to-fixture lifecycle assertions such as retirement and revocation. Do not run the full test and assume its leftover records are a usable demonstration. Reset by creating a new isolated database/container and reinstalling, not by weakening immutable-history triggers or clearing a shared database.
 
-The four-account seed above provides persistent native identities. A complete managed learning-scenario seed is still a priority. Until it exists, use reviewed synthetic fixture preparation with named scenario boundaries. Do not fabricate a working seed command. Separate course author and reviewer, retain synthetic approval provenance, and use a fresh independent learner with the exact release grant and required consent. Do not send invitations to real addresses.
+The four-account seed above provides persistent native identities. `scripts/local_virtual_lab_e2e_scenario.py` now prepares a single synthetic managed Momentum Lab journey for the live browser test. It uses ordinary local API routes and records synthetic-only policy, rights, consent, eligibility and release decisions; it is not a real approval or a general managed-course seeder. The adaptive diagnostic/practice/progress and guardian/report workflows remain separate. Never send invitations to real addresses or copy synthetic decisions into an organization.
 
 ## 4. Launch API and web
 
@@ -225,7 +229,43 @@ docker stop "$PG" "$REDIS"
 
 Keep stopped disposable data only while actively investigating. Do not run broad Docker prune, shared database reset or process-name kill. Clear secret variables when finished. No production rollout, Git commit/push, external email, real-user activation, model call or backup certification follows automatically from this runbook.
 
-**Next priority:** extend the verified native-account baseline with a separately reviewed, synthetic managed-course scenario without inventing approvals or publishing automatically, then replay staff review → learner diagnostic/practice/progress. No dependent guardian report is seeded because that end-to-end route is not supported.
+**Next priority:** obtain qualified educator, safeguarding, rights and curriculum decisions before adapting the synthetic Momentum Lab to real teaching. Separately verify diagnostic/practice/progress and guardian/report journeys against their own approved scenarios; the lab fixture does not cover them.
+
+## 9. Synthetic managed Virtual Lab browser journey
+
+Use a fresh disposable database, native account manifest and local API, web and static-lab servers from sections 2–4. Keep the manifest, scenario JSON, browser state and Playwright artifacts in an owner-only directory outside the checkout. The scenario helper refuses a non-loopback API/lab origin, a database outside its `*_test` guard, a reused output path, or credentials/output with permissive file or directory modes.
+
+The browser runner blocks non-loopback browser requests, but it does not control network access from the separate API process. Clear email-provider settings and block API outbound network access before a repeat; otherwise notification code may attempt external delivery during author/reviewer setup. Do not treat invalid provider credentials as an egress control.
+
+```sh
+DEMO_PRIVATE=/tmp/studytomy-demo-private.<unique>
+mkdir -m 700 -p "$DEMO_PRIVATE/vlab-output"
+chmod 700 "$DEMO_PRIVATE"
+
+python3 scripts/local_virtual_lab_e2e_scenario.py \
+  --api http://127.0.0.1:1342 \
+  --lab http://127.0.0.1:4173 \
+  --credentials "$DEMO_PRIVATE/accounts.json" \
+  --output "$DEMO_PRIVATE/vlab-scenario.json" \
+  --synthetic-only
+
+export E2E_BASE_URL=http://localhost:3042
+export E2E_API_URL=http://127.0.0.1:1342/api/v1
+export E2E_LIVE_VLAB_SCENARIO="$DEMO_PRIVATE/vlab-scenario.json"
+export E2E_LIVE_VLAB_OUTPUT_DIR="$DEMO_PRIVATE/vlab-output"
+node apps/e2e/scripts/live-vlab-browser-state.mjs \
+  --scenario "$E2E_LIVE_VLAB_SCENARIO" \
+  --base "$E2E_BASE_URL" \
+  --state "$DEMO_PRIVATE/learner-storage-state.json"
+apps/e2e/node_modules/.bin/playwright test \
+  --config apps/e2e/playwright.vlab-live.config.ts --project chromium
+```
+
+Set `LEARNHOUSE_SQL_CONNECTION_STRING` to the same disposable database already migrated and seeded by `scripts/local_demo_seed.py`. The browser-state helper performs normal login and aborts non-loopback requests. The live Playwright case also enforces loopback-only HTTP and WebSocket traffic in its desktop and mobile contexts, blocks service workers, and fails if an external browser request is attempted. Neither guard restricts network access from the separate API process. The dedicated Playwright config runs only `17-managed-virtual-lab-live.spec.ts`, uses one worker, and keeps artifacts outside the checkout. All four accounts and product records are synthetic. The fixture grants synthetic approvals only to reach the product workflow; it does not satisfy educator, safeguarding, content-rights, curriculum or real release approval. Do not enable an AI provider for this run.
+
+The loopback egress guard has a standalone synthetic Chromium check: `cd apps/e2e && bun run test:browser-egress`. It verifies external HTTP and WebSocket attempts are intercepted and recorded without contacting those hosts. This does not verify or restrict API-process egress.
+
+Verified on 21 November 2026: the full Chromium case passed against a named-volume PostgreSQL 19 service and real local FastAPI/Next.js/static-lab stack. It covered release authoring/review, first-use lab activity, CSV evidence, practical assignment upload/submission, teacher grading/feedback, negative authorization/deadline cases, mobile layout and consent withdrawal. PostgreSQL readback confirmed the final state. The full-run browser artifacts and scenario credentials remain under the private local temp directory; never commit or attach them. See [the completion record](studytomy/POSTGRESQL-19-UPGRADE.md) for exact bounds.
 
 ## Persistent-account vertical-slice attempt (19 November 2026)
 
@@ -613,3 +653,17 @@ The [review routes](../apps/api/src/routers/studytomy/files.py) and
 for this check. No learner journey, real account or data, provider generation,
 successful publication, production policy, or deployment was tested. The
 owned API, Next.js, PostgreSQL and Redis services were stopped.
+
+### Managed Virtual Lab full-stack acceptance on PostgreSQL 19 (21 November 2026)
+
+The single-use live scenario at `apps/e2e/features/studytomy/tests/17-managed-virtual-lab-live.spec.ts` passed in real Chromium against local FastAPI, Next.js, the curated static lab, PostgreSQL 19 and pgvector 0.8.7: **1 passed, 0 skipped**. The one-run synthetic scenario was prepared by `scripts/local_virtual_lab_e2e_scenario.py` from a fresh restored test database; it created separate author/reviewer identities, synthetic policy decisions and release evidence, learner consent, and a free first-use grant through normal APIs. Educator, safeguarding, legal-rights and curriculum approvals remain pending.
+
+The browser completed the initial lab open, mass adjustment and computed momentum check, CSV export, linked practical assignment, offline draft retry, ZIP upload and submit, teacher file review and grading, and learner feedback view at desktop and mobile widths. It also checked the iframe sandbox, raw CSV and grade-injection rejection, duplicate submission, locked post-submit upload, wrong-organization and stranger access, release mismatch, expired deadline, consent withdrawal, mobile overflow, and zero browser egress violations. The relevant APIs were real; the full suite did not mock critical business operations.
+
+For a repeat, use a **fresh disposable database**: the journey starts first-use access and withdraws the learner's consent, so an earlier scenario is not reusable for the same initial-state assertions. Keep its scenario JSON, credentials, browser state and Playwright output outside the checkout in owner-only paths. Run the app and browser inside a loopback-only OS sandbox, leave AI-provider credentials unset, and direct any required email to a local sink. A background RAG job may log a missing Gemini key and stop before any provider request. The lab's existing CSP allows the local frontend origin `http://localhost:3000`; run the browser there rather than weakening `frame-ancestors`. The opaque iframe and its `allow-scripts allow-downloads` sandbox remain in force.
+
+The run used the dedicated Playwright config `apps/e2e/playwright.vlab-live.config.ts`; from `apps/e2e`, invoke `bun node_modules/@playwright/test/cli.js test --config=playwright.vlab-live.config.ts` with `E2E_BASE_URL=http://localhost:3000`, the real loopback `E2E_API_URL`, and owner-only `E2E_LIVE_VLAB_SCENARIO` / `E2E_LIVE_VLAB_OUTPUT_DIR`. The normal learner browser state was generated with `scripts/live-vlab-browser-state.mjs`. `bun run test:browser-egress` passed 1 test, `bun run typecheck` passed, and the Web single-tenancy proxy tests passed 8 cases. The `apps/web` typecheck passed; focused ESLint found no errors and one pre-existing warning at unchanged `proxy.ts:128`.
+
+This is local synthetic acceptance only. It does not approve the lab's scientific model, Grade 12 syllabus mapping, educator-facing rubric, learner safeguarding policy or content rights, and it is not hosted or production acceptance.
+
+**Migrated-data follow-up (21 November 2026):** the same full Chromium journey also passed once after restoring the synthetic author/reviewer/release/consent/grant/order/assignment scenario from a separate PG16.16 source into a dedicated PG19.0 volume. The import matched all 137 public-table row fingerprints before the browser run, and the source PG16 snapshot remained unchanged. The original two evidence PDFs were copied with matching SHA-256 values into the PG19 filesystem-content directory. This confirms the local pilot-shaped migration path; guardian relationships, settled payments, populated outbox history, object storage and production rollback remain unverified. See the [PostgreSQL 19 migration record](studytomy/POSTGRESQL-19-UPGRADE.md) for image digests, archive hash, schema counts, egress limits and exact acceptance bounds.

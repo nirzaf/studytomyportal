@@ -52,10 +52,40 @@ describe("single tenancy", () => {
     expect(new URL(rewrite(res)).pathname).toBe("/orgs/default/account/general");
   });
 
+  test("an already tenant-scoped route continues with authoritative org context", async () => {
+    const res = await proxy(
+      new NextRequest("https://school.test/orgs/default/account/learning", {
+        headers: {
+          host: "school.test",
+          "x-lh-org": "other",
+          "x-lh-tenancy": "multi",
+        },
+      }),
+    );
+
+    expect(rewrite(res)).toBeNull();
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(res.headers.get("x-middleware-request-x-lh-org")).toBe("default");
+    expect(res.headers.get("x-middleware-request-x-lh-tenancy")).toBe("single");
+  });
+
+  test("a path scoped to a different org is not passed through", async () => {
+    const res = await get("/orgs/other/account/learning");
+    expect(new URL(rewrite(res)).pathname).toBe("/orgs/default/orgs/other/account/learning");
+  });
+
   test("a signed-in visitor on /signup stays on the join screen", async () => {
     const res = await get("/signup", "LH_session=1");
     expect(location(res)).toBeNull();
     expect(new URL(rewrite(res)).pathname).toBe("/auth/signup");
+  });
+
+  test("an internally rewritten auth page continues with tenant context", async () => {
+    const res = await get("/auth/login");
+    expect(rewrite(res)).toBeNull();
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+    expect(res.headers.get("x-middleware-request-x-lh-org")).toBe("default");
+    expect(res.headers.get("x-middleware-request-x-lh-tenancy")).toBe("single");
   });
 
   test("a signed-in visitor on /login goes to the org", async () => {

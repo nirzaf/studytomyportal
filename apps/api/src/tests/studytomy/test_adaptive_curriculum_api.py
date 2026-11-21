@@ -85,6 +85,10 @@ from src.services.studytomy.adaptive_attempt_access import (
 )
 from src.services.studytomy.adaptive_guidance import load_guidance_context
 from src.services.studytomy.adaptive_reports import _authorize_report_release
+from src.services.studytomy.adaptive_retention import (
+    ensure_adaptive_course_deletable,
+    ensure_adaptive_user_deletable,
+)
 from src.services.studytomy.adaptive_teaching import TeachingResult, apply_reviewed_hint
 from src.services.studytomy.assignment_adapter import (
     journal_native_assignment_grade,
@@ -2534,7 +2538,9 @@ async def _exercise_publication(
         f"/api/v1/assignments/{assignment.assignment_uuid}/tasks/{native_task.assignment_task_uuid}",
         headers=author_headers,
     )
-    assert deleted.status_code == 200, deleted.text
+    assert deleted.status_code == 409, deleted.text
+    assert deleted.json()["detail"]["code"] == "MANAGED_ASSESSMENT_SOURCE_RETAINED"
+    assert await db.get(AssignmentTask, native_task.id) is not None
     assert set((await db.execute(history_query)).scalars()) == retained_before
     retirement = await client.post(
         f"{endpoint}/retire",
@@ -2642,7 +2648,10 @@ async def _exercise_practice(
     for protected_path in protected_paths:
         blocked = await client.delete(protected_path, headers=unrelated)
         assert blocked.status_code == 409, blocked.text
-        assert blocked.json()["detail"]["code"] == "ADAPTIVE_SOURCE_IN_USE"
+        assert blocked.json()["detail"]["code"] in {
+            "ADAPTIVE_SOURCE_IN_USE",
+            "MANAGED_ASSESSMENT_SOURCE_RETAINED",
+        }, (protected_path, blocked.json())
     assert (
         await db.get(AssignmentTaskSubmission, saved_native.id)
     ).task_submission == {"answer": "19.25"}
@@ -4942,12 +4951,21 @@ async def _exercise_learner_attempt(
     assert corrected.json()["status"] == "draft"
     assert corrected.json()["digest"] != published_row.digest
     assert corrected.json()["commentary"] is None
+    # Exercise both retention guards directly; the course API reports the earlier
+    # frozen-release guard, while account deletion reports the adaptive guard.
+    for guard, args in (
+        (ensure_adaptive_course_deletable, (org.id, curriculum.owner_course_uuid)),
+        (ensure_adaptive_user_deletable, (learner.id,)),
+    ):
+        with pytest.raises(HTTPException) as adaptive_retained:
+            await guard(db, *args)
+        assert adaptive_retained.value.detail["code"] == "ADAPTIVE_RETENTION_REVIEW_REQUIRED"
     course_delete = await client.delete(
         f"/api/v1/courses/{curriculum.owner_course_uuid}", headers=unrelated
     )
     assert course_delete.status_code == 409, course_delete.text
     assert (
-        course_delete.json()["detail"]["code"] == "ADAPTIVE_RETENTION_REVIEW_REQUIRED"
+        course_delete.json()["detail"]["code"] == "MANAGED_ASSESSMENT_SOURCE_RETAINED"
     )
     account_delete = await client.delete(
         f"/api/v1/users/user_id/{learner.id}", headers=headers

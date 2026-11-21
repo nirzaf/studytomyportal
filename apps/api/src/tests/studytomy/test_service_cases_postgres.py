@@ -1346,15 +1346,36 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
         )
         await db.commit()
         reference = UUID(saved["case_uuid"])
-        assert saved["status"] == "assigned"
-        for denied_actor in (lead_actor, approver_actor, reporter_actor):
+        assert saved["status"] == "acknowledged"
+        triage_reference = uuid4()
+        triaged = await cases.record_safeguarding_triage(
+            db, org, backup_actor, reference,
+            expected_version=1,
+            verification_reference=triage_reference,
+            subject_user_uuids=[lead.user_uuid],
+        )
+        await db.commit()
+        assert (triaged.status, triaged.owner_user_id, triaged.version) == ("acknowledged", None, 2)
+        triage_event = (await db.exec(select(StudyBusinessEvent).where(
+            StudyBusinessEvent.org_id == org.id,
+            StudyBusinessEvent.resource_uuid == str(reference),
+            StudyBusinessEvent.action == "studytomy.safeguarding.record_triage",
+        ))).one()
+        assert triage_event.after_state == {
+            "version": 2, "evidence_reference": str(triage_reference),
+        }
+        for denied_actor in (lead_actor, backup_actor, approver_actor, reporter_actor):
             with pytest.raises(HTTPException) as denied:
                 await cases.read_safeguarding_narrative(db, org, denied_actor, reference)
             assert denied.value.status_code == 404
 
-        case = await cases.require_safeguarding_case_review(db, org, backup_actor, reference)
-        assert case.owner_user_id == backup.id
-        assert await cases.read_safeguarding_narrative(db, org, backup_actor, reference) == "Synthetic safeguarding evidence"
+        with pytest.raises(HTTPException) as no_independent_reviewer:
+            await cases.require_safeguarding_case_review(db, org, backup_actor, reference)
+        assert no_independent_reviewer.value.status_code == 404
+        retained_case = (await db.exec(select(StudyServiceCase).where(
+            StudyServiceCase.org_id == org.id, StudyServiceCase.case_uuid == str(reference),
+        ))).one()
+        assert (retained_case.status, retained_case.owner_user_id) == ("acknowledged", None)
 
         with pytest.raises(HTTPException) as no_retention_scope:
             await safeguarding_retention_inventory(db, org, approver_actor, reference)
@@ -1376,7 +1397,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
         await db.flush()
         inventory = await safeguarding_retention_inventory(db, org, approver_actor, reference)
         assert inventory.model_dump(mode="json") == {
-            "case_uuid": str(reference), "case_status": "assigned", "active_holds": [],
+            "case_uuid": str(reference), "case_status": "acknowledged", "active_holds": [],
             "categories": [{"category": "synthetic", "narrative_records": 1, "file_records": 1}],
         }
         with pytest.raises(HTTPException) as no_narrative_access:
@@ -1408,5 +1429,5 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
         with pytest.raises(HTTPException) as ended:
             await cases.read_safeguarding_narrative(db, org, backup_actor, reference)
         assert ended.value.status_code == 404
-        assert await cases.get_own_safeguarding_report_status(db, org, reporter_actor, reference) == "assigned"
+        assert await cases.get_own_safeguarding_report_status(db, org, reporter_actor, reference) == "acknowledged"
         await db.rollback()

@@ -75,6 +75,11 @@ def test_build_model_ollama_needs_no_key(monkeypatch):
 def test_build_model_bedrock_needs_no_api_key(monkeypatch):
     # Bedrock uses the standard AWS credential chain + region (not LEARNHOUSE_AI_API_KEY).
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    # Synthetic environment credentials keep model construction offline and
+    # avoid invoking optional login/instance-metadata credential providers.
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test-access-key")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test-secret-key")
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
     _patch_ai_config(monkeypatch, provider="bedrock", api_key=None)
     model = build_model("anthropic.claude-sonnet-4-5-20250929-v1:0")
     assert type(model).__name__ == "BedrockConverseModel"

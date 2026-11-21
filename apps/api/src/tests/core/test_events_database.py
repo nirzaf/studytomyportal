@@ -592,3 +592,27 @@ def test_pooler_url_uses_small_pool_and_logs(monkeypatch, caplog):
 
     assert received_kwargs.get("pool_size") == 5
     assert "connection pooler" in caplog.text
+
+
+def test_pgbouncer_uses_unnamed_prepared_statements_and_bounded_pool(monkeypatch):
+    received_kwargs = {}
+
+    def capture_engine(url, *args, **kwargs):
+        received_kwargs.update(kwargs)
+
+        class _FakeSyncEngine:
+            pass
+
+        class _E:
+            sync_engine = _FakeSyncEngine()
+
+        return _E()
+
+    _reload_with_url(monkeypatch, "postgresql://user:pw@pgbouncer:6432/db", capture_engine)
+
+    assert received_kwargs["pool_size"] == 5
+    assert received_kwargs["max_overflow"] == 10
+    connect_args = received_kwargs["connect_args"]
+    assert connect_args["statement_cache_size"] == 0
+    assert connect_args["prepared_statement_cache_size"] == 0
+    assert connect_args["prepared_statement_name_func"]() == ""

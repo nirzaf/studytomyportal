@@ -1,15 +1,13 @@
 """
-``DELETE /auth/logout`` must revoke server-side sessions whenever it can name
-the user, whether from the access token or from the refresh cookie.
+``DELETE /auth/logout`` must durably advance the user's session generation
+whenever it can identify the user, whether from the access token or refresh cookie.
 
-It used to accept the access credential only. A caller presenting just the
-refresh cookie got a 401, ``revoke_user_sessions_before`` never ran, and the
-logout degraded to clearing cookies in the browser while every issued token
-stayed live until natural expiry. Nothing failed loudly. These tests pin the
-behaviour to the backend so it cannot regress on a client-side change.
+These tests pin access-cookie, refresh-cookie, malformed-access fallback and
+unauthenticated behavior to the backend so logout cannot regress into only
+clearing cookies in the browser.
 """
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException, Response
@@ -44,10 +42,12 @@ async def test_logout_revokes_with_access_cookie_only(db, admin_user):
         **{JWT_COOKIE_NAME: create_access_token({"sub": admin_user.email})}
     )
 
-    with patch("src.routers.auth.revoke_user_sessions_before") as revoke:
+    with patch(
+        "src.routers.auth.advance_session_generation", new_callable=AsyncMock
+    ) as advance:
         await logout(request, Response(), db)
 
-    revoke.assert_called_once_with(admin_user.id)
+    advance.assert_awaited_once_with(db, admin_user.id)
 
 
 @pytest.mark.asyncio
@@ -57,10 +57,12 @@ async def test_logout_revokes_with_refresh_cookie_only(db, admin_user):
         **{JWT_REFRESH_COOKIE_NAME: create_refresh_token({"sub": admin_user.email})}
     )
 
-    with patch("src.routers.auth.revoke_user_sessions_before") as revoke:
+    with patch(
+        "src.routers.auth.advance_session_generation", new_callable=AsyncMock
+    ) as advance:
         await logout(request, Response(), db)
 
-    revoke.assert_called_once_with(admin_user.id)
+    advance.assert_awaited_once_with(db, admin_user.id)
 
 
 @pytest.mark.asyncio
@@ -72,10 +74,12 @@ async def test_logout_revokes_with_both_cookies(db, admin_user):
         }
     )
 
-    with patch("src.routers.auth.revoke_user_sessions_before") as revoke:
+    with patch(
+        "src.routers.auth.advance_session_generation", new_callable=AsyncMock
+    ) as advance:
         await logout(request, Response(), db)
 
-    revoke.assert_called_once_with(admin_user.id)
+    advance.assert_awaited_once_with(db, admin_user.id)
 
 
 @pytest.mark.asyncio
@@ -90,17 +94,21 @@ async def test_logout_falls_back_to_refresh_when_access_token_is_junk(db, admin_
         }
     )
 
-    with patch("src.routers.auth.revoke_user_sessions_before") as revoke:
+    with patch(
+        "src.routers.auth.advance_session_generation", new_callable=AsyncMock
+    ) as advance:
         await logout(request, Response(), db)
 
-    revoke.assert_called_once_with(admin_user.id)
+    advance.assert_awaited_once_with(db, admin_user.id)
 
 
 @pytest.mark.asyncio
 async def test_logout_without_any_credential_is_unauthenticated(db):
-    with patch("src.routers.auth.revoke_user_sessions_before") as revoke:
+    with patch(
+        "src.routers.auth.advance_session_generation", new_callable=AsyncMock
+    ) as advance:
         with pytest.raises(HTTPException) as exc:
             await logout(_request_with_cookies(), Response(), db)
 
     assert exc.value.status_code == 401
-    revoke.assert_not_called()
+    advance.assert_not_awaited()

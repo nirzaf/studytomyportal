@@ -5,6 +5,8 @@ Evidence snapshot: 2026-11-17. Inspected local `main` at `4f3346af99b516bab2d422
 > [!NOTE]
 > **Re-verified 2026-11-20 at `ef6b730d`** (dirty worktree: ten in-flight `apps/cli` files plus `POSTGRESQL-19-UPGRADE.md`). The stack map still holds; three things moved. Alembic reports a single head `b7c2e9a4d1f0` (137 revision files). The committed CLI default database image is now `pgvector/pgvector:0.8.7-pg19` (`apps/cli/src/constants.ts:10`), while the local runbook containers still request `pg16`. The web `lint` script no longer masks ESLint's exit code. Line-number links in the tables below remain 2026-11-17 worktree references and have shifted since (for example the Studytomy router mounts begin near `router.py:72`, the native grade finalizer is `assignments.py:4186`, and `search_course_content` is `query_service.py:45`); re-verify before citing one as current. Full sweep numbers: [local verification log](LOCAL-VERIFICATION.md).
 
+> **Database follow-up 2026-11-21:** The ALE runbook's fresh test container now uses the same pinned PostgreSQL 19/pgvector image as the CLI. A separate CLI-generated PG19 database and a synthetic PostgreSQL 16-to-19 restore were verified with persistent named volumes; neither result attests to a hosted database. The earlier PostgreSQL 16 checks below remain historical. See [upgrade and recovery evidence](POSTGRESQL-19-UPGRADE.md) and [the local verification log](LOCAL-VERIFICATION.md).
+
 ## 1. Purpose, provenance and status vocabulary
 
 One educator-led platform connects learner courses, native assignments, adaptive guidance, teacher/admin authoring and authorized guardian reports. It extends LearnHouse Community Edition; the legacy public website is a separate application. This guide expands the three conceptual views in the user-approved **Studytomy-Conceptual-Architecture.pdf** with current technical evidence and explicit implementation boundaries.
@@ -44,7 +46,7 @@ Versions below are manifest declarations unless explicitly marked observed runti
 | Web data/editor | TanStack React Query `^5.106.1` (not a replacement framework), Tiptap `3.32.3`, Yjs `^13.6.33`, Hocuspocus provider `^4.8.0`; web manifest |
 | Web package manager | `bun@1.4.4` declared by web manifest |
 | API | Python `>=3.14.7,<3.14.8`, FastAPI `0.162.0`, Pydantic `2.14.3`, SQLModel `0.0.44`, Uvicorn `0.54.0`; `apps/api/pyproject.toml` |
-| Database/migrations | PostgreSQL **16.16 observed locally**; Alembic `1.20.1`, asyncpg `0.32.0`, psycopg2-binary `2.9.13` declared |
+| Database/migrations | PostgreSQL **16.16 observed in earlier local checks** and **19.0 observed in an isolated 2026-11-21 upgrade test**; Alembic `1.20.1`, asyncpg `0.32.0`, psycopg2-binary `2.9.13` declared |
 | Vector retrieval | PostgreSQL vector extension **0.8.7 observed locally**; Python pgvector `0.5.1`; `Vector(768)` and cosine HNSW |
 | AI/source processing | Pydantic AI slim `2.66.0`, google-genai `2.34.0`, pypdf `6.21.4`, tiktoken `0.14.0` |
 | MCP | SDK `mcp==2.3.0`; existing native MCP service, not a greenfield server |
