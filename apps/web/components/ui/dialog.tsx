@@ -109,8 +109,8 @@ const SheetHandle = ({ contentRef }: { contentRef: React.RefObject<HTMLDivElemen
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => {
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideCloseButton?: boolean }
+>(({ className, children, hideCloseButton, ...props }, ref) => {
   const contentRef = React.useRef<HTMLDivElement | null>(null)
   const setRefs = React.useCallback(
     (node: HTMLDivElement | null) => {
@@ -157,7 +157,7 @@ const DialogContent = React.forwardRef<
     >
       <SheetHandle contentRef={contentRef} />
       {children}
-      <DialogCloseButton />
+      {!hideCloseButton && <DialogCloseButton />}
     </DialogPrimitive.Content>
   </DialogPortal>
   )

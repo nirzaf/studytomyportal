@@ -47,9 +47,26 @@ services:
       timeout: 4s
       retries: 5
 
+  rustfs:
+    image: rustfs/rustfs:1.0.5
+    container_name: learnhouse-rustfs-dev-pg19
+    restart: unless-stopped
+    command: ["/data"]
+    environment:
+      - RUSTFS_ACCESS_KEY=learnhouse
+      - RUSTFS_SECRET_KEY=learnhouse
+      - RUSTFS_VOLUMES=/data
+      - RUSTFS_CONSOLE_ENABLE=true
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - learnhouse_rustfs_dev_pg19_data:/data
+
 volumes:
   learnhouse_db_dev_pg19_data:
   learnhouse_redis_dev_pg19_data:
+  learnhouse_rustfs_dev_pg19_data:
 `
 
 function findProjectRoot(): string | null {
@@ -168,7 +185,11 @@ function isContainerRunning(name: string): boolean {
 }
 
 function isInfraRunning(): boolean {
-  return isContainerRunning('learnhouse-db-dev-pg19') && isContainerRunning('learnhouse-redis-dev-pg19')
+  return (
+    isContainerRunning('learnhouse-db-dev-pg19') &&
+    isContainerRunning('learnhouse-redis-dev-pg19') &&
+    isContainerRunning('learnhouse-rustfs-dev-pg19')
+  )
 }
 
 let serviceEnv: Record<string, string> = {}
@@ -423,6 +444,14 @@ export async function devCommand(opts: { ee?: boolean; adminEmail?: string; admi
     LEARNHOUSE_SQL_CONNECTION_STRING: 'postgresql://learnhouse:learnhouse@127.0.0.1:5433/learnhouse',
     LEARNHOUSE_REDIS_CONNECTION_STRING: 'redis://127.0.0.1:6380/learnhouse',
     LEARNHOUSE_REDIS_URL: 'redis://127.0.0.1:6380',
+    // Self-hosted local RustFS S3-compatible blob storage for course assets,
+    // AI-generated media, student submissions, and drafts.
+    LEARNHOUSE_CONTENT_DELIVERY_TYPE: process.env.LEARNHOUSE_CONTENT_DELIVERY_TYPE || 's3api',
+    LEARNHOUSE_S3_API_ENDPOINT_URL: process.env.LEARNHOUSE_S3_API_ENDPOINT_URL || 'http://127.0.0.1:9000',
+    LEARNHOUSE_S3_API_BUCKET_NAME: process.env.LEARNHOUSE_S3_API_BUCKET_NAME || 'learnhouse-media',
+    LEARNHOUSE_S3_API_ACCESS_KEY_ID: process.env.LEARNHOUSE_S3_API_ACCESS_KEY_ID || 'learnhouse',
+    LEARNHOUSE_S3_API_SECRET_ACCESS_KEY: process.env.LEARNHOUSE_S3_API_SECRET_ACCESS_KEY || 'learnhouse',
+    LEARNHOUSE_S3_API_REGION: process.env.LEARNHOUSE_S3_API_REGION || 'us-east-1',
   }
 
   // Health checks

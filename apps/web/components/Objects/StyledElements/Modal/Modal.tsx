@@ -19,6 +19,11 @@ type ModalParams = {
   customHeight?: string
   customWidth?: string
   noPadding?: boolean
+  /**
+   * Ignore outside clicks and Escape, and hide the corner close button, so the
+   * only way out is an action inside the content (e.g. "Save & Close").
+   */
+  preventAccidentalClose?: boolean
 }
 
 const Modal = (params: ModalParams) => {
@@ -50,7 +55,12 @@ const Modal = (params: ModalParams) => {
       {params.dialogTrigger && (
         <DialogTrigger asChild>{params.dialogTrigger}</DialogTrigger>
       )}
-      <DialogContent className={cn(
+      <DialogContent
+        hideCloseButton={params.preventAccidentalClose}
+        onPointerDownOutside={params.preventAccidentalClose ? (e) => e.preventDefault() : undefined}
+        onInteractOutside={params.preventAccidentalClose ? (e) => e.preventDefault() : undefined}
+        onEscapeKeyDown={params.preventAccidentalClose ? (e) => e.preventDefault() : undefined}
+        className={cn(
         "flex flex-col",
         "w-[95vw] max-w-[95vw]",
         "max-h-[90vh]",

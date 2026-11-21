@@ -395,6 +395,7 @@ async def api_create_course(
     about: str = Form(),
     thumbnail_type: ThumbnailType = Form(default=ThumbnailType.IMAGE),
     extra_metadata: Optional[str] = Form(default=None),
+    creation_draft_uuid: Optional[str] = Form(default=None),
     current_user: PublicUser = Depends(get_current_user),
     db_session: AsyncSession = Depends(get_db_session),
     thumbnail: UploadFile | None = None,
@@ -426,7 +427,14 @@ async def api_create_course(
         extra_metadata=parsed_metadata,
     )
     return await create_course(
-        request, org_id, course, current_user, db_session, thumbnail, thumbnail_type
+        request,
+        org_id,
+        course,
+        current_user,
+        db_session,
+        thumbnail,
+        thumbnail_type,
+        creation_draft_uuid=creation_draft_uuid,
     )
 
 

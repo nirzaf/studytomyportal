@@ -10,7 +10,7 @@ import * as Form from '@radix-ui/react-form'
 import { createNewCourse } from '@services/courses/courses'
 import { createChapter } from '@services/courses/chapters'
 import { getOrganizationContextInfoWithoutCredentials } from '@services/organizations/orgs'
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { BarLoader } from 'react-spinners'
 import { revalidateTags } from '@services/utils/ts/requests'
 import { useRouter } from 'next/navigation'
@@ -20,12 +20,29 @@ import { useLHSession } from '@components/Contexts/LHSessionContext'
 import toast from 'react-hot-toast'
 import { useFormik } from 'formik'
 import * as Yup from 'yup'
-import {  UploadCloud, Clipboard } from 'lucide-react'
+import { UploadCloud, Clipboard } from 'lucide-react'
 import AIImageButton from '@components/Objects/AI/AIImageButton'
 import FormTagInput from "@components/Objects/StyledElements/Form/TagInput"
 import { useTranslation } from "react-i18next"
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 import { useUpgradeModal } from '@components/Dashboard/Shared/PlanRestricted/UpgradeModalContext'
+import {
+  CourseDraftSync,
+  draftFieldsOf,
+  isBlankDraft,
+  sameDraftFields,
+  type CourseDraft,
+  type DraftFields,
+  type SyncState,
+} from '@/lib/courses/courseDraftSync'
+import {
+  createCourseDraftApi,
+  deleteCourseDraft,
+  fetchCourseDraftThumbnail,
+  getCourseDraft,
+} from '@services/courses/courseDrafts'
+
+const BLANK_FIELDS: DraftFields = { name: '', description: '', learnings: '', tags: '', public: true }
 
 const _validationSchema = Yup.object().shape({
   name: Yup.string()
@@ -49,6 +66,21 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
   const [isUploading, setIsUploading] = React.useState(false)
   // A free org that hits its course limit gets the shared upgrade paywall.
   const { handlePlanLimit } = useUpgradeModal()
+
+  // --- Server-persisted draft (see lib/courses/courseDraftSync.ts) ---
+  const tokenRef = useRef<string | undefined>(undefined)
+  tokenRef.current = session.data?.tokens?.access_token
+  const syncRef = useRef<CourseDraftSync | null>(null)
+  const resumeGuard = useRef<DraftFields | null>(null)
+  const submitLock = useRef(false)
+  const finishedRef = useRef(false)
+  const [syncState, setSyncState] = React.useState<SyncState>({ status: 'idle', error: null, conflictDraft: null })
+  const [phase, setPhase] = React.useState<'loading' | 'choose' | 'editing' | 'load_error'>('loading')
+  const [savedDraft, setSavedDraft] = React.useState<CourseDraft | null>(null)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [confirmDiscard, setConfirmDiscard] = React.useState(false)
+  const [closing, setClosing] = React.useState(false)
+  const [closeBlocked, setCloseBlocked] = React.useState(false)
 
   const validationSchema = Yup.object().shape({
     name: Yup.string()
@@ -74,6 +106,12 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
     },
     validationSchema,
     onSubmit: async (values, { setSubmitting }) => {
+      // Exactly one create request: ignore re-submits while one is running.
+      if (submitLock.current) return
+      submitLock.current = true
+      let created = false
+      // Stop autosave so no draft write can land after the draft is discarded.
+      await syncRef.current?.pause()
       const toast_loading = toast.loading(t('courses.creating_course'))
 
       try {
@@ -87,10 +125,17 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
             visibility: values.visibility
           },
           values.thumbnail,
-          session.data?.tokens?.access_token
+          session.data?.tokens?.access_token,
+          syncRef.current?.currentDraftUuid()
         )
 
         if (res.success) {
+          created = true
+          finishedRef.current = true
+          // The course exists now: discard the draft (retry once; a leftover
+          // draft is harmless and can be discarded from the resume prompt).
+          const discard = await deleteCourseDraft(orgId, null, tokenRef.current)
+          if (!discard.ok) await deleteCourseDraft(orgId, null, tokenRef.current)
           const thumbnailFile = values.thumbnail as File | null
           track(AnalyticsEvent.CourseCreated, {
             thumbnail_source: thumbnailFile
@@ -150,9 +195,172 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
         toast.error(t('courses.failed_to_create_course'))
       } finally {
         setSubmitting(false)
+        if (!created) {
+          // Validation/network/server failure: keep the draft and keep autosaving.
+          submitLock.current = false
+          syncRef.current?.resume()
+        }
       }
     }
   })
+
+  const thumbnail = formik.values.thumbnail as File | null
+  const thumbnailUrl = useMemo(() => (thumbnail ? URL.createObjectURL(thumbnail) : null), [thumbnail])
+  useEffect(() => {
+    return () => {
+      if (thumbnailUrl) URL.revokeObjectURL(thumbnailUrl)
+    }
+  }, [thumbnailUrl])
+
+  const applyFields = (fields: DraftFields) => {
+    resumeGuard.current = fields
+    formik.setValues(
+      {
+        name: fields.name,
+        description: fields.description,
+        learnings: fields.learnings,
+        tags: fields.tags,
+        visibility: fields.public,
+        thumbnail: null,
+      },
+      false
+    )
+  }
+
+  const applyDraft = async (draft: CourseDraft) => {
+    applyFields(draftFieldsOf(draft))
+    if (!draft.has_thumbnail) return
+    try {
+      const file = await fetchCourseDraftThumbnail(orgId, tokenRef.current)
+      if (file) formik.setFieldValue('thumbnail', file, false)
+    } catch (_e) {
+      toast.error(
+        t('courses.draft_thumbnail_restore_failed', {
+          defaultValue: 'The saved thumbnail could not be loaded. Please add it again.',
+        })
+      )
+    }
+  }
+
+  const loadDraft = React.useCallback(async () => {
+    setPhase('loading')
+    setLoadError(null)
+    const result = await getCourseDraft(orgId, tokenRef.current)
+    if (!result.ok) {
+      setLoadError(result.error)
+      setPhase('load_error')
+      return
+    }
+    syncRef.current?.hydrate(result.draft)
+    setSavedDraft(result.draft)
+    if (!result.draft) {
+      setPhase('editing')
+    } else if (isBlankDraft(result.draft)) {
+      await applyDraft(result.draft)
+      setPhase('editing')
+    } else {
+      setPhase('choose')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId])
+
+  useEffect(() => {
+    if (!orgId) return
+    const sync = new CourseDraftSync(createCourseDraftApi(orgId, () => tokenRef.current), setSyncState)
+    syncRef.current = sync
+    void loadDraft()
+    return () => {
+      sync.detach()
+      syncRef.current = null
+    }
+  }, [orgId, loadDraft])
+
+  const { name: vName, description: vDescription, learnings: vLearnings, tags: vTags, visibility: vVisibility } = formik.values
+  useEffect(() => {
+    if (phase !== 'editing') return
+    const fields: DraftFields = {
+      name: vName,
+      description: vDescription,
+      learnings: vLearnings,
+      tags: vTags,
+      public: vVisibility,
+    }
+    if (resumeGuard.current) {
+      if (!sameDraftFields(fields, resumeGuard.current)) return
+      resumeGuard.current = null
+    }
+    syncRef.current?.schedule(fields)
+  }, [phase, vName, vDescription, vLearnings, vTags, vVisibility])
+
+  useEffect(() => {
+    const handler = (event: BeforeUnloadEvent) => {
+      if (!finishedRef.current && syncRef.current?.hasUnsaved()) {
+        event.preventDefault()
+        event.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
+
+  const setThumbnail = (file: File) => {
+    formik.setFieldValue('thumbnail', file)
+    syncRef.current?.setThumbnail(file)
+  }
+
+  const handleResume = async () => {
+    if (!savedDraft) return
+    await applyDraft(savedDraft)
+    setPhase('editing')
+  }
+
+  const handleStartNew = async () => {
+    if (!savedDraft) return
+    if (!confirmDiscard) {
+      setConfirmDiscard(true)
+      return
+    }
+    const result = await deleteCourseDraft(orgId, savedDraft.revision, tokenRef.current)
+    setConfirmDiscard(false)
+    if (result.ok) {
+      syncRef.current?.hydrate(null)
+      setSavedDraft(null)
+      applyFields(BLANK_FIELDS)
+      setPhase('editing')
+    } else if (result.conflict) {
+      toast.error(t('courses.draft_changed_elsewhere', { defaultValue: 'This draft was changed in another tab. Review it before deciding.' }))
+      syncRef.current?.hydrate(result.current ?? null)
+      setSavedDraft(result.current ?? null)
+      if (!result.current) setPhase('editing')
+    } else {
+      toast.error(result.error || t('courses.draft_discard_failed', { defaultValue: 'Could not discard the draft. Try again.' }))
+    }
+  }
+
+  const handleSaveAndClose = async () => {
+    setClosing(true)
+    setCloseBlocked(false)
+    const ok = (await syncRef.current?.flush()) ?? true
+    setClosing(false)
+    if (ok) closeModal()
+    else setCloseBlocked(true)
+  }
+
+  const handleReloadLatest = async () => {
+    const latest = syncRef.current?.resolveConflict('reload') ?? null
+    if (latest) {
+      await applyDraft(latest)
+      setSavedDraft(latest)
+    } else {
+      syncRef.current?.schedule({
+        name: formik.values.name,
+        description: formik.values.description,
+        learnings: formik.values.learnings,
+        tags: formik.values.tags,
+        public: formik.values.visibility,
+      })
+    }
+  }
 
   const getOrgMetadata = async () => {
     const org = await getOrganizationContextInfoWithoutCredentials(orgslug, {
@@ -171,7 +379,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      formik.setFieldValue('thumbnail', file)
+      setThumbnail(file)
     }
   }
 
@@ -181,7 +389,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
       const response = await fetch(imageUrl)
       const blob = await response.blob()
       const file = new File([blob], 'ai_image.jpg', { type: 'image/jpeg' })
-      formik.setFieldValue('thumbnail', file)
+      setThumbnail(file)
     } catch (_error) {
       toast.error(t('courses.create.generated_image_failed'))
     }
@@ -189,7 +397,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
   }
 
   const handleAIImageFile = async (file: File) => {
-    formik.setFieldValue('thumbnail', file)
+    setThumbnail(file)
   }
 
   const handlePasteFromClipboard = async () => {
@@ -200,8 +408,6 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
         if (imageTypes.length > 0) {
           const imageType = imageTypes[0]
           const blob = await clipboardItem.getType(imageType)
-          // The API derives the stored extension from the filename, so it must
-          // match the blob's actual type (browsers may hand back jpeg/webp/gif).
           const extensionByType: Record<string, string> = {
             'image/jpeg': 'jpg',
             'image/png': 'png',
@@ -210,7 +416,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
           }
           const extension = extensionByType[imageType] ?? 'png'
           const file = new File([blob], `clipboard_image.${extension}`, { type: imageType })
-          formik.setFieldValue('thumbnail', file)
+          setThumbnail(file)
           return
         }
       }
@@ -220,8 +426,89 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
     }
   }
 
+  if (phase !== 'editing') {
+    return (
+      <div className="flex flex-col gap-4" data-testid="course-draft-gate">
+        {phase === 'loading' && (
+          <p role="status" className="text-sm text-gray-500">
+            {t('courses.draft_loading', { defaultValue: 'Checking for a saved draft...' })}
+          </p>
+        )}
+        {phase === 'load_error' && (
+          <>
+            <p role="alert" className="text-sm text-red-600">
+              {t('courses.draft_load_failed', { defaultValue: 'Could not load your saved draft.' })}
+              {loadError ? ` (${loadError})` : ''}
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => void loadDraft()} className="px-4 py-2 bg-black text-white text-sm font-bold rounded-md">
+                {t('courses.draft_retry', { defaultValue: 'Retry' })}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPhase('editing')}
+                className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md"
+              >
+                {t('courses.draft_continue_without', { defaultValue: 'Continue without loading' })}
+              </button>
+              <button type="button" onClick={closeModal} className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md">
+                {t('common.close', { defaultValue: 'Close' })}
+              </button>
+            </div>
+          </>
+        )}
+        {phase === 'choose' && savedDraft && (
+          <>
+            <div className="rounded-md bg-gray-50 outline outline-1 outline-gray-200 p-4">
+              <p className="text-sm font-bold">
+                {t('courses.draft_found', { defaultValue: 'You have an unfinished course draft.' })}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                {savedDraft.name || t('courses.draft_untitled', { defaultValue: 'Untitled course' })}
+                {' · '}
+                {t('courses.draft_last_saved', { defaultValue: 'last saved' })}{' '}
+                {new Date(savedDraft.updated_at).toLocaleString()}
+              </p>
+              {confirmDiscard && (
+                <p role="alert" className="text-sm text-red-600 mt-2">
+                  {t('courses.draft_discard_warning', {
+                    defaultValue: 'Starting new permanently discards this saved draft. Click again to confirm.',
+                  })}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={closeModal} className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md">
+                {t('common.close', { defaultValue: 'Close' })}
+              </button>
+              <button type="button" onClick={() => void handleStartNew()} className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md">
+                {confirmDiscard
+                  ? t('courses.draft_confirm_start_new', { defaultValue: 'Discard & Start New' })
+                  : t('courses.draft_start_new', { defaultValue: 'Start New' })}
+              </button>
+              <button type="button" onClick={() => void handleResume()} className="px-4 py-2 bg-black text-white text-sm font-bold rounded-md">
+                {t('courses.draft_resume', { defaultValue: 'Resume Draft' })}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const statusLabel =
+    syncState.status === 'saving'
+      ? t('courses.draft_saving', { defaultValue: 'Saving...' })
+      : syncState.status === 'saved'
+        ? t('courses.draft_saved', { defaultValue: 'Saved' })
+        : syncState.status === 'error'
+          ? t('courses.draft_save_failed', { defaultValue: 'Save failed' })
+          : syncState.status === 'conflict'
+            ? t('courses.draft_conflict_label', { defaultValue: 'Not saved: draft changed elsewhere' })
+            : ''
+
   return (
-    <FormLayout onSubmit={formik.handleSubmit} >
+    <FormLayout onSubmit={formik.handleSubmit}>
       <FormField name="name">
         <FormLabelAndMessage
           label={t('courses.course_name')}
@@ -261,12 +548,14 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
             <div className="flex flex-col justify-center items-center">
               {formik.values.thumbnail ? (
                 <img
-                  src={URL.createObjectURL(formik.values.thumbnail)}
+                  src={thumbnailUrl ?? '/empty_thumbnail.png'}
+                  alt=""
                   className={`${isUploading ? 'animate-pulse' : ''} shadow-sm w-[200px] h-[100px] rounded-md object-cover`}
                 />
               ) : (
                 <img
                   src="/empty_thumbnail.png"
+                  alt=""
                   className="shadow-sm w-[200px] h-[100px] rounded-md bg-gray-200 object-cover"
                 />
               )}
@@ -305,31 +594,31 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
         </div>
       </FormField>
 
-			<FormField name="learnings">
-				<FormLabelAndMessage
-					label={t('courses.course_learnings')}
-					message={formik.errors.learnings}
-				/>
-				<FormTagInput
-					placeholder={t('courses.enter_to_add')}
-					value={formik.values.learnings}
-					onChange={(value) => formik.setFieldValue('learnings', value)}
-					error={formik.errors.learnings}
-				/>
-			</FormField>
+      <FormField name="learnings">
+        <FormLabelAndMessage
+          label={t('courses.course_learnings')}
+          message={formik.errors.learnings}
+        />
+        <FormTagInput
+          placeholder={t('courses.enter_to_add')}
+          value={formik.values.learnings}
+          onChange={(value) => formik.setFieldValue('learnings', value)}
+          error={formik.errors.learnings}
+        />
+      </FormField>
 
-			<FormField name="tags">
-				<FormLabelAndMessage
-					label={t('courses.course_tags')}
-					message={formik.errors.tags}
-				/>
-				<FormTagInput
-					placeholder={t('courses.enter_to_add')}
-					value={formik.values.tags}
-					onChange={(value) => formik.setFieldValue('tags', value)}
-					error={formik.errors.tags}
-				/>
-			</FormField>
+      <FormField name="tags">
+        <FormLabelAndMessage
+          label={t('courses.course_tags')}
+          message={formik.errors.tags}
+        />
+        <FormTagInput
+          placeholder={t('courses.enter_to_add')}
+          value={formik.values.tags}
+          onChange={(value) => formik.setFieldValue('tags', value)}
+          error={formik.errors.tags}
+        />
+      </FormField>
 
       <FormField name="visibility">
         <FormLabelAndMessage
@@ -350,22 +639,82 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
         </Select>
       </FormField>
 
-      <div className="flex justify-end mt-6">
-        <button
-          type="submit"
-          disabled={formik.isSubmitting}
-          className="px-4 py-2 bg-black text-white text-sm font-bold rounded-md"
-        >
-          {formik.isSubmitting ? (
-            <BarLoader
-              cssOverride={{ borderRadius: 60 }}
-              width={60}
-              color="#ffffff"
-            />
-          ) : (
-            t('courses.create_course_btn')
-          )}
-        </button>
+      {syncState.status === 'conflict' && (
+        <div role="alert" className="mt-4 rounded-md bg-amber-50 outline outline-1 outline-amber-300 p-3 text-sm">
+          <p>
+            {t('courses.draft_conflict', {
+              defaultValue: 'This draft was changed in another tab or device, so your latest edits were not saved.',
+            })}
+          </p>
+          <div className="flex flex-wrap gap-2 mt-2">
+            <button type="button" onClick={() => void handleReloadLatest()} className="px-3 py-1 border border-gray-300 font-bold rounded-md">
+              {t('courses.draft_load_latest', { defaultValue: 'Load latest draft' })}
+            </button>
+            <button
+              type="button"
+              onClick={() => syncRef.current?.resolveConflict('overwrite')}
+              className="px-3 py-1 border border-gray-300 font-bold rounded-md"
+            >
+              {t('courses.draft_keep_mine', { defaultValue: 'Keep my version' })}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {(closeBlocked || syncState.status === 'error') && (
+        <div role="alert" className="mt-4 rounded-md bg-red-50 outline outline-1 outline-red-200 p-3 text-sm text-red-700">
+          <p>
+            {closeBlocked
+              ? t('courses.draft_close_blocked', {
+                  defaultValue: 'Your latest changes are not saved yet, so the form was kept open.',
+                })
+              : t('courses.draft_save_failed_detail', { defaultValue: 'Your draft could not be saved.' })}
+            {syncState.error ? ` (${syncState.error})` : ''}
+          </p>
+          <div className="flex flex-wrap gap-2 mt-2">
+            <button type="button" onClick={() => void syncRef.current?.flush()} className="px-3 py-1 border border-red-300 font-bold rounded-md">
+              {t('courses.draft_retry', { defaultValue: 'Retry' })}
+            </button>
+            {closeBlocked && (
+              <button type="button" onClick={closeModal} className="px-3 py-1 border border-red-300 font-bold rounded-md">
+                {t('courses.draft_close_anyway', { defaultValue: 'Close without saving' })}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3 mt-6">
+        <span role="status" aria-live="polite" data-testid="draft-status" className="text-xs text-gray-500">
+          {statusLabel}
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void handleSaveAndClose()}
+            disabled={closing || formik.isSubmitting}
+            className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md"
+          >
+            {closing
+              ? t('courses.draft_saving', { defaultValue: 'Saving...' })
+              : t('courses.draft_save_and_close', { defaultValue: 'Save & Close' })}
+          </button>
+          <button
+            type="submit"
+            disabled={formik.isSubmitting}
+            className="px-4 py-2 bg-black text-white text-sm font-bold rounded-md"
+          >
+            {formik.isSubmitting ? (
+              <BarLoader
+                cssOverride={{ borderRadius: 60 }}
+                width={60}
+                color="#ffffff"
+              />
+            ) : (
+              t('courses.create_course_btn')
+            )}
+          </button>
+        </div>
       </div>
     </FormLayout>
   )

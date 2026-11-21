@@ -80,23 +80,33 @@ def get_storage_client():
         if _s3_client is not None:
             return _s3_client
         learnhouse_config = get_learnhouse_config()
+        s3api = learnhouse_config.hosting_config.content_delivery.s3api
         # Cloudflare R2 requires SigV4 and the "auto" region; without this,
         # botocore falls back to SigV2 for presigned URLs (the legacy
         # AWSAccessKeyId/Signature/Expires form), which R2 rejects with 401.
-        # Overridable via LEARNHOUSE_S3_API_REGION for real AWS S3 / MinIO, which
-        # validate the region against the endpoint.
-        region = os.environ.get("LEARNHOUSE_S3_API_REGION") or "auto"
-        _s3_client = boto3.client(
-            "s3",
-            endpoint_url=learnhouse_config.hosting_config.content_delivery.s3api.endpoint_url,
-            region_name=region,
-            config=botocore.config.Config(
+        # Overridable via LEARNHOUSE_S3_API_REGION for real AWS S3 / RustFS /
+        # MinIO, which validate the region and require path-style addressing
+        # on loopback/custom endpoints.
+        region = os.environ.get("LEARNHOUSE_S3_API_REGION") or (
+            "us-east-1" if getattr(s3api, "access_key_id", None) else "auto"
+        )
+        client_kwargs = {
+            "endpoint_url": s3api.endpoint_url,
+            "region_name": region,
+            "config": botocore.config.Config(
                 signature_version="s3v4",
                 connect_timeout=10,
                 read_timeout=60,
                 retries={"max_attempts": 2},
+                s3={"addressing_style": "path"},
             ),
-        )
+        }
+        access_key_id = getattr(s3api, "access_key_id", None)
+        secret_access_key = getattr(s3api, "secret_access_key", None)
+        if access_key_id and secret_access_key:
+            client_kwargs["aws_access_key_id"] = access_key_id
+            client_kwargs["aws_secret_access_key"] = secret_access_key
+        _s3_client = boto3.client("s3", **client_kwargs)
         return _s3_client
 
 

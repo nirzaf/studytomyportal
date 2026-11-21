@@ -102,7 +102,8 @@ export async function createNewCourse(
   org_id: string,
   course_body: any,
   thumbnail: any,
-  access_token: any
+  access_token: any,
+  creation_draft_uuid?: string | null
 ) {
   // Send file thumbnail as form data
   const formData = new FormData()
@@ -115,6 +116,10 @@ export async function createNewCourse(
 
   if (thumbnail) {
     formData.append('thumbnail', thumbnail)
+  }
+
+  if (creation_draft_uuid) {
+    formData.append('creation_draft_uuid', creation_draft_uuid)
   }
 
   const result = await fetch(

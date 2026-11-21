@@ -1,5 +1,5 @@
 from typing import List, Optional
-from sqlalchemy import Boolean, CheckConstraint, Column, Enum as SAEnum, ForeignKey, Index, Integer, false
+from sqlalchemy import Boolean, CheckConstraint, Column, Enum as SAEnum, ForeignKey, Index, Integer, String, false
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 from enum import Enum
@@ -90,6 +90,11 @@ class Course(CourseBase, table=True):
     # Drip content schedule (see db/courses/drip.py). Only written through the
     # course drip schedule endpoint, which checks the plan.
     drip_settings: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    # Idempotency link for converting one saved Create Course draft. Kept out
+    # of public read models; the unique constraint prevents duplicate courses.
+    creation_draft_uuid: Optional[str] = Field(
+        default=None, sa_column=Column(String, unique=True, nullable=True)
+    )
 
 
 class CourseCreate(CourseBase):

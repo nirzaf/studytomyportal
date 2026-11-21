@@ -755,6 +755,7 @@ async def create_course(
     creation_source: str = "manual",
     *,
     transactional_draft: bool = False,
+    creation_draft_uuid: str | None = None,
 ):
     """
     Create a new course
@@ -766,6 +767,7 @@ async def create_course(
     - Course creation is subject to organization limits and permissions
     """
     course = Course.model_validate(course_object)
+    normalized_draft_uuid = creation_draft_uuid.strip() if creation_draft_uuid else None
     if transactional_draft:
         if course.public or course.published or thumbnail_file is not None:
             raise HTTPException(422, "A transactional draft must be private and have no upload.")
@@ -777,6 +779,71 @@ async def create_course(
     await check_resource_access(request, db_session, current_user, "course_x", AccessAction.CREATE)
     # course_x has no org: pin the create right (and membership) to this org.
     await require_org_create_permission(current_user, org_id, db_session, "courses")
+
+    # SECURITY: Make the user the creator of the course
+    # For API tokens, use the user who created the token as the author
+    if isinstance(current_user, APITokenUser):
+        author_user_id = current_user.created_by_user_id
+    else:
+        author_user_id = current_user.id
+
+    async def _course_read_for_existing(existing_course: Course) -> CourseRead:
+        existing_authors_res = (
+            await db_session.execute(
+                select(ResourceAuthor, User)
+                .join(User, ResourceAuthor.user_id == User.id)  # type: ignore
+                .where(ResourceAuthor.resource_uuid == existing_course.course_uuid)
+                .order_by(ResourceAuthor.id.asc())  # type: ignore
+            )
+        ).all()
+        existing_authors = [
+            AuthorWithRole(
+                user=await project_public_author(db_session, u, scope_uuid=ra.resource_uuid),
+                authorship=ra.authorship,
+                authorship_status=ra.authorship_status,
+                creation_date=ra.creation_date,
+                update_date=ra.update_date,
+            )
+            for ra, u in existing_authors_res
+        ]
+        return CourseRead.model_validate({**existing_course.model_dump(), "authors": existing_authors})
+
+    if normalized_draft_uuid:
+        existing_course = (
+            await db_session.execute(
+                select(Course).where(Course.creation_draft_uuid == normalized_draft_uuid)
+            )
+        ).scalars().first()
+        if existing_course is not None:
+            if existing_course.org_id != org_id:
+                raise HTTPException(status_code=409, detail="Course draft already used")
+            existing_creator = (
+                await db_session.execute(
+                    select(ResourceAuthor).where(
+                        ResourceAuthor.resource_uuid == existing_course.course_uuid,
+                        ResourceAuthor.user_id == author_user_id,
+                        ResourceAuthor.authorship == ResourceAuthorshipEnum.CREATOR,
+                    )
+                )
+            ).scalars().first()
+            if existing_creator is None:
+                raise HTTPException(status_code=409, detail="Course draft already used")
+            return await _course_read_for_existing(existing_course)
+
+        from src.db.courses.course_creation_drafts import CourseCreationDraft
+
+        owned_draft = (
+            await db_session.execute(
+                select(CourseCreationDraft).where(
+                    CourseCreationDraft.draft_uuid == normalized_draft_uuid,
+                    CourseCreationDraft.org_id == org_id,
+                    CourseCreationDraft.user_id == author_user_id,
+                )
+            )
+        ).scalars().first()
+        if owned_draft is None:
+            raise HTTPException(status_code=409, detail="Course draft not found for this user")
+        course.creation_draft_uuid = normalized_draft_uuid
 
     # Usage check
     await check_limits_with_usage("courses", org_id, db_session)
@@ -808,13 +875,6 @@ async def create_course(
         course.thumbnail_video = ""
         course.thumbnail_type = ThumbnailType.IMAGE
 
-    # SECURITY: Make the user the creator of the course
-    # For API tokens, use the user who created the token as the author
-    if isinstance(current_user, APITokenUser):
-        author_user_id = current_user.created_by_user_id
-    else:
-        author_user_id = current_user.id
-
     resource_author = ResourceAuthor(
         resource_uuid=course.course_uuid,
         user_id=author_user_id,
@@ -840,6 +900,27 @@ async def create_course(
         await db_session.refresh(resource_author)
     except Exception:
         await db_session.rollback()
+        if normalized_draft_uuid:
+            raced_course = (
+                await db_session.execute(
+                    select(Course).where(
+                        Course.creation_draft_uuid == normalized_draft_uuid,
+                        Course.org_id == org_id,
+                    )
+                )
+            ).scalars().first()
+            if raced_course is not None:
+                raced_creator = (
+                    await db_session.execute(
+                        select(ResourceAuthor).where(
+                            ResourceAuthor.resource_uuid == raced_course.course_uuid,
+                            ResourceAuthor.user_id == author_user_id,
+                            ResourceAuthor.authorship == ResourceAuthorshipEnum.CREATOR,
+                        )
+                    )
+                ).scalars().first()
+                if raced_creator is not None:
+                    return await _course_read_for_existing(raced_course)
         raise
     index_course(course.id)
 

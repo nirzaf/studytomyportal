@@ -498,6 +498,7 @@ function CoursesHome(params: CourseProps) {
                   setNewCourseModal(open)
                   if (!open) setCreationType('select')
                 }}
+                preventAccidentalClose={creationType === 'scratch'}
                 minHeight={creationType === 'select' ? 'no-min' : 'md'}
                 minWidth={creationType === 'select' ? 'md' : 'lg'}
                 dialogContent={getNewCourseModalContent()}

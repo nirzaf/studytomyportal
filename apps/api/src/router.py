@@ -31,6 +31,7 @@ from src.routers.paths import paths as paths_router_module
 from src.routers.messaging import messaging as messaging_router_module
 from src.routers.media import media as media_router_module
 from src.routers.courses import migration as migration_router_module
+from src.routers.courses import course_drafts as course_drafts_router_module
 from src.routers.communities import communities as communities_router_module
 from src.routers.communities import discussions as discussions_router_module
 from src.routers.courses.activities import activities, blocks
@@ -284,6 +285,11 @@ v1_router.include_router(
     tags=["admin"],
 )
 v1_router.include_router(courses.router, prefix="/courses", tags=["courses"])
+v1_router.include_router(
+    course_drafts_router_module.router,
+    prefix="/course-drafts",
+    tags=["course-drafts"],
+)
 v1_router.include_router(
     migration_router_module.router,
     prefix="/courses",

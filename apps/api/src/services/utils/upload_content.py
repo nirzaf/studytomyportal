@@ -42,6 +42,31 @@ def _write_body(dest: BinaryIO, body: Union[bytes, BinaryIO]) -> None:
         shutil.copyfileobj(body, dest, 1024 * 1024)
 
 
+def _s3_client(learnhouse_config):
+    """Build the client for the configured S3-compatible private content store."""
+    storage = learnhouse_config.hosting_config.content_delivery.s3api
+    region = os.environ.get("LEARNHOUSE_S3_API_REGION") or (
+        "us-east-1" if getattr(storage, "access_key_id", None) else "auto"
+    )
+    kwargs = {
+        "endpoint_url": storage.endpoint_url,
+        "region_name": region,
+        "config": botocore.config.Config(
+            signature_version="s3v4",
+            connect_timeout=10,
+            read_timeout=60,
+            retries={"max_attempts": 2},
+            s3={"addressing_style": "path"},
+        ),
+    }
+    access_key_id = getattr(storage, "access_key_id", None)
+    secret_access_key = getattr(storage, "secret_access_key", None)
+    if access_key_id and secret_access_key:
+        kwargs["aws_access_key_id"] = access_key_id
+        kwargs["aws_secret_access_key"] = secret_access_key
+    return boto3.client("s3", **kwargs)
+
+
 def ensure_directory_exists(directory: str):
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -135,11 +160,7 @@ async def upload_content(
         await asyncio.to_thread(ensure_faststart, safe_path)
 
     elif content_delivery == "s3api":
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=learnhouse_config.hosting_config.content_delivery.s3api.endpoint_url,
-            config=botocore.config.Config(connect_timeout=10, read_timeout=60, retries={"max_attempts": 2}),
-        )
+        s3 = _s3_client(learnhouse_config)
 
         bucket_name = learnhouse_config.hosting_config.content_delivery.s3api.bucket_name or "learnhouse-media"
         local_path = safe_path
@@ -200,11 +221,7 @@ async def read_content(
     content_delivery = learnhouse_config.hosting_config.content_delivery.type
 
     if content_delivery == "s3api":
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=learnhouse_config.hosting_config.content_delivery.s3api.endpoint_url,
-            config=botocore.config.Config(connect_timeout=10, read_timeout=60, retries={"max_attempts": 2}),
-        )
+        s3 = _s3_client(learnhouse_config)
         bucket_name = learnhouse_config.hosting_config.content_delivery.s3api.bucket_name or "learnhouse-media"
         s3_key = f"content/{type_of_dir}/{uuid}/{directory}/{file_and_format}"
         try:
@@ -259,15 +276,7 @@ async def open_content_stream(
     learnhouse_config = get_learnhouse_config()
     content_delivery = learnhouse_config.hosting_config.content_delivery.type
     if content_delivery == "s3api":
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=learnhouse_config.hosting_config.content_delivery.s3api.endpoint_url,
-            config=botocore.config.Config(
-                connect_timeout=10,
-                read_timeout=60,
-                retries={"max_attempts": 2},
-            ),
-        )
+        s3 = _s3_client(learnhouse_config)
         bucket_name = learnhouse_config.hosting_config.content_delivery.s3api.bucket_name or "learnhouse-media"
         s3_key = f"content/{type_of_dir}/{uuid}/{directory}/{file_and_format}"
         try:
@@ -315,6 +324,62 @@ async def open_content_stream(
             await asyncio.to_thread(handle.close)
 
     return filesystem_chunks()
+
+
+async def delete_content(
+    directory: str,
+    type_of_dir: Literal["orgs", "users"],
+    uuid: str,
+    file_and_format: str,
+) -> None:
+    """Remove one private content object; missing objects are already deleted."""
+    if (
+        type_of_dir not in {"orgs", "users"}
+        or not uuid
+        or not file_and_format
+        or "/" in file_and_format
+        or "\\" in file_and_format
+        or ".." in file_and_format
+        or "\x00" in file_and_format
+    ):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    normalized_directory = directory.replace("\\", "/")
+    if (
+        not normalized_directory
+        or normalized_directory.startswith("/")
+        or any(part in {"", ".", ".."} for part in normalized_directory.split("/"))
+        or any(
+            not (char.isascii() and (char.isalnum() or char in "_-/"))
+            for char in normalized_directory
+        )
+        or any(not (char.isascii() and (char.isalnum() or char in "._-")) for char in file_and_format)
+        or any(not (char.isascii() and (char.isalnum() or char in "_-")) for char in uuid)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    config = get_learnhouse_config()
+    delivery = config.hosting_config.content_delivery
+    if delivery.type == "s3api":
+        s3 = _s3_client(config)
+        bucket_name = delivery.s3api.bucket_name or "learnhouse-media"
+        key = f"content/{type_of_dir}/{uuid}/{normalized_directory}/{file_and_format}"
+        try:
+            await asyncio.to_thread(s3.delete_object, Bucket=bucket_name, Key=key)
+        except (ClientError, BotoCoreError) as error:
+            logger.error("S3 delete failed: %s", error)
+            raise HTTPException(status_code=503, detail="Private file storage is unavailable") from error
+        return
+
+    if delivery.type != "filesystem":
+        raise HTTPException(status_code=503, detail="Private file storage is unavailable")
+    safe_path = _safe_content_path(type_of_dir, uuid, normalized_directory, file_and_format)
+    try:
+        await asyncio.to_thread(os.remove, safe_path)
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        raise HTTPException(status_code=503, detail="Private file storage is unavailable") from error
 
 
 def _read_file_bytes(path: str) -> bytes:
