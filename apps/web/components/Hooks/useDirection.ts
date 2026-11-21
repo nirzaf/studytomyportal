@@ -20,8 +20,7 @@ import { directionForLanguage, dirMultiplier, type Direction } from '@/lib/direc
  *   OK:  className={isRTL ? 'rotate-180' : ''}   (transform only, no layout)
  *   NOT: {isRTL ? <Left /> : <Right />}          (different trees)
  *
- * If you genuinely need a structural swap, gate it behind a `mounted` flag;
- * see components/Utils/LanguageSwitcher.tsx for the pattern.
+ * If you genuinely need a structural swap, gate it behind a `mounted` flag.
  */
 export function useDirection(): { dir: Direction; isRTL: boolean; x: 1 | -1 } {
   const { i18n } = useTranslation()

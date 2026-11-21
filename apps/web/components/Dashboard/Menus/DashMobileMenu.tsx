@@ -9,7 +9,6 @@ import {
   Users,
   CurrencyCircleDollar,
   Buildings,
-  Globe,
   Gear,
   SignOut,
   ChatsCircle,
@@ -20,10 +19,8 @@ import {
   Cube,
   FolderSimple,
   Steps,
-  Check,
   ChatCircleDots,
   Book,
-  CaretDown,
   CaretRight,
   MagnifyingGlass,
   Code,
@@ -38,8 +35,6 @@ import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { getUriWithOrg, getDeploymentMode } from '@services/config/config'
 import { isOrgAnalyticsAvailable } from '@ee/components/Analytics/availability'
 import { useTranslation } from 'react-i18next'
-import { changeLanguage } from '@/lib/i18n'
-import { AVAILABLE_LANGUAGES } from '@/lib/languages'
 import OrgSquareLogo, { hasOrgLogo, OrgInitial } from '@components/Objects/Org/OrgSquareLogo'
 import { cn } from '@/lib/utils'
 import { usePlan } from '@components/Hooks/usePlan'
@@ -57,13 +52,12 @@ import { Dialog, DialogContent, DialogTitle } from '@components/ui/dialog'
 function DashMobileMenu() {
   const org = useOrg() as any
   const session = useLHSession() as any
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const pathname = usePathname() || ''
   const plan = usePlan()
   const { toggle: openSearch } = useCommandPalette()
   const [moreOpen, setMoreOpen] = useState(false)
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
-  const [langExpanded, setLangExpanded] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
@@ -95,7 +89,7 @@ function DashMobileMenu() {
     await signOut({ redirect: true, callbackUrl: getUriWithOrg(org.slug, '/login') })
   }
 
-  const close = () => { setMoreOpen(false); setLangExpanded(false) }
+  const close = () => setMoreOpen(false)
 
   const tabs = [
     { key: 'home', href: '/dash', Icon: House, label: t('common.home'), active: isActive('/dash') },
@@ -220,27 +214,6 @@ function DashMobileMenu() {
             {/* Account and help */}
             <div className="mx-4 rounded-2xl bg-white/[0.04] divide-y divide-white/[0.06] overflow-hidden">
               <SheetRow href="/account/general" Icon={Gear} label={t('common.settings')} onClick={close} />
-              <SheetRow
-                Icon={Globe}
-                label={t('common.language')}
-                onClick={() => setLangExpanded(v => !v)}
-                trailing={<CaretDown size={12} weight="bold" className={cn('text-white/30 transition-transform', langExpanded && 'rotate-180')} />}
-              />
-              {langExpanded && (
-                <div className="py-1">
-                  {AVAILABLE_LANGUAGES.map(lang => (
-                    <button
-                      key={lang.code}
-                      type="button"
-                      onClick={() => { changeLanguage(lang.code); setLangExpanded(false) }}
-                      className="flex items-center justify-between w-full ps-14 pe-4 min-h-[44px] text-[15px] text-white/70 active:bg-white/[0.06]"
-                    >
-                      <span className="font-medium">{lang.nativeName}</span>
-                      {i18n.language.split('-')[0] === lang.code && <Check size={14} weight="bold" className="text-green-500" />}
-                    </button>
-                  ))}
-                </div>
-              )}
               <SheetRow
                 Icon={ChatCircleDots}
                 label={t('common.help_menu.report_feedback')}

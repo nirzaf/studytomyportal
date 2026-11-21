@@ -2,7 +2,6 @@
 
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
 import en from '../locales/en.json';
 import { loadDateLocale } from './format';
 
@@ -49,9 +48,9 @@ async function loadLocale(lng: string) {
 }
 
 i18n
-  .use(LanguageDetector)
   .use(initReactI18next)
   .init({
+    lng: 'en',
     resources,
     fallbackLng: 'en',
     ns: ['common'],
@@ -59,36 +58,23 @@ i18n
     interpolation: {
       escapeValue: false, // react already safes from xss
     },
-    detection: {
-      order: ['localStorage', 'cookie', 'querystring', 'navigator', 'path', 'subdomain'],
-      caches: ['localStorage', 'cookie'],
-      lookupLocalStorage: 'i18nextLng',
-      lookupCookie: 'i18next',
-    },
     react: {
       useSuspense: false,
     }
   });
 
-// Load the detected language if it's not English, and export the promise
-// so I18nProvider can wait for resources before rendering.
-// The date locale rides along: dayjs keeps its own registry, and without this
-// every "2 hours ago" renders in English no matter the language.
+// The interface uses English for text and date formatting.
 export const initialLocaleReady = Promise.all([
-  loadLocale(i18n.language.split('-')[0]),
-  loadDateLocale(i18n.language),
+  loadLocale('en'),
+  loadDateLocale('en'),
 ]).then(() => undefined);
 
-/**
- * Switch language safely: preloads the bundle before switching
- * so the UI never flashes English as a fallback.
- */
-/** Every UI language the app ships. */
-export const SUPPORTED_LANGUAGES = ['en', ...Object.keys(LOCALE_LOADERS)]
+/** Only English is available as an application interface language. */
+export const SUPPORTED_LANGUAGES = ['en']
 
-export async function changeLanguage(lng: string) {
-  await Promise.all([loadLocale(lng), loadDateLocale(lng)])
-  return i18n.changeLanguage(lng)
+export async function changeLanguage(_lng: string) {
+  await loadDateLocale('en')
+  return i18n.changeLanguage('en')
 }
 
 export default i18n;

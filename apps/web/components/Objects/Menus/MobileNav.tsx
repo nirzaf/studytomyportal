@@ -15,11 +15,9 @@ import {
   ChatsCircle,
   User,
   ShoppingBag,
-  Globe,
   Book,
   SignOut,
   CaretRight,
-  Check,
   SquaresFour,
 } from '@phosphor-icons/react'
 import { Dialog, DialogContent, DialogTitle } from '@components/ui/dialog'
@@ -32,8 +30,6 @@ import { useMessaging, useMessagingEnabled } from '@components/Messaging/Messagi
 import { useSiteCommandPalette } from '@components/Objects/Search/SiteCommandPaletteContext'
 import { getUriWithOrg } from '@services/config/config'
 import { isFeatureAvailable } from '@services/plans/plans'
-import { changeLanguage } from '@/lib/i18n'
-import { AVAILABLE_LANGUAGES } from '@/lib/languages'
 import { DASHBOARD_MENU_ITEMS, DashboardMenuItem } from '@/lib/dashboard-menu-items'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 import { useOrgMenuItems } from './OrgMenuLinks'
@@ -245,7 +241,7 @@ function MobileMoreSheet({
   orgslug: string
   skipKey?: string
 }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const session = useLHSession() as any
   const org = useOrg() as any
   const { rights } = useAdminStatus()
@@ -253,7 +249,6 @@ function MobileMoreSheet({
   const messagingEnabled = useMessagingEnabled()
   const { unreadTotal } = useMessaging()
   const menuItems = useOrgMenuItems(orgslug).filter((i) => i.key !== skipKey)
-  const [showLanguages, setShowLanguages] = useState(false)
 
   const isAuthenticated = session?.status === 'authenticated'
   const user = session?.data?.user
@@ -266,10 +261,8 @@ function MobileMoreSheet({
     if (rf?.[item.featureKey]) return rf[item.featureKey].enabled
     return isFeatureAvailable(item.featureKey)
   })
-  const currentLang = i18n.language.split('-')[0]
-
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setShowLanguages(false) }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="lg:hidden flex flex-col p-0 bg-white md:max-h-[85vh] md:w-[420px] [&>button:last-child]:hidden">
         <DialogTitle className="sr-only">{t('common.more')}</DialogTitle>
         <div className="flex-1 overflow-y-auto overscroll-contain pt-7 pb-4 space-y-5">
@@ -355,26 +348,6 @@ function MobileMoreSheet({
           )}
 
           <SheetGroup>
-            <SheetRow
-              onClick={() => setShowLanguages((v) => !v)}
-              Icon={Globe}
-              label={t('common.language')}
-              trailing={
-                <span className="text-sm font-medium text-neutral-400 uppercase">{currentLang}</span>
-              }
-            />
-            {showLanguages &&
-              AVAILABLE_LANGUAGES.map((language) => (
-                <button
-                  key={language.code}
-                  type="button"
-                  onClick={() => changeLanguage(language.code)}
-                  className="flex w-full items-center justify-between ps-14 pe-4 min-h-[44px] text-start text-[15px] text-neutral-700 active:bg-black/[0.03]"
-                >
-                  <span>{language.nativeName}</span>
-                  {currentLang === language.code && <Check size={16} weight="bold" className="text-neutral-900" />}
-                </button>
-              ))}
             {isAuthenticated && (
               <SheetRow
                 onClick={() => {

@@ -436,14 +436,10 @@ export default async function proxy(req: NextRequest) {
   if (authPaths.includes(pathname)) {
     const hasSession = !!req.cookies.get('LH_session')?.value
 
-    // A logged-in user has no business on /login, so bounce them to the hub (the
-    // page itself re-verifies, so this is a best-effort UX shortcut). Not when
-    // they arrive with a pending second factor: a sign-in link for another
-    // account hands its 2FA step over here, and bouncing would drop it.
-    if (pathname === '/login' && hasSession && !req.nextUrl.searchParams.has('mfa_token')) {
-      // Single tenancy redirects /home on to / anyway; skip the extra hop.
-      return NextResponse.redirect(new URL(instance.tenancy === 'single' ? '/' : '/home', req.url))
-    }
+    // Do not use the non-httpOnly LH_session marker to block /login. It can
+    // outlive an expired or rejected session, leaving an unauthenticated user
+    // stuck bouncing to the home page. LoginClient verifies the session and
+    // redirects genuinely authenticated users itself.
 
     const resolved = await resolveTenant(req, instance)
 

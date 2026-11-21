@@ -10,13 +10,12 @@ import { apiFetch } from '@services/utils/ts/requests'
 import { signOut } from '@components/Contexts/AuthContext'
 import OrgSquareLogo from '@components/Objects/Org/OrgSquareLogo'
 import { deleteOrganization, leaveOrg } from '@services/organizations/orgs'
-import { ChevronRight, Languages, Check, LogOut, Settings, LogIn, Plus, MoreVertical, CreditCard, Trash2, AlertTriangle } from 'lucide-react'
+import { ChevronRight, LogOut, Settings, LogIn, Plus, MoreVertical, CreditCard, Trash2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
-import { changeLanguage } from '@/lib/i18n'
 import { CopyrightFooter } from '@components/Footers/LegalFooters'
 import {
   DropdownMenu,
@@ -25,10 +24,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-  DropdownMenuPortal,
 } from '@components/ui/dropdown-menu'
 import {
   Dialog,
@@ -38,12 +33,11 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@components/ui/dialog'
-import { AVAILABLE_LANGUAGES } from '@/lib/languages'
 
 const noSubscription = () => () => {}
 
 function HomeClient() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const session = useLHSession() as any
   const router = useRouter()
   const access_token = session?.data?.tokens?.access_token
@@ -159,29 +153,6 @@ function HomeClient() {
                         <p className="text-xs text-gray-500">{session?.data?.user?.email}</p>
                       </div>
                     </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="flex items-center space-x-2">
-                        <Languages size={14} />
-                        <span>{t('common.language')}</span>
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuPortal>
-                        <DropdownMenuSubContent>
-                          {AVAILABLE_LANGUAGES.map((language) => (
-                            <DropdownMenuItem
-                              key={language.code}
-                              onClick={() => changeLanguage(language.code)}
-                              className="flex items-center justify-between"
-                            >
-                              <span>
-                                {t(language.translationKey)} ({language.nativeName})
-                              </span>
-                              {i18n.language.split('-')[0] === language.code && <Check size={14} />}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuPortal>
-                    </DropdownMenuSub>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => signOut({ redirect: true, callbackUrl: '/login' })}

@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { OrgProvider } from '@components/Contexts/OrgContext'
-import OrgLanguageSync from '@components/Contexts/OrgLanguageSync'
 import { getAuthOrgSlug } from '@services/org/orgResolution'
 
 export default async function AuthLayout({
@@ -18,7 +17,6 @@ export default async function AuthLayout({
 
     return (
         <OrgProvider orgslug={orgslug}>
-            <OrgLanguageSync />
             {children}
         </OrgProvider>
     )

@@ -60,7 +60,6 @@ import AdminAuthorization from '@components/Security/AdminAuthorization'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { getUriWithOrg, getAPIUrl, getMainDomainUri, isMultiOrgModeEnabled } from '@services/config/config'
 import { useTranslation } from 'react-i18next'
-import { changeLanguage } from '@/lib/i18n'
 import {
   Tooltip,
   TooltipContent,
@@ -75,7 +74,6 @@ import {
   HoverMenuSeparator,
 } from "@components/ui/hover-menu"
 import { FeedbackModal } from '@components/Objects/Modals/FeedbackModal'
-import { AVAILABLE_LANGUAGES } from '@/lib/languages'
 import OrgSquareLogo, { hasOrgLogo, OrgInitial } from '@components/Objects/Org/OrgSquareLogo'
 import { cn } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
@@ -121,7 +119,7 @@ const UPGRADE_STARS: {
 function DashLeftMenu() {
   const org = useOrg() as any
   const session = useLHSession() as any
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { track } = useLHAnalytics('dashboard')
   const pathname = usePathname() || ''
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -1127,45 +1125,6 @@ function DashLeftMenu() {
               </TooltipContent>
             </Tooltip>
           )}
-
-          {/* Language Switcher with hover menu */}
-          <HoverMenu
-            align="end"
-            content={
-              <HoverMenuContent className="w-64 max-h-96 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                <HoverMenuLabel className="flex items-center gap-2 text-white/70 font-medium">
-                  <Globe size={16} weight="fill" />
-                  <span>{t('common.language')}</span>
-                </HoverMenuLabel>
-                <HoverMenuSeparator />
-                {AVAILABLE_LANGUAGES.map((language) => (
-                  <HoverMenuItem
-                    key={language.code}
-                    onClick={() => changeLanguage(language.code)}
-                    className="flex items-center justify-between px-3 py-2.5 cursor-pointer text-white/70 hover:text-white hover:bg-white/[0.08] transition-colors"
-                  >
-                    <div className="flex flex-col">
-                      <span className="font-medium text-sm">{language.nativeName}</span>
-                      <span className="text-xs text-white/40">{t(language.translationKey)}</span>
-                    </div>
-                    {i18n.language.split('-')[0] === language.code && (
-                      <Check size={16} weight="bold" className="text-green-500" />
-                    )}
-                  </HoverMenuItem>
-                ))}
-              </HoverMenuContent>
-            }
-          >
-            <button aria-label={t('dashboard.nav.open_language_menu')} className={cn(
-              "flex items-center w-full rounded-lg text-white/50 hover:text-white hover:bg-white/[0.08] transition-all group",
-              isCollapsed ? "justify-center h-10" : "px-3 py-2 gap-3"
-            )}>
-              <Globe size={20} weight="fill" />
-              {!isCollapsed && (
-                <span className="text-sm font-medium">{t('common.language')}</span>
-              )}
-            </button>
-          </HoverMenu>
 
           {/* Help with hover menu */}
           <HoverMenu

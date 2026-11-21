@@ -6,9 +6,7 @@ import {
   updateOrganization,
   updateOrgFooterTextConfig,
   updateOrgEmailSenderNameConfig,
-  updateOrgDefaultLanguageConfig,
 } from '@services/settings/org'
-import { AVAILABLE_LANGUAGES } from '@/lib/languages'
 import { revalidateTags } from '@services/utils/ts/requests'
 import { useRouter } from 'next/navigation'
 import { useOrg } from '@components/Contexts/OrgContext'
@@ -101,13 +99,6 @@ const OrgEditGeneral: React.FC = () => {
     ''
   )
 
-  // Default language state
-  const [defaultLanguage, setDefaultLanguage] = React.useState<string>(
-    org?.config?.config?.customization?.general?.default_language ||
-    org?.config?.config?.general?.default_language ||
-    'en'
-  )
-
   const initialValues: OrganizationValues = {
     name: org?.name,
     description: org?.description || '',
@@ -124,11 +115,9 @@ const OrgEditGeneral: React.FC = () => {
       // Save the email sender display name (name only; the sending address is
       // always the platform's)
       await updateOrgEmailSenderNameConfig(org.id, emailSenderName, access_token)
-      // Save default language
-      await updateOrgDefaultLanguageConfig(org.id, defaultLanguage, access_token)
       await revalidateTags(['organizations'], org.slug)
       queryClient.invalidateQueries({ queryKey: queryKeys.org.detail(org.slug) })
-      track(AnalyticsEvent.OrgGeneralSettingsUpdated, { default_language: defaultLanguage })
+      track(AnalyticsEvent.OrgGeneralSettingsUpdated)
       toast.success(t('dashboard.organization.settings.update_success'), { id: loadingToast })
     } catch (_err) {
       toast.error(t('dashboard.organization.settings.update_error'), { id: loadingToast })
@@ -280,31 +269,6 @@ const OrgEditGeneral: React.FC = () => {
                         maxLength={MAX_EMAIL_SENDER_NAME_LENGTH}
                       />
                       <p className="text-gray-500 text-sm mt-1">{t('dashboard.organization.settings.email_sender_name_desc')}</p>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="defaultLanguage">
-                        {t('dashboard.organization.settings.default_language')}
-                      </Label>
-                      <Select
-                        value={defaultLanguage}
-                        onValueChange={setDefaultLanguage}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {AVAILABLE_LANGUAGES.map((lang) => (
-                            <SelectItem key={lang.code} value={lang.code}>
-                              <span className="flex items-center space-x-2">
-                                <span className="text-xs font-mono text-gray-400 w-6">{lang.code.toUpperCase()}</span>
-                                <span>{lang.nativeName}</span>
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-gray-500 text-sm mt-1">{t('dashboard.organization.settings.default_language_desc')}</p>
                     </div>
 
                   </div>

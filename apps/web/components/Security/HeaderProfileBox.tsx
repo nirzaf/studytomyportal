@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react'
 
 import Link from 'next/link'
-import { Crown, Shield, User, Users, SignOut, CaretDown, Globe, Check, ShoppingBag, House, Buildings, Plus, CreditCard } from '@phosphor-icons/react'
+import { Crown, Shield, User, Users, SignOut, CaretDown, Check, ShoppingBag, House, Buildings, Plus, CreditCard } from '@phosphor-icons/react'
 import UserAvatar from '@components/Objects/UserAvatar'
 import useAdminStatus, { seesPlatformHubFromSession } from '@components/Hooks/useAdminStatus'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
@@ -24,9 +24,6 @@ import {
 } from "@components/ui/dropdown-menu"
 import { signOut } from '@components/Contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
-import { changeLanguage } from '@/lib/i18n'
-import { AVAILABLE_LANGUAGES } from '@/lib/languages'
-import LanguageSwitcher from '@components/Utils/LanguageSwitcher'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 import { getMenuColorClasses } from '@services/utils/ts/colorUtils'
 
@@ -47,7 +44,7 @@ export const HeaderProfileBox = ({ primaryColor = '' }: { primaryColor?: string 
   const session = useLHSession() as any
   const { userRoles, rights, canManageOrg } = useAdminStatus()
   const org = useOrg() as any
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { track } = useLHAnalytics()
   const colors = getMenuColorClasses(primaryColor)
 
@@ -174,9 +171,6 @@ export const HeaderProfileBox = ({ primaryColor = '' }: { primaryColor?: string 
       {session.status == 'unauthenticated' && (
         <div className="flex items-stretch grow items-center">
           <ul className="flex space-x-0.5 sm:space-x-1 items-center">
-            <li>
-              <LanguageSwitcher primaryColor={primaryColor} />
-            </li>
             <li>
               <Link
                 className={`px-3 py-2 rounded-lg transition-colors text-sm font-bold ${colors.hoverBg} ${colors.text}`}
@@ -321,27 +315,6 @@ export const HeaderProfileBox = ({ primaryColor = '' }: { primaryColor?: string 
                     </DropdownMenuSub>
                   </>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center gap-2 space-x-2">
-                    <Globe size={14} weight="fill" />
-                    <span>{t('common.language')}</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuPortal>
-                    <DropdownMenuSubContent>
-                      {AVAILABLE_LANGUAGES.map((language) => (
-                        <DropdownMenuItem 
-                          key={language.code}
-                          onClick={() => changeLanguage(language.code)}
-                          className="flex items-center justify-between"
-                        >
-                          <span>{t(language.translationKey)} ({language.nativeName})</span>
-                          {i18n.language.split('-')[0] === language.code && <Check size={14} weight="bold" />}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuPortal>
-                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {

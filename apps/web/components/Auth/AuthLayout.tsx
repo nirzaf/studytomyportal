@@ -1,6 +1,5 @@
 'use client'
 import React from 'react'
-import LanguageSwitcher from '@components/Utils/LanguageSwitcher'
 import AuthBrandingPanel from '@components/Auth/AuthBrandingPanel'
 import AuthMobileHeader from '@components/Auth/AuthMobileHeader'
 import { AuthFooter } from '@components/Footers/LegalFooters'
@@ -31,14 +30,6 @@ export default function AuthLayout({ org, welcomeText, title, subtitle, children
           WebkitMaskImage: 'linear-gradient(to top, black 0%, transparent 60%)',
         }}
       />
-
-      {/* Language switcher: must sit ABOVE the right-hand branding panel
-          (z-10), otherwise the panel intercepts its clicks. `z-dropdown`
-          resolves to z-index:auto here, so use a concrete z-50. */}
-      {/* Phones carry the switcher inside the branding card instead. */}
-      <div className="hidden lg:block absolute top-4 end-4 z-50">
-        <LanguageSwitcher />
-      </div>
 
       {/* Mobile Header - visible only on small screens */}
       <div className="lg:hidden relative z-10">

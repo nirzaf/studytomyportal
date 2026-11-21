@@ -44,40 +44,9 @@ export function dirMultiplier(dir: Direction): 1 | -1 {
   return dir === 'rtl' ? -1 : 1
 }
 
-/**
- * Detect the language the same way i18next's LanguageDetector does, in the same
- * order (see `detection.order` in lib/i18n.ts). Client-only; returns 'en' on
- * the server.
- *
- * Kept byte-for-byte equivalent to the detector in public/dir-init.js.
- */
+/** The application interface language is fixed to English. */
 export function detectClientLanguage(): string {
-  if (typeof window === 'undefined') return 'en'
-
-  try {
-    const stored = window.localStorage.getItem('i18nextLng')
-    if (stored) return stored
-  } catch {
-    /* localStorage can throw in private mode / sandboxed iframes */
-  }
-
-  const cookie = document.cookie.match(/(?:^|;\s*)i18next=([^;]*)/)
-  if (cookie) {
-    try {
-      return decodeURIComponent(cookie[1])
-    } catch {
-      /* malformed cookie value */
-    }
-  }
-
-  try {
-    const qs = new URLSearchParams(window.location.search).get('lng')
-    if (qs) return qs
-  } catch {
-    /* malformed query string */
-  }
-
-  return navigator.languages?.[0] || navigator.language || 'en'
+  return 'en'
 }
 
 /**

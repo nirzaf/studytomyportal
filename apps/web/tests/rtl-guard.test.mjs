@@ -2,32 +2,46 @@ import { describe, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
 
-/**
- * Guards the RTL invariants that ESLint can't see: raw CSS, and a constant
- * that is deliberately duplicated into a file the bundler never touches.
- */
+/** Guards locale and direction invariants that ESLint can't see. */
 
 const webRoot = path.resolve(import.meta.dirname, '..')
 const read = (p) => fs.readFileSync(path.join(webRoot, p), 'utf8')
 
-describe('RTL language set', () => {
-  // public/dir-init.js runs before any bundle loads, so it cannot import
-  // lib/direction.ts and has to carry its own copy of the RTL list. That makes
-  // it exactly the kind of constant that drifts silently.
-  test('dir-init.js matches RTL_LANGUAGES in lib/direction.ts', () => {
+describe('English-only application locale', () => {
+  test('dir-init.js sets English LTR before first paint', () => {
     const initSrc = read('public/dir-init.js')
-    const directionSrc = read('lib/direction.ts')
+    expect(initSrc).toContain("setAttribute('lang', 'en')")
+    expect(initSrc).toContain("setAttribute('dir', 'ltr')")
+    expect(initSrc).toContain("setProperty('--dir', '1')")
+    expect(initSrc).not.toMatch(/navigator\.language|i18nextLng|localStorage/)
+  })
 
-    const initBlock = initSrc.match(/var RTL = \{([\s\S]*?)\}/)
-    expect(initBlock).not.toBeNull()
-    const initCodes = [...initBlock[1].matchAll(/(\w+):\s*1/g)].map((m) => m[1]).sort()
+  test('i18next cannot select a non-English application locale', () => {
+    const src = read('lib/i18n.ts')
+    expect(src).toMatch(/lng:\s*'en'/)
+    expect(src).toMatch(/SUPPORTED_LANGUAGES\s*=\s*\['en'\]/)
+    expect(src).toMatch(/i18n\.changeLanguage\('en'\)/)
+    expect(src).not.toContain('LanguageDetector')
+  })
 
-    const setBlock = directionSrc.match(/RTL_LANGUAGES = new Set\(\[([\s\S]*?)\]\)/)
-    expect(setBlock).not.toBeNull()
-    const setCodes = [...setBlock[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1]).sort()
-
-    expect(initCodes.length).toBeGreaterThan(0)
-    expect(initCodes).toEqual(setCodes)
+  test('global navigation and settings expose no locale selector', () => {
+    const surfaces = [
+      'components/Security/HeaderProfileBox.tsx',
+      'components/Auth/AuthLayout.tsx',
+      'components/Auth/AuthMobileHeader.tsx',
+      'components/Dashboard/Menus/DashMobileMenu.tsx',
+      'components/Dashboard/Menus/DashLeftMenu.tsx',
+      'components/Objects/Menus/MobileNav.tsx',
+      'app/home/home.tsx',
+      'components/Dashboard/Pages/Org/OrgEditGeneral/OrgEditGeneral.tsx',
+    ]
+    for (const file of surfaces) {
+      const src = read(file)
+      expect(src, file).not.toContain('LanguageSwitcher')
+      expect(src, file).not.toContain('AVAILABLE_LANGUAGES')
+      expect(src, file).not.toContain('common.language')
+      expect(src, file).not.toContain('defaultLanguage')
+    }
   })
 
   test('Arabic and Persian are RTL', () => {

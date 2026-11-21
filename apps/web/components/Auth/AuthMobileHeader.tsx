@@ -9,7 +9,6 @@ import OrgSquareLogo from '@components/Objects/Org/OrgSquareLogo'
 import { getUriWithOrg } from '@services/config/config'
 import { usePlan } from '@components/Hooks/usePlan'
 import { isWhiteLabelPlan } from '@components/Hooks/useLearnHouseBranding'
-import LanguageSwitcher from '@components/Utils/LanguageSwitcher'
 
 interface AuthMobileHeaderProps {
   org: any
@@ -17,7 +16,7 @@ interface AuthMobileHeaderProps {
 }
 
 // Phones get the desktop branding card in compact form: same background,
-// logo, name and welcome line, with the language switcher inside it.
+// logo, name and welcome line.
 export default function AuthMobileHeader({ org, welcomeText }: AuthMobileHeaderProps) {
   const isWhiteLabel = isWhiteLabelPlan(usePlan())
   const authBranding = org?.config?.config?.customization?.auth_branding || org?.config?.config?.general?.auth_branding || {}
@@ -63,7 +62,7 @@ export default function AuthMobileHeader({ org, welcomeText }: AuthMobileHeaderP
   return (
     <div className="px-3 pt-[calc(0.75rem+var(--lh-safe-top))]">
       <div
-        className="relative flex min-h-[176px] flex-col justify-end overflow-hidden rounded-3xl px-5 pb-5 pt-16"
+        className="relative flex min-h-[176px] flex-col justify-end overflow-hidden rounded-3xl px-5 pb-5 pt-6"
         style={getBackgroundStyle()}
       >
         {hasCustomBackground ? (
@@ -79,10 +78,6 @@ export default function AuthMobileHeader({ org, welcomeText }: AuthMobileHeaderP
             }}
           />
         )}
-
-        <div className="absolute top-2.5 end-2.5 z-10">
-          <LanguageSwitcher primaryColor="#000000" />
-        </div>
 
         <Link prefetch href={getUriWithOrg(org?.slug, '/')} className="relative z-10 w-fit">
           <div className="w-14 h-14 rounded-2xl ring-1 ring-inset ring-white/10 bg-white flex items-center justify-center overflow-hidden shrink-0">

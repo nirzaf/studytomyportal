@@ -88,7 +88,9 @@ describe("single tenancy", () => {
     expect(res.headers.get("x-middleware-request-x-lh-tenancy")).toBe("single");
   });
 
-  test("a signed-in visitor on /login goes to the org", async () => {
-    expect(location(await get("/login", "LH_session=1"))).toBe("https://school.test/");
+  test("a stale session marker does not prevent the login page from opening", async () => {
+    const res = await get("/login", "LH_session=stale");
+    expect(location(res)).toBeNull();
+    expect(rewrite(res)).toBe("https://school.test/auth/login");
   });
 });
