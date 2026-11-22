@@ -22,7 +22,7 @@ import { checkForUpdates } from '../src/services/version-check.js'
 import { VERSION } from '../src/constants.js'
 import { autoDetectDeploymentId, listDeploymentContainers, getContainerRestartCount, isDockerInstalled, isDockerRunning, dockerComposeWorks, dockerComposePs, dockerExecToFile, dockerExecFromFile, dockerStats, dockerStatsForContainers, dockerExec, getContainerLogs, getDockerDiskUsage, isTcpPortListening, dockerComposeUpRetry, waitForAptLock, installDockerLinux } from '../src/services/docker.js'
 import { readEnvVar, setEnvVar, isExternalDbInstall, ensureAlembicBaseline, runAlembicUpgrade } from '../src/commands/update-ee.js'
-import { replaceComposeImageTag } from '../src/services/compose-utils.js'
+import { readComposeServiceImage, replaceComposeImageTag } from '../src/services/compose-utils.js'
 import type { SetupConfig } from '../src/types.js'
 import type { EditionLayout } from '../src/commands/update-ee.js'
 
@@ -779,8 +779,8 @@ describe('validateEmail: reserved TLDs', () => {
 // Docker never re-fetched. The fix: (1) explicit `docker compose pull`
 // before restarting, (2) `--pull always` on `docker compose up` as safety net.
 //
-// These tests pin the image tag replacement regex that writes the new tag
-// into docker-compose.yml before the pull step.
+// These tests exercise service-scoped image reading and updates rather than a
+// registry-wide string replacement.
 
 // ─── Regression: update command must pull the new image ──────
 //
@@ -794,62 +794,69 @@ describe('validateEmail: reserved TLDs', () => {
 // These tests import `replaceComposeImageTag` from the real service module,
 // so a regex change in compose-utils.ts is caught immediately.
 
-describe('update: image tag replacement in docker-compose.yml', () => {
-  it('replaces a pinned version tag (1.2.2 → 1.2.6)', () => {
-    const compose = 'image: ghcr.io/learnhouse/app:1.2.2'
-    expect(replaceComposeImageTag(compose, 'ghcr.io/learnhouse/app:1.2.6')).toBe(
-      'image: ghcr.io/learnhouse/app:1.2.6',
-    )
+describe('service-scoped Compose image handling', () => {
+  const compose = (appImage = 'ghcr.io/learnhouse/app:1.2.2') => [
+    'services:',
+    '  learnhouse-app:',
+    `    image: ${appImage}`,
+    '    restart: unless-stopped',
+    '  db:',
+    '    image: pgvector/pgvector:pg19',
+    '  redis:',
+    '    image: redis:7-alpine',
+    '  nginx:',
+    '    image: nginx:alpine',
+    'networks:',
+    '  default: {}',
+    '',
+  ].join('\n')
+
+  it('reads the direct image for the exact requested service', () => {
+    expect(readComposeServiceImage(compose(), 'learnhouse-app')).toBe('ghcr.io/learnhouse/app:1.2.2')
+    expect(readComposeServiceImage(compose(), 'db')).toBe('pgvector/pgvector:pg19')
+    expect(readComposeServiceImage(compose(), 'redis')).toBe('redis:7-alpine')
   })
 
-  it('updates the tag within a realistic compose file block', () => {
-    const compose = [
-      'services:',
-      '  learnhouse-app:',
-      '    image: ghcr.io/learnhouse/app:1.2.2',
-      '    restart: unless-stopped',
-    ].join('\n')
-    const updated = replaceComposeImageTag(compose, 'ghcr.io/learnhouse/app:1.2.6')
-    expect(updated).toContain('image: ghcr.io/learnhouse/app:1.2.6')
-    expect(updated).not.toContain(':1.2.2')
+  it.each([
+    ['missing service', 'services:\n  db:\n    image: pgvector/pgvector:pg19\n'],
+    ['missing app image', 'services:\n  learnhouse-app:\n    restart: unless-stopped\n'],
+    ['duplicate services section', 'services:\n  learnhouse-app:\n    image: ghcr.io/learnhouse/app:1.2.2\nservices:\n  learnhouse-app:\n    image: ghcr.io/learnhouse/app:1.2.3\n'],
+    ['duplicate app service', 'services:\n  learnhouse-app:\n    image: ghcr.io/learnhouse/app:1.2.2\n  learnhouse-app:\n    image: ghcr.io/learnhouse/app:1.2.3\n'],
+    ['duplicate direct image', 'services:\n  learnhouse-app:\n    image: ghcr.io/learnhouse/app:1.2.2\n    image: ghcr.io/learnhouse/app:1.2.3\n'],
+  ])('returns null for %s', (_label, source) => {
+    expect(readComposeServiceImage(source, 'learnhouse-app')).toBeNull()
   })
 
-  it('handles v-prefixed version tags', () => {
-    const compose = 'image: ghcr.io/learnhouse/app:v1.2.2'
-    expect(replaceComposeImageTag(compose, 'ghcr.io/learnhouse/app:v1.2.6')).toBe(
-      'image: ghcr.io/learnhouse/app:v1.2.6',
-    )
+  it('reads quoted image values and preserves CRLF on replacement', () => {
+    const source = 'services:\r\n  learnhouse-app:\r\n    image: "ghcr.io/learnhouse/app:1.2.2" # pin\r\n  db:\r\n    image: postgres:19\r\n'
+    expect(readComposeServiceImage(source, 'learnhouse-app')).toBe('ghcr.io/learnhouse/app:1.2.2')
+    const updated = replaceComposeImageTag(source, 'ghcr.io/learnhouse/app:1.2.6')
+    expect(updated).toContain('    image: "ghcr.io/learnhouse/app:1.2.6" # pin\r\n')
+    expect(updated).toContain('    image: postgres:19\r\n')
   })
 
-  it('handles latest tag (no-version update path)', () => {
-    const compose = 'image: ghcr.io/learnhouse/app:latest'
-    // When no --version is specified the tag stays "latest" but the explicit
-    // docker compose pull that now precedes `up` fetches the actual new digest.
-    expect(replaceComposeImageTag(compose, 'ghcr.io/learnhouse/app:latest')).toBe(
-      'image: ghcr.io/learnhouse/app:latest',
-    )
+  it.each([
+    'ghcr.io/custom/app:1.2.2',
+    `ghcr.io/learnhouse/app:1.2.2@sha256:${'a'.repeat(64)}`,
+  ])('refuses tag updates for unsupported current image %s without changing input', (image) => {
+    const source = compose(image)
+    expect(() => replaceComposeImageTag(source, 'ghcr.io/learnhouse/app:1.2.6')).toThrow(/does not support custom or digest-pinned/)
+    expect(source).toBe(compose(image))
   })
 
-  it('handles dev channel tag', () => {
-    const compose = 'image: ghcr.io/learnhouse/app:dev'
-    expect(replaceComposeImageTag(compose, 'ghcr.io/learnhouse/app:1.3.0')).toBe(
-      'image: ghcr.io/learnhouse/app:1.3.0',
-    )
+  it('rejects missing or ambiguous app services and unsupported target images', () => {
+    expect(() => replaceComposeImageTag('services:\n  db:\n    image: postgres:19\n', 'ghcr.io/learnhouse/app:1.2.6')).toThrow(/missing or ambiguous/)
+    expect(() => replaceComposeImageTag('services:\n  learnhouse-app:\n    restart: always\n', 'ghcr.io/learnhouse/app:1.2.6')).toThrow(/missing or ambiguous/)
+    expect(() => replaceComposeImageTag(compose(), 'registry.invalid/app:1.2.6')).toThrow(/unsupported target/)
   })
 
-  it('does not modify other images in the compose file', () => {
-    const compose = [
-      '  learnhouse-app:',
-      '    image: ghcr.io/learnhouse/app:1.2.2',
-      '  db:',
-      '    image: pgvector/pgvector:pg16',
-      '  nginx:',
-      '    image: nginx:alpine',
-    ].join('\n')
-    const updated = replaceComposeImageTag(compose, 'ghcr.io/learnhouse/app:1.2.6')
-    expect(updated).toContain('image: ghcr.io/learnhouse/app:1.2.6')
-    expect(updated).toContain('image: pgvector/pgvector:pg16')
-    expect(updated).toContain('image: nginx:alpine')
+  it('replaces only learnhouse-app and keeps a same-tag pull eligible', () => {
+    const source = compose()
+    const updated = replaceComposeImageTag(source, 'ghcr.io/learnhouse/app:1.2.6')
+    expect(readComposeServiceImage(updated, 'learnhouse-app')).toBe('ghcr.io/learnhouse/app:1.2.6')
+    expect(readComposeServiceImage(updated, 'db')).toBe('pgvector/pgvector:pg19')
+    expect(readComposeServiceImage(updated, 'redis')).toBe('redis:7-alpine')
+    expect(replaceComposeImageTag(source, 'ghcr.io/learnhouse/app:1.2.2')).toBe(source)
   })
 })
 

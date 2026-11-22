@@ -6,7 +6,7 @@ import { findInstallDir, readConfig } from '../services/config-store.js'
 import { dockerComposeStop, dockerComposeUp, dockerComposePull } from '../services/docker.js'
 import { migrateContentVolume } from '../services/content-volume-migration.js'
 import { waitForAppHealth } from '../services/health.js'
-import { replaceComposeImageTag } from '../services/compose-utils.js'
+import { readComposeServiceImage, replaceComposeImageTag } from '../services/compose-utils.js'
 import { describeRuntimeImage, resolveAppImage } from '../services/version-check.js'
 import { writeFileAtomic } from '../utils/fs-atomic.js'
 import {
@@ -24,20 +24,6 @@ import {
 const COMMUNITY_LAYOUT: EditionLayout = { appService: 'learnhouse-app', alembicCwd: '/app/api', dbService: 'db' }
 
 const GHCR_BASE = 'ghcr.io/learnhouse/app'
-
-function composeServiceImage(compose: string, service: string): string {
-  let inService = false
-  for (const line of compose.split(/\r?\n/)) {
-    if (/^  [^ ]/.test(line)) {
-      if (inService) break
-      inService = line.trim() === `${service}:`
-    } else if (inService) {
-      const image = line.match(/^    image:\s*(\S+)/)?.[1]
-      if (image) return image
-    }
-  }
-  return ''
-}
 
 async function resolveTag(version: string): Promise<boolean> {
   try {
@@ -95,12 +81,6 @@ export async function updateCommand(options: { version?: string; migrate?: boole
     process.exit(1)
   }
 
-  if (targetVersion) {
-    p.intro(pc.cyan(`Updating runtime image to v${targetVersion}`))
-  } else {
-    p.intro(pc.cyan('Updating runtime image to latest'))
-  }
-
   const ui = {
     log: (m: string) => p.log.info(m),
     ok: (m: string) => p.log.success(m),
@@ -108,9 +88,25 @@ export async function updateCommand(options: { version?: string; migrate?: boole
   }
   const composePath = join(config.installDir, 'docker-compose.yml')
   const originalCompose = readFileSync(composePath, 'utf-8')
-  const currentImage = composeServiceImage(originalCompose, COMMUNITY_LAYOUT.appService)
+  const currentImage = readComposeServiceImage(originalCompose, COMMUNITY_LAYOUT.appService)
+  if (!currentImage) {
+    p.log.error('Cannot update this installation: the learnhouse-app service image is missing or ambiguous. No installation files or services were changed.')
+    process.exit(1)
+  }
+  try {
+    // Validate support before any backup, migration, image pull, file write, or stop.
+    replaceComposeImageTag(originalCompose, currentImage)
+  } catch (error) {
+    p.log.error(`Cannot update runtime image "${currentImage}": ${(error as Error).message} No installation files or services were changed.`)
+    process.exit(1)
+  }
+  if (targetVersion) {
+    p.intro(pc.cyan(`Updating runtime image to v${targetVersion}`))
+  } else {
+    p.intro(pc.cyan('Updating runtime image to latest'))
+  }
   const currentProvenance = describeRuntimeImage(currentImage)
-  p.log.info(`Current runtime image: ${currentImage || '(not identified)'}`)
+  p.log.info(`Current runtime image: ${currentImage}`)
   p.log.info(currentProvenance.disclosure)
   const s = p.spinner()
   // What to put back if anything fails after the image tag is rewritten.
@@ -165,7 +161,7 @@ export async function updateCommand(options: { version?: string; migrate?: boole
       // Follow the install's channel: dev stays on :dev, stable moves to the
       // newest versioned release (falling back to :latest).
       // Configs written before 1.6.0 have no channel; their compose image says it.
-      const channel = config.channel ?? (/learnhouse\/app:dev\s*$/m.test(originalCompose) ? 'dev' : 'stable')
+      const channel = config.channel ?? (/^ghcr\.io\/learnhouse\/app:dev$/.test(currentImage) ? 'dev' : 'stable')
       targetImage = (await resolveAppImage(channel)).image
     }
     const targetProvenance = describeRuntimeImage(targetImage)
@@ -214,8 +210,18 @@ export async function updateCommand(options: { version?: string; migrate?: boole
     // on any failure below, so a later `start` never boots an unpulled or
     // un-migrated image.
     const composeContent = readFileSync(composePath, 'utf-8')
+    if (readComposeServiceImage(composeContent, COMMUNITY_LAYOUT.appService) !== currentImage) {
+      throw new Error('The learnhouse-app image changed while the update was being prepared. No image replacement was written.')
+    }
+    const updatedCompose = replaceComposeImageTag(composeContent, targetImage)
+    if (readComposeServiceImage(updatedCompose, COMMUNITY_LAYOUT.appService) !== targetImage) {
+      throw new Error('Compose image replacement did not select the requested learnhouse-app image. The existing file was preserved.')
+    }
     rollbackCompose = composeContent
-    writeFileAtomic(composePath, replaceComposeImageTag(composeContent, targetImage))
+    writeFileAtomic(composePath, updatedCompose)
+    if (readComposeServiceImage(readFileSync(composePath, 'utf-8'), COMMUNITY_LAYOUT.appService) !== targetImage) {
+      throw new Error('The written Compose file does not contain the requested learnhouse-app image.')
+    }
 
     s.start('Pulling new image (this may take a minute)')
     dockerComposePull(config.installDir)

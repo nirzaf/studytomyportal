@@ -40,6 +40,7 @@ import {
   runtimeIdentityProblems,
   type RuntimeIdentity,
 } from './core/studytomyIdentity'
+import { isSafeStudytomyTestDatabase } from './core/testDatabase'
 
 const BOOT_TIMEOUT_MS = 8 * 60 * 1000 // image pull + first-run install can be slow
 const POLL_INTERVAL_MS = 3000
@@ -101,13 +102,19 @@ function bootSelfHost(): void {
 export default async function globalSetup(): Promise<void> {
   const verifyStudyTomy = includesStudyTomySpecs(process.argv.slice(2))
   if (verifyStudyTomy) {
-    if (!SKIP_BOOT && !process.env.E2E_CLI) {
+    if (!process.env.E2E_BASE_URL) {
       throw new Error(
-        'Studytomy E2E requires E2E_BASE_URL for an existing local fork or an explicit E2E_CLI for a verified local build. The default learnhouse@latest CLI cannot identify this fork.',
+        'Studytomy E2E requires E2E_BASE_URL for an already-running local fork. It will not boot a CLI-managed image because the default runtime is not a verified build of this checkout.',
       )
     }
     if (!isLoopbackUrl(BASE_URL) || !isLoopbackUrl(API_URL)) {
       throw new Error('Studytomy E2E only runs against a loopback web and API instance.')
+    }
+    // Global setup creates a shared learner, so guard the database before any API access.
+    if (!isSafeStudytomyTestDatabase(process.env.STUDYTOMY_TEST_DATABASE_URL)) {
+      throw new Error(
+        'Studytomy E2E requires STUDYTOMY_TEST_DATABASE_URL to identify the same loopback PostgreSQL _test database used by the API. Global setup will not provision shared test accounts without it.',
+      )
     }
   }
 

@@ -2425,6 +2425,16 @@ describe('setup / update in-process', () => {
       useHttps: false, autoSsl: false, useExternalDb: false, orgSlug: 'default',
     }))
     fs.writeFileSync(path.join(dir, '.env'), 'POSTGRES_PASSWORD=kept-db-pw\nNEXTAUTH_SECRET=kept-nextauth\n')
+    fs.writeFileSync(path.join(dir, 'docker-compose.yml'), [
+      'services:',
+      '  learnhouse-app:',
+      '    image: ghcr.io/learnhouse/app:latest',
+      '    volumes:',
+      '      - learnhouse_content_keep1234:/app/api/content',
+      'volumes:',
+      '  learnhouse_content_keep1234:',
+      '',
+    ].join('\n'))
     return dir
   }
 
@@ -2447,11 +2457,12 @@ describe('setup / update in-process', () => {
 
   it('the wizard exits when an existing-install overwrite is declined', async () => {
     const existing = seedExisting('dup2')
+    const before = fs.readFileSync(path.join(existing, 'docker-compose.yml'), 'utf-8')
     H.q.select.push('community', 'stable')
     H.q.text.push('dup2')
     H.q.confirm.push(false) // "Reconfigure it?" declined → exit(0)
     await expect(setupCommand({})).rejects.toMatchObject({ code: 0 })
-    expect(fs.existsSync(path.join(existing, 'docker-compose.yml'))).toBe(false) // nothing written
+    expect(fs.readFileSync(path.join(existing, 'docker-compose.yml'), 'utf-8')).toBe(before) // nothing written
   })
 
   it('the wizard edit menu cancels cleanly when the step picker is dismissed', async () => {
@@ -2614,6 +2625,73 @@ describe('setup / update in-process', () => {
     expect(envVar('NEXTAUTH_SECRET')).toBe(nextAuth)
   })
 
+  it.each([
+    ['custom', 'registry.example.org/studytomy/app:school-2026'],
+    ['digest-pinned', `ghcr.io/learnhouse/app:1.2.3@sha256:${'b'.repeat(64)}`],
+  ])('setup --ci preserves the existing %s application image', async (_label, image) => {
+    const opts = {
+      ci: true, name: `image-${_label}`, domain: 'localhost', port: 8092,
+      adminEmail: 'admin@school.dev', adminPassword: 'password123', start: false,
+    }
+    await setupCommand(opts)
+    const dir = path.join(home, '.learnhouse', opts.name)
+    const composePath = path.join(dir, 'docker-compose.yml')
+    const firstConfig = JSON.parse(fs.readFileSync(path.join(dir, 'learnhouse.config.json'), 'utf-8'))
+    const original = fs.readFileSync(composePath, 'utf-8')
+    fs.writeFileSync(composePath, original.replace(/^    image: .*$/m, `    image: ${image}`))
+
+    await setupCommand(opts)
+
+    const updated = fs.readFileSync(composePath, 'utf-8')
+    const secondConfig = JSON.parse(fs.readFileSync(path.join(dir, 'learnhouse.config.json'), 'utf-8'))
+    expect(updated).toContain(`    image: ${image}`)
+    expect(secondConfig.deploymentId).toBe(firstConfig.deploymentId)
+    expect(fs.readFileSync(path.join(dir, '.env'), 'utf-8')).toContain('NEXTAUTH_SECRET=')
+    expect(fs.readFileSync(path.join(dir, '.env'), 'utf-8')).toContain('POSTGRES_PASSWORD=')
+  })
+
+  it.each([
+    ['missing app service', (compose: string) => compose.replace(/  learnhouse-app:[\s\S]*?(?=  [A-Za-z0-9_.-]+:|volumes:|networks:|$)/, '')],
+    ['missing app image', (compose: string) => compose.replace(/^    image: .*\n/m, '')],
+  ])('setup --ci refuses reconfiguration with a %s before changing files', async (_label, change) => {
+    const opts = {
+      ci: true, name: `missing-${_label.replaceAll(' ', '-')}`, domain: 'localhost', port: 8096,
+      adminEmail: 'admin@school.dev', adminPassword: 'password123', start: false,
+    }
+    await setupCommand(opts)
+    const dir = path.join(home, '.learnhouse', opts.name)
+    const composePath = path.join(dir, 'docker-compose.yml')
+    fs.writeFileSync(composePath, change(fs.readFileSync(composePath, 'utf-8')))
+    const before = ['docker-compose.yml', '.env', 'learnhouse.config.json', 'extra/nginx.prod.conf']
+      .map((file) => fs.readFileSync(path.join(dir, file), 'utf-8'))
+
+    await expect(setupCommand(opts)).rejects.toThrow(/Cannot safely reconfigure/)
+
+    const after = ['docker-compose.yml', '.env', 'learnhouse.config.json', 'extra/nginx.prod.conf']
+      .map((file) => fs.readFileSync(path.join(dir, file), 'utf-8'))
+    expect(after).toEqual(before)
+  })
+
+  it('setup --ci refuses to overwrite an app Compose file when the install .env is missing', async () => {
+    const opts = {
+      ci: true, name: 'partial-existing', domain: 'localhost', port: 8096,
+      adminEmail: 'admin@school.dev', adminPassword: 'password123', start: false,
+    }
+    await setupCommand(opts)
+    const dir = path.join(home, '.learnhouse', opts.name)
+    const composePath = path.join(dir, 'docker-compose.yml')
+    const configPath = path.join(dir, 'learnhouse.config.json')
+    const composeBefore = fs.readFileSync(composePath, 'utf-8')
+    const configBefore = fs.readFileSync(configPath, 'utf-8')
+    fs.unlinkSync(path.join(dir, '.env'))
+
+    await expect(setupCommand(opts)).rejects.toThrow(/existing runtime files are present/)
+
+    expect(fs.readFileSync(composePath, 'utf-8')).toBe(composeBefore)
+    expect(fs.readFileSync(configPath, 'utf-8')).toBe(configBefore)
+    expect(fs.existsSync(path.join(dir, '.env'))).toBe(false)
+  })
+
   it('setup --ci refuses inline volume metadata before changing an existing install', async () => {
     const opts = {
       ci: true, name: 'inline-volume', domain: 'localhost', port: 8097,
@@ -2737,8 +2815,50 @@ describe('setup / update in-process', () => {
     fs.writeFileSync(path.join(dir, '.env'), 'LEARNHOUSE_DOMAIN=localhost\n')
     fs.writeFileSync(path.join(dir, 'docker-compose.yml'),
       'name: learnhouse-dep1\nservices:\n  learnhouse-app:\n    image: ghcr.io/learnhouse/app:1.4.0\n    container_name: learnhouse-app-dep1\n' +
-      '    networks:\n      - n\nnetworks:\n  n:\n')
+      '    networks:\n      - n\n  db:\n    image: pgvector/pgvector:pg19\n  redis:\n    image: redis:7-alpine\n  nginx:\n    image: nginx:alpine\nnetworks:\n  n:\n')
   }
+
+  it.each([
+    ['custom', 'registry.example.org/studytomy/app:school-2026'],
+    ['digest-pinned', `ghcr.io/learnhouse/app:1.4.0@sha256:${'c'.repeat(64)}`],
+  ])('update rejects %s images before backup or Compose mutation', async (_label, image) => {
+    const dir = path.join(home, '.learnhouse', 'unsupported')
+    seedInstall(dir)
+    const composePath = path.join(dir, 'docker-compose.yml')
+    const original = fs.readFileSync(composePath, 'utf-8').replace('ghcr.io/learnhouse/app:1.4.0', image)
+    fs.writeFileSync(composePath, original)
+    const m = (await import('node:child_process')).execSync as unknown as ReturnType<typeof vi.fn>
+    m.mockClear()
+    const error = vi.spyOn(H.mock.log, 'error')
+    const success = vi.spyOn(H.mock.log, 'success')
+    const intro = vi.spyOn(H.mock, 'intro')
+
+    await expect(updateCommand({ migrate: false })).rejects.toMatchObject({ code: 1 })
+
+    expect(fs.readFileSync(composePath, 'utf-8')).toBe(original)
+    expect(m).not.toHaveBeenCalled()
+    expect(error.mock.calls.flat().join(' ')).toContain(image)
+    expect(error.mock.calls.flat().join(' ')).toContain('No installation files or services were changed')
+    expect(success).not.toHaveBeenCalled()
+    expect(intro).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing app service', 'name: test\nservices:\n  redis:\n    image: redis:7-alpine\n'],
+    ['missing app image', 'name: test\nservices:\n  learnhouse-app:\n    restart: unless-stopped\n'],
+  ])('update rejects a %s before any Docker operation', async (_label, compose) => {
+    const dir = path.join(home, '.learnhouse', 'unsupported')
+    seedInstall(dir)
+    const composePath = path.join(dir, 'docker-compose.yml')
+    fs.writeFileSync(composePath, compose)
+    const m = (await import('node:child_process')).execSync as unknown as ReturnType<typeof vi.fn>
+    m.mockClear()
+
+    await expect(updateCommand({ migrate: false })).rejects.toMatchObject({ code: 1 })
+
+    expect(fs.readFileSync(composePath, 'utf-8')).toBe(compose)
+    expect(m).not.toHaveBeenCalled()
+  })
 
   it('update aborts when the default pre-upgrade backup fails', async () => {
     seedInstall(path.join(home, '.learnhouse', 'test'))
@@ -2747,7 +2867,8 @@ describe('setup / update in-process', () => {
   })
 
   it('update --to resolves a version that only exists under a v-prefixed tag', async () => {
-    seedInstall(path.join(home, '.learnhouse', 'test'))
+    const dir = path.join(home, '.learnhouse', 'test')
+    seedInstall(dir)
     vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
       if (String(url).includes('/token')) return new Response(JSON.stringify({ token: 't' }), { status: 200 })
       // bare "1.9.9" manifest 404s; the "v1.9.9" retry succeeds → targetImage uses the v-tag.
@@ -2757,6 +2878,11 @@ describe('setup / update in-process', () => {
     // Make the actual upgrade steps no-ops so the command completes past tag resolution.
     await expect(updateCommand({ version: '1.9.9', backup: false, migrate: false }))
       .resolves.toBeUndefined()
+    const updated = fs.readFileSync(path.join(dir, 'docker-compose.yml'), 'utf-8')
+    expect(updated).toContain('image: ghcr.io/learnhouse/app:v1.9.9')
+    expect(updated).toContain('image: pgvector/pgvector:pg19')
+    expect(updated).toContain('image: redis:7-alpine')
+    expect(updated).toContain('image: nginx:alpine')
   })
 
   it('update --to a nonexistent version fails before changing anything', async () => {

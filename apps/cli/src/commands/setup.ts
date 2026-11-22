@@ -23,6 +23,7 @@ import { waitForAppHealth, waitForAppOrgSeed } from '../services/health.js'
 import { hasComposeService, publicUrl } from '../services/stack.js'
 import { checkPort, findAvailablePort } from '../utils/network.js'
 import { describeRuntimeImage, resolveAppImage } from '../services/version-check.js'
+import { readComposeServiceImage } from '../services/compose-utils.js'
 import { readEnvVar } from '../utils/env-file.js'
 import { writeFileAtomic } from '../utils/fs-atomic.js'
 import { hasPostgresServiceDeclaration, readPostgresComposeSettings, type PostgresComposeSettings } from '../services/postgres-compose.js'
@@ -82,20 +83,26 @@ interface ExistingInstall {
 function composeImage(dir: string): string | undefined {
   const composePath = path.join(dir, 'docker-compose.yml')
   if (!fs.existsSync(composePath)) return undefined
-  return fs.readFileSync(composePath, 'utf-8').match(/image:\s*(\S*learnhouse\/app:\S+)/)?.[1]
+  return readComposeServiceImage(fs.readFileSync(composePath, 'utf-8'), 'learnhouse-app') ?? undefined
 }
 
 function readExistingInstall(dir: string): ExistingInstall | null {
   const config = readConfig(dir)
   const composePath = path.join(dir, 'docker-compose.yml')
   const compose = fs.existsSync(composePath) ? fs.readFileSync(composePath, 'utf-8') : ''
+  const hasAppService = hasComposeService(dir, 'learnhouse-app')
   const hasLocalDatabase = hasPostgresServiceDeclaration(compose)
   const envPath = path.join(dir, '.env')
   if (!config?.deploymentId || !fs.existsSync(envPath)) {
-    if (hasLocalDatabase) {
-      throw new Error(`Cannot safely reconfigure ${dir}: a local database is present but its installation config or .env file is missing. Preserve the current files and inspect them manually.`)
+    if (hasLocalDatabase || hasAppService || config?.deploymentId) {
+      throw new Error(`Cannot safely reconfigure ${dir}: existing runtime files are present but the installation config or .env file is incomplete. Preserve the current files and inspect them manually.`)
     }
     return null
+  }
+  const edition = config.edition || 'community'
+  const image = composeImage(dir)
+  if (edition !== 'enterprise' && !image) {
+    throw new Error(`Cannot safely reconfigure ${dir}: the learnhouse-app service or its image could not be read from docker-compose.yml. Preserve the current files and inspect them manually.`)
   }
   const envFile = fs.readFileSync(envPath, 'utf-8')
   let database: PostgresComposeSettings | undefined
@@ -107,7 +114,7 @@ function readExistingInstall(dir: string): ExistingInstall | null {
     database = parsedDatabase
   }
   return {
-    edition: config.edition || 'community',
+    edition,
     deploymentId: config.deploymentId,
     httpPort: config.httpPort,
     dbPassword: readEnvVar(dir, 'POSTGRES_PASSWORD'),
@@ -117,7 +124,7 @@ function readExistingInstall(dir: string): ExistingInstall | null {
       collabInternalKey: readEnvVar(dir, 'COLLAB_INTERNAL_KEY'),
     },
     running: isDeploymentRunning(config.deploymentId),
-    image: composeImage(dir),
+    image,
     externalDb: hasComposeService(dir, 'db') ? undefined : readEnvVar(dir, 'LEARNHOUSE_SQL_CONNECTION_STRING'),
     externalRedis: hasComposeService(dir, 'redis') ? undefined : readEnvVar(dir, 'LEARNHOUSE_REDIS_CONNECTION_STRING'),
     database,

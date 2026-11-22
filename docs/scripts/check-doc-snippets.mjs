@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import path, { dirname, join, resolve, win32, posix } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
@@ -13,6 +13,20 @@ function snippetsWithFilename(source, filename) {
     .filter((match) => match[0].split('\n', 1)[0].includes(`filename="${filename}`))
     .map((match) => match[1])
 }
+
+function isWithinRoot(root, candidate, pathApi = path) {
+  const relative = pathApi.relative(root, candidate)
+  return relative !== '' && !pathApi.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${pathApi.sep}`)
+}
+
+test('documentation route containment is portable and rejects traversal', () => {
+  const posixRoot = '/repo/docs/content'
+  assert.equal(isWithinRoot(posixRoot, posix.resolve(posixRoot, 'guides/start'), posix), true)
+  assert.equal(isWithinRoot(posixRoot, posix.resolve(posixRoot, '../app/page'), posix), false)
+  const windowsRoot = 'C:\\repo\\docs\\content'
+  assert.equal(isWithinRoot(windowsRoot, win32.resolve(windowsRoot, 'guides\\start'), win32), true)
+  assert.equal(isWithinRoot(windowsRoot, win32.resolve(windowsRoot, '..\\app\\page'), win32), false)
+})
 
 test('tutorial imports the helper file that it asks readers to create', () => {
   assert.match(tutorial, /Create `src\/lib\/studytomy\.ts`/)
@@ -50,7 +64,7 @@ test('tutorial internal links resolve to a documentation route and do not advert
       continue
     }
     const route = resolve(contentRoot, pathname)
-    assert.ok(route.startsWith(`${contentRoot}/`), `link must remain within docs content: ${href}`)
+    assert.ok(isWithinRoot(contentRoot, route), `link must remain within docs content: ${href}`)
     assert.ok(existsSync(`${route}.mdx`) || existsSync(join(route, 'index.mdx')), `documentation route must exist: ${href}`)
   }
 })

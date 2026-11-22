@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const webRoot = new URL('..', import.meta.url).pathname
+const webRootFromUrl = (url) => fileURLToPath(new URL('..', url))
+const webRoot = webRootFromUrl(import.meta.url)
 function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name)
@@ -22,6 +24,12 @@ test('legacy LearnHouse AI icon has no active frontend callers or public asset',
   for (const asset of ['lrnai_icon.png', 'lrn-text.svg', 'lrn.svg', 'lrn-dash.svg']) {
     expect(existsSync(join(webRoot, 'public', asset))).toBe(false)
   }
+})
+
+test('frontend test root resolves encoded spaces in file URLs', () => {
+  const root = webRootFromUrl('file:///tmp/studytomy%20project/apps/web/tests/studytomy-branding.test.mjs')
+  expect(root).toContain('studytomy project')
+  expect(root.replaceAll('\\', '/').replace(/\/$/, '')).toMatch(/studytomy project\/apps\/web$/)
 })
 
 test('shared AI mark uses the existing Studytomy asset and descriptive defaults', () => {

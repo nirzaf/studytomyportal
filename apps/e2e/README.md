@@ -1,11 +1,11 @@
 # Studytomy Portal E2E: UI acceptance tests
 
-**Studytomy working-tree acceptance:** the default published Studytomy Portal image does not contain unpublished Studytomy changes. Point `E2E_BASE_URL` and `E2E_API_URL` at the intended local build; `core/instance.ts` supports an existing instance and `E2E_SKIP_BOOT`. Record the tested revision. Local `features/studytomy/` test files are not evidence of a passing browser run. See [documentation review](../../docs/studytomy/DOCUMENTATION-REVIEW.md). This does not enable repository CI/CD.
+**Studytomy working-tree acceptance:** the default CLI runtime image is the existing upstream LearnHouse image, not a verified Studytomy build. Point `E2E_BASE_URL` and `E2E_API_URL` at the intended local build; `core/instance.ts` supports an existing instance and `E2E_SKIP_BOOT`. Record the tested revision. Local `features/studytomy/` test files are not evidence of a passing browser run. See [documentation review](../../docs/studytomy/DOCUMENTATION-REVIEW.md). This does not enable repository CI/CD.
 
-Browser-driven, human-like end-to-end tests for Studytomy Portal. The suite boots a
-real **self-host via the Studytomy Portal CLI** (`setup --ci`, pulling the published
-image) and drives the UI with Playwright like a real user. It validates the
-**shipped self-host product**.
+Browser-driven acceptance tests for Studytomy Portal. Generic upstream tests may
+boot a CLI-managed self-host; Studytomy tests run against the local web and API
+build whose identity matches this checkout. A published LearnHouse image does
+not contain unpublished changes from this repository.
 
 It is organized as a **modular, multi-feature** harness: shared infrastructure
 lives in `core/`, and each product area is a self-contained module under
@@ -95,6 +95,57 @@ they read only `STUDYTOMY_TEST_DATABASE_URL`, reject non-PostgreSQL/non-loopback
 or non-`_test` databases, and report an explicit skip when the variable is
 absent.
 
+#### Explore Topics: mocked UI versus live backend
+
+`19-explore-topics.spec.ts` is a deterministic browser-interaction test. It
+intercepts syllabus, topic, PDF, and educator-access responses; it does not prove
+FastAPI, PostgreSQL, private PDF storage, indexing, or authorization behavior.
+Global setup still provisions a shared synthetic learner, so the test-database
+guard applies to this mocked UI test as well as the live API test.
+
+`20-explore-topics-live.spec.ts` drives the learner UI and calls the real
+`/api/v1/studytomy` routes. It requires all of the following before it creates a
+source record:
+
+* Loopback `E2E_BASE_URL` and `E2E_API_URL` served by the same local checkout;
+  global setup verifies build identities and database migration heads.
+* The local API must use the same `STUDYTOMY_TEST_DATABASE_URL` passed to the
+  E2E process. It must be PostgreSQL on loopback and its database name must end
+  in `_test`; global setup refuses Studytomy browser runs before provisioning
+  shared accounts otherwise. Never point it at shared or production data.
+* One pre-provisioned synthetic organization member with syllabus author scope
+  and a separate educational reviewer with review scope, an education owner
+  assignment, and active source-approval policy. The test checks those
+  capabilities through the API and does not seed or bypass them.
+* At least one published synthetic curriculum in the isolated organization.
+  The shared learner is created by existing global setup.
+* Private storage and a test-approved embedding provider available to the API.
+  Upload runs the normal ingestion and indexing path. Do not enable a chargeable
+  provider for this run unless that use is approved.
+
+Set the four credentials only in a local test shell; never commit them:
+
+```bash
+export E2E_STUDYTOMY_SOURCE_AUTHOR_EMAIL='source-author@example.test'
+export E2E_STUDYTOMY_SOURCE_AUTHOR_PASSWORD='...'
+export E2E_STUDYTOMY_SOURCE_REVIEWER_EMAIL='source-reviewer@example.test'
+export E2E_STUDYTOMY_SOURCE_REVIEWER_PASSWORD='...'
+```
+
+Run the categories separately and retain their results as separate evidence:
+
+```bash
+cd apps/e2e
+bunx playwright test features/studytomy/tests/19-explore-topics.spec.ts
+bunx playwright test features/studytomy/tests/20-explore-topics-live.spec.ts
+```
+
+The live test uses unique original synthetic content. It rejects or revokes its
+source in `finally` after failures; if cleanup fails, it logs the HTTP status so
+the isolated database can be inspected. A passing mocked test does not
+substitute for this live acceptance test or the separate PostgreSQL service
+tests.
+
 Run a single module or spec:
 
 ```bash
@@ -116,6 +167,9 @@ bunx playwright test features/assignments/tests/06-manual-grading.spec.ts
 | `STUDYTOMY_TEST_RUNTIME_IDENTITY` | unset | Local-only opt-in for exact API/web build identity endpoints. |
 | `STUDYTOMY_BUILD_SHA` | unset | Full Git commit SHA embedded in the local API and web processes. |
 | `STUDYTOMY_BUILD_TREE_SHA256` | unset | Digest of tracked and non-ignored untracked checkout files. |
+| `STUDYTOMY_TEST_DATABASE_URL` | unset | Loopback PostgreSQL test database ending in `_test`; for the live Explore Topics spec the API must use this same database. |
+| `E2E_STUDYTOMY_SOURCE_AUTHOR_EMAIL/PASSWORD` | unset | Pre-provisioned synthetic source author credentials for the live Explore Topics spec. |
+| `E2E_STUDYTOMY_SOURCE_REVIEWER_EMAIL/PASSWORD` | unset | Separate educational reviewer credentials with active approval policy assignments. |
 
 ### Reliability notes
 
