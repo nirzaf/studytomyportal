@@ -69,7 +69,6 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
 
   // --- Server-persisted draft (see lib/courses/courseDraftSync.ts) ---
   const tokenRef = useRef<string | undefined>(undefined)
-  tokenRef.current = session.data?.tokens?.access_token
   const syncRef = useRef<CourseDraftSync | null>(null)
   const resumeGuard = useRef<DraftFields | null>(null)
   const submitLock = useRef(false)
@@ -82,6 +81,10 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
   const [closing, setClosing] = React.useState(false)
   const [closeBlocked, setCloseBlocked] = React.useState(false)
   const [thumbnailRestoreFailed, setThumbnailRestoreFailed] = React.useState(false)
+
+  useEffect(() => {
+    tokenRef.current = session.data?.tokens?.access_token
+  }, [session.data?.tokens?.access_token])
 
   const validationSchema = Yup.object().shape({
     name: Yup.string()
@@ -379,7 +382,14 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
   const handleSaveAndClose = async () => {
     setClosing(true)
     setCloseBlocked(false)
-    const ok = (await syncRef.current?.flush()) ?? true
+    const { name, description, learnings, tags, visibility } = formik.values
+    const ok = (await syncRef.current?.flush({
+      name,
+      description,
+      learnings,
+      tags,
+      public: visibility,
+    })) ?? true
     setClosing(false)
     if (ok) closeModal()
     else setCloseBlocked(true)
@@ -469,9 +479,18 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
     return (
       <div className="flex flex-col gap-4" data-testid="course-draft-gate">
         {phase === 'loading' && (
-          <p role="status" className="text-sm text-gray-500">
-            {t('courses.draft_loading', { defaultValue: 'Checking for a saved draft...' })}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p role="status" className="text-sm text-gray-500">
+              {t('courses.draft_loading', { defaultValue: 'Checking for a saved draft...' })}
+            </p>
+            <button
+              type="button"
+              onClick={closeModal}
+              className="min-h-11 rounded-md border border-gray-300 px-4 py-2 text-sm font-bold transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
+            >
+              {t('common.close', { defaultValue: 'Close' })}
+            </button>
+          </div>
         )}
         {phase === 'load_error' && (
           <>
@@ -480,17 +499,17 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
               {loadError ? ` (${loadError})` : ''}
             </p>
             <div className="flex flex-wrap justify-end gap-2">
-              <button type="button" onClick={() => void loadDraft()} className="px-4 py-2 bg-black text-white text-sm font-bold rounded-md">
+              <button type="button" onClick={() => void loadDraft()} className="min-h-11 px-4 py-2 bg-black text-white text-sm font-bold rounded-md transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
                 {t('courses.draft_retry', { defaultValue: 'Retry' })}
               </button>
               <button
                 type="button"
                 onClick={() => setPhase('editing')}
-                className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md"
+                className="min-h-11 px-4 py-2 border border-gray-300 text-sm font-bold rounded-md transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
               >
                 {t('courses.draft_continue_without', { defaultValue: 'Continue without loading' })}
               </button>
-              <button type="button" onClick={closeModal} className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md">
+              <button type="button" onClick={closeModal} className="min-h-11 px-4 py-2 border border-gray-300 text-sm font-bold rounded-md transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
                 {t('common.close', { defaultValue: 'Close' })}
               </button>
             </div>
@@ -517,15 +536,15 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
               )}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <button type="button" onClick={closeModal} className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md">
+              <button type="button" onClick={closeModal} className="min-h-11 px-4 py-2 border border-gray-300 text-sm font-bold rounded-md transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
                 {t('common.close', { defaultValue: 'Close' })}
               </button>
-              <button type="button" onClick={() => void handleStartNew()} className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md">
+              <button type="button" onClick={() => void handleStartNew()} className="min-h-11 px-4 py-2 border border-gray-300 text-sm font-bold rounded-md transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
                 {confirmDiscard
                   ? t('courses.draft_confirm_start_new', { defaultValue: 'Discard & Start New' })
                   : t('courses.draft_start_new', { defaultValue: 'Start New' })}
               </button>
-              <button type="button" onClick={() => void handleResume()} className="px-4 py-2 bg-black text-white text-sm font-bold rounded-md">
+              <button type="button" onClick={() => void handleResume()} className="min-h-11 px-4 py-2 bg-black text-white text-sm font-bold rounded-md transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
                 {t('courses.draft_resume', { defaultValue: 'Resume Draft' })}
               </button>
             </div>
@@ -559,6 +578,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
             value={formik.values.name}
             type="text"
             required
+            className="min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700 focus-visible:ring-offset-2"
           />
         </Form.Control>
       </FormField>
@@ -573,6 +593,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
             onChange={formik.handleChange}
             value={formik.values.description}
             required
+            className="min-h-24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-700 focus-visible:ring-offset-2"
           />
         </Form.Control>
       </FormField>
@@ -589,16 +610,20 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
                 <img
                   src={thumbnailUrl ?? '/empty_thumbnail.png'}
                   alt=""
+                  width={200}
+                  height={100}
                   className={`${isUploading ? 'animate-pulse' : ''} shadow-sm w-[200px] h-[100px] rounded-md object-cover`}
                 />
               ) : (
                 <img
                   src="/empty_thumbnail.png"
                   alt=""
+                  width={200}
+                  height={100}
                   className="shadow-sm w-[200px] h-[100px] rounded-md bg-gray-200 object-cover"
                 />
               )}
-              <div className="flex justify-center items-center space-x-2">
+              <div className="flex flex-wrap justify-center items-center gap-2 px-2">
                 <input
                   type="file"
                   id="fileInput"
@@ -608,24 +633,24 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
                 />
                 <button
                   type="button"
-                  className="font-bold antialiased items-center text-gray text-sm rounded-md px-4 mt-6 flex"
+                  className="min-h-11 font-bold antialiased items-center text-gray text-sm rounded-md px-3 py-2 mt-3 flex transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
                   onClick={() => document.getElementById('fileInput')?.click()}
                 >
-                  <UploadCloud size={16} className="me-2" />
+                  <UploadCloud size={16} className="me-2" aria-hidden="true" />
                   <span>{t('courses.upload_image')}</span>
                 </button>
                 <button
                   type="button"
-                  className="font-bold antialiased items-center text-gray text-sm rounded-md px-4 mt-6 flex"
+                  className="min-h-11 font-bold antialiased items-center text-gray text-sm rounded-md px-3 py-2 mt-3 flex transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
                   onClick={handlePasteFromClipboard}
                 >
-                  <Clipboard size={16} className="me-2" />
+                  <Clipboard size={16} className="me-2" aria-hidden="true" />
                   <span>{t('courses.paste_from_clipboard')}</span>
                 </button>
                 <AIImageButton
                   onSelect={handleRemoteImageSelect}
                   onSelectFile={handleAIImageFile}
-                  className="font-bold antialiased items-center text-gray text-sm rounded-md px-4 mt-6 flex gap-2"
+                  className="min-h-11 font-bold antialiased items-center text-gray text-sm rounded-md px-3 py-2 mt-3 flex gap-2 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
                 />
               </div>
             </div>
@@ -642,14 +667,14 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
               <button
                 type="button"
                 onClick={() => void restoreDraftThumbnail()}
-                className="px-3 py-1 border border-amber-400 font-bold rounded-md"
+                className="min-h-11 px-3 py-2 border border-amber-400 font-bold rounded-md transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2"
               >
                 {t('courses.draft_retry_thumbnail', { defaultValue: 'Retry loading thumbnail' })}
               </button>
               <button
                 type="button"
                 onClick={() => setThumbnailRestoreFailed(false)}
-                className="px-3 py-1 border border-amber-400 font-bold rounded-md"
+                className="min-h-11 px-3 py-2 border border-amber-400 font-bold rounded-md transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2"
               >
                 {t('courses.draft_continue_without_thumbnail', { defaultValue: 'Continue without thumbnail' })}
               </button>
@@ -711,13 +736,13 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
             })}
           </p>
           <div className="flex flex-wrap gap-2 mt-2">
-            <button type="button" onClick={() => void handleReloadLatest()} className="px-3 py-1 border border-gray-300 font-bold rounded-md">
+            <button type="button" onClick={() => void handleReloadLatest()} className="min-h-11 px-3 py-2 border border-gray-300 font-bold rounded-md transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
               {t('courses.draft_load_latest', { defaultValue: 'Load latest draft' })}
             </button>
             <button
               type="button"
               onClick={() => syncRef.current?.resolveConflict('overwrite')}
-              className="px-3 py-1 border border-gray-300 font-bold rounded-md"
+              className="min-h-11 px-3 py-2 border border-gray-300 font-bold rounded-md transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
             >
               {t('courses.draft_keep_mine', { defaultValue: 'Keep my version' })}
             </button>
@@ -736,11 +761,11 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
             {syncState.error ? ` (${syncState.error})` : ''}
           </p>
           <div className="flex flex-wrap gap-2 mt-2">
-            <button type="button" onClick={() => void syncRef.current?.flush()} className="px-3 py-1 border border-red-300 font-bold rounded-md">
+            <button type="button" onClick={() => void syncRef.current?.flush()} className="min-h-11 px-3 py-2 border border-red-300 font-bold rounded-md transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
               {t('courses.draft_retry', { defaultValue: 'Retry' })}
             </button>
             {closeBlocked && (
-              <button type="button" onClick={closeModal} className="px-3 py-1 border border-red-300 font-bold rounded-md">
+              <button type="button" onClick={closeModal} className="min-h-11 px-3 py-2 border border-red-300 font-bold rounded-md transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2">
                 {t('courses.draft_close_anyway', { defaultValue: 'Close without saving' })}
               </button>
             )}
@@ -757,7 +782,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
             type="button"
             onClick={() => void handleSaveAndClose()}
             disabled={closing || formik.isSubmitting}
-            className="px-4 py-2 border border-gray-300 text-sm font-bold rounded-md"
+            className="min-h-11 px-4 py-2 border border-gray-300 text-sm font-bold rounded-md transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
           >
             {closing
               ? t('courses.draft_saving', { defaultValue: 'Saving...' })
@@ -766,7 +791,7 @@ function CreateCourseModal({ closeModal, orgslug }: any) {
           <button
             type="submit"
             disabled={formik.isSubmitting}
-            className="px-4 py-2 bg-black text-white text-sm font-bold rounded-md"
+            className="min-h-11 px-4 py-2 bg-black text-white text-sm font-bold rounded-md transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
           >
             {formik.isSubmitting ? (
               <BarLoader

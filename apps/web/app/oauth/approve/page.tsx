@@ -4,7 +4,7 @@ import PageLoading from '@components/Objects/Loaders/PageLoading'
 import ApproveClient from './approve'
 
 export const metadata: Metadata = {
-  title: 'Approve an action | Studytomy',
+  title: 'Approve an action',
   robots: { index: false, follow: false },
 }
 

@@ -13,8 +13,6 @@ export type OnboardingStep = {
   hrefType?: 'org' | 'root'
   // Steps with no data signal complete when their CTA is clicked.
   completeOnClick?: boolean
-  // Walkthrough video (see onboardingMedia.ts) and how long the step takes.
-  video: string
   minutes: number
   completed: boolean
   requiredPlan?: string
@@ -47,7 +45,6 @@ const DEFAULT_STEPS: Omit<OnboardingStep, 'completed'>[] = [
     description: 'Publish a course so there’s something real for learners to enroll in.',
     action: 'Create a course',
     href: '/dash/courses?new=true',
-    video: 'ob2',
     minutes: 2,
   },
   {
@@ -56,7 +53,6 @@ const DEFAULT_STEPS: Omit<OnboardingStep, 'completed'>[] = [
     description: 'Add a video, page or quiz to give learners a real reason to enroll.',
     action: 'Add content',
     href: '/dash/courses',
-    video: 'ob3',
     minutes: 5,
   },
   {
@@ -65,7 +61,6 @@ const DEFAULT_STEPS: Omit<OnboardingStep, 'completed'>[] = [
     description: 'Add your logo and colors so it looks like a credible, professional school.',
     action: 'Brand it',
     href: '/dash/org/settings/branding',
-    video: 'ob4',
     minutes: 2,
   },
   {
@@ -76,7 +71,6 @@ const DEFAULT_STEPS: Omit<OnboardingStep, 'completed'>[] = [
     href: '/',
     hrefType: 'root',
     completeOnClick: true,
-    video: 'ob5',
     minutes: 1,
   },
   {
@@ -85,7 +79,6 @@ const DEFAULT_STEPS: Omit<OnboardingStep, 'completed'>[] = [
     description: 'Share your join link or invite people to get that first learner through the door.',
     action: 'Invite learners',
     href: '/dash/users/settings/add',
-    video: 'ob6',
     minutes: 2,
   },
   {
@@ -94,7 +87,6 @@ const DEFAULT_STEPS: Omit<OnboardingStep, 'completed'>[] = [
     description: 'Open a community space so your learners stay active and bring their friends.',
     action: 'Open community',
     href: '/dash/communities',
-    video: 'ob7',
     minutes: 2,
   },
 ]

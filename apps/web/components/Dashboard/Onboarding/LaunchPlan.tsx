@@ -1,6 +1,6 @@
 'use client'
 import React, { useEffect, useMemo, useState } from 'react'
-import { motion } from 'motion/react'
+import { motion, useReducedMotion } from 'motion/react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
@@ -21,7 +21,6 @@ import { useOnboardingSignals } from '@components/Hooks/useOnboardingSignals'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { getUriWithOrg } from '@services/config/config'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
-import OnboardingVideo from './OnboardingVideo'
 import LaunchFinale from './LaunchFinale'
 import { whyKey } from './onboardingCopy'
 
@@ -36,7 +35,7 @@ export const STEP_ICON: Record<string, React.ElementType> = {
 
 /**
  * The launch plan: the steps in a card on the left, the selected step on the
- * right with its walkthrough video and one action. Steps tick off from real
+ * right with clear guidance and one action. Steps tick off from real
  * data; each one finished gets a toast, the last one opens the finale.
  */
 export default function LaunchPlan() {
@@ -100,12 +99,13 @@ function StepList({
   onSelect: (_id: string) => void
 }) {
   const { t } = useTranslation()
+  const reduceMotion = useReducedMotion()
   const done = steps.filter((s) => s.completed).length
   return (
     <div className="order-2 lg:order-1 bg-white rounded-xl nice-shadow overflow-hidden lg:sticky lg:top-6">
       <div className="flex items-center justify-between px-5 pt-4 pb-3">
         <h3 className="text-sm font-semibold text-gray-700">{t('onboarding.steps_title')}</h3>
-        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 tabular-nums">
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 tabular-nums">
           {done}/{steps.length}
         </span>
       </div>
@@ -121,34 +121,34 @@ function StepList({
                 onClick={() => onSelect(step.id)}
                 aria-current={active ? 'step' : undefined}
                 className={[
-                  'w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-colors',
+                  'flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
                   active ? 'bg-gray-100' : 'hover:bg-gray-50',
                 ].join(' ')}
               >
                 <span
                   className={[
                     'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                    finished ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500',
+                    finished ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600',
                   ].join(' ')}
                 >
                   {finished ? (
-                    <motion.span initial={{ scale: 0.5 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 20 }}>
-                      <Check size={15} weight="bold" />
+                    <motion.span initial={reduceMotion ? false : { scale: 0.5 }} animate={{ scale: 1 }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 20 }}>
+                      <Check size={15} weight="bold" aria-hidden="true" />
                     </motion.span>
                   ) : (
-                    <Icon size={16} weight="duotone" />
+                    <Icon size={16} weight="duotone" aria-hidden="true" />
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span
                     className={[
                       'block truncate text-sm font-medium',
-                      step.completed ? 'text-gray-400' : 'text-gray-900',
+                      step.completed ? 'text-gray-600' : 'text-gray-900',
                     ].join(' ')}
                   >
                     {t(`onboarding.steps.${step.id}.title`)}
                   </span>
-                  <span className="block text-xs text-gray-400">
+                  <span className="block text-xs text-gray-600">
                     {step.skipped
                       ? t('onboarding.skipped')
                       : finished
@@ -159,7 +159,7 @@ function StepList({
                   </span>
                 </span>
                 {!step.completed && (
-                  <span className="shrink-0 text-xs text-gray-400 tabular-nums">
+                  <span className="shrink-0 text-xs text-gray-600 tabular-nums">
                     {t('onboarding.minutes', { count: step.minutes })}
                   </span>
                 )}
@@ -203,6 +203,7 @@ function StepPanel({
   const target = step.hrefType === 'root' ? getUriWithOrg(orgSlug, '/') : getUriWithOrg(orgSlug, href)
   const title = t(`onboarding.steps.${step.id}.title`)
   const action = t(`onboarding.steps.${step.id}.action`)
+  const StepIcon = STEP_ICON[step.id] ?? BookOpen
 
   const onAction = () => {
     track(AnalyticsEvent.OnboardingStepActionClicked, { step_id: step.id })
@@ -210,62 +211,65 @@ function StepPanel({
   }
 
   const btn =
-    'inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-xs font-bold text-white nice-shadow transition-colors hover:bg-gray-800'
+    'inline-flex min-h-11 items-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white nice-shadow transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2'
   const cta = step.completeOnClick ? (
     <a href={target} target="_blank" rel="noopener noreferrer" onClick={onAction} className={btn}>
       {action}
-      <ArrowUpRight size={13} weight="bold" data-dir-flip />
+      <ArrowUpRight size={13} weight="bold" data-dir-flip aria-hidden="true" />
     </a>
   ) : (
     <Link href={target} onClick={onAction} className={btn}>
       {action}
-      <ArrowRight size={13} weight="bold" data-dir-flip />
+      <ArrowRight size={13} weight="bold" data-dir-flip aria-hidden="true" />
     </Link>
   )
 
   return (
     <section className="order-1 lg:order-2 bg-white rounded-xl nice-shadow overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
-        <span className="text-xs font-medium text-gray-400">
+        <span className="text-xs font-medium text-gray-600">
           {t('onboarding.step_of', { current: index + 1, total })}
         </span>
-        <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-          <Clock size={12} />
+        <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+          <Clock size={12} aria-hidden="true" />
           {t('onboarding.about_minutes', { count: step.minutes })}
         </span>
       </div>
 
-      <div className="px-5">
-        <OnboardingVideo id={step.video} endSlot={!step.completed ? cta : undefined} />
-      </div>
-
       <div className="px-5 pt-5 pb-5">
-        <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-        <p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-500">
-          {why ?? t(`onboarding.steps.${step.id}.description`)}
-        </p>
+        <div className="flex items-start gap-3">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-800 ring-1 ring-inset ring-sky-100">
+            <StepIcon size={21} weight="duotone" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-500">
+              {why ?? t(`onboarding.steps.${step.id}.description`)}
+            </p>
+          </div>
+        </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
           {step.completed && !step.skipped ? (
             <>
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-600">
-                <Check size={14} weight="bold" />
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700">
+                <Check size={14} weight="bold" aria-hidden="true" />
                 {t('onboarding.step_done')}
               </span>
               <button
                 type="button"
                 onClick={onNext}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-gray-900 hover:text-gray-600"
+                className="inline-flex min-h-11 items-center gap-1 rounded px-2 text-sm font-semibold text-gray-900 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 {t('onboarding.next_step')}
-                <ArrowRight size={12} weight="bold" data-dir-flip />
+                <ArrowRight size={12} weight="bold" data-dir-flip aria-hidden="true" />
               </button>
             </>
           ) : step.skipped ? (
             <button
               type="button"
               onClick={() => unskipStep(step.id)}
-              className="rounded-lg bg-gray-100 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200 transition-colors"
+              className="min-h-11 rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               {t('onboarding.undo_skip')}
             </button>
@@ -276,7 +280,7 @@ function StepPanel({
                 <button
                   type="button"
                   onClick={() => completeStep(step.id)}
-                  className="text-xs font-medium text-gray-500 hover:text-gray-900"
+                  className="min-h-11 rounded px-2 text-sm font-medium text-gray-700 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   {t('onboarding.mark_done')}
                 </button>
@@ -288,7 +292,7 @@ function StepPanel({
                   skipStep(step.id)
                   onNext()
                 }}
-                className="text-xs font-medium text-gray-400 hover:text-gray-600"
+                className="min-h-11 rounded px-2 text-sm font-medium text-gray-600 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 {t('onboarding.skip_for_now')}
               </button>
@@ -298,7 +302,7 @@ function StepPanel({
       </div>
 
       {!step.completed && !step.completeOnClick && (
-        <div className="border-t border-gray-100 px-5 py-3 text-xs text-gray-400">{t('onboarding.auto_check')}</div>
+        <div className="border-t border-gray-100 px-5 py-3 text-xs text-gray-600">{t('onboarding.auto_check')}</div>
       )}
     </section>
   )

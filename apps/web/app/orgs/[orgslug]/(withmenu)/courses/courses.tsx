@@ -209,7 +209,8 @@ function Courses(props: CourseProps) {
                 onOpenChange={setNewCourseModal}
                 preventAccidentalClose
                 minHeight="md"
-                minWidth="lg"
+                minWidth="no-min"
+                customWidth="md:w-[90vw]"
                 dialogContent={
                   <CreateCourseModal
                     closeModal={closeNewCourseModal}

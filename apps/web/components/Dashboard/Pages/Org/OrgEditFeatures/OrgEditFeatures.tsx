@@ -5,12 +5,9 @@ import { toast } from 'react-hot-toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
-import { usePlan } from '@components/Hooks/usePlan'
 import useAdminStatus from '@components/Hooks/useAdminStatus'
-import PlanBadge from '@components/Dashboard/Shared/PlanRestricted/PlanBadge'
 import { Switch } from '@components/ui/switch'
 import { queryKeys } from '@/lib/query/keys'
-import { getUpgradeUrl } from '@services/config/config'
 import { updateOrgFeatureToggle } from '@services/settings/org'
 import { revalidateTags } from '@services/utils/ts/requests'
 import {
@@ -23,8 +20,8 @@ import {
 type Row = { feature: OptionalFeature } & OptionalFeatureState
 
 /**
- * One switch per optional feature. A feature the plan does not include has no
- * switch, only the plan that unlocks it.
+ * Features unavailable on the organization's plan are omitted. This page only
+ * lists features the organization can actually enable or disable.
  */
 const OrgEditFeatures: React.FC = () => {
   const { t } = useTranslation()
@@ -32,7 +29,6 @@ const OrgEditFeatures: React.FC = () => {
   const session = useLHSession() as any
   const accessToken = session?.data?.tokens?.access_token
   const queryClient = useQueryClient()
-  const plan = usePlan()
   const { canManageOrg } = useAdminStatus()
   const [updating, setUpdating] = useState<string | null>(null)
 
@@ -42,7 +38,6 @@ const OrgEditFeatures: React.FC = () => {
     ...getOptionalFeatureState(rf?.[feature.key]),
   }))
   const inPlan = rows.filter((r) => r.status !== 'locked')
-  const locked = rows.filter((r) => r.status === 'locked')
 
   const toggle = async (row: Row, enabled: boolean) => {
     const name = t(row.feature.labelKey)
@@ -91,40 +86,6 @@ const OrgEditFeatures: React.FC = () => {
         })}
       </section>
 
-      {locked.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="px-1 text-sm font-semibold text-gray-500">
-            {t('dashboard.organization.features.sections.locked')}
-          </h3>
-          <div className="bg-white rounded-xl nice-shadow divide-y divide-gray-100">
-            {locked.map((row) => {
-              const upgradeUrl = canManageOrg ? getUpgradeUrl(org?.slug, row.upgradePlan) : null
-              return (
-                <div key={row.feature.key} className="flex items-center gap-4 p-4">
-                  <FeatureIcon row={row} />
-                  <div className="flex-1 min-w-0 space-y-0.5">
-                    <h4 className="text-sm font-semibold text-gray-500 flex items-center">
-                      {t(row.feature.labelKey)}
-                      {row.upgradePlan && <PlanBadge currentPlan={plan} requiredPlan={row.upgradePlan} alwaysShow />}
-                    </h4>
-                    <p className="text-sm text-gray-400">{t(row.feature.descriptionKey)}</p>
-                  </div>
-                  {upgradeUrl && (
-                    <a
-                      href={upgradeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 text-sm font-semibold text-gray-700 bg-white px-3 py-1.5 rounded-lg nice-shadow hover:bg-gray-50 transition-colors"
-                    >
-                      {t('dashboard.organization.features.upgrade')}
-                    </a>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
     </div>
   )
 }

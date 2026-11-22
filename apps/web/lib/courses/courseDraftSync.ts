@@ -132,6 +132,7 @@ export class CourseDraftSync {
     // A queued so it is written after B acknowledges.
     if (!this.inFlightFields && this.lastSaved && sameDraftFields(fields, this.lastSaved)) {
       this.pendingFields = null
+      if (!this.pendingThumb && this.state.status !== 'conflict') this.set('saved')
       return
     }
     if (!this.inFlightFields && this.revision === null && isBlankDraftFields(fields)) {
@@ -213,7 +214,10 @@ export class CourseDraftSync {
   }
 
   /** Persist everything queued now. True only when nothing is left unsaved. */
-  async flush(): Promise<boolean> {
+  async flush(fields?: DraftFields): Promise<boolean> {
+    // Callers that close or navigate away can pass the current form snapshot
+    // so correctness does not depend on a React effect having queued it first.
+    if (fields) this.schedule(fields)
     if (this.debounceTimer) clearTimeout(this.debounceTimer)
     this.debounceTimer = null
     for (let attempt = 0; attempt < 2 && this.hasPending && this.state.status !== 'conflict'; attempt++) {

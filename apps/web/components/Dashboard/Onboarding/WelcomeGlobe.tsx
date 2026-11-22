@@ -45,9 +45,6 @@ const COLLABORATION_ARCS = [
 export default function WelcomeGlobe() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const pointerDown = useRef(false)
-  const lastX = useRef(0)
-  const dragVelocity = useRef(0)
   const phiRef = useRef(1.8)
 
   useEffect(() => {
@@ -57,31 +54,9 @@ export default function WelcomeGlobe() {
     const width = container.offsetWidth
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
 
-    let phi = 1.8
-    phiRef.current = phi
+    phiRef.current = 1.8
     const autoRotateSpeed = 0.003
-
-    const onDown = (e: PointerEvent) => {
-      pointerDown.current = true
-      lastX.current = e.clientX
-      dragVelocity.current = 0
-      container.setPointerCapture(e.pointerId)
-    }
-    const onMove = (e: PointerEvent) => {
-      if (!pointerDown.current) return
-      const delta = e.clientX - lastX.current
-      lastX.current = e.clientX
-      dragVelocity.current = delta * 0.005
-      phiRef.current += dragVelocity.current
-    }
-    const onUp = () => {
-      pointerDown.current = false
-    }
-
-    container.addEventListener('pointerdown', onDown)
-    container.addEventListener('pointermove', onMove)
-    container.addEventListener('pointerup', onUp)
-    container.addEventListener('pointerleave', onUp)
+    const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
 
     const globe = createGlobe(canvasRef.current, {
       devicePixelRatio: dpr,
@@ -93,11 +68,11 @@ export default function WelcomeGlobe() {
       diffuse: 1.5,
       mapSamples: 16000,
       mapBrightness: 8,
-      baseColor: [1, 1, 1],
+      baseColor: [0.82, 0.87, 0.95],
       markerColor: [0.2, 0.2, 0.2],
-      glowColor: [0.95, 0.95, 0.95],
+      glowColor: [0.9, 0.93, 0.98],
       markerElevation: 0,
-      opacity: 0.7,
+      opacity: 0.9,
       markers: STICKER_MARKERS.map((m) => ({
         location: m.location,
         size: 0.03,
@@ -112,37 +87,45 @@ export default function WelcomeGlobe() {
       arcHeight: 0.2,
     })
 
-    let animationId: number
+    let animationId: number | undefined
     let frame = 0
     function animate() {
-      frame++
-      if (!pointerDown.current) {
-        if (Math.abs(dragVelocity.current) > 0.0001) {
-          phiRef.current += dragVelocity.current
-          dragVelocity.current *= 0.95
-        } else {
-          dragVelocity.current = 0
-          phiRef.current += autoRotateSpeed
-        }
+      if (motionPreference.matches || document.visibilityState === 'hidden') {
+        animationId = undefined
+        globe.update({ phi: phiRef.current, arcHeight: 0.15 })
+        return
       }
+      frame++
+      phiRef.current += autoRotateSpeed
       const arcHeight = 0.15 + Math.sin(frame * 0.015) * 0.1
       globe.update({ phi: phiRef.current, arcHeight })
       animationId = requestAnimationFrame(animate)
     }
-    animate()
+    const syncMotion = () => {
+      const shouldPause = motionPreference.matches || document.visibilityState === 'hidden'
+      if (shouldPause) {
+        if (animationId !== undefined) cancelAnimationFrame(animationId)
+        animationId = undefined
+        globe.update({ phi: phiRef.current, arcHeight: 0.15 })
+      } else if (animationId === undefined) {
+        animationId = requestAnimationFrame(animate)
+      }
+    }
+    globe.update({ phi: phiRef.current, arcHeight: 0.15 })
+    motionPreference.addEventListener('change', syncMotion)
+    document.addEventListener('visibilitychange', syncMotion)
+    syncMotion()
 
     return () => {
-      cancelAnimationFrame(animationId)
-      container.removeEventListener('pointerdown', onDown)
-      container.removeEventListener('pointermove', onMove)
-      container.removeEventListener('pointerup', onUp)
-      container.removeEventListener('pointerleave', onUp)
+      if (animationId !== undefined) cancelAnimationFrame(animationId)
+      motionPreference.removeEventListener('change', syncMotion)
+      document.removeEventListener('visibilitychange', syncMotion)
       globe.destroy()
     }
   }, [])
 
   return (
-    <div ref={containerRef} className="relative w-full cursor-grab active:cursor-grabbing" style={{ aspectRatio: '1', touchAction: 'none' }}>
+    <div ref={containerRef} className="relative w-full" style={{ aspectRatio: '1' }}>
       {/* SVG filter for sticker white outline */}
       <svg width="0" height="0" style={{ position: 'absolute' }}>
         <defs>

@@ -83,6 +83,34 @@ test('a blank form never creates a draft, but an incomplete one does', async () 
   expect(sync.state.status).toBe('saved')
 })
 
+test('flush persists the caller current form snapshot before close', async () => {
+  const server = fakeServer()
+  const sync = make(server)
+
+  // Models Save & Close being clicked before the autosave effect queues the
+  // latest render's values.
+  expect(await sync.flush(fields({ name: 'Latest input' }))).toBe(true)
+  expect(server.draft?.name).toBe('Latest input')
+  expect(server.calls).toEqual([{ kind: 'fields', base: null }])
+})
+
+test('reverting a failed field edit to the saved values clears the save error', async () => {
+  const server = fakeServer()
+  const sync = make(server)
+  const saved = fields({ name: 'Already saved' })
+  sync.schedule(saved)
+  expect(await sync.flush()).toBe(true)
+
+  server.failNext = 1
+  sync.schedule(fields({ name: 'Temporary edit' }))
+  expect(await sync.flush()).toBe(false)
+  expect(sync.state.status).toBe('error')
+
+  expect(await sync.flush(saved)).toBe(true)
+  expect(sync.state.status).toBe('saved')
+  expect(server.draft?.name).toBe('Already saved')
+})
+
 test('rapid edits coalesce and revisions advance one write at a time', async () => {
   const server = fakeServer()
   const sync = make(server)

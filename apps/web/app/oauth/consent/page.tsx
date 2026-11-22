@@ -4,7 +4,7 @@ import PageLoading from '@components/Objects/Loaders/PageLoading'
 import ConsentClient from './consent'
 
 export const metadata: Metadata = {
-  title: 'Connect an app | Studytomy',
+  title: 'Connect an app',
   robots: { index: false, follow: false },
 }
 

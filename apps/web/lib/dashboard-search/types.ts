@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import type { PlanLevel } from '@services/plans/plans'
 
 export type SearchMetaGroup =
   | 'home'
@@ -23,6 +24,7 @@ export interface SearchMeta {
   group: SearchMetaGroup
   featureKey?: string
   featureDefaultDisabled?: boolean
+  requiresPlan?: PlanLevel
   requiresOrgAdmin?: boolean
   /** Hides the entry when it returns false (e.g. Enterprise-only pages). */
   available?: () => boolean

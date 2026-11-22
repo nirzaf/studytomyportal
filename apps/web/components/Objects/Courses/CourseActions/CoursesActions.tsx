@@ -20,30 +20,39 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query/keys'
 import { useTranslation } from 'react-i18next'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
+import {
+  getNextCourseActivity,
+  isCourseStartAvailable,
+  type CourseChapterSummary,
+} from '@/lib/courses/courseNavigation'
 
 interface CourseRun {
   status: string
   course_id: string
   steps: Array<{
-    activity_id: string
+    activity_id: number | string
     complete: boolean
+  }>
+}
+
+interface CourseChapter extends CourseChapterSummary {
+  name: string
+  activities: Array<{
+    id: number | string
+    activity_uuid: string
+    name: string
+    activity_type: string
   }>
 }
 
 interface Course {
   id: string
   course_uuid: string
+  published?: boolean
   trail?: {
     runs: CourseRun[]
   }
-  chapters?: Array<{
-    name: string
-    activities: Array<{
-      activity_uuid: string
-      name: string
-      activity_type: string
-    }>
-  }>
+  chapters?: CourseChapter[]
   open_to_contributors?: boolean
 }
 
@@ -83,6 +92,20 @@ function CoursesActions({ courseuuid, orgslug, course, trailData }: CourseAction
   // Clean up course UUID by removing 'course_' prefix if it exists
   const cleanCourseUuid = course.course_uuid?.replace('course_', '');
   const resourceUuid = cleanCourseUuid ? `course_${cleanCourseUuid}` : null;
+  const courseChapters = course.chapters ?? []
+  const firstCourseActivity = getNextCourseActivity(courseChapters)
+  const totalActivities = courseChapters.reduce(
+    (total, chapter) => total + (chapter.activities?.length ?? 0),
+    0,
+  )
+  const canStartCourse = isCourseStartAvailable(course.published, firstCourseActivity)
+  const startUnavailableMessage = course.published === false
+    ? t('courses.course_not_published_for_learners', {
+        defaultValue: 'This course is still a draft. Publish it before learners can start.',
+      })
+    : t('courses.no_published_lessons_yet', {
+        defaultValue: 'No published lessons are available yet.',
+      })
 
   const isStarted = trailData?.runs?.find(
     (run: any) => {
@@ -94,15 +117,16 @@ function CoursesActions({ courseuuid, orgslug, course, trailData }: CourseAction
   // `s` starts the course, or resumes it at the first lesson not yet done.
   const resumeCourse = () => {
     const run = isStarted || null
-    const doneIds = new Set<number>(
-      (run?.steps ?? []).filter((step: any) => step.complete).map((step: any) => step.activity_id),
-    )
-    const flat: any[] = (course.chapters ?? []).flatMap((chapter: any) => chapter.activities ?? [])
-    const target = flat.find((activity: any) => !doneIds.has(activity.id)) ?? flat[0]
-    if (!target) return
+    const completedActivityIds = (run?.steps ?? [])
+      .filter((step: CourseRun['steps'][number]) => step.complete)
+      .map((step: CourseRun['steps'][number]) => step.activity_id)
+    const target = getNextCourseActivity(courseChapters, completedActivityIds)
+    if (!target) {
+      toast.error(startUnavailableMessage)
+      return
+    }
     router.push(
-      getUriWithOrg(orgslug, '') +
-        `/course/${cleanCourseUuid}/activity/${target.activity_uuid.replace('activity_', '')}`,
+      getUriWithOrg(orgslug, `/course/${cleanCourseUuid}/activity/${target.activity_uuid.replace('activity_', '')}`),
     )
   }
   useShortcut(
@@ -116,7 +140,7 @@ function CoursesActions({ courseuuid, orgslug, course, trailData }: CourseAction
         else if (!isActionLoading) handleCourseAction()
       },
     },
-    !!session.data?.user && isUserPartOfTheOrg && !!course?.chapters,
+    !!session.data?.user && isUserPartOfTheOrg && !!course?.chapters && (isStarted || canStartCourse),
   )
 
   // Public endpoint: no auth needed, works for unauthenticated visitors too
@@ -155,6 +179,11 @@ function CoursesActions({ courseuuid, orgslug, course, trailData }: CourseAction
       return
     }
 
+    if (!isStarted && !canStartCourse) {
+      toast.error(startUnavailableMessage)
+      return
+    }
+
     setIsActionLoading(true)
     const loadingToast = toast.loading(
       isStarted ? t('courses.leave_course') + '...' : t('courses.start_course') + '...'
@@ -167,26 +196,28 @@ function CoursesActions({ courseuuid, orgslug, course, trailData }: CourseAction
         track(AnalyticsEvent.CourseLeft, { course_uuid: cleanCourseUuid })
         toast.success(t('courses.leave_course_success'), { id: loadingToast })
       } else {
-        await startCourse('course_' + courseuuid, orgslug, session.data?.tokens?.access_token)
+        const activityToOpen = firstCourseActivity
+        if (!activityToOpen) {
+          toast.error(startUnavailableMessage, { id: loadingToast })
+          return
+        }
+
+        await startCourse(course.course_uuid, orgslug, session.data?.tokens?.access_token)
         if (org?.id) queryClient.invalidateQueries({ queryKey: queryKeys.trail.org(org.id) })
         track(AnalyticsEvent.CourseStarted, {
           course_uuid: cleanCourseUuid,
-          total_activities: course.chapters?.reduce((acc: number, chapter: any) => acc + chapter.activities.length, 0) || 0,
+          total_activities: totalActivities,
           has_offers: linkedOffers.length > 0,
         })
         toast.success(t('courses.start_course_success'), { id: loadingToast })
 
-        // Get the first activity from the first chapter
-        const firstChapter = course.chapters?.[0]
-        const firstActivity = firstChapter?.activities?.[0]
-
-        if (firstActivity) {
-          // Redirect to the first activity
-          router.push(
-            getUriWithOrg(orgslug, '') +
-            `/course/${courseuuid}/activity/${firstActivity.activity_uuid.replace('activity_', '')}`
-          )
-        }
+        // Start at the first visible lesson in course order.
+        router.push(
+          getUriWithOrg(
+            orgslug,
+            `/course/${cleanCourseUuid}/activity/${activityToOpen.activity_uuid.replace('activity_', '')}`,
+          ),
+        )
       }
     } catch (error) {
       console.error('Failed to perform course action:', error)
@@ -311,7 +342,26 @@ function CoursesActions({ courseuuid, orgslug, course, trailData }: CourseAction
   };
 
   const renderProgressSection = () => {
-    const totalActivities = course.chapters?.reduce((acc: number, chapter: any) => acc + chapter.activities.length, 0) || 0;
+    if (!canStartCourse && !isStarted) {
+      return (
+        <div role="status" className="relative bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="text-sm font-semibold text-amber-900">
+            {course.published === false
+              ? t('courses.unpublished', { defaultValue: 'Unpublished' })
+              : t('courses.no_published_lessons_yet', { defaultValue: 'No published lessons yet' })}
+          </div>
+          <p className="text-sm text-amber-800 mt-1">{startUnavailableMessage}</p>
+        </div>
+      )
+    }
+
+    if (totalActivities === 0) {
+      return (
+        <div role="status" className="relative bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <p className="text-sm text-amber-800">{startUnavailableMessage}</p>
+        </div>
+      )
+    }
 
     // Find the correct run using the cleaned UUID
     const run = trailData?.runs?.find(
@@ -513,11 +563,9 @@ function CoursesActions({ courseuuid, orgslug, course, trailData }: CourseAction
     )
   }
 
-  const totalActivities = course.chapters?.reduce((acc: number, chapter: any) => acc + chapter.activities.length, 0) || 0
-
   return (
     <div ref={boxRef} className="bg-white shadow-md shadow-gray-300/25 outline outline-1 outline-neutral-200/40 rounded-lg overflow-hidden p-4">
-      {totalActivities > 0 && (
+      {totalActivities > 0 && (isStarted || canStartCourse) && (
         <div
           aria-hidden={boxVisible}
           className={`md:hidden fixed inset-x-0 px-4 pt-6 pb-3 bg-gradient-to-t from-white via-white/90 to-transparent transition-all duration-300 ease-out ${
@@ -542,22 +590,25 @@ function CoursesActions({ courseuuid, orgslug, course, trailData }: CourseAction
         {renderProgressSection()}
 
         {/* Start/Leave Course Button */}
-        <button
-          onClick={handleCourseAction}
-          disabled={isActionLoading}
-          aria-label={isStarted ? t('courses.leave_course') : t('courses.start_course')}
-          className={`w-full py-3 rounded-lg nice-shadow font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer ${
-            isStarted
-              ? 'bg-red-500 text-white hover:bg-red-600 disabled:bg-red-400'
-              : 'bg-neutral-900 text-white hover:bg-neutral-800 disabled:bg-neutral-700'
-          }`}
-        >
-          {isActionLoading ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            renderActionButton(isStarted ? 'leave' : 'start')
-          )}
-        </button>
+        {(isStarted || canStartCourse) && (
+          <button
+            type="button"
+            onClick={handleCourseAction}
+            disabled={isActionLoading}
+            aria-label={isStarted ? t('courses.leave_course') : t('courses.start_course')}
+            className={`w-full py-3 rounded-lg nice-shadow font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer ${
+              isStarted
+                ? 'bg-red-500 text-white hover:bg-red-600 disabled:bg-red-400'
+                : 'bg-neutral-900 text-white hover:bg-neutral-800 disabled:bg-neutral-700'
+            }`}
+          >
+            {isActionLoading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              renderActionButton(isStarted ? 'leave' : 'start')
+            )}
+          </button>
+        )}
 
         {/* Contributor Button */}
         {renderContributorButton()}

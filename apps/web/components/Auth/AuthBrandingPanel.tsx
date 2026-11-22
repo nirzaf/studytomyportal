@@ -3,7 +3,7 @@ import React from 'react'
 import { useTranslation, Trans } from 'react-i18next'
 import Image from 'next/image'
 import Link from 'next/link'
-import learnhouseIcon from 'public/learnhouse_bigicon_1.png'
+import studytomyIcon from 'public/studytomy-mini.png'
 import { getOrgAuthBackgroundMediaDirectory } from '@services/media/media'
 import OrgSquareLogo from '@components/Objects/Org/OrgSquareLogo'
 import { getUriWithOrg } from '@services/config/config'
@@ -32,10 +32,10 @@ export default function AuthBrandingPanel({ org, welcomeText, title, subtitle }:
     unsplash_photographer_url = '',
     unsplash_photo_url = '',
   } = authBranding
-  const UNSPLASH_UTM = '?utm_source=LearnHouse&utm_medium=referral'
+  const UNSPLASH_UTM = '?utm_source=Studytomy&utm_medium=referral'
   const withUtm = (url: string) => (url ? `${url}${UNSPLASH_UTM}` : '')
 
-  // Pro+ and EE are white-labelled; OSS keeps the LearnHouse mark
+  // White-label plans use the organization's identity; other plans keep the Studytomy mark.
   const plan = usePlan()
   const isWhiteLabel = isWhiteLabelPlan(plan)
 
@@ -144,7 +144,7 @@ export default function AuthBrandingPanel({ org, welcomeText, title, subtitle }:
 
         {/* Content */}
         <div className="relative z-10 flex flex-col h-full p-10">
-          {/* Top bar with LearnHouse lrn.svg logo - hidden for white-label plans
+          {/* Studytomy mark - hidden for white-label plans
               and for the no-org apex panel (platform shows no logo on the image). */}
           {!isWhiteLabel && !noOrg && (
             <div className="login-topbar">
@@ -196,7 +196,7 @@ export default function AuthBrandingPanel({ org, welcomeText, title, subtitle }:
                               quality={100}
                               width={96}
                               height={96}
-                              src={learnhouseIcon}
+                              src={studytomyIcon}
                               alt="Studytomy"
                               className="object-contain"
                             />

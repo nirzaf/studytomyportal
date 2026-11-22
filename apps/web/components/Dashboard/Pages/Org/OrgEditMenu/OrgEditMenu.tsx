@@ -10,14 +10,13 @@ import { revalidateTags } from '@services/utils/ts/requests'
 import { updateOrgMenuConfig, MenuLinkItem } from '@services/settings/org'
 import { useTranslation } from 'react-i18next'
 import { PlanLevel, planMeetsRequirement } from '@services/plans/plans'
-import PlanBadge from '@components/Dashboard/Shared/PlanRestricted/PlanBadge'
 import useAdminStatus from '@components/Hooks/useAdminStatus'
 import { usePlan } from '@components/Hooks/usePlan'
 import { Switch } from '@components/ui/switch'
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd'
 import {
   Books, FolderSimple, Headphones, ChatsCircle, Cube, ShoppingBag, Steps, VideoCamera,
-  DotsSixVertical, Lock, Trash, Plus, FloppyDisk, CaretDown,
+  DotsSixVertical, Trash, Plus, FloppyDisk, CaretDown,
 } from '@phosphor-icons/react'
 import { MENU_ICONS, MENU_ICON_NAMES, menuIcon, DEFAULT_MENU_ICON } from '@components/Objects/Menus/menuIcons'
 
@@ -203,17 +202,30 @@ const OrgEditMenu: React.FC = () => {
   const featureState = (type: string) => {
     const meta = BUILTIN_META[type]
     if (!meta) return { requiredPlan: undefined as any, planAllowed: true, featureEnabled: true }
-    const requiredPlan = rf?.[meta.feature]?.required_plan
-    const planAllowed = !requiredPlan || planMeetsRequirement(currentPlan, requiredPlan as PlanLevel)
-    const featureEnabled = rf?.[meta.feature]?.enabled === true
+    const resolved = rf?.[meta.feature]
+    const requiredPlan = resolved?.required_plan ?? resolved?.upgrade_plan
+    const planAllowed = resolved?.available !== undefined
+      ? resolved.available
+      : !requiredPlan || planMeetsRequirement(currentPlan, requiredPlan as PlanLevel)
+    const featureEnabled = resolved?.enabled === true
     return { requiredPlan, planAllowed, featureEnabled }
   }
 
+  // Keep unavailable built-ins out of the editor while retaining their stored
+  // config, so a future plan change does not silently rewrite the menu.
+  const visibleItems = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => featureState(item.type).planAllowed)
+
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return
+    const reordered = visibleItems.map(({ item }) => item)
+    const [moved] = reordered.splice(result.source.index, 1)
+    reordered.splice(result.destination.index, 0, moved)
     const next = [...items]
-    const [moved] = next.splice(result.source.index, 1)
-    next.splice(result.destination.index, 0, moved)
+    visibleItems.forEach(({ index }, visibleIndex) => {
+      next[index] = reordered[visibleIndex]
+    })
     setItems(next.map((it, i) => ({ ...it, order: i })))
   }
 
@@ -306,16 +318,16 @@ const OrgEditMenu: React.FC = () => {
           <Droppable droppableId="menu-items">
             {(provided) => (
               <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
-                {items.map((item, index) => {
+                {visibleItems.map(({ item, index }, visibleIndex) => {
                   const meta = BUILTIN_META[item.type]
-                  const { requiredPlan, planAllowed, featureEnabled } = featureState(item.type)
+                  const { planAllowed, featureEnabled } = featureState(item.type)
                   const isCustom = item.type === 'custom'
                   const Icon = meta?.Icon || menuIcon(item.icon)
                   // Gray out built-in links whose feature is plan-locked or turned off.
                   const grayed = !isCustom && (!planAllowed || !featureEnabled)
                   const toggleDisabled = !canEdit || grayed
                   return (
-                    <Draggable key={`${item.type}-${index}`} draggableId={`${item.type}-${index}`} index={index}>
+                    <Draggable key={`${item.type}-${index}`} draggableId={`${item.type}-${index}`} index={visibleIndex}>
                       {(prov, snap) => (
                         <div
                           ref={prov.innerRef}
@@ -345,9 +357,6 @@ const OrgEditMenu: React.FC = () => {
                                 onChange={(e) => setItem(index, { label: e.target.value })}
                                 className="text-sm font-semibold text-gray-800 bg-transparent border-0 border-b border-transparent hover:border-gray-200 focus:border-gray-400 focus:outline-none w-40 px-0 py-0.5"
                               />
-                              {requiredPlan && (
-                                <PlanBadge currentPlan={currentPlan} requiredPlan={requiredPlan as PlanLevel} />
-                              )}
                             </div>
                             {isCustom ? (
                               <input
@@ -360,9 +369,6 @@ const OrgEditMenu: React.FC = () => {
                             ) : (
                               <p className="text-xs text-gray-400">
                                 {meta?.link}
-                                {!planAllowed && requiredPlan && (
-                                  <span className="text-amber-600 inline-flex items-center gap-1 ms-2"><Lock size={10} />{t('dashboard.organization.menu.plan_locked', { plan: requiredPlan })}</span>
-                                )}
                                 {planAllowed && !featureEnabled && (
                                   <span className="text-gray-400 ms-2">· {t('dashboard.organization.menu.feature_off')}</span>
                                 )}

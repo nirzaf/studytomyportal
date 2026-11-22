@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, memo, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, Link as LinkIcon, ExternalLink, GripVertical } from 'lucide-react';
+import { Plus, X, Link as LinkIcon, ExternalLink, GripVertical, ArrowDown, ArrowUp } from 'lucide-react';
 const Picker = lazy(() => import('@emoji-mart/react'));
 
 interface LearningItem {
@@ -78,6 +78,17 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
     setExpandedLink(null);
   }, [items, commit]);
 
+  const moveItem = useCallback((id: string, direction: -1 | 1) => {
+    const index = items.findIndex(item => item.id === id);
+    const destination = index + direction;
+    if (index < 0 || destination < 0 || destination >= items.length) return;
+
+    const next = [...items];
+    [next[index], next[destination]] = [next[destination], next[index]];
+    commit(next);
+    setTimeout(() => inputRefs.current[id]?.focus(), 0);
+  }, [items, commit]);
+
   // Close emoji picker when clicking outside
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -124,7 +135,7 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
           </div>
         )}
 
-        {items.map((item) => {
+        {items.map((item, index) => {
           const isDragging = dragId === item.id;
           return (
             <div
@@ -133,16 +144,17 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
               onDragOver={onDragOver}
               onDrop={onDrop(item.id)}
             >
-              <div className="flex items-center gap-2 px-2.5 py-2">
+              <div className="flex flex-wrap items-center gap-2 px-2.5 py-2 sm:flex-nowrap">
                 {/* Drag handle */}
                 <div
                   draggable
                   onDragStart={onDragStart(item.id)}
                   onDragEnd={() => setDragId(null)}
-                  className="shrink-0 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-0.5"
+                  className="hidden shrink-0 cursor-grab p-1 text-gray-400 hover:text-gray-600 active:cursor-grabbing sm:flex"
                   title={t('library.sort.drag_to_reorder')}
+                  aria-hidden="true"
                 >
-                  <GripVertical size={14} />
+                  <GripVertical size={16} />
                 </div>
 
                 {/* Emoji button */}
@@ -150,8 +162,9 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
                   <button
                     type="button"
                     onClick={() => setShowEmojiPicker(showEmojiPicker === item.id ? null : item.id)}
-                    className="w-8 h-8 flex items-center justify-center text-xl leading-none rounded-md hover:bg-gray-50 transition-colors select-none"
+                    className="flex size-10 shrink-0 items-center justify-center rounded-md text-xl leading-none transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                     title={t('dashboard.courses.general.learning_items.change_emoji')}
+                    aria-label={t('dashboard.courses.general.learning_items.change_emoji_item', { index: index + 1 })}
                   >
                     {item.emoji}
                   </button>
@@ -179,10 +192,12 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
                 <input
                   ref={(el) => { inputRefs.current[item.id] = el; }}
                   type="text"
+                  name={`learning-outcome-${item.id}`}
+                  aria-label={t('dashboard.courses.general.learning_items.input_label', { index: index + 1 })}
                   value={item.text}
                   onChange={(e) => updateText(item.id, e.target.value)}
                   placeholder={t('dashboard.courses.general.learning_items.placeholder')}
-                  className="flex-1 min-w-0 text-sm text-gray-700 bg-transparent border-none outline-none placeholder:text-gray-300 py-1"
+                  className="order-2 min-w-[calc(100%-3rem)] flex-1 rounded-md border border-transparent bg-transparent px-2 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus-visible:border-gray-200 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:order-none sm:min-w-0"
                 />
 
                 {/* Link chip (when link is set) */}
@@ -190,8 +205,9 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
                   <button
                     type="button"
                     onClick={() => setExpandedLink(item.id)}
-                    className="flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-full shrink-0 transition-colors"
+                    className="order-3 flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-[11px] text-blue-700 transition-colors hover:bg-blue-100 sm:order-none"
                     title={item.link}
+                    aria-label={t('dashboard.courses.general.learning_items.edit_link_for_item', { index: index + 1 })}
                   >
                     <ExternalLink size={10} />
                     <span className="max-w-[96px] truncate">{item.link.replace(/^https?:\/\//, '')}</span>
@@ -199,7 +215,27 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
                 )}
 
                 {/* Action buttons, always visible but muted */}
-                <div className="flex items-center gap-0.5 shrink-0">
+                <div className="order-4 ms-auto flex shrink-0 items-center gap-0.5 sm:order-none sm:ms-0">
+                  <button
+                    type="button"
+                    onClick={() => moveItem(item.id, -1)}
+                    disabled={index === 0}
+                    className="flex size-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-35"
+                    aria-label={t('dashboard.courses.general.learning_items.move_up', { index: index + 1 })}
+                    title={t('dashboard.courses.general.learning_items.move_up', { index: index + 1 })}
+                  >
+                    <ArrowUp size={15} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveItem(item.id, 1)}
+                    disabled={index === items.length - 1}
+                    className="flex size-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-35"
+                    aria-label={t('dashboard.courses.general.learning_items.move_down', { index: index + 1 })}
+                    title={t('dashboard.courses.general.learning_items.move_down', { index: index + 1 })}
+                  >
+                    <ArrowDown size={15} aria-hidden="true" />
+                  </button>
                   {!item.link && (
                     <button
                       type="button"
@@ -207,8 +243,9 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
                         setExpandedLink(expandedLink === item.id ? null : item.id);
                         setTimeout(() => linkInputRefs.current[item.id]?.focus(), 0);
                       }}
-                      className="p-1.5 text-gray-300 hover:text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                      className="flex size-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                       title={t('dashboard.courses.general.learning_items.add_link')}
+                      aria-label={t('dashboard.courses.general.learning_items.add_link_for_item', { index: index + 1 })}
                     >
                       <LinkIcon size={13} />
                     </button>
@@ -216,8 +253,9 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
                   <button
                     type="button"
                     onClick={() => removeItem(item.id)}
-                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                    className="flex size-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                     title={t('boards.members.remove')}
+                    aria-label={t('dashboard.courses.general.learning_items.remove_item', { index: index + 1 })}
                   >
                     <X size={13} />
                   </button>
@@ -232,18 +270,19 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
                     <input
                       ref={(el) => { linkInputRefs.current[item.id] = el; }}
                       type="url"
+                      aria-label={t('dashboard.courses.general.learning_items.link_label', { index: index + 1 })}
                       value={item.link || ''}
                       onChange={(e) => updateLink(item.id, e.target.value)}
                       onBlur={() => { if (!item.link) setExpandedLink(null); }}
                       placeholder="https://..."
-                      className="flex-1 text-xs text-gray-700 bg-transparent border-none outline-none placeholder:text-gray-300"
+                      className="min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                       autoFocus
                     />
                     {item.link ? (
                       <button
                         type="button"
                         onClick={() => clearLink(item.id)}
-                        className="text-[10px] text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                        className="min-h-10 shrink-0 rounded px-2 text-xs text-gray-600 transition-colors hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       >
                         {t('boards.members.remove')}
                       </button>
@@ -251,7 +290,7 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
                       <button
                         type="button"
                         onClick={() => setExpandedLink(null)}
-                        className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+                        className="min-h-10 shrink-0 rounded px-2 text-xs text-gray-600 transition-colors hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       >
                         {t('common.close')}
                       </button>
@@ -266,7 +305,7 @@ const LearningItemsList = ({ value, onChange, error }: LearningItemsListProps) =
         <button
           type="button"
           onClick={addItem}
-          className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors rounded-b-xl"
+          className="flex min-h-11 w-full items-center gap-2 rounded-b-xl px-4 py-2.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         >
           <Plus size={13} className="text-blue-500 shrink-0" />
           {t('dashboard.courses.general.learning_items.add')}

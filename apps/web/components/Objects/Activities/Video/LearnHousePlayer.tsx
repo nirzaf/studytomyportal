@@ -209,7 +209,7 @@ function CenterIndicator() {
   )
 }
 
-/** Icon-only LearnHouse mark, top-right; fades in and out with the controls. */
+/** Icon-only platform mark, top-right; fades in and out with the controls. */
 function PlayerLogo() {
   const showBranding = useShowLearnHouseBranding()
   const visible = usePlayer((s) => s.controlsVisible)

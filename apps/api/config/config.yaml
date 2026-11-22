@@ -1,5 +1,5 @@
-site_name: LearnHouse
-site_description: LearnHouse is an open-source platform tailored for learning experiences.
+site_name: Studytomy
+site_description: Studytomy is a learning platform for courses, resources, and student progress.
 contact_email: hello@learnhouse.app
 
 # This config is optimized for local development. You can change the values according to your needs.
@@ -102,9 +102,9 @@ ai_config:
   embedding_dimensions: ""  # default: 768
   # Google/Gemini key. Also the embeddings fallback for providers that lack an embeddings API.
   gemini_api_key: ""
-  # Media generation (Google-only, uses the Google GenAI SDK regardless of `provider`,
-  # resolving its key from `api_key` when provider=google, else `gemini_api_key`).
-  image_model: ""       # AI image generation           (default: gemini-2.5-flash-image)
+  # Image generation uses the configured OpenAI key when provider=openai; Google
+  # providers use api_key, with gemini_api_key retained as a legacy fallback.
+  image_model: ""       # Provider default: gpt-image-2.5-flare (OpenAI), gemini-2.5-flash-image (Google).
   tts_model: ""         # AI audio / podcast generation  (default: gemini-2.5-flash-preview-tts)
 
 tinybird_config:

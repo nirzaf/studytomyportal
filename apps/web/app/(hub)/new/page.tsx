@@ -609,7 +609,7 @@ function CreateOrgForm({
                 />
               </Form.Control>
               <span className="px-4 py-3 bg-gray-50 text-black/25 border-s border-gray-100 shrink-0 text-[13px] font-medium select-none">
-                .learnhouse.io
+                .{getLEARNHOUSE_DOMAIN_VAL()}
               </span>
             </div>
             {formik.errors.slug === 'test_hint' && <TestHint t={t} />}

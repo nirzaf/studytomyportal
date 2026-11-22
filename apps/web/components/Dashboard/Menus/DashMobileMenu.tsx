@@ -110,7 +110,7 @@ function DashMobileMenu() {
     isEnabled('payments') && { href: '/dash/payments/overview', Icon: CurrencyCircleDollar, label: t('common.payments') },
     isOrgAnalyticsAvailable() && { href: '/dash/analytics', Icon: ChartBar, label: t('common.analytics') },
     { href: '/dash/org/settings/general', Icon: Buildings, label: t('common.organization'), match: '/dash/org' },
-    { href: '/dash/developers/api', Icon: Code, label: t('dashboard.developers.breadcrumb', { defaultValue: 'Developers' }), match: '/dash/developers' },
+    { href: '/dash/developers/mcp', Icon: Code, label: t('dashboard.developers.breadcrumb', { defaultValue: 'Developers' }), match: '/dash/developers' },
   ].filter(Boolean) as { href: string; Icon: any; label: string; match?: string }[]
 
   const moreActive = moreOpen || sections.some((s) => isActive(s.match ?? s.href))

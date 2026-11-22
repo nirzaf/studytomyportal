@@ -47,8 +47,9 @@ export const searchMetas: SearchMeta[] = [
     descriptionKey: 'dashboard.search.entries.org_seo.description',
     keywordsKey: 'dashboard.search.entries.org_seo.keywords',
     icon: Compass,
-    href: '/dash/org/settings/seo',
+    href: '/dash/developers/seo',
     group: 'settings',
+    requiresPlan: 'standard',
   },
   {
     id: 'dash.org.ai',
@@ -58,6 +59,7 @@ export const searchMetas: SearchMeta[] = [
     icon: Robot,
     href: '/dash/org/settings/ai',
     group: 'settings',
+    requiresPlan: 'standard',
   },
   {
     id: 'dash.org.domains',
@@ -65,8 +67,9 @@ export const searchMetas: SearchMeta[] = [
     descriptionKey: 'dashboard.search.entries.org_domains.description',
     keywordsKey: 'dashboard.search.entries.org_domains.keywords',
     icon: Globe,
-    href: '/dash/org/settings/domains',
+    href: '/dash/developers/domains',
     group: 'settings',
+    requiresPlan: 'pro',
   },
   {
     id: 'dash.org.automations',
@@ -74,8 +77,9 @@ export const searchMetas: SearchMeta[] = [
     descriptionKey: 'dashboard.search.entries.org_automations.description',
     keywordsKey: 'dashboard.search.entries.org_automations.keywords',
     icon: Lightning,
-    href: '/dash/org/settings/automations',
+    href: '/dash/developers/automations',
     group: 'settings',
+    requiresPlan: 'pro',
   },
   {
     id: 'dash.org.api',
@@ -83,8 +87,9 @@ export const searchMetas: SearchMeta[] = [
     descriptionKey: 'dashboard.search.entries.org_api.description',
     keywordsKey: 'dashboard.search.entries.org_api.keywords',
     icon: Key,
-    href: '/dash/org/settings/api',
+    href: '/dash/developers/api',
     group: 'settings',
+    requiresPlan: 'pro',
   },
   {
     id: 'dash.org.sso',
@@ -92,8 +97,9 @@ export const searchMetas: SearchMeta[] = [
     descriptionKey: 'dashboard.search.entries.org_sso.description',
     keywordsKey: 'dashboard.search.entries.org_sso.keywords',
     icon: Lock,
-    href: '/dash/org/settings/sso',
+    href: '/dash/developers/sso',
     group: 'settings',
+    requiresPlan: 'enterprise',
   },
   {
     id: 'dash.org.usage',

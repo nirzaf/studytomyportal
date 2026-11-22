@@ -92,7 +92,7 @@ function DevelopersPage(props: { params: Promise<DevParams> }) {
       <div className="ps-4 pe-4 sm:ps-10 sm:pe-10 tracking-tight bg-[#fcfbfc] z-10 nice-shadow flex-shrink-0 relative">
         <div className="pt-4 pb-1 sm:pt-6 sm:pb-4">
           <Breadcrumbs items={[
-            { label: t('dashboard.developers.breadcrumb', { defaultValue: 'Developers' }), href: '/dash/developers/api', icon: <Terminal size={14} /> }
+            { label: t('dashboard.developers.breadcrumb', { defaultValue: 'Developers' }), href: '/dash/developers/mcp', icon: <Terminal size={14} /> }
           ]} />
         </div>
         <div className="py-2 sm:my-2">

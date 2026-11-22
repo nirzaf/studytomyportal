@@ -1,8 +1,9 @@
-"""Tests for src/services/ai/image/generator.py (nano banana image gen).
+"""Tests for src/services/ai/image/generator.py (Google and OpenAI image gen).
 
-The Google GenAI SDK and the global config are fully mocked.
+Provider SDKs and the global config are fully mocked.
 """
 
+import base64
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -31,32 +32,49 @@ def _image_response(data=b"PNGBYTES"):
     return SimpleNamespace(candidates=[SimpleNamespace(content=content)])
 
 
+def _openai_image_response(data=b"PNGDATA"):
+    encoded = base64.b64encode(data).decode("ascii")
+    return SimpleNamespace(data=[SimpleNamespace(b64_json=encoded)])
+
+
 # --- _resolve_image_config ---
 
 def test_resolve_config_google_uses_api_key():
     with patch.object(gen, "get_learnhouse_config", return_value=_cfg(provider="google", api_key="gk")):
-        key, model = gen._resolve_image_config()
+        provider, key, model = gen._resolve_image_config()
+    assert provider == "google"
     assert key == "gk" and model == gen.DEFAULT_IMAGE_MODEL
 
 
-def test_resolve_config_non_google_falls_back_to_gemini_key():
+def test_resolve_config_openai_reuses_provider_key():
     cfg = _cfg(provider="openai", api_key="openai-key", gemini_api_key="gemk")
     with patch.object(gen, "get_learnhouse_config", return_value=cfg):
-        key, _ = gen._resolve_image_config()
-    assert key == "gemk"  # openai key ignored for image gen
+        provider, key, model = gen._resolve_image_config()
+    assert provider == "openai"
+    assert key == "openai-key"
+    assert model == gen.DEFAULT_OPENAI_IMAGE_MODEL
+
+
+def test_resolve_config_other_provider_retains_gemini_fallback():
+    cfg = _cfg(provider="anthropic", api_key="anthropic-key", gemini_api_key="gemk")
+    with patch.object(gen, "get_learnhouse_config", return_value=cfg):
+        provider, key, model = gen._resolve_image_config()
+    assert provider == "google"
+    assert key == "gemk"
+    assert model == gen.DEFAULT_IMAGE_MODEL
 
 
 def test_resolve_config_custom_model():
     cfg = _cfg(image_model="my-image-model")
     with patch.object(gen, "get_learnhouse_config", return_value=cfg):
-        _, model = gen._resolve_image_config()
+        _, _, model = gen._resolve_image_config()
     assert model == "my-image-model"
 
 
 def test_resolve_config_missing_key_raises():
     cfg = _cfg(provider="anthropic", api_key=None, gemini_api_key=None)
     with patch.object(gen, "get_learnhouse_config", return_value=cfg):
-        with pytest.raises(AINotConfiguredError):
+        with pytest.raises(AINotConfiguredError, match="LEARNHOUSE_AI_PROVIDER=openai or google"):
             gen._resolve_image_config()
 
 
@@ -141,6 +159,7 @@ async def test_generate_image_requests_image_modality():
 
 async def test_default_model_is_ga_flash_image():
     assert gen.DEFAULT_IMAGE_MODEL == "gemini-2.5-flash-image"
+    assert gen.DEFAULT_OPENAI_IMAGE_MODEL == "gpt-image-2.5-flare"
 
 
 def test_sniff_mime():
@@ -177,3 +196,70 @@ async def test_generate_image_truncates_long_prompt():
     assert out == b"IMG"
     sent_prompt = client.aio.models.generate_content.await_args.kwargs["contents"][0]
     assert len(sent_prompt) == gen.MAX_PROMPT_CHARS
+
+
+async def test_generate_image_openai_reuses_configured_key_and_decodes_png():
+    client = MagicMock()
+    client.images.generate = AsyncMock(return_value=_openai_image_response(b"OPENAI-PNG"))
+    client.close = AsyncMock()
+    cfg = _cfg(provider="openai", api_key="same-openai-key")
+    with patch.object(gen, "get_learnhouse_config", return_value=cfg), patch(
+        "openai.AsyncOpenAI", return_value=client
+    ) as openai_client:
+        out = await gen.generate_image("a chemistry course thumbnail")
+
+    assert out == b"OPENAI-PNG"
+    openai_client.assert_called_once_with(api_key="same-openai-key")
+    client.images.generate.assert_awaited_once_with(
+        model=gen.DEFAULT_OPENAI_IMAGE_MODEL,
+        prompt="a chemistry course thumbnail",
+        output_format="png",
+    )
+    client.close.assert_awaited_once()
+
+
+async def test_generate_image_openai_edits_reference_image():
+    png = b"\x89PNG\r\n\x1a\noriginal-image"
+    client = MagicMock()
+    client.images.edit = AsyncMock(return_value=_openai_image_response(b"EDITED-PNG"))
+    client.close = AsyncMock()
+    cfg = _cfg(provider="openai", api_key="same-openai-key")
+    with patch.object(gen, "get_learnhouse_config", return_value=cfg), patch(
+        "openai.AsyncOpenAI", return_value=client
+    ):
+        out = await gen.generate_image("make it brighter", input_images=[png])
+
+    assert out == b"EDITED-PNG"
+    client.images.edit.assert_awaited_once()
+    kwargs = client.images.edit.await_args.kwargs
+    assert kwargs["prompt"] == "make it brighter"
+    assert kwargs["output_format"] == "png"
+    assert kwargs["image"] == [("reference-1.png", png, "image/png")]
+    client.close.assert_awaited_once()
+
+
+async def test_generate_image_openai_rejects_gif_edit_inputs():
+    client = MagicMock()
+    client.images.edit = AsyncMock()
+    client.close = AsyncMock()
+    cfg = _cfg(provider="openai", api_key="same-openai-key")
+    with patch.object(gen, "get_learnhouse_config", return_value=cfg), patch(
+        "openai.AsyncOpenAI", return_value=client
+    ), pytest.raises(ValueError, match="PNG, JPEG, and WebP"):
+        await gen.generate_image("edit", input_images=[b"GIF89a-frame"])
+
+    client.images.edit.assert_not_awaited()
+
+
+def test_extract_openai_image_bytes_returns_none_for_invalid_response():
+    assert gen._extract_openai_image_bytes(SimpleNamespace(data=[])) is None
+    assert gen._extract_openai_image_bytes(
+        SimpleNamespace(data=[SimpleNamespace(b64_json="not-base64!")])
+    ) is None
+
+
+def test_openai_rate_limit_status_is_retryable_when_error_code_is_text():
+    error = Exception("rate limit")
+    error.code = "insufficient_quota"
+    error.status_code = 429
+    assert gen._is_retryable(error)

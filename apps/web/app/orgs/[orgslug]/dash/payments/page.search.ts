@@ -16,6 +16,7 @@ export const searchMetas: SearchMeta[] = [
     href: '/dash/payments/overview',
     group: 'payments',
     featureKey: 'payments',
+    requiresPlan: 'standard',
   },
   {
     id: 'dash.payments.offers',
@@ -26,6 +27,7 @@ export const searchMetas: SearchMeta[] = [
     href: '/dash/payments/products',
     group: 'payments',
     featureKey: 'payments',
+    requiresPlan: 'standard',
   },
   {
     id: 'dash.payments.configuration',
@@ -36,6 +38,7 @@ export const searchMetas: SearchMeta[] = [
     href: '/dash/payments/settings',
     group: 'payments',
     featureKey: 'payments',
+    requiresPlan: 'standard',
   },
   {
     id: 'dash.payments.customers',
@@ -46,5 +49,6 @@ export const searchMetas: SearchMeta[] = [
     href: '/dash/payments/customers',
     group: 'payments',
     featureKey: 'payments',
+    requiresPlan: 'standard',
   },
 ]

@@ -46,7 +46,7 @@ export interface LearnHouseEmailProps {
   cta?: { label: string; href: string }
 }
 
-const LOGO_URL = 'https://www.learnhouse.io/learnhouse-dark.svg'
+const LOGO_URL = 'https://lms.studytomy.com/studytomy-logo.png'
 
 export function LearnHouseEmail({
   accentColor,

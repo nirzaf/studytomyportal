@@ -238,7 +238,7 @@ function TwoFactorAuthSection() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'learnhouse-backup-codes.txt'
+    link.download = 'studytomy-backup-codes.txt'
     document.body.appendChild(link)
     link.click()
     link.remove()

@@ -264,7 +264,7 @@ export default function AgentBuilderDialog({ open, onOpenChange, agent, orgslug,
     try {
       const body: AgentInput = { ...draft, name: draft.name.trim() }
       if (!canShare && !editing) body.visibility = 'private'
-      // Copilot keeps its LearnHouse AI identity and reads every course.
+      // Copilot keeps its Studytomy identity and reads every course.
       if (isDefault) for (const k of ['visibility', 'name', 'emoji', 'color', 'secondary_color', 'course_uuids', 'knowledge_mode']) delete (body as any)[k]
       const saved = editing && agent
         ? await updateAgent(agent.agent_uuid, body, token)

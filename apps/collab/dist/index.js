@@ -7,6 +7,9 @@ import { CONNECTION_ID_HEADER, clientIp, createConnectionGuard, createRateLimite
 import { createDocSizeGuard } from './docLimits.js';
 import { sanitizeAwareness, seatRefusal } from './boardPresence.js';
 import { createAccessChecker, dropConnection, recheckConnections, } from './accessRecheck.js';
+import { loadBoardState } from './boardState.js';
+import { cachePendingBoardSnapshot, writeBoardSnapshot } from './boardWrite.js';
+import { BoardPersistenceQueue } from './persistenceQueue.js';
 const PORT = parseInt(process.env.COLLAB_PORT || '4000', 10);
 const API_URL = process.env.LEARNHOUSE_API_URL || 'http://localhost:8000';
 const SECRET_KEY = process.env.LEARNHOUSE_AUTH_JWT_SECRET_KEY || '';
@@ -20,10 +23,15 @@ const TRUST_PROXY = process.env.COLLAB_TRUST_PROXY === 'true';
 const FETCH_TIMEOUT_MS = 10_000;
 // Debounce interval before flushing ydoc state to the database (ms)
 const DB_FLUSH_DELAY = 5000;
+const DB_FLUSH_RETRY_DELAYS_MS = [250, 1000, 5000];
+const DB_FLUSH_SHUTDOWN_DEADLINE_MS = 30_000;
+const DB_FLUSH_SHUTDOWN_REQUEST_TIMEOUT_MS = 15_000;
 // Redis TTL for cached ydoc state (seconds): 1 hour
 const REDIS_YDOC_TTL = 3600;
 // Largest Yjs state we persist (bytes): 5 MB
 const MAX_YDOC_BYTES = 5 * 1024 * 1024;
+const MAX_PENDING_FLUSH_DOCUMENTS = 128;
+const MAX_PENDING_FLUSH_BYTES = 64 * 1024 * 1024;
 // Largest single incoming WebSocket message (bytes): 2 MB
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
 // How often open connections re-check their access to the board (ms)
@@ -88,6 +96,10 @@ const docSizes = createDocSizeGuard({
     remeasureEveryBytes: 256 * 1024,
 });
 const DOC_TOO_LARGE = { code: 4413, reason: 'Board is too large' };
+const PERSISTENCE_CAPACITY_REACHED = {
+    code: 1013,
+    reason: 'Board storage is temporarily unavailable; reconnect shortly',
+};
 // Clean up stale entries every 5 minutes
 const rateLimitCleanupInterval = setInterval(() => {
     requestLimiter.sweep();
@@ -142,43 +154,51 @@ function getRedis() {
 function redisYdocKey(boardUuid) {
     return `collab:ydoc:${boardUuid}`;
 }
-// ── Debounced DB persistence ────────────────────────────────────────────────
-// Store both the timer and latest state so shutdown can flush without Redis
-const pendingFlushes = new Map();
-function scheduleDbFlush(boardUuid, state) {
-    // Cancel any existing pending flush for this board
-    const existing = pendingFlushes.get(boardUuid);
-    if (existing)
-        clearTimeout(existing.timer);
-    // Copy the state so it survives even if the original buffer is reused
-    const stateCopy = new Uint8Array(state);
-    const timer = setTimeout(async () => {
-        pendingFlushes.delete(boardUuid);
-        try {
-            const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`;
-            const response = await fetchWithTimeout(url, {
-                method: 'PUT',
-                headers: {
-                    'X-Internal-Key': INTERNAL_KEY,
-                    'Content-Type': 'application/octet-stream',
-                },
-                body: stateCopy.buffer.slice(stateCopy.byteOffset, stateCopy.byteOffset + stateCopy.byteLength),
-            });
-            if (!response.ok) {
-                console.error(`[collab] DB flush failed for ${boardUuid}: ${response.status}`);
-            }
-        }
-        catch (err) {
-            console.error(`[collab] DB flush error for ${boardUuid}:`, err);
-        }
-    }, DB_FLUSH_DELAY);
-    pendingFlushes.set(boardUuid, { timer, state: stateCopy });
+function redisPendingYdocKey(boardUuid) {
+    return `collab:pending-ydoc:${boardUuid}`;
 }
+// ── Debounced DB persistence ────────────────────────────────────────────────
+const pendingFlushes = new BoardPersistenceQueue({
+    debounceMs: DB_FLUSH_DELAY,
+    retryDelaysMs: DB_FLUSH_RETRY_DELAYS_MS,
+    requestTimeoutMs: FETCH_TIMEOUT_MS,
+    maxPendingDocuments: MAX_PENDING_FLUSH_DOCUMENTS,
+    maxPendingBytes: MAX_PENDING_FLUSH_BYTES,
+    write: async (boardUuid, state, timeoutMs) => {
+        const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`;
+        const acknowledged = await writeBoardSnapshot(state, MAX_YDOC_BYTES, (init) => fetchWithTimeout(url, { ...init, headers: { ...init.headers, 'X-Internal-Key': INTERNAL_KEY } }, timeoutMs));
+        try {
+            // A late acknowledgement must leave any newer pending snapshot alone.
+            await getRedis().eval(`if redis.call('GET', KEYS[1]) == ARGV[1] then
+           redis.call('SETEX', KEYS[2], ARGV[3], ARGV[2])
+           redis.call('DEL', KEYS[1])
+         end`, 2, redisPendingYdocKey(boardUuid), redisYdocKey(boardUuid), Buffer.from(state), Buffer.from(acknowledged), REDIS_YDOC_TTL);
+        }
+        catch (error) {
+            console.warn(`[collab] Redis acknowledgement failed for ${boardUuid}:`, error);
+        }
+    },
+    onRetry: (boardUuid, retry, delayMs, error) => {
+        console.warn(`[collab] DB flush retry ${retry} scheduled for ${boardUuid} in ${delayMs}ms:`, error);
+    },
+    onExhausted: (boardUuid, error) => {
+        console.error(`[collab] DB flush retries exhausted for ${boardUuid}; the latest state remains queued:`, error);
+    },
+    onCapacityExceeded: (boardUuid, error) => {
+        console.error(`[collab] ${error.message}; closing active board connections to stop unsaved edits`);
+        const document = server.hocuspocus.documents.get(`board:${boardUuid}`);
+        for (const connection of document?.getConnections() ?? []) {
+            dropConnection(connection, PERSISTENCE_CAPACITY_REACHED);
+        }
+    },
+});
 // ── Server ──────────────────────────────────────────────────────────────────
 // Awareness client id -> owning connection, per loaded document
 const awarenessClaims = new WeakMap();
 const server = new Server({
     port: PORT,
+    // The application must finish its persistence flush before exiting.
+    stopOnSignals: false,
     // ws drops oversized frames before they are buffered into a document
     websocketOptions: { maxPayload: MAX_MESSAGE_BYTES },
     async beforeHandleMessage({ update, documentName, connection, requestHeaders, }) {
@@ -304,51 +324,51 @@ const server = new Server({
             async fetch({ documentName }) {
                 const boardUuid = extractBoardUuid(documentName);
                 if (!boardUuid)
-                    return null;
-                // 1. Try Redis first
-                try {
-                    const r = getRedis();
-                    const cached = await r.getBuffer(redisYdocKey(boardUuid));
-                    if (cached && cached.byteLength > 0) {
-                        console.log(`[collab] Redis hit for ${boardUuid}: ${cached.byteLength} bytes`);
-                        return new Uint8Array(cached);
-                    }
-                }
-                catch (err) {
-                    console.error(`[collab] Redis fetch error for ${boardUuid}:`, err);
-                }
-                // 2. Fall back to database (with timeout)
-                try {
-                    const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`;
-                    console.log(`[collab] Fetching ydoc from DB for ${boardUuid}`);
-                    const response = await fetchWithTimeout(url, {
-                        headers: {
-                            'X-Internal-Key': INTERNAL_KEY,
-                        },
-                    });
-                    if (!response.ok) {
-                        console.error(`[collab] Failed to fetch ydoc for ${boardUuid}: ${response.status} ${response.statusText}`);
-                        return null;
-                    }
-                    const buffer = await response.arrayBuffer();
-                    if (buffer.byteLength === 0)
-                        return null;
-                    const state = new Uint8Array(buffer);
-                    console.log(`[collab] Fetched ydoc from DB for ${boardUuid}: ${buffer.byteLength} bytes`);
-                    // Warm the Redis cache
-                    try {
+                    throw new Error('Invalid board document name');
+                return loadBoardState(boardUuid, {
+                    maxBytes: MAX_YDOC_BYTES,
+                    readCache: async () => {
                         const r = getRedis();
-                        await r.setex(redisYdocKey(boardUuid), REDIS_YDOC_TTL, Buffer.from(state));
-                    }
-                    catch (err) {
-                        console.error(`[collab] Redis warm error for ${boardUuid}:`, err);
-                    }
-                    return state;
-                }
-                catch (err) {
-                    console.error(`[collab] Error fetching ydoc for ${boardUuid}:`, err);
-                    return null;
-                }
+                        const [pending, cached] = await r.mgetBuffer(redisPendingYdocKey(boardUuid), redisYdocKey(boardUuid));
+                        if (pending?.byteLength) {
+                            if (pending.byteLength <= MAX_YDOC_BYTES) {
+                                try {
+                                    pendingFlushes.schedule(boardUuid, pending);
+                                }
+                                catch (error) {
+                                    console.error(`[collab] Redis snapshot remains pending for ${boardUuid}:`, error);
+                                }
+                            }
+                            return pending;
+                        }
+                        if (cached && cached.byteLength > 0) {
+                            console.log(`[collab] Redis hit for ${boardUuid}: ${cached.byteLength} bytes`);
+                        }
+                        return cached;
+                    },
+                    fetchDatabase: async () => {
+                        const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`;
+                        console.log(`[collab] Fetching ydoc from DB for ${boardUuid}`);
+                        return fetchWithTimeout(url, {
+                            headers: {
+                                'X-Internal-Key': INTERNAL_KEY,
+                            },
+                        });
+                    },
+                    warmCache: async (state) => {
+                        const r = getRedis();
+                        await r.set(redisYdocKey(boardUuid), Buffer.from(state), 'EX', REDIS_YDOC_TTL, 'NX');
+                        console.log(`[collab] Fetched ydoc from DB for ${boardUuid}: ${state.byteLength} bytes`);
+                    },
+                    reportError: (stage, error) => {
+                        const label = {
+                            'redis-read': 'Redis fetch error',
+                            'database-read': 'Error fetching ydoc from DB',
+                            'redis-warm': 'Redis warm error',
+                        }[stage];
+                        console.error(`[collab] ${label} for ${boardUuid}:`, error);
+                    },
+                });
             },
             async store({ documentName, state }) {
                 const boardUuid = extractBoardUuid(documentName);
@@ -358,16 +378,15 @@ const server = new Server({
                     console.warn(`[collab] Refusing to persist ${boardUuid}: ${state.byteLength} bytes exceeds the cap`);
                     return;
                 }
-                // 1. Write to Redis immediately (fast)
+                let pending = state;
                 try {
-                    const r = getRedis();
-                    await r.setex(redisYdocKey(boardUuid), REDIS_YDOC_TTL, Buffer.from(state));
+                    pending = await cachePendingBoardSnapshot(getRedis(), redisPendingYdocKey(boardUuid), redisYdocKey(boardUuid), state, MAX_YDOC_BYTES, REDIS_YDOC_TTL);
                 }
                 catch (err) {
                     console.error(`[collab] Redis store error for ${boardUuid}:`, err);
                 }
                 // 2. Debounced write to database (slow, batched)
-                scheduleDbFlush(boardUuid, state);
+                pendingFlushes.schedule(boardUuid, pending);
             },
         }),
     ],
@@ -397,43 +416,35 @@ const accessRecheckInterval = setInterval(async () => {
     }
 }, ACCESS_RECHECK_MS);
 // ── Graceful shutdown ─────────────────────────────────────────────────────
+let shuttingDown = false;
 async function gracefulShutdown() {
+    if (shuttingDown)
+        return;
+    shuttingDown = true;
     console.log('[collab] Shutting down, flushing pending writes...');
     // Stop accepting new connections
     clearInterval(rateLimitCleanupInterval);
     clearInterval(accessRecheckInterval);
     await server.destroy();
-    // Flush all pending writes directly from the captured state (no Redis dependency)
-    const flushPromises = [];
-    for (const [boardUuid, { timer, state }] of pendingFlushes) {
-        clearTimeout(timer);
-        const flush = async () => {
-            try {
-                const url = `${API_URL}/api/v1/boards/${boardUuid}/ydoc`;
-                await fetchWithTimeout(url, {
-                    method: 'PUT',
-                    headers: {
-                        'X-Internal-Key': INTERNAL_KEY,
-                        'Content-Type': 'application/octet-stream',
-                    },
-                    body: state.buffer.slice(state.byteOffset, state.byteOffset + state.byteLength),
-                }, 15_000);
-                console.log(`[collab] Flushed ${boardUuid} to DB on shutdown`);
-            }
-            catch (err) {
-                console.error(`[collab] Shutdown flush error for ${boardUuid}:`, err);
-            }
-        };
-        flushPromises.push(flush());
+    const unresolved = await pendingFlushes.flushPending(DB_FLUSH_SHUTDOWN_DEADLINE_MS, DB_FLUSH_SHUTDOWN_REQUEST_TIMEOUT_MS);
+    let exitCode = 0;
+    if (unresolved.length > 0) {
+        console.error(`[collab] Shutdown deadline reached with ${unresolved.length} unacknowledged board write(s): ${unresolved.join(', ')}`);
+        exitCode = 1;
     }
-    await Promise.allSettled(flushPromises);
-    pendingFlushes.clear();
     if (redis) {
-        await redis.quit();
+        try {
+            await redis.quit();
+        }
+        catch (err) {
+            console.error('[collab] Redis shutdown failed:', err);
+            exitCode = 1;
+        }
     }
-    process.exit(0);
+    process.exit(exitCode);
 }
 process.on('SIGINT', gracefulShutdown);
+process.on('SIGQUIT', gracefulShutdown);
 process.on('SIGTERM', gracefulShutdown);
 server.listen().then(() => {
     console.log(`Hocuspocus collab server running on port ${PORT}`);

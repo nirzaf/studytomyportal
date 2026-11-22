@@ -260,7 +260,7 @@ function ThumbnailUpdate({ thumbnailType }: ThumbnailUpdateProps) {
 
     if (activeTab === 'image') {
       return (
-        <div className="flex gap-2 mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
           <input
             ref={imageInputRef}
             type="file"
@@ -270,7 +270,7 @@ function ThumbnailUpdate({ thumbnailType }: ThumbnailUpdateProps) {
           />
           <button
             type="button"
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="flex min-h-10 max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             onClick={() => imageInputRef.current?.click()}
           >
             <UploadCloud size={16} />
@@ -286,7 +286,7 @@ function ThumbnailUpdate({ thumbnailType }: ThumbnailUpdateProps) {
     }
 
     return (
-      <div className="flex gap-2 mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
         <input
           ref={videoInputRef}
           type="file"
@@ -296,7 +296,7 @@ function ThumbnailUpdate({ thumbnailType }: ThumbnailUpdateProps) {
         />
         <button
           type="button"
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          className="flex min-h-10 max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           onClick={() => videoInputRef.current?.click()}
         >
           <Video size={16} />
@@ -312,23 +312,27 @@ function ThumbnailUpdate({ thumbnailType }: ThumbnailUpdateProps) {
       {thumbnailType === 'both' && (
         <div className="flex border-b border-gray-100">
           <button
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            type="button"
+            className={`flex min-h-10 items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
               activeTab === 'image'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
             onClick={() => setActiveTab('image')}
+            aria-pressed={activeTab === 'image'}
           >
             <ImageIcon size={16} />
             {t('dashboard.courses.general.thumbnail.tabs.image')}
           </button>
           <button
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            type="button"
+            className={`flex min-h-10 items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${
               activeTab === 'video'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
             onClick={() => setActiveTab('video')}
+            aria-pressed={activeTab === 'video'}
           >
             <Video size={16} />
             {t('dashboard.courses.general.thumbnail.tabs.video')}
@@ -336,8 +340,7 @@ function ThumbnailUpdate({ thumbnailType }: ThumbnailUpdateProps) {
         </div>
       )}
 
-      <div className="p-6">
-        <div className="space-y-6">
+      <div className="space-y-4">
           {renderThumbnailPreview()}
           {renderTabContent()}
           
@@ -345,7 +348,6 @@ function ThumbnailUpdate({ thumbnailType }: ThumbnailUpdateProps) {
             {activeTab === 'image' && t('dashboard.courses.general.thumbnail.supported_formats.image')}
             {activeTab === 'video' && t('dashboard.courses.general.thumbnail.supported_formats.video')}
           </p>
-        </div>
       </div>
     </div>
   )

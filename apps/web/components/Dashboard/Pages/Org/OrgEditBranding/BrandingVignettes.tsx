@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 import { hexToRgba, isLightHex } from './BrandingShared'
 
 /**
- * Every vignette is a hand-drawn miniature of a real LearnHouse surface,
+ * Every vignette is a hand-drawn miniature of a real Studytomy surface,
  * rendered with the admin's actual assets. They are not screenshots and
  * not CSS-scaled components: fixed pixel sizes keep them legible and let
  * a logo sit in the exact box it will occupy for real.
@@ -316,11 +316,12 @@ export function SidebarVignette({ squareUrl, wideUrl, name, plan, label }: Sideb
 interface BrowserTabVignetteProps {
   faviconUrl?: string | null
   name?: string
+  host?: string
   label: string
 }
 
 /** A browser tab strip: the favicon is the only thing an admin sees of it. */
-export function BrowserTabVignette({ faviconUrl, name, label }: BrowserTabVignetteProps) {
+export function BrowserTabVignette({ faviconUrl, name, host, label }: BrowserTabVignetteProps) {
   const { t } = useTranslation()
   return (
     <Vignette icon={Browser} label={label} size="w-[260px]">
@@ -345,7 +346,7 @@ export function BrowserTabVignette({ faviconUrl, name, label }: BrowserTabVignet
         <div className="flex items-center gap-2 bg-white px-2 py-1.5">
           <span className="text-[9px] text-gray-300">‹ ›</span>
           <span className="flex h-4 flex-1 items-center rounded-full bg-[#f1f3f4] px-2 text-[8px] text-gray-500">
-            {name ? `${name.toLowerCase().replace(/\s+/g, '')}.learnhouse.io` : 'your-school.learnhouse.io'}
+            {host || 'your-school.example'}
           </span>
         </div>
         <div className="h-8 bg-[#f8f8f8]" />
@@ -394,7 +395,7 @@ interface ExploreCardVignetteProps {
   label: string
 }
 
-/** Your organization's card on the LearnHouse explore listing. */
+/** Your organization's card in organization discovery. */
 export function ExploreCardVignette({ thumbnailUrl, name, description, label }: ExploreCardVignetteProps) {
   const { t } = useTranslation()
   return (
@@ -434,7 +435,7 @@ export function LinkPreviewVignette({ thumbnailUrl, name, host, label }: LinkPre
           <Line w="w-12 h-1" />
         </div>
         <div className="ms-5 rounded-md border-s-2 border-gray-300 bg-[#f4f4f5] p-2">
-          <p className="truncate text-[8px] text-gray-400">{host || 'learnhouse.io'}</p>
+          <p className="truncate text-[8px] text-gray-400">{host || 'your-school.example'}</p>
           <p className="truncate text-[9px] font-semibold text-gray-900">{name || t('dashboard.organization.branding.vignette_text.your_organization')}</p>
           <div className="mt-1.5 aspect-[1.91/1] w-full overflow-hidden rounded bg-gray-200">
             {thumbnailUrl && <img src={thumbnailUrl} alt="" className="h-full w-full object-cover" />}

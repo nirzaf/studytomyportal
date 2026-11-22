@@ -1,11 +1,8 @@
-"""AI image generation (Google "nano banana" family).
+"""AI image generation through the configured OpenAI or Google provider.
 
-Image generation is a **Google-only** path: the provider-agnostic text layer in
-``src/services/ai/llm`` returns text/embeddings only, so images go straight to
-the Google GenAI SDK. It still reuses the same credential resolution as the text
-layer: ``ai_config.api_key`` when the configured provider is Google, otherwise
-the legacy ``ai_config.gemini_api_key``, so no separate key is needed when the
-deployment already runs on Gemini.
+OpenAI image requests reuse ``ai_config.api_key`` when ``provider=openai``;
+Google requests reuse it for Google providers and retain the legacy dedicated
+Gemini-key fallback for deployments using another text provider.
 
 Supports two modes with the same call:
 - text-to-image (``prompt`` only)
@@ -16,6 +13,8 @@ Supports two modes with the same call:
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import logging
 from typing import Optional
 
@@ -32,8 +31,9 @@ logger = logging.getLogger(__name__)
 # allowlist access and can 429/500 under capacity; set LEARNHOUSE_AI_IMAGE_MODEL
 # to opt into one once it is enabled for your key.
 DEFAULT_IMAGE_MODEL = "gemini-2.5-flash-image"
+DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2.5-flare"
 
-# Nano banana returns PNG inline data.
+# Both supported providers return PNG bytes in the format requested below.
 OUTPUT_MIME = "image/png"
 OUTPUT_EXT = "png"
 
@@ -60,37 +60,45 @@ def _sniff_mime(data: bytes) -> str:
 
 
 def _is_retryable(exc: Exception) -> bool:
-    """True for transient Google API errors worth retrying."""
-    code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
-    if isinstance(code, int) and code in _RETRYABLE_STATUS:
+    """True for transient image-provider errors worth retrying."""
+    codes = (getattr(exc, "code", None), getattr(exc, "status_code", None))
+    if any(isinstance(code, int) and code in _RETRYABLE_STATUS for code in codes):
         return True
     # google.genai raises ServerError (5xx) / APIError with a numeric status.
     name = type(exc).__name__
     return name in ("ServerError", "ServiceUnavailable", "ResourceExhausted")
 
 
-def _resolve_image_config() -> tuple[str, str]:
-    """Return ``(api_key, model)`` for image generation or raise if unconfigured."""
+def _resolve_image_config() -> tuple[str, str, str]:
+    """Return ``(provider, api_key, model)`` or raise if image generation is unconfigured.
+
+    OpenAI uses the same provider key as text generation. Other text providers
+    retain the previous Google-image fallback when a dedicated Gemini key exists.
+    """
     cfg = get_learnhouse_config().ai_config
     provider_id = (getattr(cfg, "provider", None) or "").strip().lower()
 
-    # Prefer the unified key when the deployment is already on Google; otherwise
-    # fall back to the dedicated Gemini key (which any provider can set purely for
-    # image generation, since this path is Google-only).
+    image_provider = "google"
     api_key = None
+    default_model = DEFAULT_IMAGE_MODEL
     if provider_id in _GOOGLE_ALIASES:
+        api_key = getattr(cfg, "api_key", None) or getattr(cfg, "gemini_api_key", None)
+    elif provider_id == "openai" and getattr(cfg, "api_key", None):
+        image_provider = "openai"
         api_key = getattr(cfg, "api_key", None)
-    api_key = api_key or getattr(cfg, "gemini_api_key", None)
+        default_model = DEFAULT_OPENAI_IMAGE_MODEL
+    else:
+        api_key = getattr(cfg, "gemini_api_key", None)
 
     if not api_key:
         raise AINotConfiguredError(
-            "AI image generation requires a Google/Gemini API key "
-            "(set LEARNHOUSE_GEMINI_API_KEY, or LEARNHOUSE_AI_API_KEY when "
-            "LEARNHOUSE_AI_PROVIDER=google)."
+            "AI image generation requires an API key. Set LEARNHOUSE_AI_API_KEY "
+            "with LEARNHOUSE_AI_PROVIDER=openai or google, or set "
+            "LEARNHOUSE_GEMINI_API_KEY for the legacy Google image path."
         )
 
-    model = (getattr(cfg, "image_model", None) or "").strip() or DEFAULT_IMAGE_MODEL
-    return api_key, model
+    model = (getattr(cfg, "image_model", None) or "").strip() or default_model
+    return image_provider, api_key, model
 
 
 def _extract_image_bytes(response) -> Optional[bytes]:
@@ -107,26 +115,114 @@ def _extract_image_bytes(response) -> Optional[bytes]:
     return None
 
 
+def _openai_input_files(input_images: list[bytes]) -> list[tuple[str, bytes, str]]:
+    """Build supported multipart image inputs for the OpenAI edit endpoint."""
+    files: list[tuple[str, bytes, str]] = []
+    allowed = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/webp": "webp",
+    }
+    for index, image in enumerate(input_images, start=1):
+        mime_type = _sniff_mime(image)
+        extension = allowed.get(mime_type)
+        if extension is None or not (
+            image.startswith(b"\x89PNG\r\n\x1a\n")
+            or image.startswith(b"\xff\xd8\xff")
+            or (image[:4] == b"RIFF" and image[8:12] == b"WEBP")
+        ):
+            raise ValueError("OpenAI image edits support PNG, JPEG, and WebP input images.")
+        files.append((f"reference-{index}.{extension}", image, mime_type))
+    return files
+
+
+def _extract_openai_image_bytes(response) -> Optional[bytes]:
+    """Decode the base64 image returned by the OpenAI Images API."""
+    data = getattr(response, "data", None) or []
+    encoded = getattr(data[0], "b64_json", None) if data else None
+    if not encoded:
+        return None
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+
+async def _generate_openai_image(
+    prompt: str,
+    api_key: str,
+    model: str,
+    input_images: list[bytes],
+) -> bytes:
+    """Generate or edit a PNG with the OpenAI Images API."""
+    from openai import AsyncOpenAI
+
+    files = _openai_input_files(input_images) if input_images else None
+    client = AsyncOpenAI(api_key=api_key)
+    response = None
+    try:
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            try:
+                if files:
+                    response = await client.images.edit(
+                        model=model,
+                        image=files,
+                        prompt=prompt,
+                        output_format="png",
+                    )
+                else:
+                    response = await client.images.generate(
+                        model=model,
+                        prompt=prompt,
+                        output_format="png",
+                    )
+                break
+            except Exception as e:  # noqa: BLE001 (surface a clean error to the router)
+                # Do not log the SDK error message: it may include request details.
+                if _is_retryable(e) and not is_spend_cap_error(e) and attempt < _MAX_ATTEMPTS:
+                    logger.warning(
+                        "Image generation transient error (%s), retry %d/%d",
+                        type(e).__name__, attempt, _MAX_ATTEMPTS,
+                    )
+                    await asyncio.sleep(_RETRY_BACKOFF_SECONDS * attempt)
+                    continue
+                (logger.warning if is_quota_error(e) else logger.error)(
+                    "Image generation call failed: %s", type(e).__name__
+                )
+                raise RuntimeError("Image generation failed") from e
+    finally:
+        await client.close()
+
+    image_bytes = _extract_openai_image_bytes(response)
+    if not image_bytes:
+        logger.warning("Image generation returned no image")
+        raise RuntimeError("The model did not return an image. Try rephrasing your prompt.")
+    return image_bytes
+
+
 async def generate_image(
     prompt: str,
     *,
     input_images: Optional[list[bytes]] = None,
 ) -> bytes:
-    """Generate (or edit) an image with the nano banana model. Returns PNG bytes.
+    """Generate or edit an image with the configured provider. Returns PNG bytes.
 
-    Raises ``AINotConfiguredError`` when no Google key is configured, or a plain
-    ``RuntimeError`` when the model returns no image (e.g. a safety refusal).
+    Raises ``AINotConfiguredError`` when no supported provider key is configured,
+    or a plain ``RuntimeError`` when the model returns no image (e.g. a refusal).
     """
-    from google import genai
-    from google.genai import types
-
     prompt = (prompt or "").strip()
     if not prompt:
         raise ValueError("A non-empty prompt is required for image generation.")
     if len(prompt) > MAX_PROMPT_CHARS:
         prompt = prompt[:MAX_PROMPT_CHARS]
 
-    api_key, model = _resolve_image_config()
+    provider, api_key, model = _resolve_image_config()
+    imgs = [img for img in (input_images or []) if img]
+    if provider == "openai":
+        return await _generate_openai_image(prompt, api_key, model, imgs)
+
+    from google import genai
+    from google.genai import types
 
     # Build multimodal contents.
     #   - EDIT/REFINE (input_images present): put the reference image(s) FIRST and
@@ -135,7 +231,6 @@ async def generate_image(
     #     attachment instead of generating a fresh image from the words alone.
     #   - TEXT-TO-IMAGE: prompt only.
     # Sniff each image's real MIME type; a JPEG/WebP mislabeled as PNG is rejected.
-    imgs = [img for img in (input_images or []) if img]
     contents: list = []
     if imgs:
         for img in imgs:

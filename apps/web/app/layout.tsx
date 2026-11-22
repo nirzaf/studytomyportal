@@ -43,6 +43,11 @@ export const viewport: Viewport = {
 
 // Saved to the home screen, the app opens without browser chrome.
 export const metadata: Metadata = {
+  title: {
+    default: 'Studytomy',
+    template: '%s | Studytomy',
+  },
+  description: 'Studytomy is a learning platform for courses, resources, and student progress.',
   appleWebApp: { capable: true, statusBarStyle: 'default' },
   formatDetection: { telephone: false },
 }

@@ -7,6 +7,7 @@ import { Switch } from '@components/ui/switch'
 import { Checkbox } from '@components/ui/checkbox'
 import { Button } from '@components/ui/button'
 import { Label } from '@components/ui/label'
+import { getLEARNHOUSE_TOP_DOMAIN_VAL } from '@services/config/config'
 import {
   ALL_AUTH_METHODS,
   AUTH_METHOD_OPTIONS,
@@ -42,6 +43,7 @@ const OrgSignInMethods: React.FC = () => {
 
   const [draftMethods, setDraftMethods] = React.useState<string[]>(policy.allowed_auth_methods)
   const [draftSharing, setDraftSharing] = React.useState(policy.allow_central_session_sharing)
+  const topDomain = getLEARNHOUSE_TOP_DOMAIN_VAL()
 
   React.useEffect(() => {
     setDraftMethods(policy.allowed_auth_methods)
@@ -144,13 +146,15 @@ const OrgSignInMethods: React.FC = () => {
           <div className="min-w-0 pt-4">
             <Label htmlFor="central-session-sharing" className="cursor-pointer">
               {t('dashboard.organization.security.session_sharing_label', {
-                defaultValue: 'Allow sharing sessions with learnhouse.io',
+                defaultValue: 'Allow sharing sessions with {{domain}}',
+                domain: topDomain,
               })}
             </Label>
             <p className="text-xs text-gray-500 mt-0.5 leading-relaxed max-w-xl">
               {t('dashboard.organization.security.session_sharing_hint', {
                 defaultValue:
-                  'When off, signing in at learnhouse.io won’t let members into this org; they must sign in again from this org’s login page using an allowed method.',
+                  'When off, signing in at {{domain}} won’t let members into this org; they must sign in again from this org’s login page using an allowed method.',
+                domain: topDomain,
               })}
             </p>
           </div>
@@ -165,7 +169,8 @@ const OrgSignInMethods: React.FC = () => {
             disabled={controlsDisabled}
             className="shrink-0 mt-5"
             aria-label={t('dashboard.organization.security.session_sharing_label', {
-              defaultValue: 'Allow sharing sessions with learnhouse.io',
+              defaultValue: 'Allow sharing sessions with {{domain}}',
+              domain: topDomain,
             })}
           />
         </div>

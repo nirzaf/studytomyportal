@@ -81,7 +81,6 @@ import { queryKeys } from '@/lib/query/keys'
 import { RequestBodyWithAuthHeader } from '@services/utils/ts/requests'
 import { getAssignmentsFromACourse } from '@services/courses/assignments'
 import { getDeploymentMode } from '@services/config/config'
-import PlanBadge from '@components/Dashboard/Shared/PlanRestricted/PlanBadge'
 import {
   FEATURES_SETTINGS_HREF,
   OPTIONAL_FEATURES,
@@ -240,9 +239,8 @@ function DashLeftMenu() {
     plan === 'standard' ? 'bg-blue-400/15 text-blue-300' :
     'bg-white/[0.08] text-white/50'
 
-  // Optional features: 'on' ones get a nav item, the rest are listed in the
-  // "More" menu, split into turned off (a settings change away) and locked
-  // (an upgrade away).
+  // Optional features that are available and on get a nav item. Available but
+  // disabled features remain in More; plan-locked features stay hidden.
   const rf = org?.config?.config?.resolved_features
   const featureStates = OPTIONAL_FEATURES.map((feature) => ({
     feature,
@@ -251,7 +249,6 @@ function DashLeftMenu() {
   const isOn = (key: OptionalFeatureKey) =>
     featureStates.find((f) => f.feature.key === key)?.status === 'on'
   const offFeatures = featureStates.filter((f) => f.status === 'off')
-  const lockedFeatures = featureStates.filter((f) => f.status === 'locked')
 
   const showLibrary = isOn('folders')
   const showPaths = isOn('paths')
@@ -297,7 +294,7 @@ function DashLeftMenu() {
           ) : (
             <img
               src="/studytomy-mini.png"
-              alt="Learnhouse logo"
+              alt="Studytomy logo"
               className="h-8 w-8"
             />
           )}
@@ -595,18 +592,22 @@ function DashLeftMenu() {
                       <span>{t('dashboard.users.settings.tabs.users')}</span>
                     </Link>
                   </HoverMenuItem>
-                  <HoverMenuItem asChild>
-                    <Link href="/dash/users/settings/usergroups" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                      <UsersThree size={16} weight="fill" />
-                      <span className="flex items-center">{t('dashboard.users.settings.tabs.usergroups')}<PlanBadge currentPlan={plan} requiredPlan="standard" variant="dark" /></span>
-                    </Link>
-                  </HoverMenuItem>
-                  <HoverMenuItem asChild>
-                    <Link href="/dash/users/settings/roles" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                      <Shield size={16} weight="fill" />
-                      <span className="flex items-center">{t('dashboard.users.settings.tabs.roles')}<PlanBadge currentPlan={plan} requiredPlan="pro" variant="dark" /></span>
-                    </Link>
-                  </HoverMenuItem>
+                  {planMeetsRequirement(plan, 'standard') && (
+                    <HoverMenuItem asChild>
+                      <Link href="/dash/users/settings/usergroups" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                        <UsersThree size={16} weight="fill" />
+                        <span>{t('dashboard.users.settings.tabs.usergroups')}</span>
+                      </Link>
+                    </HoverMenuItem>
+                  )}
+                  {planMeetsRequirement(plan, 'pro') && (
+                    <HoverMenuItem asChild>
+                      <Link href="/dash/users/settings/roles" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                        <Shield size={16} weight="fill" />
+                        <span>{t('dashboard.users.settings.tabs.roles')}</span>
+                      </Link>
+                    </HoverMenuItem>
+                  )}
                   <HoverMenuItem asChild>
                     <Link href="/dash/users/settings/signups" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
                       <ClipboardText size={16} weight="fill" />
@@ -700,12 +701,14 @@ function DashLeftMenu() {
                       <span>{t('dashboard.organization.settings.tabs.landing')}</span>
                     </Link>
                   </HoverMenuItem>
-                  <HoverMenuItem asChild>
-                    <Link href="/dash/org/settings/ai" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                      <Robot size={16} weight="fill" />
-                      <span className="flex items-center">{t('dashboard.organization.settings.tabs.ai')}<PlanBadge currentPlan={plan} requiredPlan="standard" variant="dark" /></span>
-                    </Link>
-                  </HoverMenuItem>
+                  {planMeetsRequirement(plan, 'standard') && (
+                    <HoverMenuItem asChild>
+                      <Link href="/dash/org/settings/ai" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                        <Robot size={16} weight="fill" />
+                        <span>{t('dashboard.organization.settings.tabs.ai')}</span>
+                      </Link>
+                    </HoverMenuItem>
+                  )}
                   {canManageOrg && (
                     <HoverMenuItem asChild>
                       <Link href="/dash/org/settings/usage" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
@@ -768,35 +771,49 @@ function DashLeftMenu() {
                   <HoverMenuLabel className="text-white/70 font-medium">{t('dashboard.developers.breadcrumb', { defaultValue: 'Developers' })}</HoverMenuLabel>
                   <HoverMenuSeparator />
                   <HoverMenuItem asChild>
-                    <Link href="/dash/developers/api" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                      <Key size={16} weight="fill" />
-                      <span className="flex items-center">{t('dashboard.organization.settings.tabs.api', { defaultValue: 'API Access' })}<PlanBadge currentPlan={plan} requiredPlan="pro" variant="dark" /></span>
+                    <Link href="/dash/developers/mcp" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                      <Code size={16} weight="fill" />
+                      <span>{t('dashboard.organization.settings.tabs.mcp')}</span>
                     </Link>
                   </HoverMenuItem>
-                  <HoverMenuItem asChild>
-                    <Link href="/dash/developers/automations" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                      <Lightning size={16} weight="fill" />
-                      <span className="flex items-center">{t('dashboard.organization.settings.tabs.automations', { defaultValue: 'Automations' })}<PlanBadge currentPlan={plan} requiredPlan="pro" variant="dark" /></span>
-                    </Link>
-                  </HoverMenuItem>
-                  <HoverMenuItem asChild>
-                    <Link href="/dash/developers/domains" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                      <LinkSimple size={16} weight="fill" />
-                      <span className="flex items-center">{t('dashboard.organization.settings.tabs.domains', { defaultValue: 'Domains' })}<PlanBadge currentPlan={plan} requiredPlan="standard" variant="dark" /></span>
-                    </Link>
-                  </HoverMenuItem>
-                  <HoverMenuItem asChild>
-                    <Link href="/dash/developers/seo" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                      <MagnifyingGlass size={16} weight="fill" />
-                      <span>{t('dashboard.organization.settings.tabs.seo')}</span>
-                    </Link>
-                  </HoverMenuItem>
-                  <HoverMenuItem asChild>
-                    <Link href="/dash/developers/sso" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                      <Lock size={16} weight="fill" />
-                      <span className="flex items-center">{t('dashboard.organization.settings.tabs.sso', { defaultValue: 'SSO' })}<PlanBadge currentPlan={plan} requiredPlan="enterprise" variant="dark" /></span>
-                    </Link>
-                  </HoverMenuItem>
+                  {planMeetsRequirement(plan, 'pro') && (
+                    <>
+                      <HoverMenuItem asChild>
+                        <Link href="/dash/developers/api" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                          <Key size={16} weight="fill" />
+                          <span>{t('dashboard.organization.settings.tabs.api', { defaultValue: 'API Access' })}</span>
+                        </Link>
+                      </HoverMenuItem>
+                      <HoverMenuItem asChild>
+                        <Link href="/dash/developers/automations" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                          <Lightning size={16} weight="fill" />
+                          <span>{t('dashboard.organization.settings.tabs.automations', { defaultValue: 'Automations' })}</span>
+                        </Link>
+                      </HoverMenuItem>
+                      <HoverMenuItem asChild>
+                        <Link href="/dash/developers/domains" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                          <LinkSimple size={16} weight="fill" />
+                          <span>{t('dashboard.organization.settings.tabs.domains', { defaultValue: 'Domains' })}</span>
+                        </Link>
+                      </HoverMenuItem>
+                    </>
+                  )}
+                  {planMeetsRequirement(plan, 'standard') && (
+                    <HoverMenuItem asChild>
+                      <Link href="/dash/developers/seo" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                        <MagnifyingGlass size={16} weight="fill" />
+                        <span>{t('dashboard.organization.settings.tabs.seo')}</span>
+                      </Link>
+                    </HoverMenuItem>
+                  )}
+                  {planMeetsRequirement(plan, 'enterprise') && (
+                    <HoverMenuItem asChild>
+                      <Link href="/dash/developers/sso" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                        <Lock size={16} weight="fill" />
+                        <span>{t('dashboard.organization.settings.tabs.sso', { defaultValue: 'SSO' })}</span>
+                      </Link>
+                    </HoverMenuItem>
+                  )}
                 </HoverMenuContent>
               }
             >
@@ -804,7 +821,7 @@ function DashLeftMenu() {
                 const active = isActivePath('/dash/developers')
                 return (
                   <Link
-                    href="/dash/developers/api"
+                    href="/dash/developers/mcp"
                     aria-label={t('dashboard.nav.open_developers_menu')}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
@@ -851,12 +868,14 @@ function DashLeftMenu() {
                         <span>{t('analytics.tabs.overview')}</span>
                       </Link>
                     </HoverMenuItem>
-                    <HoverMenuItem asChild>
-                      <Link href="/dash/analytics" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
-                        <ChartLine size={16} weight="fill" />
-                        <span className="flex items-center">{t('analytics.tabs.advanced')}<PlanBadge currentPlan={plan} requiredPlan="enterprise" variant="dark" /></span>
-                      </Link>
-                    </HoverMenuItem>
+                    {planMeetsRequirement(plan, 'enterprise') && (
+                      <HoverMenuItem asChild>
+                        <Link href="/dash/analytics" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                          <ChartLine size={16} weight="fill" />
+                          <span>{t('analytics.tabs.advanced')}</span>
+                        </Link>
+                      </HoverMenuItem>
+                    )}
                   </HoverMenuContent>
                 }
               >
@@ -899,48 +918,25 @@ function DashLeftMenu() {
               </HoverMenu>
             )}
 
-            {/* Optional features that are not in the nav: turned off, or not in the plan */}
-            {(offFeatures.length > 0 || lockedFeatures.length > 0) && (
+            {/* Optional features that are available but turned off */}
+            {offFeatures.length > 0 && (
               <HoverMenu
                 content={
                   <HoverMenuContent className="w-64">
-                    {offFeatures.length > 0 && (
-                      <>
-                        <HoverMenuLabel className="text-white/50 text-xs font-medium">
-                          {t('dashboard.nav.features_off')}
-                        </HoverMenuLabel>
-                        {offFeatures.map(({ feature }) => (
-                          <HoverMenuItem key={feature.key} asChild>
-                            <Link href={feature.href} className="flex items-center gap-2 px-3 py-2 text-sm text-white/40 hover:text-white/70 hover:bg-white/[0.05] cursor-pointer transition-colors">
-                              <feature.Icon size={16} weight="fill" />
-                              <span className="flex-1">{t(feature.labelKey)}</span>
-                              <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-white/35">
-                                {t('dashboard.nav.feature_off_badge')}
-                              </span>
-                            </Link>
-                          </HoverMenuItem>
-                        ))}
-                      </>
-                    )}
-                    {offFeatures.length > 0 && lockedFeatures.length > 0 && <HoverMenuSeparator />}
-                    {lockedFeatures.length > 0 && (
-                      <>
-                        <HoverMenuLabel className="text-white/50 text-xs font-medium">
-                          {t('dashboard.nav.features_locked')}
-                        </HoverMenuLabel>
-                        {lockedFeatures.map(({ feature, upgradePlan }) => (
-                          <HoverMenuItem key={feature.key} asChild>
-                            <Link href={feature.href} className="flex items-center gap-2 px-3 py-2 text-sm text-white/40 hover:text-white/70 hover:bg-white/[0.05] cursor-pointer transition-colors">
-                              <feature.Icon size={16} weight="fill" />
-                              <span className="flex-1">{t(feature.labelKey)}</span>
-                              {upgradePlan && (
-                                <PlanBadge currentPlan={plan} requiredPlan={upgradePlan} variant="dark" alwaysShow noMargin />
-                              )}
-                            </Link>
-                          </HoverMenuItem>
-                        ))}
-                      </>
-                    )}
+                    <HoverMenuLabel className="text-white/50 text-xs font-medium">
+                      {t('dashboard.nav.features_off')}
+                    </HoverMenuLabel>
+                    {offFeatures.map(({ feature }) => (
+                      <HoverMenuItem key={feature.key} asChild>
+                        <Link href={feature.href} className="flex items-center gap-2 px-3 py-2 text-sm text-white/40 hover:text-white/70 hover:bg-white/[0.05] cursor-pointer transition-colors">
+                          <feature.Icon size={16} weight="fill" />
+                          <span className="flex-1">{t(feature.labelKey)}</span>
+                          <span className="text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-white/35">
+                            {t('dashboard.nav.feature_off_badge')}
+                          </span>
+                        </Link>
+                      </HoverMenuItem>
+                    ))}
                     {canManageOrg && (
                       <>
                         <HoverMenuSeparator />

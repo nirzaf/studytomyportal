@@ -5,6 +5,7 @@ import { AppWindow, ImageSquare, Panorama } from '@phosphor-icons/react'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { constructAcceptValue } from '@/lib/constants'
 import { getOrgFaviconMediaDirectory } from '@services/media/media'
+import { getLEARNHOUSE_DOMAIN_VAL } from '@services/config/config'
 import {
   uploadOrganizationFavicon,
   uploadOrganizationLogo,
@@ -157,7 +158,7 @@ export default function LogosTab() {
         icon={AppWindow}
         title={t('dashboard.organization.branding.logos.favicon.title')}
         description={t('dashboard.organization.branding.logos.favicon.description')}
-        aside={<BrowserTabVignette faviconUrl={faviconUrl} name={org?.name} label={v('browser_tab')} />}
+        aside={<BrowserTabVignette faviconUrl={faviconUrl} name={org?.name} host={org?.slug ? `${org.slug}.${getLEARNHOUSE_DOMAIN_VAL()}` : undefined} label={v('browser_tab')} />}
       >
         <ImageDropzone
           id="faviconInput"

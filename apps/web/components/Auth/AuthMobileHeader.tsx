@@ -3,7 +3,7 @@ import React from 'react'
 import { Trans } from 'react-i18next'
 import Image from 'next/image'
 import Link from 'next/link'
-import learnhouseIcon from 'public/learnhouse_bigicon_1.png'
+import studytomyIcon from 'public/studytomy-mini.png'
 import { getOrgAuthBackgroundMediaDirectory } from '@services/media/media'
 import OrgSquareLogo from '@components/Objects/Org/OrgSquareLogo'
 import { getUriWithOrg } from '@services/config/config'
@@ -29,7 +29,7 @@ export default function AuthMobileHeader({ org, welcomeText }: AuthMobileHeaderP
     welcome_message = '',
   } = authBranding
   const displayMessage = welcome_message || welcomeText || ''
-  const UNSPLASH_UTM = '?utm_source=LearnHouse&utm_medium=referral'
+  const UNSPLASH_UTM = '?utm_source=Studytomy&utm_medium=referral'
   const withUtm = (url: string) => (url ? `${url}${UNSPLASH_UTM}` : '')
 
   const getBackgroundStyle = (): React.CSSProperties => {
@@ -94,7 +94,7 @@ export default function AuthMobileHeader({ org, welcomeText }: AuthMobileHeaderP
                     quality={100}
                     width={56}
                     height={56}
-                    src={learnhouseIcon}
+                    src={studytomyIcon}
                     alt="Studytomy"
                     className="object-contain"
                   />

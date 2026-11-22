@@ -5,12 +5,12 @@
 // YouTube URL (https://www.youtube.com/watch?v=<ID>) into `youtubeId`.
 export const VIDEOS = {
   // Getting started: one-minute walkthroughs of a new academy
-  'start-tour': { title: 'A one-minute tour of your new academy', youtubeId: '5UNjzIuEAl0' },
-  'start-first-course': { title: 'Create your first course', youtubeId: 'UUnoT-xfnnY' },
+  'start-tour': { title: 'A one-minute tour of your new academy', youtubeId: null },
+  'start-first-course': { title: 'Create your first course', youtubeId: null },
   'start-first-lesson': { title: 'Add your first lesson', youtubeId: null },
   'start-branding': { title: 'Make your academy look like your brand', youtubeId: null },
   'start-open-school': { title: 'Open your school to learners', youtubeId: null },
-  'start-invite': { title: 'Invite your first learners', youtubeId: 'flESwP0B87g' },
+  'start-invite': { title: 'Invite your first learners', youtubeId: null },
   'start-community': { title: 'Start a community', youtubeId: null },
 
   // Feature demos

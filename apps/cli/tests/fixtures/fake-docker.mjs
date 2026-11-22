@@ -31,6 +31,17 @@ if (is('--version')) {
   // nothing running
 } else if ((is('compose', 'stop') || is('compose', 'up')) && process.env.FAKE_DOCKER_EXEC) {
   // lifecycle calls made around a restore; only logged
+} else if (is('compose', 'run') && process.env.FAKE_DOCKER_EXEC) {
+  // One-shot content archive command used by backups.
+  const command = args.join(' ')
+  if (process.env.FAKE_DOCKER_STDIN_TO && command.includes('tar -C') && command.includes('-xf -')) {
+    fs.appendFileSync(process.env.FAKE_DOCKER_STDIN_TO, `--- ${command}\n${fs.readFileSync(0)}\n`)
+  } else if (process.env.FAKE_DOCKER_EXEC_STDOUT) {
+    process.stdout.write(process.env.FAKE_DOCKER_EXEC_STDOUT)
+  }
+  const status = Number(process.env.FAKE_DOCKER_EXEC_STATUS || 0)
+  if (status) process.stderr.write('fake compose run failure\n')
+  process.exit(status)
 } else if (is('exec') && process.env.FAKE_DOCKER_EXEC) {
   // Opt-in `docker exec` for stream-plumbing tests:
   //   FAKE_DOCKER_EXEC_STDOUT  text written to stdout
@@ -39,7 +50,13 @@ if (is('--version')) {
   if (args[1] === '-i' && process.env.FAKE_DOCKER_STDIN_TO) {
     fs.appendFileSync(process.env.FAKE_DOCKER_STDIN_TO, `--- ${args.slice(2).join(' ')}\n${fs.readFileSync(0)}\n`)
   }
-  if (process.env.FAKE_DOCKER_EXEC_STDOUT) process.stdout.write(process.env.FAKE_DOCKER_EXEC_STDOUT)
+  const command = args.join(' ')
+  const stdout = command.includes('SHOW server_version')
+    ? process.env.FAKE_DOCKER_EXEC_SERVER_VERSION ?? process.env.FAKE_DOCKER_EXEC_STDOUT
+    : command.includes('pg_dump')
+      ? process.env.FAKE_DOCKER_EXEC_PG_DUMP_STDOUT ?? process.env.FAKE_DOCKER_EXEC_STDOUT
+      : process.env.FAKE_DOCKER_EXEC_STDOUT
+  if (stdout) process.stdout.write(stdout)
   const status = Number(process.env.FAKE_DOCKER_EXEC_STATUS || 0)
   if (status) process.stderr.write('fake exec failure\n')
   process.exit(status)

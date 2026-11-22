@@ -210,7 +210,7 @@ app.include_router(v1_router)
 
 @app.get("/")
 async def root():
-    return {"Message": "Welcome to LearnHouse ✨"}
+    return {"Message": "Welcome to Studytomy ✨"}
 
 
 if __name__ == "__main__":

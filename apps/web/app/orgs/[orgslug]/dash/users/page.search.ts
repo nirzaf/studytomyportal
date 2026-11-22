@@ -34,6 +34,7 @@ export const searchMetas: SearchMeta[] = [
     icon: UsersThree,
     href: '/dash/users/settings/usergroups',
     group: 'users',
+    requiresPlan: 'standard',
   },
   {
     id: 'dash.users.roles',
@@ -43,6 +44,7 @@ export const searchMetas: SearchMeta[] = [
     icon: ShieldCheck,
     href: '/dash/users/settings/roles',
     group: 'users',
+    requiresPlan: 'pro',
   },
   {
     id: 'dash.users.signups',
@@ -61,5 +63,6 @@ export const searchMetas: SearchMeta[] = [
     icon: ClipboardText,
     href: '/dash/users/settings/audit-logs',
     group: 'users',
+    requiresPlan: 'enterprise',
   },
 ]

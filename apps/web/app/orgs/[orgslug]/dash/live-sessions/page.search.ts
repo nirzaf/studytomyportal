@@ -10,4 +10,5 @@ export const searchMeta: SearchMeta = {
   href: '/dash/live-sessions',
   group: 'navigation',
   featureKey: 'live_sessions',
+  requiresPlan: 'pro',
 }

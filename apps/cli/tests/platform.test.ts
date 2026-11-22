@@ -48,6 +48,7 @@ class ProcessExit extends Error { code: number; constructor(c: number) { super(`
 
 const ENV_KEYS = [
   'LEARNHOUSE_DOCKER_BIN', 'FAKE_DOCKER_DOWN', 'FAKE_DOCKER_EXEC', 'FAKE_DOCKER_EXEC_STDOUT',
+  'FAKE_DOCKER_EXEC_PG_DUMP_STDOUT', 'FAKE_DOCKER_EXEC_SERVER_VERSION',
   'FAKE_DOCKER_STDIN_TO', 'FAKE_DOCKER_EXEC_STATUS', 'FAKE_DOCKER_PS_ID', 'FAKE_DOCKER_LOG',
   'HOME', 'LEARNHOUSE_DIR', 'PATH',
 ]
@@ -153,6 +154,8 @@ describe('backup → restore end to end (real tar on this OS, fake docker)', () 
     process.env.FAKE_DOCKER_EXEC = '1'
     process.env.FAKE_DOCKER_PS_ID = 'cid'
     process.env.FAKE_DOCKER_EXEC_STDOUT = 'DUMP-OR-CONTENT-BYTES\n'
+    process.env.FAKE_DOCKER_EXEC_PG_DUMP_STDOUT = '-- Dumped from database version 16.10\nDUMP-OR-CONTENT-BYTES\n'
+    process.env.FAKE_DOCKER_EXEC_SERVER_VERSION = '16.10\n'
     vi.spyOn(process, 'exit').mockImplementation(((c?: number) => { throw new ProcessExit(c ?? 0) }) as never)
     const tty = { in: process.stdin.isTTY, out: process.stdout.isTTY }
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true })
@@ -169,8 +172,8 @@ describe('backup → restore end to end (real tar on this OS, fake docker)', () 
       await restoreCommand(path.join(backups, archives[0]), { yes: true })
       const fed = fs.readFileSync(sink, 'utf-8')
       // the dump went to psql in one transaction, the content to tar -x in the app
-      expect(fed).toMatch(/--- cid sh -c .*ON_ERROR_STOP=1.*--single-transaction[^\n]*\nDUMP-OR-CONTENT-BYTES\n/)
-      expect(fed).toMatch(/--- cid tar -C \/app\/api\/content -xf -\nDUMP-OR-CONTENT-BYTES\n/)
+      expect(fed).toMatch(/--- cid sh -c .*ON_ERROR_STOP=1.*--single-transaction[^\n]*\n-- Dumped from database version 16\.10\nDUMP-OR-CONTENT-BYTES\n/)
+      expect(fed).toMatch(/--- compose run .*learnhouse-app sh -c mkdir -p .*tar -C "\/app\/api\/content" -xf -\nDUMP-OR-CONTENT-BYTES\n/)
       expect(fs.readdirSync(installDir).some((e) => e.startsWith('.restore-'))).toBe(false)
     } finally {
       Object.defineProperty(process.stdin, 'isTTY', { value: tty.in, configurable: true })

@@ -6,20 +6,13 @@ import FormLayout, {
   Textarea,
 } from '@components/Objects/StyledElements/Form/Form';
 import { useFormik } from 'formik';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Globe, LockKeyhole } from 'lucide-react';
 import * as Form from '@radix-ui/react-form';
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import ThumbnailUpdate from './ThumbnailUpdate';
 import { useCourseFieldSync } from '@components/Contexts/CourseContext';
 import FormTagInput from '@components/Objects/StyledElements/Form/TagInput';
 import LearningItemsList from './LearningItemsList';
-import {
-  CustomSelect,
-  CustomSelectContent,
-  CustomSelectItem,
-  CustomSelectTrigger,
-  CustomSelectValue,
-} from "./CustomSelect";
 import { useTranslation } from 'react-i18next';
 
 type EditCourseStructureProps = {
@@ -65,6 +58,8 @@ const validate = (values: any, t: any) => {
 
   return errors;
 };
+
+const fieldClassName = 'rounded-lg border border-gray-200 bg-white text-gray-900 shadow-none placeholder:text-gray-400 hover:border-gray-300 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
 function EditCourseGeneral(props: EditCourseStructureProps) {
   const { t } = useTranslation()
@@ -172,49 +167,24 @@ function EditCourseGeneral(props: EditCourseStructureProps) {
   if (isLoading || !courseStructure) {
     return (
       <div className="h-full">
-        <div className="h-6" />
-        <div className="px-4 sm:px-10 pb-10">
-          <div className="bg-white rounded-xl shadow-xs p-6">
-            <div className="animate-pulse space-y-6">
-              {/* Name field */}
-              <div className="space-y-2">
-                <div className="h-3.5 bg-gray-200 rounded w-24" />
-                <div className="h-10 bg-gray-100 rounded-lg w-full" />
-              </div>
-              {/* Description field */}
-              <div className="space-y-2">
-                <div className="h-3.5 bg-gray-200 rounded w-32" />
-                <div className="h-10 bg-gray-100 rounded-lg w-full" />
-              </div>
-              {/* About field */}
-              <div className="space-y-2">
-                <div className="h-3.5 bg-gray-200 rounded w-20" />
-                <div className="h-[200px] bg-gray-100 rounded-lg w-full" />
-              </div>
-              {/* Learnings field */}
-              <div className="space-y-2">
-                <div className="h-3.5 bg-gray-200 rounded w-36" />
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-10 bg-gray-100 rounded-lg w-full" />
-                  ))}
+        <div className="mx-auto max-w-7xl px-4 pt-4 pb-10 sm:px-8 lg:px-10">
+          <div className="mb-6 space-y-2">
+            <div className="h-7 w-44 animate-pulse rounded bg-gray-200" />
+            <div className="h-4 w-72 max-w-full animate-pulse rounded bg-gray-100" />
+          </div>
+          <div className="grid animate-pulse gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="space-y-6 rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
+              <div className="h-5 w-40 rounded bg-gray-200" />
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-3.5 w-28 rounded bg-gray-200" />
+                  <div className={`${i === 3 ? 'h-36' : 'h-10'} w-full rounded-lg bg-gray-100`} />
                 </div>
-              </div>
-              {/* Tags field */}
-              <div className="space-y-2">
-                <div className="h-3.5 bg-gray-200 rounded w-16" />
-                <div className="h-10 bg-gray-100 rounded-lg w-full" />
-              </div>
-              {/* Thumbnail type field */}
-              <div className="space-y-2">
-                <div className="h-3.5 bg-gray-200 rounded w-28" />
-                <div className="h-10 bg-gray-100 rounded-lg w-48" />
-              </div>
-              {/* Thumbnail field */}
-              <div className="space-y-2">
-                <div className="h-3.5 bg-gray-200 rounded w-24" />
-                <div className="h-40 bg-gray-100 rounded-xl w-full" />
-              </div>
+              ))}
+            </div>
+            <div className="space-y-4">
+              <div className="h-64 rounded-xl border border-gray-200 bg-white" />
+              <div className="h-36 rounded-xl border border-gray-200 bg-white" />
             </div>
           </div>
         </div>
@@ -224,51 +194,93 @@ function EditCourseGeneral(props: EditCourseStructureProps) {
 
   return (
     <div className="h-full">
-      <div className="h-6" />
-      <div className="px-4 sm:px-10 pb-10">
-        <div className="bg-white rounded-xl shadow-xs">
-          <FormLayout onSubmit={formik.handleSubmit} className="p-6">
-            {error && (
-              <div className="flex justify-center bg-red-200 rounded-md text-red-950 space-x-2 items-center p-4 mb-6 transition-all shadow-xs">
-                <AlertTriangle size={18} />
-                <div className="font-bold text-sm">{error}</div>
-              </div>
-            )}
+      <div className="mx-auto max-w-7xl px-4 pt-4 pb-10 sm:px-8 lg:px-10">
+        <header className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-950">
+            {t('dashboard.courses.general.form.editor_title')}
+          </h1>
+          <p className="mt-1.5 text-sm text-gray-600">
+            {t('dashboard.courses.general.form.editor_subtitle')}
+          </p>
+          <p className="mt-2 text-xs font-medium text-gray-500">
+            {t('dashboard.courses.general.form.autosave_note')}
+          </p>
+        </header>
+
+        <FormLayout
+          onSubmit={formik.handleSubmit}
+          className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]"
+        >
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-900 lg:col-span-2">
+              <AlertTriangle size={18} aria-hidden="true" />
+              <div>{error}</div>
+            </div>
+          )}
+
+          <section aria-labelledby="course-information-heading" className="min-w-0 rounded-xl border border-gray-200 bg-white p-5 shadow-xs sm:p-6">
+            <div className="mb-6 border-b border-gray-100 pb-4">
+              <h2 id="course-information-heading" className="text-base font-semibold text-gray-900">
+                {t('dashboard.courses.general.form.course_information_heading')}
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {t('dashboard.courses.general.form.course_information_hint')}
+              </p>
+            </div>
 
             <div className="space-y-6">
               <FormField name="name">
                 <FormLabelAndMessage label={t('dashboard.courses.general.form.name_label')} message={formik.errors.name} />
                 <Form.Control asChild>
                   <Input
-                    style={{ backgroundColor: 'white' }}
+                    className={fieldClassName}
+                    name="name"
                     onChange={formik.handleChange}
                     value={formik.values.name}
                     type="text"
+                    maxLength={100}
+                    autoComplete="off"
                     required
                     disabled={isSaving}
                   />
                 </Form.Control>
+                <p className="text-end text-xs text-gray-500">
+                  {t('dashboard.courses.general.form.character_count', {
+                    count: formik.values.name.length,
+                    max: 100,
+                  })}
+                </p>
               </FormField>
 
               <FormField name="description">
                 <FormLabelAndMessage label={t('dashboard.courses.general.form.description_label')} message={formik.errors.description} />
                 <Form.Control asChild>
-                  <Input
-                    style={{ backgroundColor: 'white' }}
+                  <Textarea
+                    className={fieldClassName}
+                    name="description"
                     onChange={formik.handleChange}
                     value={formik.values.description}
-                    type="text"
+                    rows={3}
+                    maxLength={1000}
                     required
                     disabled={isSaving}
                   />
                 </Form.Control>
+                <p className="text-end text-xs text-gray-500">
+                  {t('dashboard.courses.general.form.character_count', {
+                    count: formik.values.description.length,
+                    max: 1000,
+                  })}
+                </p>
               </FormField>
 
               <FormField name="about">
                 <FormLabelAndMessage label={t('dashboard.courses.general.form.about_label')} message={formik.errors.about} />
                 <Form.Control asChild>
                   <Textarea
-                    style={{ backgroundColor: 'white', height: '200px', minHeight: '200px' }}
+                    className={fieldClassName}
+                    name="about"
+                    style={{ backgroundColor: 'white', height: '180px', minHeight: '180px' }}
                     onChange={formik.handleChange}
                     value={formik.values.about}
                     required
@@ -279,6 +291,9 @@ function EditCourseGeneral(props: EditCourseStructureProps) {
 
               <FormField name="learnings">
                 <FormLabelAndMessage label={t('dashboard.courses.general.form.learnings_label')} message={formik.touched.learnings ? formik.errors.learnings : undefined} />
+                <p className="mb-2 text-sm text-gray-500">
+                  {t('dashboard.courses.general.form.learnings_hint')}
+                </p>
                 <Form.Control asChild>
                   <LearningItemsList
                     value={formik.values.learnings}
@@ -293,6 +308,9 @@ function EditCourseGeneral(props: EditCourseStructureProps) {
 
               <FormField name="tags">
                 <FormLabelAndMessage label={t('dashboard.courses.general.form.tags_label')} message={formik.errors.tags} />
+                <p className="mb-2 text-sm text-gray-500">
+                  {t('dashboard.courses.general.form.tags_hint')}
+                </p>
                 <Form.Control asChild>
                   <FormTagInput
                     placeholder={t('dashboard.courses.general.form.tags_placeholder')}
@@ -301,43 +319,67 @@ function EditCourseGeneral(props: EditCourseStructureProps) {
                   />
                 </Form.Control>
               </FormField>
+            </div>
+          </section>
 
-              <FormField name="thumbnail_type">
+          <aside className="space-y-4">
+            <section aria-labelledby="course-thumbnail-heading" className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5">
+              <div className="mb-4">
+                <h2 id="course-thumbnail-heading" className="text-base font-semibold text-gray-900">
+                  {t('dashboard.courses.general.form.thumbnail_label')}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {t('dashboard.courses.general.form.thumbnail_hint')}
+                </p>
+              </div>
+              <FormField name="thumbnail_type" className="mb-4">
                 <FormLabelAndMessage label={t('dashboard.courses.general.form.thumbnail_type_label')} />
                 <Form.Control asChild>
-                  <CustomSelect
+                  <select
+                    name="thumbnail_type"
                     value={formik.values.thumbnail_type}
-                    onValueChange={(value) => {
-                      if (!value) return;
-                      formik.setFieldValue('thumbnail_type', value);
-                    }}
+                    onChange={(event) => formik.setFieldValue('thumbnail_type', event.target.value)}
                     disabled={isSaving}
+                    className={`${fieldClassName} mt-1 h-10 cursor-pointer px-3`}
                   >
-                    <CustomSelectTrigger className="w-full bg-white">
-                      <CustomSelectValue>
-                        {formik.values.thumbnail_type === 'image' ? t('dashboard.courses.general.form.thumbnail_type_image') :
-                         formik.values.thumbnail_type === 'video' ? t('dashboard.courses.general.form.thumbnail_type_video') :
-                         formik.values.thumbnail_type === 'both' ? t('dashboard.courses.general.form.thumbnail_type_both') : t('dashboard.courses.general.form.thumbnail_type_image')}
-                      </CustomSelectValue>
-                    </CustomSelectTrigger>
-                    <CustomSelectContent>
-                      <CustomSelectItem value="image">{t('dashboard.courses.general.form.thumbnail_type_image')}</CustomSelectItem>
-                      <CustomSelectItem value="video">{t('dashboard.courses.general.form.thumbnail_type_video')}</CustomSelectItem>
-                      <CustomSelectItem value="both">{t('dashboard.courses.general.form.thumbnail_type_both')}</CustomSelectItem>
-                    </CustomSelectContent>
-                  </CustomSelect>
+                    <option value="image">{t('dashboard.courses.general.form.thumbnail_type_image')}</option>
+                    <option value="video">{t('dashboard.courses.general.form.thumbnail_type_video')}</option>
+                    <option value="both">{t('dashboard.courses.general.form.thumbnail_type_both')}</option>
+                  </select>
                 </Form.Control>
               </FormField>
+              <ThumbnailUpdate thumbnailType={formik.values.thumbnail_type} />
+            </section>
 
-              <FormField name="thumbnail">
-                <FormLabelAndMessage label={t('dashboard.courses.general.form.thumbnail_label')} />
-                <Form.Control asChild>
-                  <ThumbnailUpdate thumbnailType={formik.values.thumbnail_type} />
-                </Form.Control>
-              </FormField>
-            </div>
-          </FormLayout>
-        </div>
+            <section aria-labelledby="course-access-heading" className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs sm:p-5">
+              <div className="flex items-center gap-2">
+                {formik.values.public ? (
+                  <Globe className="size-4 text-gray-500" aria-hidden="true" />
+                ) : (
+                  <LockKeyhole className="size-4 text-gray-500" aria-hidden="true" />
+                )}
+                <h2 id="course-access-heading" className="text-base font-semibold text-gray-900">
+                  {t('dashboard.courses.general.form.visibility_heading')}
+                </h2>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                  {formik.values.public
+                    ? t('dashboard.courses.access.public.title')
+                    : t('dashboard.courses.access.users_only.title')}
+                </span>
+              </div>
+              <p className="mt-2 text-sm leading-5 text-gray-600">
+                {formik.values.public
+                  ? t('dashboard.courses.general.form.visibility_public_summary')
+                  : t('dashboard.courses.general.form.visibility_private_summary')}
+              </p>
+              <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
+                {t('dashboard.courses.general.form.visibility_hint')}
+              </p>
+            </section>
+          </aside>
+        </FormLayout>
       </div>
     </div>
   );

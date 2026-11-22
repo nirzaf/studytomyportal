@@ -2,8 +2,7 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { PlanLevel } from '@services/plans/plans'
-import PlanBadge from '@components/Dashboard/Shared/PlanRestricted/PlanBadge'
+import { PlanLevel, planMeetsRequirement } from '@services/plans/plans'
 import { usePlan } from '@components/Hooks/usePlan'
 import ToolTip from '@components/Objects/StyledElements/Tooltip/Tooltip'
 import { useTranslation } from 'react-i18next'
@@ -27,6 +26,9 @@ interface DashTabBarProps {
 export function DashTabBar({ tabs }: DashTabBarProps) {
   const { t } = useTranslation()
   const currentPlan = usePlan()
+  const visibleTabs = tabs.filter(
+    (tab) => !tab.requiresPlan || planMeetsRequirement(currentPlan, tab.requiresPlan)
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -55,7 +57,7 @@ export function DashTabBar({ tabs }: DashTabBarProps) {
   // Scroll active tab into view whenever the active key changes.
   // Next.js reuses the component across subpage navigations, so scroll state
   // can persist, so we need to bring the new active tab back into view.
-  const activeKey = tabs.find((t) => t.active)?.key
+  const activeKey = visibleTabs.find((tab) => tab.active)?.key
   useEffect(() => {
     const container = scrollRef.current
     if (!container) return
@@ -100,16 +102,11 @@ export function DashTabBar({ tabs }: DashTabBarProps) {
         ref={scrollRef}
         className="flex space-x-1 font-black text-sm overflow-x-auto scrollbar-hide"
       >
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const inner = (
             <div className="flex items-center space-x-2.5 mx-2.5">
               {tab.icon}
-              <div className="flex items-center whitespace-nowrap">
-                {tab.label}
-                {tab.requiresPlan && (
-                  <PlanBadge currentPlan={currentPlan} requiredPlan={tab.requiresPlan} />
-                )}
-              </div>
+              <div className="flex items-center whitespace-nowrap">{tab.label}</div>
             </div>
           )
 

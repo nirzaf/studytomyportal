@@ -152,7 +152,7 @@ function EmbedActivityClient({ activityId, courseuuid, orgslug }: EmbedActivityC
           {showBranding && (
             <div className="mb-6">
               <Image
-                src="/learnhouse_bigicon.png"
+                src="/studytomy-mini.png"
                 alt="Studytomy"
                 width={64}
                 height={64}
@@ -222,12 +222,10 @@ function PoweredByBadge({ activityUrl }: { activityUrl: string }) {
         onClick={handleClick}
         className="bg-white/80 backdrop-blur-lg rounded-2xl p-2 light-shadow block cursor-pointer"
       >
-        <Image
-          src="/studytomy-mini.png"
-          alt="Studytomy"
-          width={20}
-          height={20}
-        />
+        <span className="flex items-center gap-1.5 px-1 text-xs font-medium text-gray-700">
+          <span>Made with</span>
+          <Image src="/lrn-text.svg" alt="LearnHouse" width={72} height={11} />
+        </span>
       </button>
     </div>
   )

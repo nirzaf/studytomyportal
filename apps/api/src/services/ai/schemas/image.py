@@ -1,4 +1,4 @@
-"""Request/response schemas for AI image generation (nano banana)."""
+"""Request/response schemas for AI image generation."""
 
 from typing import Optional
 

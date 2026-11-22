@@ -64,16 +64,14 @@ class AIConfig(BaseModel):
     # Google/Gemini key. Doubles as the embeddings fallback for providers (Anthropic, DeepSeek,
     # Moonshot, Mistral, OpenRouter, Bedrock) that have no embeddings API of their own.
     gemini_api_key: str | None = None
-    # Image generation model (Google "nano banana" family). Image generation is a
-    # Google-only path: it always uses the Google GenAI SDK regardless of the
-    # configured text `provider`, resolving its key from `api_key` (when provider
-    # is Google) or `gemini_api_key`. Override the exact model id with
-    # LEARNHOUSE_AI_IMAGE_MODEL; defaults to the GA `gemini-2.5-flash-image`
-    # (Nano Banana). Set a newer/preview model here once it is allowlisted.
+    # Image generation model. Uses the OpenAI Images API when provider=openai and
+    # the configured `api_key`, or Google GenAI when provider is Google (or when
+    # the legacy `gemini_api_key` fallback is configured). Override the exact
+    # model id with LEARNHOUSE_AI_IMAGE_MODEL; provider-specific defaults apply.
     image_model: str | None = None
-    # Text-to-speech / podcast model (Google Gemini TTS). Like image generation
-    # this is a Google-only path resolving its key from `api_key` (when provider
-    # is Google) or `gemini_api_key`. Override the exact model id with
+    # Text-to-speech / podcast model (Google Gemini TTS). This is a Google-only
+    # path resolving its key from `api_key` (when provider is Google) or
+    # `gemini_api_key`. Override the exact model id with
     # LEARNHOUSE_AI_TTS_MODEL; defaults to `gemini-2.5-flash-preview-tts`. All
     # Gemini TTS models are currently preview, so keep this configurable.
     tts_model: str | None = None

@@ -22,7 +22,7 @@ import {
   type ContentResultType,
 } from '@/lib/dashboard-search/useContentSearch'
 import { useOrgMembership } from '@components/Contexts/OrgContext'
-import { isFeatureAvailable } from '@services/plans/plans'
+import { isFeatureAvailable, planMeetsRequirement } from '@services/plans/plans'
 import { normalizeForSearch } from '@/lib/search/normalize'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 import { usePlan } from '@components/Hooks/usePlan'
@@ -58,16 +58,18 @@ const CONTENT_TYPE_ORDER: ContentResultType[] = [
 function usePagesFiltered(): SearchMeta[] {
   const { org } = useOrgMembership()
   const resolvedFeatures = org?.config?.config?.resolved_features
+  const currentPlan = usePlan()
   return useMemo(
     () =>
       dashboardPages.filter((p) => {
         if (p.available && !p.available()) return false
+        if (p.requiresPlan && !planMeetsRequirement(currentPlan, p.requiresPlan)) return false
         if (!p.featureKey) return true
         const rf = resolvedFeatures?.[p.featureKey]
         if (rf) return rf.enabled
         return isFeatureAvailable(p.featureKey)
       }),
-    [resolvedFeatures],
+    [resolvedFeatures, currentPlan],
   )
 }
 

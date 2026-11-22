@@ -1,5 +1,5 @@
 'use client'
-import { getPlatformHomeUri, getPlatformUrl } from '@services/config/config'
+import { getPlatformHomeUri } from '@services/config/config'
 import { signOut } from '@components/Contexts/AuthContext'
 import { openFeedbackDialog, isReportingAvailable } from '@lib/errors/report'
 import type { ResolutionKind } from '@lib/errors/types'
@@ -65,7 +65,7 @@ export default function ErrorActions({ resolutions, reset, eventId, loginNext }:
   }
 
   const loginHref = loginNext ? `/login?next=${encodeURIComponent(loginNext)}` : '/login'
-  const supportHref = getPlatformUrl('/contact') || 'mailto:support@learnhouse.io'
+  const supportHref = 'https://www.studytomy.com/contact/'
 
   const renderMain = (kind: ResolutionKind, index: number) => {
     const variant = index === 0 ? 'primary' : 'secondary'

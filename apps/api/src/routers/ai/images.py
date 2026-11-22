@@ -1,4 +1,4 @@
-"""AI image generation endpoints (Google "nano banana").
+"""AI image generation endpoints (OpenAI Images API or Google GenAI).
 
 Backs the shared AIImagePicker used across every image-upload surface. Follows
 the same guard/credit ordering as the other AI routers: resolve org → org
@@ -90,7 +90,7 @@ async def _load_org_and_authorize(
 @router.post(
     "/images/generate",
     response_model=GenerateImageResponse,
-    summary="Generate an image with AI (nano banana)",
+    summary="Generate an image with AI",
     description="Generate or refine an image from a text prompt. Consumes AI credits.",
     responses={
         200: {"description": "Image generated and stored.", "model": GenerateImageResponse},

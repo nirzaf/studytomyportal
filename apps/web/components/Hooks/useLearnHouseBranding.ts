@@ -6,8 +6,8 @@ import { usePlan } from '@components/Hooks/usePlan'
 export { isWhiteLabelPlan }
 
 /**
- * Whether LearnHouse branding (logo marks, "made with" badges) should render
- * for the current org.
+ * Whether platform marks and required attribution badges should render for
+ * the current organization.
  *
  *   1. EE / Pro+  → hidden.
  *   2. SaaS free  → always shown.

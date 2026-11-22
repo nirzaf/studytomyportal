@@ -31,7 +31,7 @@ export default function AuthBrandingTab() {
   const org = useOrg() as any
   const session = useLHSession() as any
   const accessToken = session?.data?.tokens?.access_token
-  // Enterprise orgs do not show the LearnHouse mark on the sign-in panel.
+  // White-label orgs do not show the platform mark on the sign-in panel.
   const isWhiteLabel = isWhiteLabelPlan(usePlan())
 
   const [state, setState] = useState<AuthBrandingState>(() => readAuthBranding(org))

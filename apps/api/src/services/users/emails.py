@@ -33,7 +33,7 @@ def _send_notification_email(**kwargs):
 
 
 # Public academy: footer "learn more" target, and last-resort CTA fallback.
-ACADEMY_URL = "https://university.learnhouse.io"
+ACADEMY_URL = "https://lms.studytomy.com"
 
 
 # Inline SVG logo (LearnHouse icon mark + wordmark, scaled down)
