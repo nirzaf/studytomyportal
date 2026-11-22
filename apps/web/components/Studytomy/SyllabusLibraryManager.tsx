@@ -39,10 +39,14 @@ type SourceVersion = {
   uploaded_by_user_id: number
   reviewed_by_user_id: number | null
   review_evidence: string | null
+  approved_at: string | null
+  revoked_by_user_id: number | null
+  revocation_evidence: string | null
+  revoked_at: string | null
 }
 type Curriculum = { uuid: string; curriculum_key: string; revision: number; subject: string; level: string; language: string; jurisdiction: string | null; status: string }
 type Concept = { uuid: string; code: string; title: string; objective: string }
-type Mapping = { mapping_uuid: string; version_uuid: string; source_title: string; source_type: string; source_publisher: string; source_edition: string; curriculum_uuid: string; curriculum_key: string; curriculum_revision: number; curriculum_subject: string; curriculum_level: string; curriculum_jurisdiction: string | null; concept_uuid: string; concept_code: string; concept_title: string; page_start: number; page_end: number; evidence_kind: string; evidence_quote: string; status: string; created_by_user_id: number; reviewed_by_user_id: number | null; review_evidence: string | null }
+type Mapping = { mapping_uuid: string; version_uuid: string; source_title: string; source_type: string; source_publisher: string; source_edition: string; curriculum_uuid: string; curriculum_key: string; curriculum_revision: number; curriculum_subject: string; curriculum_level: string; curriculum_jurisdiction: string | null; concept_uuid: string; concept_code: string; concept_title: string; page_start: number; page_end: number; evidence_kind: string; evidence_quote: string; status: string; created_by_user_id: number; reviewed_by_user_id: number | null; review_evidence: string | null; approved_at: string | null; revoked_by_user_id: number | null; revocation_evidence: string | null; revoked_at: string | null }
 type Page = { page: number; text: string }
 
 const statusStyle: Record<string, string> = {
@@ -398,7 +402,7 @@ export default function SyllabusLibraryManager() {
           <h3 className="mb-3 text-sm font-semibold text-slate-900">Mapping review queue</h3>
           {mappings.length === 0 ? <p className="text-sm text-slate-500">No page-to-concept mappings submitted yet.</p> : <ul className="space-y-2">
             {mappings.map((mapping) => <li key={mapping.mapping_uuid} className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{mapping.concept_code} · {mapping.concept_title}</p><p className="mt-1 text-xs text-slate-500">Target: {mapping.curriculum_subject} · {mapping.curriculum_level} · {mapping.curriculum_key} v{mapping.curriculum_revision}{mapping.curriculum_jurisdiction ? ` · ${mapping.curriculum_jurisdiction}` : ''}</p><p className="mt-1 text-xs text-slate-500">Source: {mapping.source_type.replaceAll('_', ' ')} · {mapping.source_title} · {mapping.source_publisher} · edition {mapping.source_edition}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{mapping.evidence_kind} · PDF pages {mapping.page_start}–{mapping.page_end} · “{mapping.evidence_quote}”</p><a href={`#source-version-${encodeURIComponent(mapping.version_uuid)}`} className="mt-2 inline-block text-xs font-semibold text-blue-700 underline underline-offset-2">Inspect mapped source pages</a></div>
+              <div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{mapping.concept_code} · {mapping.concept_title}</p><p className="mt-1 text-xs text-slate-500">Target: {mapping.curriculum_subject} · {mapping.curriculum_level} · {mapping.curriculum_key} v{mapping.curriculum_revision}{mapping.curriculum_jurisdiction ? ` · ${mapping.curriculum_jurisdiction}` : ''}</p><p className="mt-1 text-xs text-slate-500">Source: {mapping.source_type.replaceAll('_', ' ')} · {mapping.source_title} · {mapping.source_publisher} · edition {mapping.source_edition}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{mapping.evidence_kind} · PDF pages {mapping.page_start}–{mapping.page_end} · “{mapping.evidence_quote}”</p>{mapping.review_evidence && <p className="mt-1 text-xs text-slate-500">Review by educator {mapping.reviewed_by_user_id ?? '—'}: {mapping.review_evidence}</p>}{mapping.revocation_evidence && <p className="mt-1 text-xs text-rose-700">Revoked by educator {mapping.revoked_by_user_id ?? '—'}: {mapping.revocation_evidence}</p>}<a href={`#source-version-${encodeURIComponent(mapping.version_uuid)}`} className="mt-2 inline-block text-xs font-semibold text-blue-700 underline underline-offset-2">Inspect mapped source pages</a></div>
               <div className="flex shrink-0 items-center gap-2"><StatusPill value={mapping.status} />
                 {mapping.status === 'pending_review' && mapping.created_by_user_id !== currentUserId && <><Button size="sm" variant="outline" disabled={busy} onClick={() => void reviewMapping(mapping, 'approve')}>Approve</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => void reviewMapping(mapping, 'reject')}>Reject</Button></>}
                 {(mapping.status === 'pending_review' || mapping.status === 'approved') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void revokeMapping(mapping)}>Revoke</Button>}
@@ -461,6 +465,7 @@ function SourceVersionCard({ version, currentUserId, busy, onReview, onRetry, on
         <p className="mt-1 text-xs text-slate-600">Rights: {version.rights_status}{version.rights_reference ? ` · ${version.rights_reference}` : ''}</p>
         {version.ingestion_error_message && <p className="mt-2 rounded-md bg-rose-50 px-2.5 py-2 text-xs leading-5 text-rose-800">{version.ingestion_error_message}</p>}
         {version.review_evidence && <p className="mt-2 text-xs text-slate-500">Review note: {version.review_evidence}</p>}
+        {version.revocation_evidence && <p className="mt-1 text-xs text-rose-700">Revoked by educator {version.revoked_by_user_id ?? '—'}: {version.revocation_evidence}</p>}
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => void loadPages()}><FileSearch size={14} aria-hidden /> {pages ? 'Hide pages' : 'Inspect pages'}</Button>

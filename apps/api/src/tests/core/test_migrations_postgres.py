@@ -73,7 +73,7 @@ def test_empty_schema_bootstrap_serializes_and_installs_integrity_guards():
             reports = list(workers.map(lambda _: ensure_schema(database_url), range(2)))
 
         expected_heads = head_revisions()
-        assert expected_heads == ["e3c4b1d928af"]
+        assert expected_heads == ["f04d9c6a31b8"]
         assert all(report.after == expected_heads for report in reports)
         assert {report.state for report in reports} == {"empty", "stamped"}
 
@@ -199,12 +199,12 @@ def test_interrupted_upgrade_rolls_back_ddl_and_preserves_revision():
 def test_supported_prior_revision_upgrades_through_application_bootstrap():
     with _isolated_database() as (database_url, database):
         initial = ensure_schema(database_url)
-        assert initial.after == ["e3c4b1d928af"]
+        assert initial.after == ["f04d9c6a31b8"]
 
         head = migrations.ScriptDirectory.from_config(migrations.alembic_config()).get_revision(
             initial.after[0]
         )
-        assert head.down_revision == "d9f74c2a81e6"
+        assert head.down_revision == "e3c4b1d928af"
 
         token = uuid4().hex
         engine = create_engine(database_url)
@@ -241,15 +241,9 @@ def test_supported_prior_revision_upgrades_through_application_bootstrap():
                 )
                 assert migrations.current_revisions(connection) == [head.down_revision]
                 inspector = inspect(connection)
-                mapping_indexes = {
-                    index["name"] for index in inspector.get_indexes("st_syllabus_concept_mapping")
-                }
-                mapping_constraints = {
-                    constraint["name"]
-                    for constraint in inspector.get_unique_constraints("st_syllabus_concept_mapping")
-                }
-                assert "uq_st_syllabus_mapping_active_evidence" not in mapping_indexes
-                assert "uq_st_syllabus_mapping_evidence" in mapping_constraints
+                for table in ("st_syllabus_source_version", "st_syllabus_concept_mapping"):
+                    columns = {column["name"] for column in inspector.get_columns(table)}
+                    assert "revocation_evidence" not in columns
                 assert connection.execute(
                     text("SELECT count(*) FROM st_business_event WHERE event_uuid=:id"),
                     {"id": event_uuid},
@@ -260,19 +254,13 @@ def test_supported_prior_revision_upgrades_through_application_bootstrap():
             # the path under test: it upgrades the prior revision through ensure_schema().
             upgraded = ensure_schema(database_url)
             assert upgraded.before == [head.down_revision]
-            assert upgraded.after == ["e3c4b1d928af"]
+            assert upgraded.after == ["f04d9c6a31b8"]
 
             with engine.connect() as connection:
                 inspector = inspect(connection)
-                mapping_indexes = {
-                    index["name"] for index in inspector.get_indexes("st_syllabus_concept_mapping")
-                }
-                mapping_constraints = {
-                    constraint["name"]
-                    for constraint in inspector.get_unique_constraints("st_syllabus_concept_mapping")
-                }
-                assert "uq_st_syllabus_mapping_active_evidence" in mapping_indexes
-                assert "uq_st_syllabus_mapping_evidence" not in mapping_constraints
+                for table in ("st_syllabus_source_version", "st_syllabus_concept_mapping"):
+                    columns = {column["name"] for column in inspector.get_columns(table)}
+                    assert {"revoked_by_user_id", "revocation_evidence", "revoked_at"} <= columns
                 assert connection.execute(
                     text("SELECT count(*) FROM st_business_event WHERE event_uuid=:id"),
                     {"id": event_uuid},
@@ -320,7 +308,7 @@ def test_lossy_downgrade_of_dependent_and_provenance_revision_is_refused():
 
             # Verify transaction rolled back cleanly and revision + data remain intact
             with engine.connect() as connection:
-                assert migrations.current_revisions(connection) == ["e3c4b1d928af"]
+                assert migrations.current_revisions(connection) == ["f04d9c6a31b8"]
                 kept = connection.execute(
                     text("SELECT count(*) FROM st_curriculum_revision WHERE programme_metadata IS NOT NULL")
                 ).scalar_one()

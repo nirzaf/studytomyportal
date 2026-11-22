@@ -6,7 +6,6 @@ import { BookOpenText, BookMarked, Compass, ExternalLink, LoaderCircle, Search, 
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { Button } from '@components/ui/button'
-import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@components/ui/select'
 import { getAPIUrl } from '@services/config/config'
@@ -31,6 +30,8 @@ type Citation = {
   version_uuid: string
   title: string
   publisher: string
+  version_number: number
+  source_revision: string
   source_type: string
   jurisdiction: string
   grade: string
@@ -45,7 +46,7 @@ type Citation = {
 type ExploreResult = {
   status: 'grounded_answer' | 'sources_found' | 'insufficient_evidence' | 'ai_unavailable'
   explanation: string | null
-  answer_blocks: { text: string; citations: number[] }[]
+  answer_blocks: { text: string; citations: number[]; evidence_quote: string; kind: 'teaching' | 'example' | 'term' }[]
   sources: Citation[]
   coverage: string
   selected_curriculum_uuid: string | null
@@ -77,9 +78,7 @@ export default function ExploreTopics() {
   const [curriculaState, setCurriculaState] = useState('Loading approved syllabuses…')
   const [query, setQuery] = useState('')
   const [selectedCurriculum, setSelectedCurriculum] = useState('')
-  const [grade, setGrade] = useState('')
-  const [subject, setSubject] = useState('')
-  const [jurisdiction, setJurisdiction] = useState('')
+  const [searchScope, setSearchScope] = useState<'all_approved' | 'selected_syllabus' | 'selected_subject'>('all_approved')
   const [result, setResult] = useState<ExploreResult | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -119,12 +118,9 @@ export default function ExploreTopics() {
       : 'Searching educator-approved PDFs…')
     setResult(null)
     try {
-      const selected = curricula.find((item) => item.uuid === selectedCurriculum)
       const payload = buildExploreTopicsPayload(currentQuestion, {
         selectedCurriculumUuid: selectedCurriculum,
-        grade: grade.trim() || selected?.level || '',
-        subject: subject.trim() || selected?.subject || '',
-        jurisdiction: jurisdiction.trim() || selected?.jurisdiction || '',
+        searchScope,
       }, followUpContext)
       const response = await secureFetch(`${base}/explore/topics`, {
         ...RequestBodyWithAuthHeader('POST', payload, null, token),
@@ -191,7 +187,7 @@ export default function ExploreTopics() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6" aria-labelledby="topic-search-title">
         <h2 id="topic-search-title" className="text-lg font-semibold text-slate-900">What would you like to understand?</h2>
-        <p className="mt-1 text-sm text-slate-500">Choose a syllabus to check its reviewed coverage. Leave it unselected to search all available approved materials.</p>
+        <p className="mt-1 text-sm text-slate-500">Your syllabus is a learning context. Search scope controls which approved resources are discovered.</p>
         {curriculaState && <p role="status" className="mt-3 text-sm text-slate-500">{curriculaState}</p>}
         <form onSubmit={search} className="mt-5 space-y-4">
           <label htmlFor="topic-question" className="sr-only">Topic or question</label>
@@ -205,10 +201,10 @@ export default function ExploreTopics() {
             placeholder="For example: How do carbon-12 and carbon-14 differ?"
             className="min-h-24 resize-y rounded-xl border-slate-300 text-base"
           />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-              Syllabus context
-              <Select value={selectedCurriculum} onValueChange={(value) => { setSelectedCurriculum(value); setFollowUpContext(null) }}>
+              Learning context
+              <Select value={selectedCurriculum} onValueChange={(value) => { setSelectedCurriculum(value); if (value === 'any') setSearchScope('all_approved'); setFollowUpContext(null) }}>
                 <SelectTrigger aria-label="Syllabus context"><SelectValue placeholder="Any approved syllabus" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any approved syllabus</SelectItem>
@@ -217,18 +213,18 @@ export default function ExploreTopics() {
               </Select>
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-              Grade
-              <Input value={grade} onChange={(event) => { setGrade(event.target.value); setFollowUpContext(null) }} placeholder={selectedLabel?.level || 'Any grade'} maxLength={32} />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-              Subject
-              <Input value={subject} onChange={(event) => { setSubject(event.target.value); setFollowUpContext(null) }} placeholder={selectedLabel?.subject || 'Any subject'} maxLength={120} />
-            </label>
-            <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-              Jurisdiction
-              <Input value={jurisdiction} onChange={(event) => { setJurisdiction(event.target.value); setFollowUpContext(null) }} placeholder={selectedLabel?.jurisdiction || 'Any jurisdiction'} maxLength={120} />
+              Search scope
+              <Select value={searchScope} onValueChange={(value) => { setSearchScope(value as typeof searchScope); setFollowUpContext(null) }}>
+                <SelectTrigger aria-label="Search scope"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_approved">All approved resources</SelectItem>
+                  <SelectItem value="selected_syllabus" disabled={!selectedCurriculum || selectedCurriculum === 'any'}>Resources for this syllabus</SelectItem>
+                  <SelectItem value="selected_subject" disabled={!selectedCurriculum || selectedCurriculum === 'any'}>This subject across grades</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
           </div>
+          {selectedLabel && <p className="text-xs text-slate-500">Learning level: {selectedLabel.subject} · {selectedLabel.level} · {selectedLabel.language}. This context does not restrict “All approved resources.”</p>}
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <Button type="submit" disabled={busy || query.trim().length < 2} className="min-w-36 bg-blue-700 hover:bg-blue-800">
               {busy ? <LoaderCircle size={16} className="animate-spin" aria-hidden /> : <Search size={16} aria-hidden />}
@@ -242,7 +238,7 @@ export default function ExploreTopics() {
                 Ask a follow-up using these {new Set(result.sources.map((source) => source.version_uuid)).size} sources
               </Button>
             ) : null}
-            {followUpContext && <span role="status" className="text-xs font-medium text-teal-800">Follow-up searches only {followUpContext.sourceVersionUuids.length} selected approved source version(s), with the previous question for context. Change a filter to start a fresh topic search.</span>}
+            {followUpContext && <span role="status" className="text-xs font-medium text-teal-800">Follow-up searches only {followUpContext.sourceVersionUuids.length} selected approved source version(s), with the previous question for context. Change a scope or syllabus to start a fresh topic search.</span>}
           </div>
         </form>
         {message && <p role="status" className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{message}</p>}
@@ -269,7 +265,10 @@ export default function ExploreTopics() {
               <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900"><BookOpenText size={18} className="text-blue-700" aria-hidden /> Source-grounded explanation</h2>
               <div className="mt-3 space-y-3 text-sm leading-7 text-slate-800">
                 {result.answer_blocks.map((block, index) => (
-                  <p key={`${index}-${block.text}`}>{block.text}{' '}{block.citations.map((reference) => <a key={reference} href={`#source-${reference}`} className="ms-1 rounded bg-white px-1.5 py-0.5 text-xs font-semibold text-blue-800 underline underline-offset-2">[{reference}]</a>)}</p>
+                  <div key={`${index}-${block.text}`}>
+                    <p>{block.text}{' '}{block.citations.map((reference) => <a key={reference} href={`#source-${reference}`} className="ms-1 rounded bg-white px-1.5 py-0.5 text-xs font-semibold text-blue-800 underline underline-offset-2">[{reference}]</a>)}</p>
+                    <blockquote className="mt-2 border-s-2 border-teal-600 ps-3 text-xs leading-5 text-slate-600">Source evidence: “{block.evidence_quote}”</blockquote>
+                  </div>
                 ))}
               </div>
             </article>
@@ -286,7 +285,7 @@ export default function ExploreTopics() {
                         <span className="grid size-7 place-items-center rounded-full bg-blue-50 text-xs font-bold text-blue-800">{citation.reference}</span>
                         <h3 className="font-semibold text-slate-900">{citation.title}</h3>
                       </div>
-                      <p className="mt-2 text-xs text-slate-500">{sourceTypes[citation.source_type] || 'Approved PDF'} · {citation.publisher || citation.jurisdiction} {citation.syllabus_edition} · {citation.subject}, Grade {citation.grade} · page {citation.page}</p>
+                      <p className="mt-2 text-xs text-slate-500">{sourceTypes[citation.source_type] || 'Approved PDF'} · v{citation.version_number} (revision {citation.source_revision}) · {citation.publisher || citation.jurisdiction} {citation.syllabus_edition} · {citation.subject}, Grade {citation.grade} · page {citation.page}</p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => void openPdf(citation)} className="shrink-0">
                       <ExternalLink size={14} aria-hidden /> Open PDF · p. {citation.page}

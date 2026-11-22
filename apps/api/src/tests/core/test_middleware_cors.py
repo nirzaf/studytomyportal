@@ -159,3 +159,4 @@ class TestConfigureCors:
         assert opts["allow_credentials"] is True
         assert opts["allow_methods"] == ["*"]
         assert opts["allow_headers"] == ["*"]
+        assert opts["expose_headers"] == ["X-Next-Offset"]

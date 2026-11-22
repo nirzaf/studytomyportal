@@ -728,3 +728,18 @@ class TestStartupHook:
         with pytest.raises(SchemaMigrationError):
             await database.connect_to_db(MagicMock())
         assert len(calls) == 1
+
+
+def test_syllabus_revocation_downgrade_refuses_to_drop_audit_history():
+    revision = migrations.ScriptDirectory.from_config(migrations.alembic_config()).get_revision(
+        "f04d9c6a31b8"
+    ).module
+    connection = MagicMock()
+    connection.dialect.name = "postgresql"
+    connection.execute.return_value.first.return_value = (1,)
+
+    with patch.object(revision.op, "get_bind", return_value=connection):
+        with pytest.raises(RuntimeError, match="Retained syllabus revocation evidence blocks downgrade"):
+            revision.downgrade()
+
+    assert connection.execute.call_count == 2

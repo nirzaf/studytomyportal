@@ -5,9 +5,7 @@ export type FollowUpContext = {
 
 export type ExploreTopicFilters = {
   selectedCurriculumUuid: string
-  grade: string
-  subject: string
-  jurisdiction: string
+  searchScope: 'all_approved' | 'selected_syllabus' | 'selected_subject'
 }
 
 export function buildExploreTopicsPayload(
@@ -20,9 +18,7 @@ export function buildExploreTopicsPayload(
     query: query.trim(),
     context_question: context?.previousQuestion ?? null,
     selected_curriculum_uuid: !selected || selected === 'any' ? null : selected,
-    grade: filters.grade.trim() || null,
-    subject: filters.subject.trim() || null,
-    jurisdiction: filters.jurisdiction.trim() || null,
+    search_scope: filters.searchScope,
     source_version_uuids: context ? [...context.sourceVersionUuids] : [],
   }
 }

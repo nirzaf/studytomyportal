@@ -120,4 +120,5 @@ def configure_cors(app: FastAPI) -> None:
         allow_methods=["*"],
         allow_credentials=True,
         allow_headers=["*"],
+        expose_headers=["X-Next-Offset"],
     )

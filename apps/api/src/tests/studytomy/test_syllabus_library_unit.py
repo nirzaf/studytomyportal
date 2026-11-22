@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -13,12 +14,22 @@ from src.services.studytomy.syllabus_library import (
     SyllabusSourceReview,
     _GeneratedAnswer,
     _classify_source_coverage,
+    _claim_is_supported,
+    _claim_answers_question,
+    _concept_evidence_is_relevant,
     _extract_pdf,
     _indexable_chunks,
     _literal_like_pattern,
+    _lexical_match_is_sufficient,
     _mapping_supports_cited_topic,
+    _official_mapping_compatible,
+    _normalize_topic_query,
+    _query_identifiers,
     _query_matches_concept,
+    _query_phrases,
     _semantic_distance_is_sufficient,
+    _same_syllabus_index_snapshot,
+    _topic_search_terms,
     _validate_generated_claims,
 )
 from src.tests.services.rag_helpers import make_pdf
@@ -85,7 +96,7 @@ def test_searchable_pdf_quote_keeps_physical_page_and_requires_original_page_pro
     assert _validate_generated_claims(answer, [valid])[0].citations == [1]
 
     wrong_page = {"chunk": SimpleNamespace(page_number=2, chunk_text=excerpt), "version": version}
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(ValueError, match="not supported"):
         _validate_generated_claims(answer, [wrong_page])
 
 
@@ -136,6 +147,50 @@ def test_explore_query_is_bounded_and_requires_a_question():
     with pytest.raises(ValidationError):
         ExploreTopicRequest(query=" ")
     assert ExploreTopicRequest(query="atomic number").query == "atomic number"
+    assert ExploreTopicRequest(query="atomic number", search_scope="all_approved").search_scope == "all_approved"
+    with pytest.raises(ValidationError):
+        ExploreTopicRequest(query="atomic number", search_scope="tenant_wide")
+
+
+def test_natural_language_lexical_search_keeps_topic_aliases_codes_and_phrases():
+    plants = _topic_search_terms(_normalize_topic_query("How do plants make food?"))
+    assert {"plants", "photosynthesis", "chlorophyll"} <= set(plants)
+    assert "buoyancy" in _topic_search_terms(_normalize_topic_query("Why do objects float?"))
+    assert "refraction" in _topic_search_terms(_normalize_topic_query("What happens when light passes through water?"))
+    assert "chem" in _topic_search_terms("CHEM-ISO")
+    assert "iso" in _topic_search_terms("CHEM-ISO")
+    assert _query_identifiers("What is H2O?") == ["H2O"]
+    assert "atomic number" in _query_phrases("What is atomic number?")
+
+
+def test_keyword_retrieval_rejects_passages_that_match_only_one_part_of_a_question():
+    query_terms = {"water", "black", "holes", "evaporate"}
+    assert not _lexical_match_is_sufficient(query_terms, [], "Objects float when density differs from water.")
+    assert _lexical_match_is_sufficient(query_terms, [], "Water in black holes can evaporate.")
+    assert _lexical_match_is_sufficient({"chem", "iso"}, ["CHEM-ISO"], "CHEM-ISO defines atomic number.")
+
+
+def test_official_mapping_requires_full_curriculum_metadata_compatibility():
+    version = SimpleNamespace(
+        source_type="syllabus", jurisdiction="Sri Lanka", grade="Grade 12", subject="Chemistry",
+        language="en", syllabus_edition="2017", effective_cohort="2026",
+    )
+    revision = SimpleNamespace(
+        jurisdiction="Sri Lanka", level="12", subject="Chemistry", language="en",
+        programme_metadata={"syllabus_edition": "2017", "effective_cohort": "2026"},
+    )
+    assert _official_mapping_compatible(version, revision)
+    assert not _official_mapping_compatible(version, SimpleNamespace(**{
+        **revision.__dict__, "subject": "Physics",
+    }))
+    assert not _official_mapping_compatible(version, SimpleNamespace(**{
+        **revision.__dict__, "programme_metadata": {"syllabus_edition": "2019", "effective_cohort": "2026"},
+    }))
+    assert not _official_mapping_compatible(SimpleNamespace(**{**version.__dict__, "source_type": "resource_book"}), revision)
+    assert _concept_evidence_is_relevant(
+        SimpleNamespace(code="CHEM-ISO", title="Boron isotopes", objective="Compare boron isotopes."),
+        "Boron isotopes have the same proton number.",
+    )
 
 
 def test_independent_source_approval_requires_its_own_rights_evidence():
@@ -168,7 +223,7 @@ def test_generated_citations_are_checked_against_the_exact_original_page():
         "explanation": "Fabricated citation.",
         "claims": [{"reference": 1, "text": "Unsupported.", "quote": "Carbon-14 has twelve protons."}],
     })
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(ValueError, match="not supported"):
         _validate_generated_claims(fabricated, [candidate])
 
     unsupported_paraphrase = _GeneratedAnswer.model_validate({
@@ -179,8 +234,45 @@ def test_generated_citations_are_checked_against_the_exact_original_page():
             "quote": quote,
         }],
     })
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(ValueError, match="not supported"):
         _validate_generated_claims(unsupported_paraphrase, [candidate])
+
+    teaching = _GeneratedAnswer.model_validate({
+        "claims": [{
+            "reference": 1,
+            "kind": "teaching",
+            "text": "Atomic number gives the number of protons in the atom.",
+            "quote": "The atomic number is the number of protons in an atom.",
+        }],
+    })
+    teaching_candidate = {
+        "chunk": SimpleNamespace(page_number=2, chunk_text="The atomic number is the number of protons in an atom."),
+        "version": SimpleNamespace(extracted_pages=[{"page": 2, "text": "The atomic number is the number of protons in an atom."}]),
+    }
+    block = _validate_generated_claims(teaching, [teaching_candidate])[0]
+    assert block.text.startswith("Atomic number gives")
+    assert block.evidence_quote == "The atomic number is the number of protons in an atom."
+
+
+def test_supported_claim_must_answer_the_question_as_well_as_quote_the_source():
+    assert _claim_answers_question(
+        "Plants use photosynthesis to make their food.",
+        "How do plants make food?",
+    )
+    assert not _claim_answers_question(
+        "Carbon-14 has eight neutrons.",
+        "Why do metals conduct electricity?",
+    )
+    quote = "Carbon-14 has eight neutrons and six protons."
+    candidate = {
+        "chunk": SimpleNamespace(page_number=4, chunk_text=quote),
+        "version": SimpleNamespace(extracted_pages=[{"page": 4, "text": quote}]),
+    }
+    proposal = _GeneratedAnswer.model_validate({
+        "claims": [{"reference": 1, "text": "Carbon-14 has eight neutrons.", "quote": quote}],
+    })
+    with pytest.raises(ValueError, match="question and cited PDF passage"):
+        _validate_generated_claims(proposal, [candidate], "Why do metals conduct electricity?")
 
 
 def test_zero_claims_and_conservative_semantic_evidence_threshold():
@@ -191,6 +283,24 @@ def test_zero_claims_and_conservative_semantic_evidence_threshold():
     assert not _semantic_distance_is_sufficient(0.35001)
     assert not _semantic_distance_is_sufficient(float("nan"))
     assert not _semantic_distance_is_sufficient(float("inf"))
+    assert _claim_is_supported("Carbon-14 has eight neutrons.", "Carbon-14 has six protons and eight neutrons.")
+    assert not _claim_is_supported("Carbon-14 has twelve neutrons.", "Carbon-14 has six protons and eight neutrons.")
+
+
+def test_reindex_snapshot_fence_rejects_concurrent_source_changes():
+    initial = datetime(2026, 11, 22, tzinfo=UTC)
+    snapshot = (12, initial, "ready", 3, "a" * 64, "approved")
+    current = SimpleNamespace(
+        id=12,
+        updated_at=initial,
+        ingestion_status="ready",
+        ingestion_attempts=3,
+        content_sha256="a" * 64,
+        review_status="approved",
+    )
+    assert _same_syllabus_index_snapshot(current, snapshot)
+    current.review_status = "revoked"
+    assert not _same_syllabus_index_snapshot(current, snapshot)
 
 
 def test_mapping_coverage_requires_query_concept_match_and_cited_mapping_quote():
@@ -198,7 +308,7 @@ def test_mapping_coverage_requires_query_concept_match_and_cited_mapping_quote()
     assert _mapping_supports_cited_topic("What is atomic number?", "Atomic Number", quote, f"Example: {quote}")
     assert not _mapping_supports_cited_topic("photosynthesis", "Atomic Number", quote, f"Example: {quote}")
     assert not _mapping_supports_cited_topic("atomic number", "Atomic Number", quote, "A different passage on that page.")
-    assert _query_matches_concept("carbon isotopes", "Chemistry / Isotopes")
+    assert not _query_matches_concept("carbon isotopes", "Chemistry / Isotopes")
     assert not _query_matches_concept("carbon isotopes", "Cell division")
     assert _literal_like_pattern("%_\\") == "%\\%\\_\\\\%"
 

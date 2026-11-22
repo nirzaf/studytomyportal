@@ -130,6 +130,9 @@ class StudySyllabusSourceVersion(SQLModel, table=True):
     reviewed_by_user_id: int | None = Field(default=None, sa_column=Column(Integer, ForeignKey("user.id", ondelete="RESTRICT")))
     review_evidence: str | None = Field(default=None, max_length=500)
     approved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    revoked_by_user_id: int | None = Field(default=None, sa_column=Column(Integer, ForeignKey("user.id", ondelete="RESTRICT")))
+    revocation_evidence: str | None = Field(default=None, max_length=500)
+    revoked_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     created_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
     updated_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
@@ -225,4 +228,7 @@ class StudySyllabusConceptMapping(SQLModel, table=True):
     reviewed_by_user_id: int | None = Field(default=None, sa_column=Column(Integer, ForeignKey("user.id", ondelete="RESTRICT")))
     review_evidence: str | None = Field(default=None, max_length=500)
     approved_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
+    revoked_by_user_id: int | None = Field(default=None, sa_column=Column(Integer, ForeignKey("user.id", ondelete="RESTRICT")))
+    revocation_evidence: str | None = Field(default=None, max_length=500)
+    revoked_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True)))
     created_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
