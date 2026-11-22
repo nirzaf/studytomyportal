@@ -2,9 +2,11 @@ import hashlib
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
 
+from src.core.events.database import get_db_session
 from src.routers import instance
 
 
@@ -29,6 +31,11 @@ class RuntimeIdentitySession:
 
     def get_bind(self):
         return SimpleNamespace(url=self.url)
+
+
+class UnavailableRuntimeIdentitySession(RuntimeIdentitySession):
+    async def connection(self):
+        raise OSError("database connection unavailable")
 
 
 def test_runtime_database_identity_is_credential_free_and_rejects_unsafe_targets():
@@ -116,3 +123,35 @@ async def test_runtime_identity_rejects_database_host_query_override(monkeypatch
 
     assert error.value.status_code == 503
     assert error.value.detail == "Runtime database identity or revision is unavailable."
+
+
+@pytest.mark.asyncio
+async def test_runtime_identity_fails_closed_when_database_connection_is_unavailable(monkeypatch):
+    monkeypatch.setenv("STUDYTOMY_TEST_RUNTIME_IDENTITY", "1")
+    monkeypatch.setenv("STUDYTOMY_BUILD_SHA", "a" * 40)
+    monkeypatch.setenv("STUDYTOMY_BUILD_TREE_SHA256", "b" * 64)
+
+    with pytest.raises(HTTPException) as error:
+        await instance.get_runtime_identity(
+            Response(),
+            current_user=None,
+            db_session=UnavailableRuntimeIdentitySession(),
+        )
+
+    assert error.value.status_code == 503
+    assert error.value.detail == "Runtime database identity or revision is unavailable."
+
+
+@pytest.mark.asyncio
+async def test_runtime_identity_route_rejects_unauthenticated_http_requests():
+    app = FastAPI()
+    app.include_router(instance.router, prefix="/api/v1/instance")
+    app.dependency_overrides[get_db_session] = RuntimeIdentitySession
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/api/v1/instance/runtime-identity")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
