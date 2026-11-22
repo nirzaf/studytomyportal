@@ -43,6 +43,7 @@ import CourseEndView from '@components/Pages/Activity/CourseEndView'
 import { motion, AnimatePresence } from 'motion/react'
 import { Breadcrumbs } from '@components/Objects/Breadcrumbs/Breadcrumbs'
 import { BookCopy, ChevronLeft as BackIcon } from 'lucide-react'
+import ActivitySyllabusSources from '@components/Studytomy/ActivitySyllabusSources'
 import MiniInfoTooltip from '@components/Objects/MiniInfoTooltip'
 import GeneralWrapperStyled from '@components/Objects/StyledElements/Wrappers/GeneralWrapper'
 import ActivityIndicators from '@components/Pages/Courses/ActivityIndicators'
@@ -833,6 +834,7 @@ function ActivityClient(props: ActivityClientProps) {
                               {/* Activity Types */}
                               <div className={activity.activity_type === 'TYPE_SCORM' ? 'overflow-hidden' : ''}>
                                 {activityContent}
+                                <ActivitySyllabusSources activityUuid={activity.activity_uuid} />
                                 <Suspense fallback={null}>
                                   <AdaptiveAttemptPanel orgUuid={org?.org_uuid} orgSlug={orgslug} activityUuid={activity.activity_uuid} />
                                 </Suspense>
@@ -1187,6 +1189,7 @@ function ActivityClient(props: ActivityClientProps) {
                                 </button>
                                 )}
                                 {activityContent}
+                                <ActivitySyllabusSources activityUuid={activity.activity_uuid} />
                                 <Suspense fallback={null}>
                                   <AdaptiveAttemptPanel orgUuid={org?.org_uuid} orgSlug={orgslug} activityUuid={activity.activity_uuid} />
                                 </Suspense>

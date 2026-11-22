@@ -50,6 +50,7 @@ from src.routers.studytomy import consents as studytomy_consents_router
 from src.routers.studytomy import cases as studytomy_cases_router
 from src.routers.studytomy import support as studytomy_support_router
 from src.routers.studytomy import grounding as studytomy_grounding_router
+from src.routers.studytomy import syllabus as studytomy_syllabus_router
 from src.routers.studytomy import adaptive as studytomy_adaptive_router
 from src.core.ee_hooks import register_ee_routers
 from src.core.deployment_mode import get_deployment_mode
@@ -114,6 +115,11 @@ v1_router.include_router(
     studytomy_grounding_router.router,
     prefix="/studytomy",
     tags=["studytomy-grounding"],
+)
+v1_router.include_router(
+    studytomy_syllabus_router.router,
+    prefix="/studytomy",
+    tags=["studytomy-syllabus-library"],
 )
 v1_router.include_router(
     studytomy_cases_router.router,

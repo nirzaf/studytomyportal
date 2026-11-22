@@ -105,6 +105,8 @@ def _check_migrated_schema(connection) -> None:
         ("st_draft_material", "st_draft_material_version_guard"),
         ("st_offer", "st_offer_draft_root_protected"),
         ("st_offer_version", "st_offer_version_immutable"),
+        ("st_syllabus_source_version", "st_syllabus_version_identity_immutable"),
+        ("st_syllabus_concept_mapping", "st_syllabus_mapping_evidence_immutable"),
     }
     actual_guards = set(
         connection.execute(
