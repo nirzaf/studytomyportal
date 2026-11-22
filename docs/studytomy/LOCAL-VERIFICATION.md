@@ -766,3 +766,7 @@ The live browser journey verified that a pending source was unavailable, author 
 Headed Chromium was necessary for the built-in PDF viewer: in headless Chromium the popup remained at `about:blank`, while the headed run opened the authenticated PDF at the cited page. This is a browser implementation limitation, not an API failure. The in-app browser could not reach the loopback server in this environment, so interactive verification was performed through the repository's headed Playwright runner; no claim is made that the in-app browser was tested. These results establish local synthetic acceptance only, not educator validation, real learner safeguarding approval, real-provider generation quality, deployment readiness, or production behavior.
 
 The task-created PostgreSQL, Redis, RustFS, Ollama, API, and web processes are disposable and loopback-bound. No named Docker volumes were attached. The final run's synthetic source was revoked by the test cleanup path; exact cleanup of the task-created processes and temporary credentials is recorded in the delivery report. No schema migration was introduced.
+
+### Git delivery receipt
+
+Implementation and test commit `1146e796b1d905ac299e3e20911fbf9f172387c7` was pushed normally to `origin/main` after the post-commit runtime identity check and both Explore Topics browser specs passed. `git ls-remote origin refs/heads/main` returned the same SHA. This receipt is a documentation-only follow-up; it contains no application or test-code changes.
