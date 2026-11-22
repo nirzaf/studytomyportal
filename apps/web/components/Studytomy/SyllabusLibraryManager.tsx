@@ -83,28 +83,41 @@ export default function SyllabusLibraryManager() {
   const [refresh, setRefresh] = useState(0)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('Loading source library…')
+  const [versionOffset, setVersionOffset] = useState(0)
+  const [versionNextOffset, setVersionNextOffset] = useState<number | null>(null)
+  const [mappingOffset, setMappingOffset] = useState(0)
+  const [mappingNextOffset, setMappingNextOffset] = useState<number | null>(null)
   const concepts = conceptsState.curriculumUuid === curriculumUuid ? conceptsState.values : []
 
   useEffect(() => {
     if (!base || !token) return
     const controller = new AbortController()
     Promise.all([
-      secureFetch(`${base}/syllabus-sources`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
+      secureFetch(`${base}/syllabus-sources?limit=100&offset=${versionOffset}`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
       secureFetch(`${base}/explore/curricula`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
-      secureFetch(`${base}/syllabus-mappings`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
+      secureFetch(`${base}/syllabus-mappings?limit=100&offset=${mappingOffset}`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
     ]).then(async ([sourceResponse, curriculumResponse, mappingResponse]) => {
       if (!sourceResponse.ok || !curriculumResponse.ok || !mappingResponse.ok) throw new Error('This account cannot access the educator source library.')
-      const [sourceBody, curriculumBody, mappingBody] = await Promise.all([sourceResponse.json(), curriculumResponse.json(), mappingResponse.json()])
+      const [sourceBody, curriculumBody, incomingMappings] = await Promise.all([sourceResponse.json(), curriculumResponse.json(), mappingResponse.json()])
       if (controller.signal.aborted) return
-      setVersions(sourceBody.sources || [])
+      const incomingVersions: SourceVersion[] = sourceBody.sources || []
+      setVersions((current) => versionOffset === 0
+        ? incomingVersions
+        : [...new Map([...current, ...incomingVersions].map((version) => [version.version_uuid, version])).values()])
+      setVersionNextOffset(sourceBody.next_offset ?? null)
       setCurricula(curriculumBody || [])
-      setMappings(mappingBody || [])
+      const mappingPage: Mapping[] = incomingMappings || []
+      setMappings((current) => mappingOffset === 0
+        ? mappingPage
+        : [...new Map([...current, ...mappingPage].map((mapping) => [mapping.mapping_uuid, mapping])).values()])
+      const nextMappingOffset = mappingResponse.headers.get('X-Next-Offset')
+      setMappingNextOffset(nextMappingOffset === null ? null : Number(nextMappingOffset))
       setMessage('')
     }).catch((error) => {
       if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'The source library is unavailable.')
     })
     return () => controller.abort()
-  }, [base, token, refresh])
+  }, [base, token, refresh, versionOffset, mappingOffset])
 
   useEffect(() => {
     if (!base || !token || !curriculumUuid) return
@@ -124,6 +137,12 @@ export default function SyllabusLibraryManager() {
 
   function update<K extends keyof typeof emptyMetadata>(key: K, value: string) {
     setMetadata((current) => ({ ...current, [key]: value }))
+  }
+
+  function refreshLibrary() {
+    setVersionOffset(0)
+    setMappingOffset(0)
+    setRefresh((value) => value + 1)
   }
 
   async function callJson(path: string, method: string, payload?: unknown) {
@@ -167,7 +186,7 @@ export default function SyllabusLibraryManager() {
       // Default the next upload to a new source. Reusing a logical source for
       // another version must be an explicit selection to avoid accidental grouping.
       setMetadata((current) => ({ ...current, source_uuid: '' }))
-      setRefresh((value) => value + 1)
+      refreshLibrary()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'The PDF could not be uploaded.')
     } finally {
@@ -180,7 +199,7 @@ export default function SyllabusLibraryManager() {
     try {
       await callJson(`/syllabus-sources/${encodeURIComponent(version.version_uuid)}/review`, 'POST', { decision, evidence, rights_reference: rightsReference })
       setMessage(decision === 'approve' ? 'Source approved. Any previously approved version is now superseded.' : 'Source version rejected.')
-      setRefresh((value) => value + 1)
+      refreshLibrary()
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Review could not be saved.') }
     finally { setBusy(false) }
   }
@@ -192,7 +211,7 @@ export default function SyllabusLibraryManager() {
     try {
       await callJson(`/syllabus-sources/${encodeURIComponent(version.version_uuid)}/revoke`, 'POST', { evidence })
       setMessage('Source revoked and removed from student retrieval.')
-      setRefresh((value) => value + 1)
+      refreshLibrary()
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Source could not be revoked.') }
     finally { setBusy(false) }
   }
@@ -203,7 +222,7 @@ export default function SyllabusLibraryManager() {
     try {
       const body = await callJson(`/syllabus-sources/${encodeURIComponent(version.version_uuid)}/retry-index`, 'POST')
       setMessage(body.ingestion_status === 'ready' ? 'PDF indexing completed.' : body.ingestion_error_message || 'Indexing is still unavailable.')
-      setRefresh((value) => value + 1)
+      refreshLibrary()
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Index retry failed.') }
     finally { setBusy(false) }
   }
@@ -223,7 +242,7 @@ export default function SyllabusLibraryManager() {
       })
       setEvidenceQuote('')
       setMessage('Curriculum mapping saved for independent educator review.')
-      setRefresh((value) => value + 1)
+      refreshLibrary()
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Mapping could not be saved.') }
     finally { setBusy(false) }
   }
@@ -235,8 +254,20 @@ export default function SyllabusLibraryManager() {
     try {
       await callJson(`/syllabus-mappings/${encodeURIComponent(mapping.mapping_uuid)}/review`, 'POST', { decision, evidence })
       setMessage(`Curriculum mapping ${decision}d.`)
-      setRefresh((value) => value + 1)
+      refreshLibrary()
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Mapping review could not be saved.') }
+    finally { setBusy(false) }
+  }
+
+  async function revokeMapping(mapping: Mapping) {
+    const evidence = window.prompt('Record why this curriculum mapping is being withdrawn (at least 8 characters). You can then submit a corrected mapping for independent review.')
+    if (!evidence?.trim()) return
+    setBusy(true)
+    try {
+      await callJson(`/syllabus-mappings/${encodeURIComponent(mapping.mapping_uuid)}/revoke`, 'POST', { evidence })
+      setMessage('Mapping revoked. Its review history is retained; a corrected mapping can be submitted for review.')
+      refreshLibrary()
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Mapping could not be revoked.') }
     finally { setBusy(false) }
   }
 
@@ -256,7 +287,7 @@ export default function SyllabusLibraryManager() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Syllabus source library</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Keep official syllabuses and supporting PDFs in one organization library. Uploads stay private until an independent educator confirms rights and approves the indexed version.</p>
         </div>
-        <Button variant="outline" onClick={() => setRefresh((value) => value + 1)} disabled={busy}><RefreshCw size={15} aria-hidden /> Refresh library</Button>
+        <Button variant="outline" onClick={refreshLibrary} disabled={busy}><RefreshCw size={15} aria-hidden /> Refresh library</Button>
       </header>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
@@ -319,7 +350,7 @@ export default function SyllabusLibraryManager() {
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="source-list-title">
           <div className="flex items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-800"><FileSearch size={20} aria-hidden /></span>
-            <div><h2 id="source-list-title" className="text-lg font-semibold text-slate-900">Source versions</h2><p className="mt-1 text-sm text-slate-500">{versions.length} version{versions.length === 1 ? '' : 's'} · students can retrieve only approved and permitted versions</p></div>
+            <div><h2 id="source-list-title" className="text-lg font-semibold text-slate-900">Source versions</h2><p className="mt-1 text-sm text-slate-500">{versions.length} version{versions.length === 1 ? '' : 's'} loaded · students can retrieve only approved and permitted versions</p></div>
           </div>
           <p role="status" className="min-h-5 text-sm text-slate-600">{message}</p>
           {versions.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-7 text-center text-sm text-slate-500">No PDF sources uploaded yet.</div> : (
@@ -328,6 +359,7 @@ export default function SyllabusLibraryManager() {
                 onReview={reviewSource} onRetry={retryIndex} onRevoke={revokeSource} base={base} token={token} />)}
             </ul>
           )}
+          {versionNextOffset !== null && <Button type="button" variant="outline" disabled={busy} onClick={() => { setMessage('Loading more source versions…'); setVersionOffset(versionNextOffset) }}>Load more source versions</Button>}
         </section>
       </section>
 
@@ -369,9 +401,11 @@ export default function SyllabusLibraryManager() {
               <div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{mapping.concept_code} · {mapping.concept_title}</p><p className="mt-1 text-xs text-slate-500">Target: {mapping.curriculum_subject} · {mapping.curriculum_level} · {mapping.curriculum_key} v{mapping.curriculum_revision}{mapping.curriculum_jurisdiction ? ` · ${mapping.curriculum_jurisdiction}` : ''}</p><p className="mt-1 text-xs text-slate-500">Source: {mapping.source_type.replaceAll('_', ' ')} · {mapping.source_title} · {mapping.source_publisher} · edition {mapping.source_edition}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{mapping.evidence_kind} · PDF pages {mapping.page_start}–{mapping.page_end} · “{mapping.evidence_quote}”</p><a href={`#source-version-${encodeURIComponent(mapping.version_uuid)}`} className="mt-2 inline-block text-xs font-semibold text-blue-700 underline underline-offset-2">Inspect mapped source pages</a></div>
               <div className="flex shrink-0 items-center gap-2"><StatusPill value={mapping.status} />
                 {mapping.status === 'pending_review' && mapping.created_by_user_id !== currentUserId && <><Button size="sm" variant="outline" disabled={busy} onClick={() => void reviewMapping(mapping, 'approve')}>Approve</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => void reviewMapping(mapping, 'reject')}>Reject</Button></>}
+                {(mapping.status === 'pending_review' || mapping.status === 'approved') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void revokeMapping(mapping)}>Revoke</Button>}
               </div>
             </li>)}
           </ul>}
+          {mappingNextOffset !== null && <Button type="button" variant="outline" disabled={busy} onClick={() => { setMessage('Loading more mapping history…'); setMappingOffset(mappingNextOffset) }}>Load more mapping history</Button>}
         </div>
       </section>
 
@@ -430,7 +464,11 @@ function SourceVersionCard({ version, currentUserId, busy, onReview, onRetry, on
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => void loadPages()}><FileSearch size={14} aria-hidden /> {pages ? 'Hide pages' : 'Inspect pages'}</Button>
-        {version.ingestion_status === 'failed' && version.ingestion_error_code === 'embedding_failed' && version.ingestion_attempts < 5 && <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onRetry(version)}><RefreshCw size={14} aria-hidden /> Retry index</Button>}
+        {version.ingestion_status === 'ready'
+          ? <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onRetry(version)}><RefreshCw size={14} aria-hidden /> Reindex if needed</Button>
+          : version.ingestion_attempts < 5 && version.ingestion_status === 'failed' && version.ingestion_error_code === 'embedding_failed'
+            ? <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onRetry(version)}><RefreshCw size={14} aria-hidden /> Retry index</Button>
+            : null}
       </div>
     </div>
     {pageState && <p role="status" className="mt-3 text-xs text-slate-500">{pageState}</p>}

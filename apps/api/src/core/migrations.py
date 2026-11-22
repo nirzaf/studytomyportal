@@ -259,10 +259,12 @@ def ensure_schema(url: Optional[str] = None, *, metadata: Optional[MetaData] = N
     metadata = metadata if metadata is not None else load_models()
     engine = create_engine(sync_database_url(url), poolclass=NullPool)
     try:
-        _ensure_extensions(engine)
         heads = head_revisions()
         deferred: list[tuple[str, str, list[str]]] = []
         with engine.connect() as lock_connection, _migration_lock(lock_connection):
+            # Keep optional extension creation under the same per-database
+            # lock as migrations; concurrent replicas otherwise race on pg_extension.
+            _ensure_extensions(engine)
             with engine.begin() as connection:
                 report = SchemaReport(state="stamped", before=current_revisions(connection))
                 has_tables = any(inspect(connection).has_table(name) for name in metadata.tables)

@@ -192,9 +192,12 @@ class StudySyllabusConceptMapping(SQLModel, table=True):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("mapping_uuid", name="uq_st_syllabus_mapping_uuid"),
-        UniqueConstraint(
+        Index(
+            "uq_st_syllabus_mapping_active_evidence",
             "source_version_id", "curriculum_revision_id", "concept_id", "page_start", "page_end", "evidence_kind",
-            name="uq_st_syllabus_mapping_evidence",
+            unique=True,
+            postgresql_where=text("status IN ('pending_review', 'approved')"),
+            sqlite_where=text("status IN ('pending_review', 'approved')"),
         ),
         CheckConstraint("page_start >= 1 AND page_end >= page_start", name="ck_st_syllabus_mapping_pages"),
         CheckConstraint("evidence_kind IN ('official', 'supplementary')", name="ck_st_syllabus_mapping_kind"),

@@ -514,6 +514,62 @@ ASSESSMENT_ARCHIVE_POSTGRES_GUARD = (
 )
 
 _POSTGRES_GUARDS = (
+    (
+        "st_syllabus_source_version",
+        "st_syllabus_version_identity_immutable",
+        """
+        CREATE OR REPLACE FUNCTION protect_st_syllabus_version_identity() RETURNS trigger AS $$
+        BEGIN
+            IF NEW.extracted_pages::text IS DISTINCT FROM OLD.extracted_pages::text OR ROW(
+                NEW.org_id, NEW.source_id, NEW.version_uuid, NEW.version_number, NEW.title,
+                NEW.jurisdiction, NEW.grade, NEW.subject, NEW.language,
+                NEW.syllabus_edition, NEW.effective_cohort, NEW.publisher, NEW.source_type,
+                NEW.source_revision, NEW.original_filename,
+                NEW.storage_reference, NEW.content_sha256, NEW.size_bytes, NEW.page_count,
+                NEW.uploaded_by_user_id, NEW.created_at
+            ) IS DISTINCT FROM ROW(
+                OLD.org_id, OLD.source_id, OLD.version_uuid, OLD.version_number, OLD.title,
+                OLD.jurisdiction, OLD.grade, OLD.subject, OLD.language,
+                OLD.syllabus_edition, OLD.effective_cohort, OLD.publisher, OLD.source_type,
+                OLD.source_revision, OLD.original_filename,
+                OLD.storage_reference, OLD.content_sha256, OLD.size_bytes, OLD.page_count,
+                OLD.uploaded_by_user_id, OLD.created_at
+            ) THEN
+                RAISE EXCEPTION 'syllabus source version provenance is immutable';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """,
+        "CREATE TRIGGER st_syllabus_version_identity_immutable "
+        "BEFORE UPDATE ON st_syllabus_source_version FOR EACH ROW "
+        "EXECUTE FUNCTION protect_st_syllabus_version_identity()",
+    ),
+    (
+        "st_syllabus_concept_mapping",
+        "st_syllabus_mapping_evidence_immutable",
+        """
+        CREATE OR REPLACE FUNCTION protect_st_syllabus_mapping_evidence() RETURNS trigger AS $$
+        BEGIN
+            IF ROW(
+                NEW.org_id, NEW.mapping_uuid, NEW.source_version_id, NEW.curriculum_revision_id,
+                NEW.concept_id, NEW.page_start, NEW.page_end, NEW.evidence_kind,
+                NEW.evidence_quote, NEW.created_by_user_id, NEW.created_at
+            ) IS DISTINCT FROM ROW(
+                OLD.org_id, OLD.mapping_uuid, OLD.source_version_id, OLD.curriculum_revision_id,
+                OLD.concept_id, OLD.page_start, OLD.page_end, OLD.evidence_kind,
+                OLD.evidence_quote, OLD.created_by_user_id, OLD.created_at
+            ) THEN
+                RAISE EXCEPTION 'syllabus mapping evidence is immutable';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """,
+        "CREATE TRIGGER st_syllabus_mapping_evidence_immutable "
+        "BEFORE UPDATE ON st_syllabus_concept_mapping FOR EACH ROW "
+        "EXECUTE FUNCTION protect_st_syllabus_mapping_evidence()",
+    ),
     ASSESSMENT_ARCHIVE_POSTGRES_GUARD,
     RECORD_REQUEST_EVIDENCE_GUARD,
     CHARGEBACK_REVERSAL_GUARD,

@@ -74,6 +74,42 @@ def _revisions(url):
 
 
 class TestEnsureSchema:
+    def test_postgres_bootstrap_installs_missing_syllabus_guards_once(self):
+        from src.core import studytomy_schema
+
+        guards = {
+            "st_syllabus_source_version": "st_syllabus_version_identity_immutable",
+            "st_syllabus_concept_mapping": "st_syllabus_mapping_evidence_immutable",
+        }
+        installed = set()
+        connection = MagicMock()
+        connection.dialect.name = "postgresql"
+
+        def execute(statement, params=None):
+            result = MagicMock()
+            if params is not None:
+                assert guards[params["table"]] == params["trigger"]
+                result.scalar_one.return_value = params["trigger"] in installed
+            elif str(statement).startswith("CREATE TRIGGER "):
+                installed.add(str(statement).split()[2])
+            return result
+
+        connection.execute.side_effect = execute
+        with (
+            patch.object(studytomy_schema, "inspect") as inspector,
+            patch("src.core.adaptive_curriculum_schema.ensure_adaptive_curriculum_guards", return_value=[]),
+            patch("src.core.adaptive_item_schema.ensure_adaptive_item_guard", return_value=[]),
+            patch("src.core.adaptive_diagnostic_schema.ensure_adaptive_diagnostic_guard", return_value=[]),
+            patch("src.core.adaptive_evidence_schema.ensure_adaptive_evidence_guards", return_value=[]),
+        ):
+            inspector.return_value.has_table.side_effect = guards.__contains__
+            assert set(studytomy_schema.ensure_studytomy_database_guards(connection)) == set(guards.values())
+            assert studytomy_schema.ensure_studytomy_database_guards(connection) == []
+
+        statements = [str(call.args[0]) for call in connection.execute.call_args_list]
+        assert sum("CREATE OR REPLACE FUNCTION protect_st_syllabus_" in sql for sql in statements) == 2
+        assert sum(sql.startswith("CREATE TRIGGER st_syllabus_") for sql in statements) == 2
+
     def test_empty_database_is_created_and_stamped(self, db_url):
         report = ensure_schema(db_url, metadata=_models())
         assert report.state == "empty"

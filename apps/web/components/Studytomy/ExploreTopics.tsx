@@ -11,6 +11,8 @@ import { Textarea } from '@components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@components/ui/select'
 import { getAPIUrl } from '@services/config/config'
 import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/requests'
+import { buildExploreTopicsPayload } from './exploreTopicsRequest'
+import type { FollowUpContext } from './exploreTopicsRequest'
 
 type Curriculum = {
   uuid: string
@@ -81,7 +83,7 @@ export default function ExploreTopics() {
   const [result, setResult] = useState<ExploreResult | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
-  const [followUp, setFollowUp] = useState(false)
+  const [followUpContext, setFollowUpContext] = useState<FollowUpContext | null>(null)
   const pdfUrlsRef = useRef<string[]>([])
   const base = useMemo(() => orgUuid ? `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}` : '', [orgUuid])
 
@@ -110,19 +112,20 @@ export default function ExploreTopics() {
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!base || !token || busy) return
+    const currentQuestion = query.trim()
     setBusy(true)
-    setMessage('Searching educator-approved PDFs…')
+    setMessage(followUpContext
+      ? `Searching only the ${followUpContext.sourceVersionUuids.length} selected source version(s)…`
+      : 'Searching educator-approved PDFs…')
     setResult(null)
     try {
       const selected = curricula.find((item) => item.uuid === selectedCurriculum)
-      const payload = {
-        query: query.trim(),
-        selected_curriculum_uuid: !selectedCurriculum || selectedCurriculum === 'any' ? null : selectedCurriculum,
-        grade: grade.trim() || selected?.level || null,
-        subject: subject.trim() || selected?.subject || null,
-        jurisdiction: jurisdiction.trim() || selected?.jurisdiction || null,
-        source_version_uuids: followUp && result ? result.sources.map((source) => source.version_uuid) : [],
-      }
+      const payload = buildExploreTopicsPayload(currentQuestion, {
+        selectedCurriculumUuid: selectedCurriculum,
+        grade: grade.trim() || selected?.level || '',
+        subject: subject.trim() || selected?.subject || '',
+        jurisdiction: jurisdiction.trim() || selected?.jurisdiction || '',
+      }, followUpContext)
       const response = await secureFetch(`${base}/explore/topics`, {
         ...RequestBodyWithAuthHeader('POST', payload, null, token),
         cache: 'no-store',
@@ -131,7 +134,9 @@ export default function ExploreTopics() {
       const body = await response.json().catch(() => null)
       if (!response.ok) throw new Error(typeof body?.detail === 'string' ? body.detail : 'Topic search could not be completed.')
       setResult(body as ExploreResult)
-      setFollowUp(false)
+      if (followUpContext) {
+        setFollowUpContext((current) => current ? { ...current, previousQuestion: currentQuestion } : null)
+      }
       setMessage('')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Topic search could not be completed. Please try again.')
@@ -193,7 +198,7 @@ export default function ExploreTopics() {
           <Textarea
             id="topic-question"
             value={query}
-            onChange={(event) => { setQuery(event.target.value); setFollowUp(false) }}
+            onChange={(event) => setQuery(event.target.value)}
             maxLength={500}
             minLength={2}
             required
@@ -203,7 +208,7 @@ export default function ExploreTopics() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
               Syllabus context
-              <Select value={selectedCurriculum} onValueChange={(value) => { setSelectedCurriculum(value); setFollowUp(false) }}>
+              <Select value={selectedCurriculum} onValueChange={(value) => { setSelectedCurriculum(value); setFollowUpContext(null) }}>
                 <SelectTrigger aria-label="Syllabus context"><SelectValue placeholder="Any approved syllabus" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any approved syllabus</SelectItem>
@@ -213,15 +218,15 @@ export default function ExploreTopics() {
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
               Grade
-              <Input value={grade} onChange={(event) => setGrade(event.target.value)} placeholder={selectedLabel?.level || 'Any grade'} maxLength={32} />
+              <Input value={grade} onChange={(event) => { setGrade(event.target.value); setFollowUpContext(null) }} placeholder={selectedLabel?.level || 'Any grade'} maxLength={32} />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
               Subject
-              <Input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder={selectedLabel?.subject || 'Any subject'} maxLength={120} />
+              <Input value={subject} onChange={(event) => { setSubject(event.target.value); setFollowUpContext(null) }} placeholder={selectedLabel?.subject || 'Any subject'} maxLength={120} />
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
               Jurisdiction
-              <Input value={jurisdiction} onChange={(event) => setJurisdiction(event.target.value)} placeholder={selectedLabel?.jurisdiction || 'Any jurisdiction'} maxLength={120} />
+              <Input value={jurisdiction} onChange={(event) => { setJurisdiction(event.target.value); setFollowUpContext(null) }} placeholder={selectedLabel?.jurisdiction || 'Any jurisdiction'} maxLength={120} />
             </label>
           </div>
           <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -230,11 +235,14 @@ export default function ExploreTopics() {
               {busy ? 'Searching…' : 'Explore topic'}
             </Button>
             {result?.sources?.length ? (
-              <Button type="button" variant="outline" disabled={busy} onClick={() => setFollowUp(true)}>
-                Ask a follow-up using these {result.sources.length} sources
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setFollowUpContext({
+                sourceVersionUuids: [...new Set(result.sources.map((source) => source.version_uuid))],
+                previousQuestion: query.trim(),
+              })}>
+                Ask a follow-up using these {new Set(result.sources.map((source) => source.version_uuid)).size} sources
               </Button>
             ) : null}
-            {followUp && <span className="text-xs font-medium text-teal-800">Next search is limited to the sources above.</span>}
+            {followUpContext && <span role="status" className="text-xs font-medium text-teal-800">Follow-up searches only {followUpContext.sourceVersionUuids.length} selected approved source version(s), with the previous question for context. Change a filter to start a fresh topic search.</span>}
           </div>
         </form>
         {message && <p role="status" className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{message}</p>}

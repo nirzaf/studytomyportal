@@ -6,6 +6,7 @@ import { OrgContext } from '../components/Contexts/OrgContext'
 import { SessionContext } from '../components/Contexts/LHSessionContext'
 import ExploreTopics from '../components/Studytomy/ExploreTopics'
 import SyllabusLibraryManager from '../components/Studytomy/SyllabusLibraryManager'
+import { buildExploreTopicsPayload } from '../components/Studytomy/exploreTopicsRequest'
 
 const session = {
   status: 'authenticated',
@@ -33,6 +34,32 @@ test('Explore Topics renders search, syllabus context, and source-safety guidanc
   expect(markup).toContain('Only approved, permitted PDFs appear')
   expect(markup).toContain('Any approved syllabus')
   expect(markup).toContain('Leave it unselected to search all available approved materials.')
+})
+
+test('follow-up request keeps the selected source set and prior question while fresh search clears both', () => {
+  const filters = {
+    selectedCurriculumUuid: 'curriculum-12',
+    grade: 'Grade 12',
+    subject: 'Chemistry',
+    jurisdiction: 'Sri Lanka',
+  }
+  const followUp = buildExploreTopicsPayload('  Why do they differ?  ', filters, {
+    sourceVersionUuids: ['version-a', 'version-b'],
+    previousQuestion: 'How do carbon isotopes differ?',
+  })
+  expect(followUp).toEqual({
+    query: 'Why do they differ?',
+    context_question: 'How do carbon isotopes differ?',
+    selected_curriculum_uuid: 'curriculum-12',
+    grade: 'Grade 12',
+    subject: 'Chemistry',
+    jurisdiction: 'Sri Lanka',
+    source_version_uuids: ['version-a', 'version-b'],
+  })
+
+  const fresh = buildExploreTopicsPayload('Atomic number', filters, null)
+  expect(fresh.context_question).toBeNull()
+  expect(fresh.source_version_uuids).toEqual([])
 })
 
 test('Educator source manager explains review and rights before learner access', () => {

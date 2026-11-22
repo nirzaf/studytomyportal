@@ -19,6 +19,7 @@ from src.services.studytomy.syllabus_library import (
     ExploreTopicResponse,
     SyllabusMappingCreate,
     SyllabusMappingRead,
+    SyllabusMappingRevocation,
     SyllabusMappingReview,
     SyllabusSourceList,
     SyllabusSourcePages,
@@ -40,6 +41,7 @@ from src.services.studytomy.syllabus_library import (
     retry_syllabus_index,
     review_syllabus_mapping,
     review_syllabus_source,
+    revoke_syllabus_mapping,
     revoke_syllabus_source,
     upload_syllabus_source,
 )
@@ -78,10 +80,11 @@ async def api_list_syllabus_sources(
     response: Response,
     actor: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> SyllabusSourceList:
     org = await _organization(org_uuid, actor, db)
-    result = await list_source_versions(db, org, actor, limit=limit)
+    result = await list_source_versions(db, org, actor, limit=limit, offset=offset)
     response.headers.update(PRIVATE_HEADERS)
     return result
 
@@ -190,9 +193,13 @@ async def api_list_syllabus_mappings(
     response: Response,
     actor: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SyllabusMappingRead]:
     org = await _organization(org_uuid, actor, db)
-    result = await list_syllabus_mappings(db, org, actor)
+    result, next_offset = await list_syllabus_mappings(db, org, actor, limit=limit, offset=offset)
+    if next_offset is not None:
+        response.headers["X-Next-Offset"] = str(next_offset)
     response.headers.update(PRIVATE_HEADERS)
     return result
 
@@ -226,6 +233,25 @@ async def api_review_syllabus_mapping(
 ) -> SyllabusMappingRead:
     org = await _organization(org_uuid, actor, db)
     result = await review_syllabus_mapping(db, org, actor, mapping_uuid, command)
+    await db.commit()
+    response.headers.update(PRIVATE_HEADERS)
+    return result
+
+
+@router.post(
+    "/orgs/{org_uuid}/syllabus-mappings/{mapping_uuid}/revoke",
+    response_model=SyllabusMappingRead,
+)
+async def api_revoke_syllabus_mapping(
+    org_uuid: str,
+    mapping_uuid: str,
+    command: SyllabusMappingRevocation,
+    response: Response,
+    actor: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> SyllabusMappingRead:
+    org = await _organization(org_uuid, actor, db)
+    result = await revoke_syllabus_mapping(db, org, actor, mapping_uuid, command.evidence)
     await db.commit()
     response.headers.update(PRIVATE_HEADERS)
     return result
