@@ -144,7 +144,6 @@ export default function ExploreTopics() {
   async function openPdf(citation: Citation) {
     if (!token) return
     const popup = window.open('', '_blank')
-    if (popup) popup.opener = null
     try {
       const path = `${base}/syllabus-sources/${encodeURIComponent(citation.version_uuid)}/pdf`
       const response = await secureFetch(path, {
@@ -165,7 +164,12 @@ export default function ExploreTopics() {
       const url = URL.createObjectURL(await response.blob()) + `#page=${citation.page}`
       const objectUrl = url.split('#')[0]
       pdfUrlsRef.current = [...pdfUrlsRef.current, objectUrl]
-      if (popup) popup.location.href = url
+      if (popup) {
+        // Keep the handle until navigation starts; severing opener first can
+        // detach the WindowProxy and leave the authenticated PDF popup blank.
+        popup.location.replace(url)
+        popup.opener = null
+      }
       else window.location.assign(url)
     } catch (error) {
       popup?.close()

@@ -665,7 +665,8 @@ async def test_uploaded_syllabus_requires_review_and_revocation_removes_learner_
             learner_access = await library.syllabus_library_access(db, org, learner)
             editor_access = await library.syllabus_library_access(db, org, course_editor)
             assert uploader_access.can_view and uploader_access.can_author and not uploader_access.can_review
-            assert reviewer_access.can_view and reviewer_access.can_review and not reviewer_access.can_author
+            # Review capability stays unavailable until its required organization policies are approved below.
+            assert not reviewer_access.can_view and not reviewer_access.can_review and not reviewer_access.can_author
             assert not learner_access.can_view and not editor_access.can_view
             with pytest.raises(HTTPException) as editor_denied:
                 await library.list_source_versions(db, org, course_editor)
@@ -726,6 +727,9 @@ async def test_uploaded_syllabus_requires_review_and_revocation_removes_learner_
                     approved_at=now,
                 ))
             await db.flush()
+
+            reviewer_access = await library.syllabus_library_access(db, org, reviewer)
+            assert reviewer_access.can_view and reviewer_access.can_review and not reviewer_access.can_author
 
             approved = await library.review_syllabus_source(db, org, reviewer, version_uuid, approval)
             assert approved.review_status == "approved"

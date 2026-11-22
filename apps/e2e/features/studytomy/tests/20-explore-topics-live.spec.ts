@@ -184,12 +184,12 @@ test('live learner search is backed by approved source records and revocation ta
     expect(directSearch.ok).toBe(true)
     const directResult = await directSearch.json()
     const citation = directResult.sources.find((source: { version_uuid: string }) => source.version_uuid === versionUuid)
-    expect(citation, 'actual API response should cite the approved synthetic version').toBeTruthy()
+    expect(citation, `actual API response should cite the approved synthetic version: ${JSON.stringify(directResult)}`).toBeTruthy()
     expect(citation).toMatchObject({ title, page: 1, grade, subject: curriculum.subject })
     expect(citation.excerpt).toContain('Photosynthesis')
 
     const unsupportedApi = await apiRequest('POST', `${root}/explore/topics`, learnerToken, {
-      query: `Unsupported zorbium topic ${suffix}`, search_scope: 'all_approved',
+      query: 'How does zorbium transfer energy?', search_scope: 'all_approved',
     })
     expect(unsupportedApi.ok).toBe(true)
     const unsupportedResult = await unsupportedApi.json()
@@ -214,7 +214,7 @@ test('live learner search is backed by approved source records and revocation ta
     const context = page.getByRole('combobox', { name: 'Syllabus context' })
     await context.click()
     await page.getByRole('option', { name: new RegExp(`${curriculum.subject}.*${curriculum.level}`) }).click()
-    await expect(page.getByText('All approved resources')).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Search scope' })).toHaveText('All approved resources')
     await page.getByLabel('Topic or question').fill('How do plants make food?')
     await page.getByRole('button', { name: 'Explore topic' }).click()
     await expect(page.getByRole('heading', { name: title })).toBeVisible()
@@ -254,7 +254,7 @@ test('live learner search is backed by approved source records and revocation ta
     await expect.poll(() => pdfPage.url()).toContain('#page=1')
     await pdfPage.close()
 
-    await page.getByLabel('Topic or question').fill(`Unsupported zorbium query ${suffix}`)
+    await page.getByLabel('Topic or question').fill('How does zorbium transfer energy?')
     await page.getByRole('button', { name: 'Explore topic' }).click()
     await expect(page.getByText('No sufficient approved source found')).toBeVisible()
     await expect(page.getByRole('heading', { name: title })).toHaveCount(0)
@@ -280,7 +280,7 @@ test('live learner search is backed by approved source records and revocation ta
     await expect(page.getByRole('status')).toContainText('This approved PDF is no longer available')
     await expect(page.getByRole('region', { name: 'Topic results' })).toHaveCount(0)
     await page.goto(`${BASE_URL}/orgs/${ORG_SLUG}/dash/studytomy/syllabus-library`)
-    await expect(page.getByText('This account cannot access the educator source library.')).toBeVisible()
+    await expect(page.getByText('You are not assigned to view this organization’s syllabus library.')).toBeVisible()
     await expect(page.getByRole('button', { name: /approve/i })).toHaveCount(0)
   } finally {
     if (versionUuid && !revoked) {

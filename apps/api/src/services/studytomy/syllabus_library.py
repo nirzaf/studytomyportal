@@ -1405,6 +1405,7 @@ async def _retrieve(
     search_text = " ".join(part for part in (command.context_question, command.query) if part)
     normalized_search = _normalize_topic_query(search_text)
     terms = _topic_search_terms(normalized_search)
+    distinctive_alias_terms = _topic_alias_terms(search_text)
     if not terms:
         return []
     base = [
@@ -1481,6 +1482,7 @@ async def _retrieve(
         relevance = _lexical_match_score(
             query_terms, identifiers, row[0].chunk_text,
             term_frequencies, corpus_size, literal_topic=literal_topic,
+            distinctive_alias_terms=distinctive_alias_terms,
         )
         if relevance is None:
             continue
@@ -1535,6 +1537,7 @@ async def _retrieve(
         if _lexical_match_score(
             query_terms, identifiers, concept_text,
             term_frequencies, corpus_size,
+            distinctive_alias_terms=distinctive_alias_terms,
         ) is None:
             continue
         candidate_row = (row[0], row[1], row[2])
@@ -1666,6 +1669,17 @@ def _normalize_topic_query(text: str) -> str:
     return " ".join((normalized, *expansions))
 
 
+def _topic_alias_terms(text: str) -> set[str]:
+    """Return curated concept names for natural-language question aliases."""
+    return {
+        _canonical_search_term(term)
+        for pattern, expansion in _TOPIC_ALIASES
+        if pattern.search(text)
+        for term in _query_terms(expansion)
+        if term in {"photosynthesis", "chlorophyll", "buoyancy", "conductivity", "refraction"}
+    }
+
+
 def _topic_search_terms(text: str) -> list[str]:
     """Build safe simple-config tsquery lexemes, including exact code/formula tokens."""
     terms: set[str] = set()
@@ -1756,6 +1770,7 @@ def _lexical_match_score(
     corpus_size: int = 0,
     *,
     literal_topic: tuple[str, ...] = (),
+    distinctive_alias_terms: set[str] | None = None,
 ) -> float | None:
     normalized_chunk = _normalize_evidence(chunk_text)
     if any(_normalize_evidence(identifier) in normalized_chunk for identifier in identifiers):
@@ -1763,6 +1778,10 @@ def _lexical_match_score(
     matched = query_terms.intersection(_query_terms(chunk_text))
     if not matched:
         return None
+    # A curated synonym can be the only distinctive term in a short or new
+    # authorized corpus (for example, "plants make food" -> photosynthesis).
+    if distinctive_alias_terms and matched.intersection(distinctive_alias_terms):
+        return 1.0
     # A literal topic match remains relevant even when a narrow source scope
     # makes the topic common. Never apply this rescue to just part of a query.
     if 1 <= len(literal_topic) <= 8 and set(literal_topic) <= matched:

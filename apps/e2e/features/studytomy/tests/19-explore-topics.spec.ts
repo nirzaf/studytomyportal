@@ -4,6 +4,33 @@ import { STUDENT_STATE } from '../../../core/sharedAuth'
 
 test.use({ storageState: STUDENT_STATE, viewport: { width: 390, height: 844 } })
 
+function syntheticPdf(): Buffer {
+  const stream = 'BT /F1 12 Tf 48 740 Td (Synthetic PDF navigation fixture) Tj ET\n'
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(stream, 'ascii')} >>\nstream\n${stream}endstream`,
+  ]
+  const parts: Buffer[] = [Buffer.from('%PDF-1.4\n% synthetic fixture\n', 'ascii')]
+  const offsets = [0]
+  let cursor = parts[0].length
+  objects.forEach((object, index) => {
+    offsets.push(cursor)
+    const part = Buffer.from(`${index + 1} 0 obj\n${object}\nendobj\n`, 'ascii')
+    parts.push(part)
+    cursor += part.length
+  })
+  const xrefOffset = cursor
+  parts.push(Buffer.from([
+    'xref', `0 ${objects.length + 1}`, '0000000000 65535 f ',
+    ...offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n `),
+    'trailer', `<< /Size ${objects.length + 1} /Root 1 0 R >>`, 'startxref', String(xrefOffset), '%%EOF', '',
+  ].join('\n'), 'ascii'))
+  return Buffer.concat(parts)
+}
+
 const curriculum = {
   uuid: 'e2e-curriculum-chemistry-12', curriculum_key: 'chemistry-12', revision: 1,
   subject: 'Chemistry', level: 'Grade 12', language: 'English', jurisdiction: 'Sri Lanka', status: 'published',
@@ -23,7 +50,7 @@ function groundedResult() {
       reference: 1, source_uuid: 'e2e-source', version_uuid: 'e2e-source-version',
       title: 'Chemistry Resource Book', publisher: 'Synthetic fixture', version_number: 1,
       source_revision: '1', source_type: 'resource_book', jurisdiction: 'Sri Lanka',
-      grade: '12', subject: 'Chemistry', syllabus_edition: 'Synthetic', page: 5,
+      grade: '12', subject: 'Chemistry', syllabus_edition: 'Synthetic', page: 1,
       excerpt: 'An electric current causes chemical change in an electrolyte.',
       pdf_url: '/synthetic.pdf', coverage: 'supplementary',
     }],
@@ -51,12 +78,12 @@ test('learner explores approved sources, keeps curriculum separate from scope, f
     }
     await route.fulfill({ json: groundedResult() })
   })
-  await page.route(`${API_URL}/studytomy/orgs/**/syllabus-sources/**/pdf`, async (route) => {
+  await page.route(/\/syllabus-sources\/[^/]+\/pdf(?:\?.*)?$/, async (route) => {
     if (pdfRevoked) {
       await route.fulfill({ status: 409, json: { detail: 'The approved source is no longer available.' } })
       return
     }
-    await route.fulfill({ status: 200, contentType: 'application/pdf', body: Buffer.from('%PDF-1.4\n% synthetic test fixture\n%%EOF') })
+    await route.fulfill({ status: 200, contentType: 'application/pdf', body: syntheticPdf() })
   })
 
   await page.goto(`${BASE_URL}/orgs/${ORG_SLUG}/explore`)
@@ -64,7 +91,7 @@ test('learner explores approved sources, keeps curriculum separate from scope, f
   await page.getByLabel('Topic or question').fill('Explain electrolysis in simple words')
   await page.getByRole('button', { name: 'Explore topic' }).click()
   await expect(page.getByRole('heading', { name: 'Chemistry Resource Book' })).toBeVisible()
-  await expect(page.getByText('page 5', { exact: false })).toBeVisible()
+  await expect(page.getByText('page 1', { exact: false })).toBeVisible()
   await expect(page.getByText('Source-grounded explanation')).toBeVisible()
   await page.getByRole('link', { name: '[1]' }).click()
   await expect(page).toHaveURL(/#source-1$/)
@@ -74,7 +101,7 @@ test('learner explores approved sources, keeps curriculum separate from scope, f
   await syllabusContext.click()
   await page.getByRole('option', { name: /Chemistry · Grade 12/ }).click()
   await expect(page.getByRole('region', { name: 'Topic results' })).toHaveCount(0)
-  await expect(page.getByText('All approved resources')).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Search scope' })).toHaveText('All approved resources')
 
   await page.getByRole('button', { name: 'Explore topic' }).click()
   await expect(page.getByRole('heading', { name: 'Chemistry Resource Book' })).toBeVisible()
@@ -107,13 +134,13 @@ test('learner explores approved sources, keeps curriculum separate from scope, f
   await expect(page.getByRole('heading', { name: 'Chemistry Resource Book' })).toBeVisible()
 
   const popupPromise = page.waitForEvent('popup')
-  await page.getByRole('button', { name: 'Open PDF · p. 5' }).click()
+  await page.getByRole('button', { name: 'Open PDF · p. 1' }).click()
   const pdfPage = await popupPromise
-  await expect.poll(() => pdfPage.url()).toContain('#page=5')
+  await expect.poll(() => pdfPage.url()).toContain('#page=1')
   await pdfPage.close()
 
   pdfRevoked = true
-  await page.getByRole('button', { name: 'Open PDF · p. 5' }).click()
+  await page.getByRole('button', { name: 'Open PDF · p. 1' }).click()
   await expect(page.getByRole('status')).toContainText('This approved PDF is no longer available')
   await expect(page.getByRole('region', { name: 'Topic results' })).toHaveCount(0)
 

@@ -25,6 +25,8 @@ from src.services.studytomy.syllabus_library import (
     _mapping_supports_cited_topic,
     _official_mapping_compatible,
     _normalize_topic_query,
+    _query_terms,
+    _topic_alias_terms,
     _query_identifiers,
     _query_matches_concept,
     _query_phrases,
@@ -184,6 +186,21 @@ def test_keyword_retrieval_uses_scoped_term_rarity_for_distinctive_single_concep
     assert _lexical_match_score(
         {"chem", "iso"}, ["CHEM-ISO"], "CHEM-ISO defines atomic number.", {}, 0,
     ) == 1.0
+
+
+def test_keyword_retrieval_accepts_curated_single_concepts_in_small_corpora():
+    question = "How do plants make food?"
+    query_terms = _query_terms(_normalize_topic_query(question))
+    aliases = _topic_alias_terms(question)
+    assert "photosynthesis" in aliases
+    assert _lexical_match_score(
+        query_terms, [], "Photosynthesis converts sunlight into glucose.",
+        {term: 1 for term in query_terms}, 1, distinctive_alias_terms=aliases,
+    ) == 1.0
+    assert _lexical_match_score(
+        query_terms, [], "Plants and food are common science examples.",
+        {term: 1 for term in query_terms}, 1, distinctive_alias_terms=aliases,
+    ) is None
 
 
 def test_keyword_retrieval_keeps_literal_topics_in_narrow_scopes_without_rescuing_partial_matches():

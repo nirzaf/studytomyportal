@@ -737,3 +737,32 @@ The live blocker is environmental, not a test pass: both loopback applications w
 ### Runtime-identity failure-path retest
 
 On 22 November 2026, against base commit `cea60982924c247b893d04d9a1e31e8ad7fe57af`, two focused API regression tests were added in the working tree and run without modifying application code. `uv run pytest -q src/tests/routers/test_instance_runtime_identity.py src/tests/studytomy/test_syllabus_library_unit.py` passed **42 tests**. `uv run ruff check src/tests/routers/test_instance_runtime_identity.py` passed. The added cases verify that a failed active-database connection returns the generic HTTP 503 contract and that the mounted runtime-identity route rejects unauthenticated HTTP requests with 401. They use synthetic sessions and do not establish live PostgreSQL behavior. An initial test harness attempt using the shared SQLite fixture failed during schema setup because SQLite does not implement PostgreSQL's `to_tsvector`; the HTTP test was changed to avoid that unrelated fixture path and the focused suite then passed.
+
+## Isolated Explore Topics environment and acceptance (22 November 2026)
+
+**Checkout:** Local `main` started at `159671a8ad29f5c715ed9206ab79e5e894a8cc57`; `origin/main` was `cea60982924c247b893d04d9a1e31e8ad7fe57af`. The local commit was preserved. The isolated acceptance changes in this checkpoint are recorded in the working tree on top of that commit.
+
+**Environment:** A task-created loopback PostgreSQL 19 container with pgvector `0.8.7` served the disposable database `study_explore_20261122_bb2191a976_test` on `127.0.0.1:58205`. Its Alembic head was `f04d9c6a31b8`, matching the source migration head. Redis, private RustFS, and local Ollama services used separate task-created loopback ports; the private RustFS bucket round-tripped test objects. FastAPI ran from this checkout on `127.0.0.1:8000`. The final identity-gated browser run served Next.js on `127.0.0.1:3001` because another project already owned port `3000`; that process was left untouched. No existing development or unrelated container/database was used. API runtime identity, source tree digest, source/database migration heads, and the active database identity were checked against the same query-free loopback `_test` database before provisioning or live browser setup. The test fixture used separate synthetic source-author and reviewer accounts, scoped educational assignments, and synthetic policy evidence; no production authorization or approval gate was disabled. Text generation remained disabled; local Ollama was used only for embeddings, with no paid AI/provider request.
+
+**Executed checks:**
+
+| Check | Result |
+| --- | --- |
+| Syllabus library backend unit tests | 36 passed, including the curated single-concept retrieval regression. |
+| Syllabus library PostgreSQL integration tests | 4 passed against the isolated PG19 database. |
+| Ruff for the touched API service, fixture provisioner, and tests | Passed. |
+| CLI typecheck and build | Passed. |
+| CLI test suite | 22 files passed; 854 passed, 1 skipped. |
+| Frontend test suite | 788 passed, 0 failed. |
+| Frontend lint | Exit 0; 0 errors and 966 existing warnings. |
+| Frontend production build | Passed; Next.js emitted existing dynamic-filesystem tracing warnings. |
+| E2E database and runtime-identity helpers | 3 database tests and 4 identity tests passed. |
+| E2E typecheck | Passed. |
+| Explore Topics browser specs 19 and 20 | 2 passed in headed Chromium against the final application code and real isolated API/database. Spec 19 exercised deterministic mocked UI states; spec 20 used real API upload/review/search/PDF/follow-up/revocation routes and PostgreSQL state. |
+| Documentation snippet tests and build | 3 snippet tests passed; build generated 461 pages using the documented bundled OpenAPI snapshot fallback after the remote OpenAPI fetch failed. The build-generated tracked `docs/public/llms.txt` was restored. |
+
+The live browser journey verified that a pending source was unavailable, author self-approval and learner approval were denied, required rights evidence was enforced, an independent reviewer could approve the synthetic source, retrieval returned its approved page citation, authenticated PDF access served the synthetic PDF, follow-up retained the authorized source context, a scope change cleared stale results, unsupported content produced no fabricated citation, and revocation denied later retrieval and PDF access. The fixture's cleanup path revoked the synthetic source while retaining its audit history. The educator-library UI correctly denied the learner. No learner personal data, grades, or mastery records were used.
+
+Headed Chromium was necessary for the built-in PDF viewer: in headless Chromium the popup remained at `about:blank`, while the headed run opened the authenticated PDF at the cited page. This is a browser implementation limitation, not an API failure. The in-app browser could not reach the loopback server in this environment, so interactive verification was performed through the repository's headed Playwright runner; no claim is made that the in-app browser was tested. These results establish local synthetic acceptance only, not educator validation, real learner safeguarding approval, real-provider generation quality, deployment readiness, or production behavior.
+
+The task-created PostgreSQL, Redis, RustFS, Ollama, API, and web processes are disposable and loopback-bound. No named Docker volumes were attached. The final run's synthetic source was revoked by the test cleanup path; exact cleanup of the task-created processes and temporary credentials is recorded in the delivery report. No schema migration was introduced.
