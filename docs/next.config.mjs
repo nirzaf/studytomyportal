@@ -12,7 +12,8 @@ export default withMDX({
   async redirects() {
     return [
       { source: '/platform/courses/collections', destination: '/platform/courses/library', permanent: true },
-      { source: '/developers/demos', destination: '/demos', permanent: true },
+      { source: '/demos', destination: '/developers', permanent: true },
+      { source: '/developers/demos', destination: '/developers', permanent: true },
       { source: '/self-hosting/installation/cli-reference', destination: '/cli/commands', permanent: true },
       { source: '/guides/custom-features/webhooks', destination: '/platform/automations/webhooks', permanent: true },
       { source: '/developers/api/endpoints', destination: '/reference', permanent: true },

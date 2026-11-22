@@ -1,15 +1,15 @@
 ---
-description: "Build a Zapier integration on the LearnHouse REST Hook endpoints: API token auth, trigger catalogue, dropdown sources and event subscriptions."
+description: "Build a Zapier integration on the Studytomy Portal REST Hook endpoints: API token auth, trigger catalogue, dropdown sources and event subscriptions."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Zapier
 
-LearnHouse ships the API that a Zapier integration needs: an auth test, a trigger catalogue, dropdown sources and REST Hook subscriptions. A Zap subscribes to one LearnHouse event, and LearnHouse pushes that event to Zapier through the same pipeline as [Webhooks](/platform/automations/webhooks).
+Studytomy Portal ships the API that a Zapier integration needs: an auth test, a trigger catalogue, dropdown sources and REST Hook subscriptions. A Zap subscribes to one Studytomy Portal event, and Studytomy Portal pushes that event to Zapier through the same pipeline as [Webhooks](/platform/automations/webhooks).
 
 <Callout type="info">
-The Zapier endpoints need the **Pro plan** or higher. The LearnHouse app in Zapier's directory is not live yet, so the dashboard does not show a Zapier card or list Zapier subscriptions. This page documents the endpoints for integrators.
+The Zapier endpoints need the **Pro plan** or higher. The Studytomy Portal app in Zapier's directory is not live yet, so the dashboard does not show a Zapier card or list Zapier subscriptions. This page documents the endpoints for integrators.
 </Callout>
 
 ## Authentication
@@ -38,7 +38,7 @@ For subscriptions, the event's resource is: courses for `course_*` and `activity
 Zapier uses the **REST Hooks** pattern:
 
 1. When a Zap is turned on, Zapier calls `POST /api/v1/integrations/zapier/subscriptions` with its callback URL (`target_url`), one `event` name and, optionally, `zap_id` and `zap_name`.
-2. LearnHouse stores the subscription as a webhook endpoint tagged `source = "zapier"` and starts delivering that event to the callback URL.
+2. Studytomy Portal stores the subscription as a webhook endpoint tagged `source = "zapier"` and starts delivering that event to the callback URL.
 3. When the Zap is turned off or deleted, Zapier calls `DELETE /api/v1/integrations/zapier/subscriptions/{id}`.
 
 Deliveries use the same envelope, retries, SSRF guard and delivery logging as manual webhooks. The signing secret is never returned to Zapier.
@@ -60,9 +60,9 @@ Zapier subscriptions count toward the limit of **20 webhook endpoints per organi
 
 The list endpoints take a `limit` parameter (default 100, maximum 500). The organization comes from the token, so no `org_id` appears in the URL.
 
-## Running LearnHouse actions from Zapier
+## Running Studytomy Portal actions from Zapier
 
-To act on LearnHouse from another app (enroll a user, mark an activity or course complete, look someone up), call the headless Admin API at `/api/v1/admin/{org_slug}/...` with an API token. See the [API Reference](/reference).
+To act on Studytomy Portal from another app (enroll a user, mark an activity or course complete, look someone up), call the headless Admin API at `/api/v1/admin/{org_slug}/...` with an API token. See the [API Reference](/reference).
 
 ## Troubleshooting
 

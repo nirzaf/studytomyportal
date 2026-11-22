@@ -70,7 +70,7 @@ describe('LearnHouseActivity with a raw document', () => {
     expect(code?.querySelector('.hljs-keyword')?.textContent).toBe('const')
   })
 
-  it('renders LearnHouse blocks with their real components', async () => {
+  it('renders Studytomy Portal blocks with their real components', async () => {
     mockFetch({ [`/courses/${COURSE}/meta`]: meta })
     const { container } = renderDoc()
     // Quiz (lazy chunk), flipcards, badge, button, scenarios, callouts.

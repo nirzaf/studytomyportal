@@ -6,7 +6,7 @@ const RESERVED_TLDS = new Set([
   'example',
 ])
 
-// RFC 2606 reserved second-level domains. The LearnHouse seeder rejects these,
+// RFC 2606 reserved second-level domains. The Studytomy Portal seeder rejects these,
 // silently leaving the install with no admin user, so the CLI must too.
 const RESERVED_DOMAINS = new Set([
   'example.com',

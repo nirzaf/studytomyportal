@@ -61,8 +61,8 @@ _NATIVE_RESPONSES = {
     "multiplechoiceresponse", "choiceresponse", "truefalseresponse", "optionresponse",
     "stringresponse", "numericalresponse", "coderesponse",
 }
-# ... and the ones LearnHouse cannot grade, with the reason shown in the report
-# Report wording for problem types that have no LearnHouse equivalent
+# ... and the ones Studytomy Portal cannot grade, with the reason shown in the report
+# Report wording for problem types that have no Studytomy Portal equivalent
 _KIND_LABELS = {
     "customresponse": "script-graded", "python-script": "script-graded", "formularesponse": "formula",
     "schematicresponse": "circuit", "imageresponse": "image hot spot", "javascriptresponse": "JavaScript",
@@ -117,12 +117,12 @@ _ORA_DEFAULT_DUE = ("2029-01-01T00:00:00",)
 _SEQUENCES = {"sequential", "videosequence"}
 _SILENT = {"done", "wiki", "textbook", "word_cloud_placeholder"}
 _UNSUPPORTED_XBLOCKS = {
-    "word_cloud": "word clouds have no LearnHouse equivalent",
-    "poll": "polls have no LearnHouse equivalent",
-    "survey": "surveys have no LearnHouse equivalent",
-    "recommender": "recommender blocks have no LearnHouse equivalent",
-    "image-explorer": "image explorer blocks have no LearnHouse equivalent",
-    "invideoquiz": "in-video quizzes have no LearnHouse equivalent",
+    "word_cloud": "word clouds have no Studytomy Portal equivalent",
+    "poll": "polls have no Studytomy Portal equivalent",
+    "survey": "surveys have no Studytomy Portal equivalent",
+    "recommender": "recommender blocks have no Studytomy Portal equivalent",
+    "image-explorer": "image explorer blocks have no Studytomy Portal equivalent",
+    "invideoquiz": "in-video quizzes have no Studytomy Portal equivalent",
 }
 
 _NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
@@ -856,12 +856,12 @@ class _Reader:
             url = str(node.attrs.get("launch_url") or node.attrs.get("lti_1p3_launch_url") or "").strip()
             out.append(_Comp("item", item=ir.UnsupportedItem(
                 title=name, kind="LTI tool", id=f"{tag}/{node.url_name}",
-                reason="external LTI tools must be reconnected in LearnHouse" + (f" ({url})" if url else "")),
+                reason="external LTI tools must be reconnected in Studytomy Portal" + (f" ({url})" if url else "")),
                 source=tag))
         elif tag == "staffgradedxblock":
             out.append(_Comp("item", item=ir.UnsupportedItem(
                 title=name, kind=tag, id=f"{tag}/{node.url_name}",
-                reason="points entered offline by staff have no LearnHouse equivalent"), source=tag))
+                reason="points entered offline by staff have no Studytomy Portal equivalent"), source=tag))
         elif tag == "scorm":
             out.append(_Comp("item", item=ir.UnsupportedItem(
                 title=name, kind="scorm", id=f"scorm/{node.url_name}",
@@ -881,7 +881,7 @@ class _Reader:
         elif tag in _SILENT:
             return
         else:
-            self.skip(name or tag, tag, "no LearnHouse equivalent")
+            self.skip(name or tag, tag, "no Studytomy Portal equivalent")
 
     # html -----------------------------------------------------------------
 

@@ -41,7 +41,7 @@ const lh = createClient({ baseUrl: 'https://learn.your-school.com', credentials:
 const me = await lh.users.session()
 ```
 
-The learner's LearnHouse session cookie is sent along. This works when your page runs on the instance's domain (or a
+The learner's Studytomy Portal session cookie is sent along. This works when your page runs on the instance's domain (or a
 subdomain it trusts), since the API only answers browsers on origins it allows.
 
 ### Your own token storage: `getToken`

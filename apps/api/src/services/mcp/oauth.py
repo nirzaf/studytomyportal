@@ -172,8 +172,7 @@ def protected_resource_metadata(request: Request) -> dict[str, Any]:
         "authorization_servers": [issuer_url(request)],
         "scopes_supported": list(SUPPORTED_SCOPES),
         "bearer_methods_supported": ["header"],
-        "resource_name": "LearnHouse",
-        "resource_documentation": "https://docs.learnhouse.app",
+        "resource_name": "Studytomy Portal",
     }
 
 
@@ -201,7 +200,6 @@ def authorization_server_metadata(request: Request) -> dict[str, Any]:
         ],
         "code_challenge_methods_supported": ["S256"],
         "authorization_response_iss_parameter_supported": True,
-        "service_documentation": "https://docs.learnhouse.app",
     }
 
 

@@ -236,7 +236,7 @@
     "billing": "Faturalandırma",
     "create_organization": "Organizasyon oluştur",
     "start_your_own_organization": "Kendi organizasyonunu kur",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Bu organizasyon silinemedi. Lütfen tekrar deneyin.",
     "org_actions": "Organizasyon işlemleri",
     "manage_upgrade": "Yönet / Yükselt",
@@ -3068,7 +3068,7 @@
           "description": "Kişisel ayarlarınızı, şifrelerinizi ve e-postanızı yapılandırın"
         }
       },
-      "learnhouse_university": "Studytomy Üniversitesi",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Tekrar hoş geldiniz",
       "plan": "plan",
       "create_course": "Kurs Oluştur",
@@ -7184,7 +7184,7 @@
           "keywords": "öğrenme yolları, yollar, programlar, müfredat, sıralama, sertifika, paths, learning paths"
         },
         "live_sessions": {
-          "keywords": "canlı oturumlar canlı ders webinar toplantı video katılım kayıtlar anketler learnhouse meet zoom meet teams live sessions attendance recordings polls",
+          "keywords": "canlı oturumlar canlı ders webinar toplantı video katılım kayıtlar anketler meet zoom meet teams live sessions attendance recordings polls",
           "description": "Canlı oturumları planlayın, katılımı takip edin ve kayıtları yönetin"
         }
       }
@@ -10715,8 +10715,8 @@
       "inactive_desc": "EE lisans kontrolü başarısız oldu (<code>{{reason}}</code>). Her <code>/ee/*</code> uç noktası 503 döndürüyor, bu yüzden bu sayfa verilerini yükleyemiyor.",
       "what_to_check": "Nelere bakmalı",
       "check_diagnostics": "<code>{{path}}</code> adresini açın. Lisans etkin değilken bile yanıt verir ve <code>hint</code> alanı çözümü belirtir.",
-      "check_saas": "SaaS dağıtımları için: API ortamında <code>LEARNHOUSE_SAAS=true</code> ayarlandığını doğrulayın. SaaS, lisans kontrolünü atlar.",
-      "check_self_hosted": "Kendi sunucusunda barındırılan EE için: <code>LEARNHOUSE_LICENSE_KEY</code> ayarlandığını ve lisans sunucusuna (veya ek süre penceresine) ulaşılabildiğini doğrulayın.",
+      "check_saas": "SaaS dağıtımları için: API ortamında <code>SaaS mode</code> ayarlandığını doğrulayın. SaaS, lisans kontrolünü atlar.",
+      "check_self_hosted": "Kendi sunucusunda barındırılan EE için: <code>license key</code> ayarlandığını ve lisans sunucusuna (veya ek süre penceresine) ulaşılabildiğini doğrulayın.",
       "check_logs": "Kabuk erişiminiz varsa API günlükleri aynı nedeni tüm ayrıntılarıyla içerir: <code>[EE] license inactive …</code>",
       "failed_to_load": "Yüklenemedi"
     },

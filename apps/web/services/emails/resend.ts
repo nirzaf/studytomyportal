@@ -24,11 +24,10 @@ function resend(): Resend | null {
 
 /** Whether transactional email is configured. */
 export function isEmailEnabled(): boolean {
-  return Boolean(process.env.RESEND_API_KEY)
+  return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL)
 }
 
-const DEFAULT_FROM =
-  process.env.RESEND_FROM_EMAIL || 'Studytomy <hello@emails.learnhouse.app>'
+const DEFAULT_FROM = process.env.RESEND_FROM_EMAIL
 
 export interface SendResult {
   ok: boolean
@@ -44,7 +43,7 @@ export async function send(
   to: string | string[],
   subject: string,
   props: LearnHouseEmailProps,
-  from: string = DEFAULT_FROM,
+  from: string | undefined = DEFAULT_FROM,
 ): Promise<SendResult> {
   // SaaS-only: transactional email never sends on OSS/self-hosted, even if a
   // RESEND_API_KEY happens to be present.
@@ -56,9 +55,13 @@ export async function send(
     console.log(`[email] skipped (RESEND_API_KEY unset): "${subject}" -> ${Array.isArray(to) ? to.join(',') : to}`)
     return { ok: false, skipped: true }
   }
+  if (!from?.trim()) {
+    console.warn('[email] skipped (RESEND_FROM_EMAIL unset)')
+    return { ok: false, skipped: true }
+  }
   try {
     const { data, error } = await client.emails.send({
-      from,
+      from: from.trim(),
       to: Array.isArray(to) ? to : [to],
       subject,
       react: React.createElement(LearnHouseEmail, props),

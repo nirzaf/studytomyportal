@@ -1,5 +1,5 @@
 """
-Write an IR course as a LearnHouse course package.
+Write an IR course as a Studytomy Portal course package.
 
 The layout is the one ``transfer/export_service.py`` produces and
 ``transfer/import_service.py`` reads, plus an ``assignment.json`` next to
@@ -898,7 +898,7 @@ class PackageWriter:
             for candidate in sorted(set(accepted.values())):
                 if _sniff_ok(asset.path, candidate):
                     return asset.path, candidate
-            # A playable file in a variant LearnHouse does not accept as is
+            # A playable file in a variant Studytomy Portal does not accept as is
             # (an MP4 with an "iso2"/"avc1" brand, MPEG audio without ID3...)
             if kind in (ir.MediaKind.VIDEO, ir.MediaKind.AUDIO) and self.options.transcode:
                 return self._transcode(kind, asset)

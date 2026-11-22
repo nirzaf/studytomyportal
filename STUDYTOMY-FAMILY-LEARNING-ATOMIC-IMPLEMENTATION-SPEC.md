@@ -13,7 +13,7 @@ Source: business requirements draft D2 (`BR-*`, `AC-*`, `D-*` identifiers preser
 
 ## 1. Boundaries still in force
 
-- No new framework, backend, database, broker or microservice; no TanStack Start, Workers/D1, Supabase or ORM/identity-provider replacement. Reuse the existing Next.js/React and FastAPI/PostgreSQL stack, LearnHouse auth and storage.
+- No new framework, backend, database, broker or microservice; no TanStack Start, Workers/D1, Supabase or ORM/identity-provider replacement. Reuse the existing Next.js/React and FastAPI/PostgreSQL stack, Studytomy Portal auth and storage.
 - `studytomy-react` (`studytomy.com`) stays separate: no shared session, database, API coupling, credential migration or Supabase dependency.
 - No automatic Enterprise enablement: no licensing-safeguard changes, no private code, no treating public stubs as features.
 - Payment never creates guardianship; a staff profile draft is not an active learner account; eligibility for learning, participation and purchasing are separate decisions.

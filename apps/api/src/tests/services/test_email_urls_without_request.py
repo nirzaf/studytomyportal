@@ -14,7 +14,7 @@ from src.services.email import utils as email_utils
 
 
 def _config(
-    tenancy="multi", domain="learnhouse.io", frontend_domain="", ssl=True
+    tenancy="multi", domain="example.com", frontend_domain="", ssl=True
 ):
     return SimpleNamespace(
         hosting_config=SimpleNamespace(
@@ -86,7 +86,7 @@ class TestOrgSignupBaseUrlWithoutRequest:
         monkeypatch.setattr(email_utils, "get_learnhouse_config", _config)
 
         url = await email_utils.get_org_signup_base_url("acme")
-        assert url == "https://acme.learnhouse.io"
+        assert url == "https://acme.example.com"
 
     async def test_single_tenant_uses_configured_url(self, monkeypatch, clean_env):
         monkeypatch.setenv("LEARNHOUSE_PLATFORM_URL", "https://school.example.com")
@@ -173,7 +173,7 @@ class TestMediaBaseUrlWithoutRequest:
 
     def test_saas_convention_is_derived_from_the_domain(self, monkeypatch, clean_env):
         monkeypatch.setattr(email_utils, "get_learnhouse_config", _config)
-        assert email_utils.get_media_base_url(None) == "https://api.learnhouse.io"
+        assert email_utils.get_media_base_url(None) == "https://api.example.com"
 
     def test_no_request_and_nothing_configured_returns_empty(
         self, monkeypatch, clean_env
@@ -191,14 +191,14 @@ class TestOrgLogoUrlWithoutRequest:
         monkeypatch.setattr(email_utils, "get_learnhouse_config", _config)
 
         assert email_utils.get_org_logo_url(self.ORG, None) == (
-            "https://api.learnhouse.io/content/orgs/org_abc/logos/logo.png"
+            "https://api.example.com/content/orgs/org_abc/logos/logo.png"
         )
 
     def test_unresolvable_media_host_falls_back_to_the_default_mark(
         self, monkeypatch, clean_env
     ):
         """A relative src renders broken in every mail client, so returning
-        None (and letting the caller use the LearnHouse wordmark) is the only
+        None (and letting the caller use the Studytomy Portal wordmark) is the only
         acceptable outcome."""
         monkeypatch.setattr(
             email_utils, "get_learnhouse_config", lambda: _config(domain="localhost")

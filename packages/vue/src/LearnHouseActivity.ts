@@ -21,11 +21,11 @@ let elementModule: Promise<unknown> | null = null
 const loadElement = () => (elementModule ??= import('@learnhouse/react/element'))
 
 /**
- * Renders a LearnHouse activity (page, video, PDF, markdown, embed) with the
- * same blocks and styles as LearnHouse itself.
+ * Renders a Studytomy Portal activity (page, video, PDF, markdown, embed) with the
+ * same blocks and styles as Studytomy Portal itself.
  *
  * Wraps @learnhouse/react's <learnhouse-activity> element: the blocks are the
- * React components of the LearnHouse web app, mounted in their own React root.
+ * React components of the Studytomy Portal web app, mounted in their own React root.
  */
 export const LearnHouseActivity = defineComponent({
   name: 'LearnHouseActivity',
@@ -40,18 +40,18 @@ export const LearnHouseActivity = defineComponent({
     activity: Object as PropType<LearnHouseActivityData | Activity>,
     /** A raw document to render, no network involved. */
     content: [Object, String] as PropType<ActivityDocument | string>,
-    /** Base URL of the LearnHouse instance. Defaults to the provider's. */
+    /** Base URL of the Studytomy Portal instance. Defaults to the provider's. */
     baseUrl: String,
     /** A user access token. Never pass an `lh_` API token to the browser. */
     token: String,
     /** Org uuid for media URLs when rendering `content` without fetching. */
     orgId: String,
-    /** Address of the LearnHouse site (not the API), used to link back to the activity. */
+    /** Address of the Studytomy Portal site (not the API), used to link back to the activity. */
     siteUrl: String,
     theme: Object as PropType<LearnHouseTheme>,
     /** UI language of the blocks (`en`, `fr`, `ar`…). Defaults to the provider's, then `en`. */
     locale: String,
-    /** Override UI strings, keyed like LearnHouse's locale files. */
+    /** Override UI strings, keyed like Studytomy Portal's locale files. */
     messages: Object as PropType<Record<string, any>>,
     dir: String as PropType<'ltr' | 'rtl' | 'auto'>,
     /** Node names to drop from the output. */

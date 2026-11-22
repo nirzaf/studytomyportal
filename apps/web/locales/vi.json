@@ -236,7 +236,7 @@
     "billing": "Thanh toán",
     "create_organization": "Tạo tổ chức",
     "start_your_own_organization": "Tạo tổ chức của riêng bạn",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Không thể xóa tổ chức này. Vui lòng thử lại.",
     "org_actions": "Thao tác tổ chức",
     "manage_upgrade": "Quản lý / Nâng cấp",
@@ -3040,7 +3040,7 @@
           "description": "Cấu hình cài đặt cá nhân, mật khẩu, email"
         }
       },
-      "learnhouse_university": "Đại học Studytomy",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Chào mừng trở lại",
       "plan": "gói",
       "create_course": "Tạo khóa học",
@@ -7138,7 +7138,7 @@
           "keywords": "lộ trình, lộ trình học tập, chương trình, giáo trình, trình tự, chứng chỉ, paths, learning paths, tracks, programs, curriculum, sequence, certificate"
         },
         "live_sessions": {
-          "keywords": "buổi học trực tiếp lớp học webinar cuộc họp video điểm danh bản ghi bình chọn learnhouse meet zoom meet teams",
+          "keywords": "buổi học trực tiếp lớp học webinar cuộc họp video điểm danh bản ghi bình chọn meet zoom meet teams",
           "description": "Lên lịch buổi học trực tiếp, theo dõi điểm danh và quản lý bản ghi"
         }
       }
@@ -10650,8 +10650,8 @@
       "inactive_desc": "Kiểm tra giấy phép EE thất bại (<code>{{reason}}</code>). Mọi điểm cuối <code>/ee/*</code> đều trả về 503, nên trang này không thể tải dữ liệu.",
       "what_to_check": "Cần kiểm tra gì",
       "check_diagnostics": "Mở <code>{{path}}</code>. Nó vẫn phản hồi ngay cả khi giấy phép không hoạt động, và trường <code>hint</code> của nó nêu cách khắc phục.",
-      "check_saas": "Với bản triển khai SaaS: hãy xác nhận <code>LEARNHOUSE_SAAS=true</code> đã được đặt trong môi trường API. SaaS bỏ qua việc kiểm tra giấy phép.",
-      "check_self_hosted": "Với EE tự lưu trữ: hãy xác nhận <code>LEARNHOUSE_LICENSE_KEY</code> đã được đặt và máy chủ giấy phép (hoặc thời gian ân hạn) có thể truy cập được.",
+      "check_saas": "Với bản triển khai SaaS: hãy xác nhận <code>SaaS mode</code> đã được đặt trong môi trường API. SaaS bỏ qua việc kiểm tra giấy phép.",
+      "check_self_hosted": "Với EE tự lưu trữ: hãy xác nhận <code>license key</code> đã được đặt và máy chủ giấy phép (hoặc thời gian ân hạn) có thể truy cập được.",
       "check_logs": "Nếu bạn có quyền truy cập shell, nhật ký API chứa cùng lý do với đầy đủ chi tiết: <code>[EE] license inactive …</code>",
       "failed_to_load": "Không thể tải"
     },

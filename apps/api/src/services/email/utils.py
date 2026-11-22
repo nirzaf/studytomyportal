@@ -129,7 +129,7 @@ def _is_allowed_base_url(url: str) -> bool:
         if url_stripped == allowed.rstrip("/"):
             return True
 
-    # The platform domain and any org subdomain of it (slug.learnhouse.io).
+    # The configured platform domain and any org subdomain of it.
     if req_host in configured_hosts:
         return True
     if base_domain and req_host.endswith(f".{base_domain}"):
@@ -145,7 +145,7 @@ def _is_allowed_base_url(url: str) -> bool:
     if _is_verified_custom_domain(parsed.hostname.lower()):
         return True
 
-    # Check against LEARNHOUSE_PLATFORM_URL (the main platform, e.g. https://www.learnhouse.app)
+    # Check against the explicitly configured LEARNHOUSE_PLATFORM_URL.
     platform_url = os.environ.get("LEARNHOUSE_PLATFORM_URL", "").rstrip("/")
     if platform_url:
         platform_host = (
@@ -345,7 +345,7 @@ def get_media_base_url(request: Optional[Request] = None) -> str:
 
     1. An explicit backend override (``LEARNHOUSE_MEDIA_URL`` /
        ``LEARNHOUSE_BACKEND_URL``). Set this if the media host isn't ``api.``.
-    2. The SaaS convention ``{scheme}://api.{domain}`` (e.g. api.learnhouse.io)
+    2. The SaaS convention ``{scheme}://api.{domain}`` (e.g. api.example.com)
        when a real domain is configured.
     3. The request's own host as a last resort (correct for single-tenant /
        self-hosted where API and content share the request origin).
@@ -376,7 +376,7 @@ def get_org_logo_url(org, request: Optional[Request] = None) -> Optional[str]:
 
     Mirrors the frontend's ``getOrgLogoMediaDirectory`` path shape
     (``content/orgs/{uuid}/logos/{file}``). Returns None so callers fall back
-    to the default LearnHouse mark.
+    to the default Studytomy Portal mark.
     """
     logo_image = getattr(org, "logo_image", None)
     org_uuid = getattr(org, "org_uuid", None)
@@ -386,7 +386,7 @@ def get_org_logo_url(org, request: Optional[Request] = None) -> Optional[str]:
     if not base:
         # No absolute media host resolvable (no request, nothing configured).
         # A relative src would render broken in every mail client, so fall
-        # back to the default LearnHouse mark instead.
+        # back to the default Studytomy Portal mark instead.
         return None
     return f"{base}/content/orgs/{org_uuid}/logos/{logo_image}"
 

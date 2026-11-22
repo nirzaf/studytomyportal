@@ -1,6 +1,6 @@
 """Individual learner identity and human eligibility decision records.
 
-These records link an existing LearnHouse user to a specific organization. They
+These records link an existing Studytomy Portal user to a specific organization. They
 do not create credentials, infer guardian authority, or grant course access.
 Eligibility decisions are append-only and reference the policy versions used
 by the assigned reviewer.

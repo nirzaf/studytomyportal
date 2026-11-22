@@ -198,7 +198,7 @@ Once a validated collection of experiments exists, a dedicated **Virtual Labs** 
 | **P5** | Integrate server-side Socratic AI guidance | Medium |
 | **P6** | Expand into a native, searchable Virtual Labs module | Medium–High |
 
-**Recommendation**: Implement **P1** and **P2** as the first proof of concept to deliver a useful student experience while preserving the Studytomy architecture and minimizing changes to the LearnHouse-based codebase.
+**Recommendation**: Implement **P1** and **P2** as the first proof of concept to deliver a useful student experience while preserving the Studytomy architecture and minimizing changes to the Studytomy Portal-based codebase.
 
 ### Licensing & scope note
 

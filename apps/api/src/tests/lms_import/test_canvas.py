@@ -728,7 +728,7 @@ def test_assignments(course):
     assert ext.allow_file and ext.allow_text and ext.instructions.html == "Plain &lt;instructions&gt;"
     plain = week2["Plain CC assignment"]
     assert isinstance(plain, ir.AssignmentItem) and plain.allow_text and not plain.allow_file
-    # Submission types LearnHouse lacks (URL, media recording, on paper) become file
+    # Submission types Studytomy Portal lacks (URL, media recording, on paper) become file
     # submissions: imported items, so neither a warning nor a skipped entry
     assert not [t for t, k, _r in course.skipped if k == "assignment"]
     assert not any("assignment(s)" in w for w in course.warnings)

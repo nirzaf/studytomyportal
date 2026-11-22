@@ -28,7 +28,7 @@ const MAX_PENDING = 50
  * The ONE analytics hook. A single `track()` fans an event out to:
  *   1. PostHog, for every event except BACKEND_ONLY_EVENTS (captures
  *      anonymous users too, which unlocks logged-out funnels), and
- *   2. the LearnHouse backend, for the events in BACKEND_EVENTS only; these
+ *   2. the Studytomy Portal backend, for the events in BACKEND_EVENTS only; these
  *      feed the org analytics dashboards, for anonymous visitors too.
  *
  * Standard props (org/plan/surface/locale/role/…) are injected into the

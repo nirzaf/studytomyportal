@@ -3,7 +3,7 @@
     cd apps/api && uv run python scripts/preview_emails.py /tmp/email-previews
 
 Each template is rendered twice where it can be white-labeled: once as a
-LearnHouse platform email and once branded to a sample organization (logo
+Studytomy Portal platform email and once branded to a sample organization (logo
 wordmark, brand color, "Powered by" line). Open the folder's index.html to
 click through them.
 """
@@ -43,7 +43,7 @@ ORG = OrganizationRead(
     update_date="2026-01-01",
 )
 BRAND = dict(brand_color="#2563eb", powered_by=True)
-BASE = "https://riverbend.learnhouse.io"
+BASE = "https://riverbend.example.com"
 
 
 def _renders() -> dict[str, callable]:

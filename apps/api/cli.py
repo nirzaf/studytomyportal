@@ -53,7 +53,7 @@ def migrate(
     status: Annotated[bool, typer.Option("--status", help="Only show the database and code revisions")] = False,
     strict: Annotated[bool, typer.Option("--strict", help="Fail if the models need schema the migrations didn't provide")] = False,
 ):
-    """Bring the database schema to this version of LearnHouse.
+    """Bring the database schema to this version of Studytomy Portal.
 
     The API does this on startup unless LEARNHOUSE_AUTO_MIGRATE=false; run it
     yourself to check or migrate a local database.
@@ -123,7 +123,7 @@ async def _purge_guest_support_challenges(org_slug: str, limit: int, execute: bo
 def install(
     short: Annotated[bool, typer.Option(help="Install with predefined values")] = False
 ):
-    """Install LearnHouse: schema, default elements, organization, and admin user.
+    """Install Studytomy Portal: schema, default elements, organization, and admin user.
 
     Typer entry point; uses asyncio.run because no loop is running yet.
     Programmatic async callers (FastAPI lifespan, etc.) should await

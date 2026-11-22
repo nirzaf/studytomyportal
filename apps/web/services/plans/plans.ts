@@ -58,7 +58,7 @@ export function isFeatureAvailable(featureKey: string, _currentPlan?: PlanLevel)
 }
 
 /**
- * Pro and above are white-labelled: no LearnHouse marks anywhere the org's
+ * Pro and above are white-labelled: no Studytomy Portal marks anywhere the org's
  * learners or staff can see them. EE is white-label by license; OSS never is.
  */
 export function isWhiteLabelPlan(

@@ -3,8 +3,6 @@ import { PencilSimple } from '@phosphor-icons/react/dist/ssr'
 import Sidebar from '../Sidebar/Sidebar'
 import TOC from '../TOC/TOC'
 import PageActions from './PageActions'
-import CtaLink from '../cta/CtaLink'
-import { SIGNUP_URL } from '@/lib/cta'
 
 function Breadcrumb({ crumbs }) {
   if (!crumbs || crumbs.length <= 1) return null
@@ -53,38 +51,6 @@ function Pagination({ prev, next }) {
   )
 }
 
-// The card beside every page, worded for what the reader is doing there.
-const CLOUD_CARDS = [
-  {
-    prefix: ['/self-hosting', '/cli'],
-    title: 'Skip the servers',
-    text: 'Updates, backups, SSL and email are handled for you on LearnHouse Cloud.',
-  },
-  {
-    prefix: ['/developers', '/reference', '/guides'],
-    title: 'Build on a real academy',
-    text: 'Create a free Cloud organization, publish a course, and render it with the SDK or components.',
-  },
-  {
-    prefix: ['/platform', '/enterprise'],
-    title: 'Try it in your own academy',
-    text: 'Everything on this page works on LearnHouse Cloud, and the Free plan gets you started.',
-  },
-]
-const DEFAULT_CARD = { title: 'Start your academy', text: 'Create courses and invite learners today. Free to start.' }
-
-function CloudAd({ route }) {
-  const card = CLOUD_CARDS.find((c) => c.prefix.some((p) => route.startsWith(p))) ?? DEFAULT_CARD
-  return (
-    <CtaLink href={SIGNUP_URL} placement="toc_card" target="_blank" rel="noopener" className="lh-cloud-card">
-      <span className="lh-cloud-card-label">LearnHouse Cloud</span>
-      <span className="lh-cloud-card-title">{card.title}</span>
-      <span className="lh-cloud-card-text">{card.text}</span>
-      <span className="lh-cloud-card-link">Start free →</span>
-    </CtaLink>
-  )
-}
-
 const formatDate = (value) =>
   new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
@@ -113,7 +79,7 @@ export default function Wrapper({ route, tree, crumbs, prev, next, toc, file, la
               <PageActions route={route} />
               {file && (
                 <a
-                  href={`https://github.com/learnhouse/learnhouse/edit/dev/docs/content/${file}`}
+                  href={`https://github.com/nirzaf/studytomyportal/edit/main/docs/content/${file}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="lh-edit-github"
@@ -134,7 +100,6 @@ export default function Wrapper({ route, tree, crumbs, prev, next, toc, file, la
         </article>
         <aside className="lh-toc" data-pagefind-ignore="all">
           {toc?.length > 0 && <TOC headings={toc} />}
-          <CloudAd route={route} />
         </aside>
       </div>
     </div>

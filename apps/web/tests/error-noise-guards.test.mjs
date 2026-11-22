@@ -8,7 +8,7 @@ import { detailMessage, fetchWithRetry } from "../services/utils/ts/requests.ts"
 describe("isClientNoise", () => {
   test("drops dropped connections in every browser's wording", () => {
     expect(isClientNoise("Failed to fetch")).toBe(true);
-    expect(isClientNoise("TypeError: Failed to fetch (api.learnhouse.io)")).toBe(true);
+    expect(isClientNoise("TypeError: Failed to fetch (api.example.com)")).toBe(true);
     expect(isClientNoise("Load failed")).toBe(true);
     expect(isClientNoise("NetworkError when attempting to fetch resource.")).toBe(true);
     expect(isClientNoise("NetworkError: A network error occurred.")).toBe(true);

@@ -6,7 +6,7 @@ Two hardening fixes in ``src/services/email/utils.py``:
   a magic-login / email-verification link. The shipped ``allowed_regexp``
   default used to be a catch-all that ``re.fullmatch`` accepted for any
   ``https://host``, so ``Origin: https://evil.com`` produced a genuine
-  LearnHouse email containing an attacker-hosted login link.
+  Studytomy Portal email containing an attacker-hosted login link.
 * ``starttls()`` with no ``context`` builds an *unverified* TLS session, so an
   on-path relay impersonator captures the SMTP credentials and every emailed
   token.
@@ -48,8 +48,8 @@ def _config(**overrides):
         allowed_origins=overrides.pop("allowed_origins", []),
         allowed_regexp=overrides.pop("allowed_regexp", ""),
         tenancy=overrides.pop("tenancy", "multi"),
-        domain=overrides.pop("domain", "learnhouse.io"),
-        frontend_domain=overrides.pop("frontend_domain", "app.learnhouse.io"),
+        domain=overrides.pop("domain", "example.com"),
+        frontend_domain=overrides.pop("frontend_domain", "app.example.com"),
         ssl=overrides.pop("ssl", True),
     )
     general = SimpleNamespace(
@@ -94,16 +94,16 @@ class TestOriginAllowlist:
         with _patch_config(allowed_regexp=CATCH_ALL_REGEXP), _no_platform_url():
             assert not _is_allowed_base_url("https://evil.com")
             assert not _is_allowed_base_url("http://evil.com:8443")
-            assert not _is_allowed_base_url("https://learnhouse.io.evil.com")
-            assert not _is_allowed_base_url("https://evil.com/learnhouse.io")
+            assert not _is_allowed_base_url("https://example.com.evil.com")
+            assert not _is_allowed_base_url("https://evil.com/example.com")
 
     def test_platform_domain_and_org_subdomains_are_accepted(self):
         with _patch_config(allowed_regexp=CATCH_ALL_REGEXP), _no_platform_url():
-            assert _is_allowed_base_url("https://learnhouse.io")
-            assert _is_allowed_base_url("https://www.learnhouse.io")
-            assert _is_allowed_base_url("https://acme.learnhouse.io")
-            assert _is_allowed_base_url("https://app.learnhouse.io")
-            assert _is_allowed_base_url("https://learnhouse.io/")
+            assert _is_allowed_base_url("https://example.com")
+            assert _is_allowed_base_url("https://www.example.com")
+            assert _is_allowed_base_url("https://acme.example.com")
+            assert _is_allowed_base_url("https://app.example.com")
+            assert _is_allowed_base_url("https://example.com/")
 
     def test_explicit_allowed_origin_and_scoped_regexp_still_work(self):
         with _patch_config(
@@ -308,7 +308,7 @@ class TestMagicLinkUrlInEmailBody:
         assert sent["to"] == link_user.email
         assert "evil.com" not in sent["body"]
         # Falls back to the configured canonical frontend, not the attacker host.
-        assert "https://app.learnhouse.io/auth/magic?token=tok" in sent["body"]
+        assert "https://app.example.com/auth/magic?token=tok" in sent["body"]
 
     async def test_attacker_referer_does_not_reach_the_emailed_link(
         self, magic_client, link_user
@@ -318,7 +318,7 @@ class TestMagicLinkUrlInEmailBody:
         )
         assert response.status_code == 200
         assert "evil.com" not in sent["body"]
-        assert "https://app.learnhouse.io/auth/magic?token=tok" in sent["body"]
+        assert "https://app.example.com/auth/magic?token=tok" in sent["body"]
 
     async def test_allowlisted_origin_does_not_pick_the_link_host(
         self, magic_client, link_user
@@ -326,11 +326,11 @@ class TestMagicLinkUrlInEmailBody:
         # Even an allowlisted origin (org subdomains, verified custom domains)
         # never chooses where a sign-in link points: the platform host does.
         response, sent = await self._request_link(
-            magic_client, link_user.email, {"origin": "https://acme.learnhouse.io"}
+            magic_client, link_user.email, {"origin": "https://acme.example.com"}
         )
         assert response.status_code == 200
-        assert "acme.learnhouse.io" not in sent["body"]
-        assert "https://app.learnhouse.io/auth/magic?token=tok" in sent["body"]
+        assert "acme.example.com" not in sent["body"]
+        assert "https://app.example.com/auth/magic?token=tok" in sent["body"]
 
 
 class TestSmtpTls:

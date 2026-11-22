@@ -1,13 +1,13 @@
 ---
 title: Activity Types Reference
-description: Look up the content JSON each LearnHouse activity type expects, from Tiptap dynamic pages and media uploads to assignments, custom and SCORM.
+description: Look up the content JSON each Studytomy Portal activity type expects, from Tiptap dynamic pages and media uploads to assignments, custom and SCORM.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Activity Types Reference
 
-Every activity in LearnHouse is described by two enums and one JSON `content` blob:
+Every activity in Studytomy Portal is described by two enums and one JSON `content` blob:
 
 - `activity_type`: one of `TYPE_DYNAMIC`, `TYPE_VIDEO`, `TYPE_DOCUMENT`, `TYPE_ASSIGNMENT`, `TYPE_CUSTOM`, `TYPE_SCORM`, `TYPE_LIVE_SESSION`.
 - `activity_sub_type`: a more specific variant within the type (e.g. `SUBTYPE_VIDEO_YOUTUBE` vs `SUBTYPE_VIDEO_HOSTED`).
@@ -94,7 +94,7 @@ blockEmbed, blockH5P, blockQuiz, blockCode, blockMagic, blockUser, blockWebPrevi
 flipcard, flipcardGrid, scenarios, button, badge
 ```
 
-The `block*` types and the other non-standard names correspond to LearnHouse's custom node extensions. `callout` (with `attrs.type` set to `info`, `warning`, `tip`, `success` or `error`) is the current callout node; `calloutInfo` and `calloutWarning` are older forms that still render. `blockCode` is the Code Playground block. Standard TipTap block types (`paragraph`, `heading`, etc.) behave as in any TipTap editor. See [Blocks](/platform/editor/blocks) for what each block does.
+The `block*` types and the other non-standard names correspond to Studytomy Portal's custom node extensions. `callout` (with `attrs.type` set to `info`, `warning`, `tip`, `success` or `error`) is the current callout node; `calloutInfo` and `calloutWarning` are older forms that still render. `blockCode` is the Code Playground block. Standard TipTap block types (`paragraph`, `heading`, etc.) behave as in any TipTap editor. See [Blocks](/platform/editor/blocks) for what each block does.
 
 #### Inline marks
 
@@ -234,7 +234,7 @@ Renders an arbitrary URL inside an iframe (Google Docs, Notion, Figma, etc.):
 }
 ```
 
-The embedded site must allow iframe embedding (`X-Frame-Options` / `Content-Security-Policy`). LearnHouse cannot work around a destination's frame-blocking headers.
+The embedded site must allow iframe embedding (`X-Frame-Options` / `Content-Security-Policy`). Studytomy Portal cannot work around a destination's frame-blocking headers.
 
 ### Library resource (`SUBTYPE_DYNAMIC_RESOURCE`)
 
@@ -284,7 +284,7 @@ curl -X POST "http://localhost:1338/api/v1/activities/video" \
 }
 ```
 
-`filename` is the safe-on-disk name LearnHouse generated; the player resolves it through `/api/v1/content/...`. The `details` form field is a JSON-encoded string with player options:
+`filename` is the safe-on-disk name Studytomy Portal generated; the player resolves it through `/api/v1/content/...`. The `details` form field is a JSON-encoded string with player options:
 
 | `details` key | Type | Notes |
 | --- | --- | --- |
@@ -461,7 +461,7 @@ A free-form activity. `content` is any JSON object you want. The platform stores
 ```
 
 <Callout type="warning">
-**Stock LearnHouse has no built-in renderer for `TYPE_CUSTOM`.** The activity will appear as an empty container in the learner viewer until you ship a custom frontend component for it. Treat `TYPE_CUSTOM` as a hook for your own integration code. If you don't already have that integration, prefer `SUBTYPE_DYNAMIC_PAGE` (TipTap) or `SUBTYPE_DYNAMIC_EMBED` (iframe) instead.
+**Stock Studytomy Portal has no built-in renderer for `TYPE_CUSTOM`.** The activity will appear as an empty container in the learner viewer until you ship a custom frontend component for it. Treat `TYPE_CUSTOM` as a hook for your own integration code. If you don't already have that integration, prefer `SUBTYPE_DYNAMIC_PAGE` (TipTap) or `SUBTYPE_DYNAMIC_EMBED` (iframe) instead.
 </Callout>
 
 ## SCORM

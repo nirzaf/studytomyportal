@@ -18,7 +18,7 @@ function lastCommitDate(route) {
 
 /** @type {import('next-sitemap').IConfig} */
 module.exports = {
-  siteUrl: 'https://docs.learnhouse.app',
+  siteUrl: process.env.NEXT_PUBLIC_DOCS_URL,
   generateRobotsTxt: true,
   sitemapSize: 5000,
   exclude: ['/404', '/500', '/md', '/md/*', '/og', '/og/*', '/reference/llms.txt', '/reference/operations.json', '/reference/openapi.json', '/reference/llms/*'],

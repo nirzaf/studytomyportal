@@ -236,7 +236,7 @@
     "billing": "請求",
     "create_organization": "組織を作成",
     "start_your_own_organization": "自分の組織を作成",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "この組織を削除できませんでした。もう一度お試しください。",
     "org_actions": "組織の操作",
     "manage_upgrade": "管理 / アップグレード",
@@ -3040,7 +3040,7 @@
           "description": "個人設定、パスワード、メールを構成する"
         }
       },
-      "learnhouse_university": "Studytomy大学",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "おかえりなさい",
       "plan": "プラン",
       "create_course": "コースを作成",
@@ -7138,7 +7138,7 @@
           "keywords": "学習パス, パス, トラック, プログラム, カリキュラム, 順序, 修了証, paths, learning paths, tracks, programs, curriculum, sequence, certificate"
         },
         "live_sessions": {
-          "keywords": "ライブセッション 授業 ウェビナー 会議 ビデオ 出席 録画 投票 learnhouse meet zoom meet teams",
+          "keywords": "ライブセッション 授業 ウェビナー 会議 ビデオ 出席 録画 投票 meet zoom meet teams",
           "description": "ライブセッションのスケジュール、出席の確認、録画の管理"
         }
       }
@@ -10650,8 +10650,8 @@
       "inactive_desc": "EEライセンスのチェックに失敗しました（<code>{{reason}}</code>）。すべての <code>/ee/*</code> エンドポイントが503を返しているため、このページはデータを読み込めません。",
       "what_to_check": "確認すること",
       "check_diagnostics": "<code>{{path}}</code> を開いてください。ライセンスが無効な状態でも応答し、<code>hint</code> フィールドに対処方法が示されます。",
-      "check_saas": "SaaSデプロイの場合：APIの環境に <code>LEARNHOUSE_SAAS=true</code> が設定されているか確認してください。SaaSではライセンスチェックが省略されます。",
-      "check_self_hosted": "セルフホストのEEの場合：<code>LEARNHOUSE_LICENSE_KEY</code> が設定されていて、ライセンスサーバー（または猶予期間）に接続できることを確認してください。",
+      "check_saas": "SaaSデプロイの場合：APIの環境に <code>SaaS mode</code> が設定されているか確認してください。SaaSではライセンスチェックが省略されます。",
+      "check_self_hosted": "セルフホストのEEの場合：<code>license key</code> が設定されていて、ライセンスサーバー（または猶予期間）に接続できることを確認してください。",
       "check_logs": "シェルにアクセスできる場合、APIログに同じ理由が詳細付きで記録されています：<code>[EE] license inactive …</code>",
       "failed_to_load": "読み込めませんでした"
     },

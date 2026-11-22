@@ -24,8 +24,8 @@ def _config(**overrides):
         allowed_regexp=overrides.pop("allowed_regexp", ""),
         self_hosted=overrides.pop("self_hosted", False),
         tenancy=overrides.pop("tenancy", "multi"),
-        domain=overrides.pop("domain", "learnhouse.app"),
-        frontend_domain=overrides.pop("frontend_domain", "app.learnhouse.app"),
+        domain=overrides.pop("domain", "example.com"),
+        frontend_domain=overrides.pop("frontend_domain", "app.example.com"),
         ssl=overrides.pop("ssl", True),
     )
     general = SimpleNamespace(
@@ -41,7 +41,7 @@ def _config(**overrides):
         smtp_password=overrides.pop("smtp_password", "pass"),
         smtp_use_tls=overrides.pop("smtp_use_tls", True),
         system_email_sender_name=overrides.pop(
-            "system_email_sender_name", "LearnHouse"
+            "system_email_sender_name", "Studytomy Portal"
         ),
     )
     return SimpleNamespace(
@@ -121,9 +121,9 @@ class TestEmailUtilsService:
             "src.services.email.utils.get_learnhouse_config",
             return_value=_config(tenancy="single"),
         ):
-            assert _is_allowed_base_url("https://app.learnhouse.app")
-            assert _is_allowed_base_url("https://learnhouse.app")
-            assert _is_allowed_base_url("https://www.learnhouse.app")
+            assert _is_allowed_base_url("https://app.example.com")
+            assert _is_allowed_base_url("https://example.com")
+            assert _is_allowed_base_url("https://www.example.com")
             assert not _is_allowed_base_url("https://learn.example.org")
             assert not _is_allowed_base_url("javascript:alert(1)")
             assert not _is_allowed_base_url("https://")
@@ -160,17 +160,17 @@ class TestEmailUtilsService:
             return_value=_config(
                 tenancy="single",
                 frontend_domain="   ",
-                domain="learnhouse.app",
+                domain="example.com",
             ),
         ):
-            assert _is_allowed_base_url("https://learnhouse.app")
+            assert _is_allowed_base_url("https://example.com")
             # The blank frontend_domain contributed no allowed host.
             assert not _is_allowed_base_url("https://other.example.org")
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "ssl,expected",
-        [(True, "https://acme.learnhouse.app"), (False, "http://acme.learnhouse.app")],
+        [(True, "https://acme.example.com"), (False, "http://acme.example.com")],
     )
     async def test_get_org_signup_base_url_builds_org_subdomain(self, ssl, expected):
         request = _request({"origin": "https://app.test"})
@@ -178,7 +178,7 @@ class TestEmailUtilsService:
         with patch(
             "src.services.email.utils.get_learnhouse_config",
             return_value=_config(
-                domain="learnhouse.app",
+                domain="example.com",
                 ssl=ssl,
             ),
         ):
@@ -238,18 +238,18 @@ class TestEmailUtilsService:
 
     def test_get_base_url_from_request_uses_frontend_then_request_url(self):
         frontend_request = _request({"origin": "https://blocked.test"})
-        url_request = _request({}, scheme="http", server=("api.learnhouse.test", 8080))
+        url_request = _request({}, scheme="http", server=("api.example.test", 8080))
 
         with patch(
             "src.services.email.utils._is_allowed_base_url",
             return_value=False,
         ), patch(
             "src.services.email.utils.get_learnhouse_config",
-            return_value=_config(frontend_domain="frontend.learnhouse.app"),
+            return_value=_config(frontend_domain="frontend.example.com"),
         ):
             assert (
                 get_base_url_from_request(frontend_request)
-                == "https://frontend.learnhouse.app"
+                == "https://frontend.example.com"
             )
 
         with patch(
@@ -259,7 +259,7 @@ class TestEmailUtilsService:
             "src.services.email.utils.get_learnhouse_config",
             return_value=_config(frontend_domain=""),
         ):
-            assert get_base_url_from_request(url_request) == "http://api.learnhouse.test:8080"
+            assert get_base_url_from_request(url_request) == "http://api.example.test:8080"
 
     def test_get_base_url_from_request_warns_on_untrusted_referer(self):
         request = _request({"referer": "https://blocked.test/path"})
@@ -269,13 +269,13 @@ class TestEmailUtilsService:
             return_value=False,
         ), patch(
             "src.services.email.utils.get_learnhouse_config",
-            return_value=_config(frontend_domain="frontend.learnhouse.app"),
+            return_value=_config(frontend_domain="frontend.example.com"),
         ), patch(
             "src.services.email.utils.logger.warning"
         ) as mock_warning:
             assert (
                 get_base_url_from_request(request)
-                == "https://frontend.learnhouse.app"
+                == "https://frontend.example.com"
             )
 
         mock_warning.assert_called_once_with(
@@ -300,7 +300,7 @@ class TestEmailUtilsService:
         assert result == {"id": "msg-1"}
         assert send_email.__module__ == "src.services.email.utils"
         assert mock_resend_send.call_args.args[0] == {
-            "from": "LearnHouse <system@test.com>",
+            "from": "Studytomy Portal <system@test.com>",
             "to": ["to@test.com"],
             "subject": "Hello",
             "html": "<p>Body</p>",
@@ -312,7 +312,7 @@ class TestEmailUtilsService:
             return_value=_config(
                 email_provider="smtp",
                 system_email_address="system@test.com",
-                smtp_host="smtp.learnhouse.test",
+                smtp_host="smtp.example.test",
                 smtp_port=2525,
                 smtp_username="smtp-user",
                 smtp_password="smtp-pass",
@@ -325,7 +325,7 @@ class TestEmailUtilsService:
             result = send_email("to@test.com", "Hello", "<p>Body</p>")
 
         assert result == {"id": None, "to": "to@test.com"}
-        mock_smtp.assert_called_once_with("smtp.learnhouse.test", 2525, timeout=15)
+        mock_smtp.assert_called_once_with("smtp.example.test", 2525, timeout=15)
         smtp_client.starttls.assert_called_once()
         smtp_client.login.assert_called_once_with("smtp-user", "smtp-pass")
         smtp_client.sendmail.assert_called_once()
@@ -338,7 +338,7 @@ class TestEmailUtilsService:
             return_value=_config(
                 email_provider="smtp",
                 system_email_address="system@test.com",
-                smtp_host="smtp.learnhouse.test",
+                smtp_host="smtp.example.test",
                 smtp_port=2525,
                 smtp_username="",
                 smtp_password="",
@@ -493,7 +493,7 @@ class TestGetPrimaryVerifiedCustomDomain:
 
         with patch(
             "src.services.email.utils.get_learnhouse_config",
-            return_value=_config(tenancy="multi", ssl=True, domain="learnhouse.app"),
+            return_value=_config(tenancy="multi", ssl=True, domain="example.com"),
         ), patch(
             "src.services.email.utils._get_primary_verified_custom_domain",
             new_callable=AsyncMock,
@@ -521,7 +521,7 @@ class TestGetPrimaryVerifiedCustomDomain:
 
         with patch(
             "src.services.email.utils.get_learnhouse_config",
-            return_value=_config(tenancy="multi", ssl=True, domain="learnhouse.app"),
+            return_value=_config(tenancy="multi", ssl=True, domain="example.com"),
         ), patch(
             "src.services.email.utils._get_primary_verified_custom_domain",
             new_callable=AsyncMock,
@@ -531,7 +531,7 @@ class TestGetPrimaryVerifiedCustomDomain:
                 "myorg", request, db_session=mock_session, org_id=42
             )
 
-        assert url == "https://myorg.learnhouse.app"
+        assert url == "https://myorg.example.com"
 
     @pytest.mark.asyncio
     async def test_get_primary_verified_custom_domain_returns_primary(self):
@@ -609,11 +609,11 @@ class TestOrgLogoUrl:
 
         with patch(
             "src.services.email.utils.get_learnhouse_config",
-            return_value=_config(domain="learnhouse.io", ssl=True),
+            return_value=_config(domain="example.com", ssl=True),
         ), patch.dict(
             "src.services.email.utils.os.environ", {}, clear=True
         ):
-            assert get_media_base_url(_request()) == "https://api.learnhouse.io"
+            assert get_media_base_url(_request()) == "https://api.example.com"
 
     def test_media_base_falls_back_to_request_host_for_localhost(self):
         from src.services.email.utils import get_media_base_url
@@ -633,10 +633,10 @@ class TestOrgLogoUrl:
         org = SimpleNamespace(org_uuid="org_abc", logo_image="uuid_logo.png")
         with patch(
             "src.services.email.utils.get_media_base_url",
-            return_value="https://api.learnhouse.io",
+            return_value="https://api.example.com",
         ):
             url = get_org_logo_url(org, _request())
-        assert url == "https://api.learnhouse.io/content/orgs/org_abc/logos/uuid_logo.png"
+        assert url == "https://api.example.com/content/orgs/org_abc/logos/uuid_logo.png"
 
     def test_org_logo_url_none_when_no_logo(self):
         from src.services.email.utils import get_org_logo_url
@@ -757,7 +757,7 @@ class TestFormatSender:
         from src.services.email.sender import format_sender
 
         assert format_sender(display_name, "system@test.com") == (
-            "LearnHouse <system@test.com>"
+            "Studytomy Portal <system@test.com>"
         )
         assert format_sender(display_name, "system@test.com", "Acme Platform") == (
             "Acme Platform <system@test.com>"
@@ -815,7 +815,7 @@ class TestSendEmailSenderName:
 
         assert (
             mock_resend_send.call_args.args[0]["from"]
-            == "LearnHouse <system@test.com>"
+            == "Studytomy Portal <system@test.com>"
         )
 
     def test_deployment_default_is_configurable(self):
@@ -901,5 +901,5 @@ class TestSendEmailSenderName:
 
         assert (
             mock_resend_send.call_args.args[0]["from"]
-            == "LearnHouse <system@test.com>"
+            == "Studytomy Portal <system@test.com>"
         )

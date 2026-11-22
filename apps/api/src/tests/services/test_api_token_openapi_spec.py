@@ -19,7 +19,7 @@ def _ref(name: str) -> dict:
 
 FULL_SPEC = {
     "openapi": "3.1.0",
-    "info": {"title": "LearnHouse", "version": "1.4.3"},
+    "info": {"title": "Studytomy Portal", "version": "1.4.3"},
     "paths": {
         "/api/v1/courses/{course_uuid}": {
             "get": {

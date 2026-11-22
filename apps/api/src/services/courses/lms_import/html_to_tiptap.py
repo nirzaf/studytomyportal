@@ -1,5 +1,5 @@
 """
-Convert LMS HTML into LearnHouse editor (TipTap) nodes.
+Convert LMS HTML into Studytomy Portal editor (TipTap) nodes.
 
 Only nodes the course editor registers are produced (see
 ``apps/web/components/Objects/Editor/Editor.tsx``): paragraphs, headings,
@@ -788,7 +788,7 @@ _TEX_SPACING = re.compile(r"\\[!,;:> ]")
 def latex_to_text(expr: str) -> str:
     """Readable plain text for a TeX expression ("\\dfrac{6,\\!000}{n}" -> "(6,000)/(n)").
 
-    Task prompts and quiz options are plain strings that LearnHouse shows as
+    Task prompts and quiz options are plain strings that Studytomy Portal shows as
     text, so math is rewritten rather than left as raw TeX.
     """
     out = _TEX_SPACING.sub(lambda m: " " if m.group(0) in ("\\,", "\\;", "\\:", "\\>", "\\ ") else "", expr)

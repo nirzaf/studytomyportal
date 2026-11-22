@@ -1,4 +1,4 @@
-"""package: IR course -> LearnHouse course package on disk."""
+"""package: IR course -> Studytomy Portal course package on disk."""
 
 from __future__ import annotations
 

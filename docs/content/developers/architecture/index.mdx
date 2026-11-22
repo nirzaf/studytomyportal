@@ -1,13 +1,13 @@
 ---
 title: "Architecture Overview"
-description: "See how LearnHouse fits together: the Next.js web app, FastAPI backend, collaboration server, CLI, PostgreSQL, Redis and the single app image."
+description: "See how Studytomy Portal fits together: the Next.js web app, FastAPI backend, collaboration server, CLI, PostgreSQL, Redis and the single app image."
 ---
 
 import ArchitectureDiagram from '../../../components/ArchitectureDiagram/LazyArchitectureDiagram'
 
 # Architecture Overview
 
-LearnHouse is a multi-directory project with multiple applications that work together to deliver the full platform experience. The system follows a clear separation of concerns between the frontend, backend, and supporting services.
+Studytomy Portal is a multi-directory project with multiple applications that work together to deliver the full platform experience. The system follows a clear separation of concerns between the frontend, backend, and supporting services.
 
 ## Project Structure
 
@@ -17,7 +17,7 @@ learnhouse/
 │   ├── web/      # Next.js frontend
 │   ├── api/      # FastAPI backend
 │   ├── collab/   # Hocuspocus collaboration server (boards)
-│   ├── cli/      # LearnHouse CLI
+│   ├── cli/      # Studytomy Portal CLI
 │   └── e2e/      # Playwright end-to-end tests
 ├── packages/
 │   ├── sdk/      # @learnhouse/sdk, typed API client (types generated from the API)
@@ -29,7 +29,7 @@ learnhouse/
 └── Dockerfile    # Single image (ghcr.io/learnhouse/app) used by CLI deployments
 ```
 
-Self-hosted deployments do not have a checked-in `docker-compose.yml`. The LearnHouse CLI (`apps/cli`) generates `docker-compose.yml`, `.env`, and reverse proxy config at setup time from the templates in `apps/cli/src/templates/`.
+The repository does not include a production deployment compose file. The CLI (`apps/cli`) contains setup templates for generating Compose, environment, and reverse-proxy configuration; this is not evidence of a released Studytomy deployment.
 
 ## How It All Fits Together
 
@@ -46,7 +46,7 @@ The API also runs background work inside its own process: AI search indexing, vi
 
 ## Backing Services
 
-LearnHouse relies on two primary backing services:
+Studytomy Portal relies on two primary backing services:
 
 - **PostgreSQL (pgvector)**: Fresh CLI-managed local databases and the isolated local development profile use the digest-pinned PostgreSQL 19 / pgvector 0.8.7 image. Existing installations keep their configured database image and data mount until an explicit major-version migration is completed.
 - **Redis**: Used for caching, session management, rate limiting, background job queues, and collaboration state persistence. Dev mode uses `redis:8.6.1-alpine`; the CLI-generated self-host production stack uses `redis:7.4-alpine`.

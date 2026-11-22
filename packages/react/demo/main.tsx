@@ -5,7 +5,7 @@ import type { BlockOverrideProps, LearnHouseEvent } from '../dist/index.js'
 import '../dist/styles.css'
 import allBlocks from '../tests/fixtures/all-blocks.json'
 
-// Local LearnHouse API (the dev stack). Override with ?api=...&activity=...&course=...
+// Local Studytomy Portal API (the dev stack). Override with ?api=...&activity=...&course=...
 const params = new URLSearchParams(location.search)
 const API = params.get('api') ?? 'http://localhost:1338'
 const LIVE_ACTIVITY = params.get('activity') ?? 'activity_05103e3e-ca3c-4d43-b916-b56d38aaf204'

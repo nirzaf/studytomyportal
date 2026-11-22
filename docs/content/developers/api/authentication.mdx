@@ -1,13 +1,13 @@
 ---
 title: API Tokens and Sessions
-description: Create and manage LearnHouse API tokens, choose their permissions, and sign in with user sessions, refresh cookies and two-factor codes.
+description: Create and manage Studytomy Portal API tokens, choose their permissions, and sign in with user sessions, refresh cookies and two-factor codes.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # API Tokens and Sessions
 
-The LearnHouse API accepts two kinds of credentials:
+The Studytomy Portal API accepts two kinds of credentials:
 
 - **User sessions** (JWT), for browsers and for scripts acting as a specific user.
 - **API tokens** (prefixed `lh_`), for server-to-server integrations scoped to one organization.
@@ -34,7 +34,7 @@ Browsers get the same tokens as `HttpOnly` cookies: `LH_access` (8 hours) and `L
 If the account has two-factor authentication, `/auth/login` answers `{ "mfa_required": true, "mfa_token": "..." }` instead. Send that `mfa_token` with a 6-digit `code` from the authenticator app (or a backup code with `is_backup_code: true`) to `POST /api/v1/auth/login/mfa` within 5 minutes to get the session.
 
 <Callout type="info">
-Logins are rate-limited by IP, and repeated failed attempts can temporarily lock the account. On LearnHouse Cloud the email address must be verified before login succeeds. See [Authentication](/platform/users/authentication#protection-against-abuse).
+Logins are rate-limited by IP, and repeated failed attempts can temporarily lock the account. In deployments that enable plan entitlements the email address must be verified before login succeeds. See [Authentication](/platform/users/authentication#protection-against-abuse).
 </Callout>
 
 ### Auth endpoints
@@ -56,10 +56,10 @@ The two-factor management endpoints (`/api/v1/auth/mfa/...`) are listed in the [
 ## API tokens
 
 <Callout type="info">
-API tokens need the **Pro** plan or higher on LearnHouse Cloud. They are available on every self-hosted instance.
+API tokens need the **Pro** plan or higher in deployments that enable plan entitlements. They are available on every self-hosted instance.
 </Callout>
 
-API tokens let your own servers call LearnHouse without a user session. Each token belongs to one organization and carries its own permissions.
+API tokens let your own servers call Studytomy Portal without a user session. Each token belongs to one organization and carries its own permissions.
 
 ```bash
 curl http://localhost:1338/api/v1/courses/... \
@@ -72,7 +72,7 @@ curl http://localhost:1338/api/v1/courses/... \
 2. Fill in the **Token Name** (required, up to 100 characters, unique among the organization's active tokens) and an optional **Description**.
 3. Optionally set an **Expiration Date**. Leave it empty for a token that never expires.
 4. Under **Permissions**, choose **Read Only**, **Full Access** or **Custom**.
-5. Click **Create Token** and copy the token. **This is the only time you'll see it.** LearnHouse only keeps a hash and the first 12 characters, shown as the **Token Prefix**.
+5. Click **Create Token** and copy the token. **This is the only time you'll see it.** Studytomy Portal only keeps a hash and the first 12 characters, shown as the **Token Prefix**.
 
 Managing tokens needs a role that can manage roles (the Admin role by default) and a signed-in session; a token cannot create or manage other tokens.
 
@@ -110,7 +110,7 @@ Creating and regenerating tokens is limited to 10 per hour per IP address.
 
 - Its expiration date has passed.
 - It was revoked.
-- The organization dropped below the Pro plan (LearnHouse Cloud).
+- The organization's configured feature entitlements no longer include API access.
 - Its creator is no longer a member of the organization.
 
 ### What tokens cannot do

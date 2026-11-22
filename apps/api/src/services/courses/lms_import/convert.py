@@ -1,5 +1,5 @@
 """
-End-to-end conversion: LMS export in, LearnHouse course package out.
+End-to-end conversion: LMS export in, Studytomy Portal course package out.
 
 Used by the CLI (``python cli.py lms-import convert ...``) and by the API's
 "Import from another LMS" endpoint, which writes the package straight into the

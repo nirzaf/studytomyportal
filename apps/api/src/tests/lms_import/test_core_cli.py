@@ -219,7 +219,7 @@ def test_print_problems_truncates():
 
 
 class Api:
-    """Scripted LearnHouse API behind httpx.MockTransport."""
+    """Scripted Studytomy Portal API behind httpx.MockTransport."""
 
     def __init__(self, statuses, import_result=None, analyze=None, import_status=200):
         self.statuses = list(statuses)

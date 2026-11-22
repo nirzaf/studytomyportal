@@ -1,5 +1,5 @@
 """
-html_to_tiptap: LMS HTML -> LearnHouse editor (TipTap) JSON.
+html_to_tiptap: LMS HTML -> Studytomy Portal editor (TipTap) JSON.
 
 Every conversion result is run through ``assert_valid_blocks``, a recursive
 validator of the editor schema (node names, content rules, mark rules), so a

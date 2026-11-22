@@ -1,16 +1,13 @@
 ---
-description: Update a self-hosted LearnHouse instance with npx learnhouse update, learn how database migrations run, and roll back to an earlier version.
+description: Update a self-hosted Studytomy Portal instance with npx learnhouse update, learn how database migrations run, and roll back to an earlier version.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Updates
 
-Update LearnHouse regularly to get the latest features, bug fixes, and security patches.
-
-<CloudCta variant="selfhost">LearnHouse Cloud runs updates for you.</CloudCta>
-
-## Updating LearnHouse
+Update Studytomy Portal regularly to get the latest features, bug fixes, and security patches.
+## Updating Studytomy Portal
 
 Use the built-in `update` command. It backs up your database, pulls the new image, runs database migrations with the new image before it starts, and restarts the stack.
 
@@ -57,7 +54,7 @@ On an Enterprise installation, `update` also logs in to the Enterprise registry 
 
 ```bash
 # 1. Review the release notes
-# https://github.com/learnhouse/learnhouse/releases
+# Check the release source configured for this installation.
 
 # 2. Optional: take a full backup (database, .env and uploaded content)
 npx learnhouse backup
@@ -71,7 +68,7 @@ npx learnhouse doctor
 
 ## Database Migrations
 
-LearnHouse uses [Alembic](https://alembic.sqlalchemy.org/) to evolve the database schema between versions, and applies it for you:
+Studytomy Portal uses [Alembic](https://alembic.sqlalchemy.org/) to evolve the database schema between versions, and applies it for you:
 
 - `learnhouse update` migrates the database before the new version starts, and checks it again once the new version is up. `--no-migrate` skips both.
 - The API checks the schema every time it starts, and migrates it if needed. Updates done by hand with `docker compose pull && docker compose up -d`, or with `--no-migrate`, are covered too.
@@ -98,7 +95,7 @@ Set `LEARNHOUSE_AUTO_MIGRATE=false` in your `.env` if you prefer to run migratio
 
 ### Installations without Alembic history
 
-Early LearnHouse installs created their schema with SQLAlchemy's `create_all`, without Alembic tracking. `learnhouse update` stamps them at the version they were running before applying any migration, so only the new changes run. An install updated another way gets its missing tables and columns added by the API on its first start, as described above.
+Early Studytomy Portal installs created their schema with SQLAlchemy's `create_all`, without Alembic tracking. `learnhouse update` stamps them at the version they were running before applying any migration, so only the new changes run. An install updated another way gets its missing tables and columns added by the API on its first start, as described above.
 
 ## When an Update Fails
 
@@ -106,7 +103,7 @@ Early LearnHouse installs created their schema with SQLAlchemy's `create_all`, w
 
 - If the image pull or the migrations fail, it restores the previous image in `docker-compose.yml` and starts the previous version again.
 - If any later step fails after it stopped the app, it starts the services again.
-- If LearnHouse doesn't become healthy, the command exits with code `1` and points you to `npx learnhouse logs`.
+- If Studytomy Portal doesn't become healthy, the command exits with code `1` and points you to `npx learnhouse logs`.
 
 ## Rolling Back
 
@@ -132,7 +129,7 @@ Backups are named `db-pre-upgrade-<timestamp>.sql.gz` when created by `update`, 
 
 After each command, the CLI checks npm for a newer version of itself and prints a notice if one is available. Run `npx learnhouse@latest <command>` to use the newest CLI. The check is skipped in CI and when the output is not a terminal; set `LEARNHOUSE_NO_UPDATE_CHECK=1` to turn it off.
 
-Review the [LearnHouse release notes](https://github.com/learnhouse/learnhouse/releases) before updating to understand what has changed. Some updates may include:
+Review the [Studytomy Portal release notes](https://github.com/nirzaf/studytomyportal/releases) before updating to understand what has changed. Some updates may include:
 
 - New features or UI changes
 - Database migrations (applied automatically by `update`)

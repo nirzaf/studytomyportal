@@ -61,7 +61,7 @@ const PATHS = [
     href: '/developers/react',
     kicker: 'React apps',
     title: 'React component',
-    desc: 'Render activities in your own app with the same blocks LearnHouse uses, in your look.',
+    desc: 'Render activities in your own app with the same blocks as the Studytomy Portal editor, in your look.',
   },
   {
     key: 'sdk',
@@ -79,7 +79,7 @@ const PATHS = [
   },
 ]
 
-/** The four ways to build on LearnHouse. */
+/** The four ways to build with Studytomy Portal. */
 export function BuildPaths() {
   return (
     <div className="lhd-paths">
@@ -185,10 +185,10 @@ export function RendererPipeline() {
     <FlowDiagram
       nodes={[
         { label: 'Activity JSON', sub: 'What the editor saves', icon: FileText, ...neutralNode, edge: { label: 'static render' } },
-        { label: 'LearnHouse blocks', sub: 'Quiz, flipcards, code, math… the editor’s own components', icon: PuzzlePiece, ...neutralNode, edge: { label: 'your theme' } },
-        { label: 'Your page', sub: 'Embed or <LearnHouseActivity>', icon: AppWindow, ...neutralNode },
+        { label: 'Studytomy Portal blocks', sub: 'Quiz, flipcards, code, math… the editor’s own components', icon: PuzzlePiece, ...neutralNode, edge: { label: 'your theme' } },
+        { label: 'Your page', sub: 'Embed or use the activity renderer', icon: AppWindow, ...neutralNode },
       ]}
-      caption="No editor is started to show an activity: the saved document is turned straight into the same block components LearnHouse uses, and each block’s code loads only when the document contains that block."
+      caption="No editor is started to show an activity: the saved document is turned straight into the same block components as the Studytomy Portal editor, and each block’s code loads only when the document contains that block."
     />
   )
 }
@@ -198,7 +198,7 @@ export function BuildPipeline() {
   return (
     <FlowDiagram
       nodes={[
-        { label: 'LearnHouse source', sub: 'The web app’s renderer and the API schema', icon: TreeStructure, ...neutralNode, edge: { label: 'release tag' } },
+        { label: 'Portal source', sub: 'The web app’s renderer and the API schema', icon: TreeStructure, ...neutralNode, edge: { label: 'release tag' } },
         { label: 'Build & test', sub: 'Compiled, never copied', icon: Cube, ...neutralNode, edge: { label: 'publish' } },
         { label: 'npm', sub: '@learnhouse/sdk, @learnhouse/react and @learnhouse/vue', icon: Package, ...neutralNode },
       ]}
@@ -210,7 +210,7 @@ export function BuildPipeline() {
 /** One release tag, three artifacts with the same version. */
 export function ReleaseLockstep({ version = '1.4.3' }) {
   const items = [
-    { icon: SiDocker, name: 'ghcr.io/learnhouse/app', sub: 'Docker image' },
+    { icon: SiDocker, name: 'Configured app image', sub: 'Container image' },
     { icon: SiNpm, name: '@learnhouse/sdk', sub: 'npm' },
     { icon: SiReact, name: '@learnhouse/react', sub: 'npm' },
     { icon: SiVuedotjs, name: '@learnhouse/vue', sub: 'npm' },

@@ -1,13 +1,13 @@
 ---
 title: "Backend Architecture"
-description: "Learn how the LearnHouse FastAPI backend is built: Python 3.14, SQLModel, Alembic, PostgreSQL with pgvector, Redis, background jobs and CLI tasks."
+description: "Learn how the Studytomy Portal FastAPI backend is built: Python 3.14, SQLModel, Alembic, PostgreSQL with pgvector, Redis, background jobs and CLI tasks."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Backend Architecture
 
-The LearnHouse backend is a **FastAPI** application written in Python, located at `apps/api` in the project. It is the central API layer and handles all business logic and data management.
+The Studytomy Portal backend is a **FastAPI** application written in Python, located at `apps/api` in the project. It is the central API layer and handles all business logic and data management.
 
 ## Technology Stack
 
@@ -110,4 +110,4 @@ uv sync              # install dependencies
 uv run python app.py # start the dev server (which calls uvicorn internally)
 ```
 
-When using the LearnHouse CLI (`learnhouse dev`), the backend starts automatically with hot reload enabled.
+When using the Studytomy Portal CLI (`learnhouse dev`), the backend starts automatically with hot reload enabled.

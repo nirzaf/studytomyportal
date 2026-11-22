@@ -122,7 +122,7 @@ describe('parseWebhook', () => {
     for (const payload of ['null', '5', '{"event":"ping"}', '{"delivery_id":"dlv_1"}']) {
       await expect(
         parseWebhook({ payload: bytes(payload), headers: { 'X-Webhook-Signature': await sign(payload) }, secret: SECRET }),
-      ).rejects.toMatchObject({ status: 400, code: 'INVALID_PAYLOAD', message: 'Webhook body is not a LearnHouse event' })
+      ).rejects.toMatchObject({ status: 400, code: 'INVALID_PAYLOAD', message: 'Webhook body is not a Studytomy Portal event' })
     }
   })
 })

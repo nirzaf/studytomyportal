@@ -1,5 +1,5 @@
 """
-Admin API Router: headless access to LearnHouse via API tokens.
+Admin API Router: headless access to Studytomy Portal via API tokens.
 
 All endpoints are scoped by org_slug and require API token authentication
 (Bearer lh_...). The token's organization must match the org_slug in the URL.
@@ -911,7 +911,7 @@ async def api_admin_get_user_by_email(
         "the target user in and optionally redirect them to a specific path. "
         "Token lifetime is clamped to 60–900 seconds.\n\n"
         "The URL is on the organization's own site (its verified custom domain, "
-        "else its LearnHouse subdomain). Each link signs in once: any later use "
+        "else its Studytomy Portal subdomain). Each link signs in once: any later use "
         "is refused. A user with two-factor authentication enabled is still "
         "asked for their code.\n\n"
         "The target must be an ordinary member. Consuming the link mints a full "

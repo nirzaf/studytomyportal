@@ -1,6 +1,6 @@
 """One error shape for every Studytomy endpoint.
 
-Existing LearnHouse endpoints keep their current detail shapes; nothing here is
+Existing Studytomy Portal endpoints keep their current detail shapes; nothing here is
 applied globally. A Studytomy failure always carries a stable machine-readable
 ``code`` so a client can branch on the reason instead of parsing prose, and a
 safe ``next_action`` where the source rules require one.

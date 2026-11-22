@@ -350,7 +350,7 @@ export default async function proxy(req: NextRequest) {
   // -------------------------------------------------------------------------
   // 1b. Legacy /dashboard/* → hub redirects
   //
-  //    The old platform (learnhouse.app) used /dashboard/{slug}/plan, /dashboard/
+  //    Legacy installs used /dashboard/{slug}/plan, /dashboard/
   //    new, /dashboard/account, etc. Those paths do NOT exist on .io and would
   //    404. Old bookmarks, emails, and (critically) URLs Stripe has already
   //    stored on live checkout sessions can still point here, so permanently map
@@ -408,7 +408,7 @@ export default async function proxy(req: NextRequest) {
     }
     const isAccount = pathname === '/account' || pathname.startsWith('/account/')
     // The hub belongs to the platform, not to a school. Someone who signed up
-    // on acme.learnhouse.io (or learn.acme.org) is a member of that school and
+    // on acme.example.com (or learn.acme.org) is a member of that school and
     // every auth flow there ends on /home, so on an org host /home is the
     // school's own home page. The rest of the hub moves to the apex where the
     // session follows; elsewhere it keeps rendering on this host as before.
@@ -449,7 +449,7 @@ export default async function proxy(req: NextRequest) {
     // picker instead, and silently threw away any ?inviteCode. So only redirect
     // a signed-in visitor when there is genuinely no org to join here: the
     // org-less apex, with no invite code in hand. Signing up on the apex means
-    // "I want my own LearnHouse", so they go to create an organization.
+    // "I want my own Studytomy Portal", so they go to create an organization.
     if (pathname === '/signup' && hasSession) {
       const onOrgHost =
         instance.tenancy === 'single'
@@ -637,10 +637,10 @@ export default async function proxy(req: NextRequest) {
   // -------------------------------------------------------------------------
   // 10. Apex root (multi tenancy only): login-first, then org picker.
   //
-  //     The bare apex (learnhouse.io) is NOT org-scoped. An unauthenticated
+  //     The bare apex is NOT org-scoped. An unauthenticated
   //     visitor lands on the login page; once signed in they get the /home org
   //     picker and choose an org, which lives on its own subdomain
-  //     ({slug}.learnhouse.io) or custom domain. Org content is ONLY served on
+  //     ({slug}.example.com) or custom domain. Org content is ONLY served on
   //     a subdomain/custom domain, never at the apex. Mirrors the platform's
   //     "log in, then choose an org" flow. We branch on the non-httpOnly
   //     LH_session marker cookie (best-effort; the page itself re-verifies).

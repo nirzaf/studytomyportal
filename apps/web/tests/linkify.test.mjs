@@ -4,9 +4,9 @@ import { splitLinks } from "../lib/text/linkify.ts";
 
 describe("splitLinks", () => {
   test("turns a bare https URL inside a sentence into a link segment", () => {
-    expect(splitLinks("Refer to https://learnhouse.io to learn more.")).toEqual([
+    expect(splitLinks("Refer to https://example.com to learn more.")).toEqual([
       { type: "text", value: "Refer to " },
-      { type: "link", value: "https://learnhouse.io", href: "https://learnhouse.io" },
+      { type: "link", value: "https://example.com", href: "https://example.com" },
       { type: "text", value: " to learn more." },
     ]);
   });

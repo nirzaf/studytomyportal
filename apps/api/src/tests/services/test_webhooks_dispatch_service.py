@@ -121,7 +121,7 @@ class TestWebhookDispatchHelpers:
             assert isinstance(client_kwargs["transport"], httpx.AsyncHTTPTransport)
             assert client_kwargs["timeout"] == 10.0
             assert client_kwargs["follow_redirects"] is False
-            assert client_kwargs["headers"] == {"User-Agent": "LearnHouse-Webhooks/1.0"}
+            assert client_kwargs["headers"] == {"User-Agent": "Studytomy Portal-Webhooks/1.0"}
 
             await dispatch.close_webhook_client()
 

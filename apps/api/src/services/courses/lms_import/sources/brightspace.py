@@ -66,7 +66,7 @@ _TOOL_FILES = re.compile(r"^(questiondb\.xml|dropbox_d2l\.xml|quiz_d2l_\d+\.xml)
 _ENFORCED = re.compile(r"^/?content/enforced/[^/]+/(.+)$", re.I)
 _VAR = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
-# Course objects that have no LearnHouse equivalent: material type -> (report title, kind)
+# Course objects that have no Studytomy Portal equivalent: material type -> (report title, kind)
 _SKIPPED_TOOLS = {
     "d2lchecklist": ("Checklists", "checklist"),
     "d2lrubrics": ("Rubrics", "rubric"),
@@ -744,7 +744,7 @@ class _Reader:
             self.warnings.append(message)
 
     def skip(self, title: str, kind: str, reason: str) -> None:
-        """A source item with no LearnHouse equivalent: listed in the report, not a warning."""
+        """A source item with no Studytomy Portal equivalent: listed in the report, not a warning."""
         entry = (title, kind, reason)
         if entry not in self.skipped:
             self.skipped.append(entry)

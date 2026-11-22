@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { docs } from '@/.source/server'
 
-const SITE_URL = 'https://docs.learnhouse.app'
+const SITE_URL = process.env.NEXT_PUBLIC_DOCS_URL?.replace(/\/+$/, '') || ''
 
 const toRoute = (filePath) => {
   const noExt = filePath.replace(/\.mdx$/, '')

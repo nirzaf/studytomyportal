@@ -1,4 +1,4 @@
-// Runs against a live LearnHouse API. Skipped automatically when nothing
+// Runs against a live Studytomy Portal API. Skipped automatically when nothing
 // answers at LEARNHOUSE_SDK_IT_URL (default http://localhost:1338).
 //   LEARNHOUSE_SDK_IT_URL   API origin
 //   LEARNHOUSE_SDK_IT_ORG   org slug with at least one public course (default "default")

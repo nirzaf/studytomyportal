@@ -1,5 +1,5 @@
 """Learner tools: who is enrolled in a course, how far each learner got, and
-everything LearnHouse records about one learner's work.
+everything Studytomy Portal records about one learner's work.
 
 Progress is read straight from the learning trail (trail runs and steps) and
 never written: looking at progress must not enroll anyone or create a trail.

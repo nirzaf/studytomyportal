@@ -1,6 +1,6 @@
 # Studytomy web application
 
-LearnHouse-based Next.js/React frontend. Start with [scoped agent instructions](AGENTS.md), [root setup guide](../../README.md) and the [task-oriented documentation index](../../docs/studytomy/README.md). Do not duplicate architecture or implementation ledgers here.
+Studytomy Portal-based Next.js/React frontend. Start with [scoped agent instructions](AGENTS.md), [root setup guide](../../README.md) and the [task-oriented documentation index](../../docs/studytomy/README.md). Do not duplicate architecture or implementation ledgers here.
 
 ## Local verification
 

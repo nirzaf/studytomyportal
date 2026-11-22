@@ -59,7 +59,7 @@ export async function checkForUpdates(opts: { print?: boolean; signal?: AbortSig
 }
 
 /**
- * Resolve the Docker image tag for the LearnHouse app.
+ * Resolve the Docker image tag for the Studytomy Portal app.
  *
  * - channel 'dev'    → always returns ghcr.io/learnhouse/app:dev
  * - channel 'stable' → fetches the latest app release tag from GitHub, falls back to :latest

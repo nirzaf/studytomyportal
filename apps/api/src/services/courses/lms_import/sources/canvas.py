@@ -58,11 +58,11 @@ WEB_RESOURCES = "web_resources"
 QTI_DIR = "non_cc_assessments"
 
 _NO_ANSWER_TEXT = "no answer text provided."
-# New Quizzes types with no LearnHouse equivalent
+# New Quizzes types with no Studytomy Portal equivalent
 _UNSUPPORTED_TYPES = {
-    "categorization_question": "categorization questions have no LearnHouse equivalent",
-    "hot_spot_question": "hot spot questions have no LearnHouse equivalent",
-    "hotspot_question": "hot spot questions have no LearnHouse equivalent",
+    "categorization_question": "categorization questions have no Studytomy Portal equivalent",
+    "hot_spot_question": "hot spot questions have no Studytomy Portal equivalent",
+    "hotspot_question": "hot spot questions have no Studytomy Portal equivalent",
     "stimulus": "stimulus blocks are not migrated",
     "error": "Canvas exported this question as broken (question type 'Error'); it has no answers",
 }

@@ -1,4 +1,4 @@
-"""References to LearnHouse objects: org-scoped lookups, ids and links.
+"""References to Studytomy Portal objects: org-scoped lookups, ids and links.
 
 Tools only ever take and return prefixed uuids (``course_...``,
 ``chapter_...``, ``user_...``). Every target named in a call is loaded here

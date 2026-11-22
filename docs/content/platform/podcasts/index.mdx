@@ -1,5 +1,5 @@
 ---
-description: "Publish a podcast in LearnHouse: upload and order episodes, let learners listen in the site player, submit the RSS feed and use episodes in lessons."
+description: "Publish a podcast in Studytomy Portal: upload and order episodes, let learners listen in the site player, submit the RSS feed and use episodes in lessons."
 ---
 
 import { Callout } from '@/components/mdx'
@@ -7,12 +7,8 @@ import { Callout } from '@/components/mdx'
 # Podcasts
 
 Podcasts let you publish audio shows inside your organization. Each podcast holds a list of episodes that learners can stream, and every podcast has an RSS feed you can submit to podcast directories.
-
-<YouTube video="guide-9" />
-
 <Callout>
-Podcasts must be enabled in your [Organization Settings](/platform/organizations/settings). On LearnHouse Cloud they need the Standard plan or higher.
-<PlanCta plan="Standard" />
+Podcasts must be enabled in your [Organization Settings](/platform/organizations/settings). In deployments that enable plan entitlements they need the Standard plan or higher.
 </Callout>
 
 ## Creating a podcast
@@ -58,7 +54,7 @@ Every podcast has an RSS feed at `/podcast/{id}/feed` on your organization's dom
 
 **Preview** opens the feed itself. The tab also has tips before you submit: a cover of at least 1400x1400 pixels, a clear description, and at least one published episode.
 
-LearnHouse does not submit the feed for you. You submit it once, then each directory reads new episodes from the feed on its own schedule. The feed is cached for up to an hour, so a new episode can take that long to appear in it.
+Studytomy Portal does not submit the feed for you. You submit it once, then each directory reads new episodes from the feed on its own schedule. The feed is cached for up to an hour, so a new episode can take that long to appear in it.
 
 ## Podcasts in courses
 

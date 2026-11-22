@@ -456,9 +456,9 @@ def test_misc_components(tmp_path):
     assert course.warnings == []
     assert course.skipped == [
         ("Talk", "discussion", "discussions are not migrated"),
-        ("Vote", "poll", "polls have no LearnHouse equivalent"),
-        ("survey", "survey", "surveys have no LearnHouse equivalent"),
-        ("mystery_xblock", "mystery_xblock", "no LearnHouse equivalent"),
+        ("Vote", "poll", "polls have no Studytomy Portal equivalent"),
+        ("survey", "survey", "surveys have no Studytomy Portal equivalent"),
+        ("mystery_xblock", "mystery_xblock", "no Studytomy Portal equivalent"),
         ("DnD", "drag and drop question", "no interactive equivalent (drag-and-drop problem without items)"),
     ]
 
@@ -709,7 +709,7 @@ def test_script_generated_problem_is_unsupported(tmp_path):
 def test_unsupported_response_types(tmp_path, xml, reason, kept):
     course = one_unit(tmp_path, lambda o: o.html("h", "<p>Text</p>") + o.problem("p1", f"<problem>{xml}</problem>"))
     page = items(course)[0]
-    # The prompt stays readable; only the input LearnHouse cannot grade is lost
+    # The prompt stays readable; only the input Studytomy Portal cannot grade is lost
     assert len(page.parts) == (2 if kept else 1)
     if kept:
         assert page.parts[1].content.html == "<p>F</p>"

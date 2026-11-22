@@ -11,7 +11,7 @@
  *   (`course_published_toggled { published }`, not `course_published`/`_unpublished`).
  *
  * Every event goes to PostHog. The few listed in BACKEND_EVENTS also go to
- * the LearnHouse backend, which powers the org analytics dashboards; for
+ * the Studytomy Portal backend, which powers the org analytics dashboards; for
  * those the enum VALUE is the backend wire name and must match the API's
  * catalog (apps/api/src/services/analytics/events.py), which drops anything
  * it doesn't know. Where the PostHog name should differ from the backend

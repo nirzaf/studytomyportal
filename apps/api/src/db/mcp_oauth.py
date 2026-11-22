@@ -1,6 +1,6 @@
 """OAuth 2.1 storage for the MCP server.
 
-LearnHouse is its own authorization server for `/mcp`: an MCP client (Claude,
+Studytomy Portal is its own authorization server for `/mcp`: an MCP client (Claude,
 ChatGPT, Cursor, ...) registers itself, sends the member through a consent
 screen, and gets tokens that act as that member inside one organization.
 

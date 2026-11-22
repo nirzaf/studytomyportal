@@ -487,7 +487,7 @@ def unwrap_internal_links(source_html: str, keep_files: bool = True) -> str:
 
     Canvas ``$WIKI_REFERENCE$`` / ``$CANVAS_OBJECT_REFERENCE$`` links and
     links to other HTML pages of the package have no target once the course
-    is in LearnHouse; their text is kept. File links are left alone so the
+    is in Studytomy Portal; their text is kept. File links are left alone so the
     converter can attach the file.
     """
     if not source_html or "<a" not in source_html.lower():

@@ -1,5 +1,5 @@
 // Types-only entry for dist/index.d.ts. The runtime entry (index.ts) bundles
-// the LearnHouse web app's source, whose types don't belong in this package's
+// the Studytomy Portal web app's source, whose types don't belong in this package's
 // public surface; tests/exports.test.ts keeps both entries in sync.
 import type { FC, CSSProperties } from 'react'
 import type { LearnHouseClient } from '@learnhouse/sdk'

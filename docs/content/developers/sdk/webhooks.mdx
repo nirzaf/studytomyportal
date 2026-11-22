@@ -1,13 +1,13 @@
 ---
 title: SDK Webhooks
-description: "Verify LearnHouse webhook signatures with @learnhouse/sdk, turn deliveries into typed events, and skip duplicate or replayed deliveries."
+description: "Verify Studytomy Portal webhook signatures with @learnhouse/sdk, turn deliveries into typed events, and skip duplicate or replayed deliveries."
 ---
 
 import { Callout, Tabs } from '@/components/mdx'
 
 # Webhooks
 
-LearnHouse can send events like `course_completed` to your server as signed `POST` requests. Set up an endpoint first;
+Studytomy Portal can send events like `course_completed` to your server as signed `POST` requests. Set up an endpoint first;
 see [Webhooks](/platform/automations/webhooks). The SDK checks the signature and gives you the event.
 
 ## Handle a delivery
@@ -74,7 +74,7 @@ The event has these fields, all read from the signed body:
 | --- | --- |
 | `event` | The event name, e.g. `course_completed`. See the [Event Catalogue](/platform/automations/events) |
 | `deliveryId` | The delivery's id (`dlv_…`). Retries of one delivery share it |
-| `timestamp` | When LearnHouse first tried the delivery, in ISO 8601 UTC |
+| `timestamp` | When Studytomy Portal first tried the delivery, in ISO 8601 UTC |
 | `orgId` | The organization the event belongs to |
 | `data` | The event's payload. Pass a type to describe it: `parseWebhook<MyEvent>(…)` |
 
@@ -83,7 +83,7 @@ When it throws, answer with `err.status`:
 | `err.code` | `err.status` | Cause |
 | --- | --- | --- |
 | `INVALID_SIGNATURE` | `401` | The `X-Webhook-Signature` header is missing or does not match |
-| `INVALID_PAYLOAD` | `400` | The body is signed but is not a LearnHouse event |
+| `INVALID_PAYLOAD` | `400` | The body is signed but is not a Studytomy Portal event |
 
 `payload` can be a string, a `Uint8Array` (a Node `Buffer` is one) or an `ArrayBuffer`. Headers can be a `Headers`
 object or a plain object like Node's `req.headers`. Header names are matched without regard to case.
@@ -117,7 +117,7 @@ someone sends it again. Guard against that, and against normal retries, with the
 1. Store each `deliveryId` you have handled, for example in a table with a unique key.
 2. When a `deliveryId` comes back, return `200` and do nothing else.
 
-LearnHouse tries a delivery up to 3 times within about half a minute, with the same body each time. That makes the
+Studytomy Portal tries a delivery up to 3 times within about half a minute, with the same body each time. That makes the
 signed `timestamp` a useful second check: reject deliveries older than a few minutes, and you only need to keep
 delivery ids for that long.
 

@@ -1,16 +1,16 @@
 ---
 title: "Headless Assignments"
-description: "Run LearnHouse assignments from your own frontend with an API token: create tasks with custom data, submit answers for learners and grade them."
+description: "Run Studytomy Portal assignments from your own frontend with an API token: create tasks with custom data, submit answers for learners and grade them."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Headless Assignments
 
-LearnHouse assignments can be driven entirely from your own frontend. With an API token you can author assignments and tasks, store an arbitrary custom data object on each task, read submissions and grades, submit answers on behalf of your learners, and grade them. It all goes through the standard REST API, so you do not need the LearnHouse UI.
+Studytomy Portal assignments can be driven entirely from your own frontend. With an API token you can author assignments and tasks, store an arbitrary custom data object on each task, read submissions and grades, submit answers on behalf of your learners, and grade them. It all goes through the standard REST API, so you do not need the Studytomy Portal UI.
 
 <Callout type="info">
-API tokens need the **Pro** plan or higher on LearnHouse Cloud, and are available on every self-hosted instance. Create one under **Developers → API Access** and grant it the **Assignments** permission. Tokens are prefixed with `lh_` and are scoped to a single organization.
+API tokens need the **Pro** plan or higher in deployments that enable plan entitlements, and are available on every self-hosted instance. Create one under **Developers → API Access** and grant it the **Assignments** permission. Tokens are prefixed with `lh_` and are scoped to a single organization.
 </Callout>
 
 ## Permissions
@@ -70,7 +70,7 @@ curl -X POST http://localhost:1338/api/v1/assignments/ \
 
 ## Custom tasks: bring your own data object
 
-Each task has an `assignment_type` and a free-form `contents` JSON object. For a fully custom assignment, use the `CUSTOM` type: LearnHouse stores your `contents` (the task definition) and the learner's `task_submission` (their answer) as an arbitrary, caller-owned JSON object. The server never interprets or auto-grades it. It's yours to render and grade however you like.
+Each task has an `assignment_type` and a free-form `contents` JSON object. For a fully custom assignment, use the `CUSTOM` type: Studytomy Portal stores your `contents` (the task definition) and the learner's `task_submission` (their answer) as an arbitrary, caller-owned JSON object. The server never interprets or auto-grades it. It's yours to render and grade however you like.
 
 ```bash
 curl -X POST http://localhost:1338/api/v1/assignments/{assignment_uuid}/tasks \
@@ -92,12 +92,12 @@ curl -X POST http://localhost:1338/api/v1/assignments/{assignment_uuid}/tasks \
 The `contents` you send back out of `GET /assignments/task/{uuid}` is byte-for-byte what you stored.
 
 <Callout type="info">
-The built-in task types (`QUIZ`, `FORM`, `CODE`, `SHORT_ANSWER`, `NUMBER_ANSWER`) are auto-graded by LearnHouse against their `contents` schema. `CUSTOM` (and `FILE_SUBMISSION`) are **not** auto-graded and are graded manually.
+The built-in task types (`QUIZ`, `FORM`, `CODE`, `SHORT_ANSWER`, `NUMBER_ANSWER`) are auto-graded by Studytomy Portal against their `contents` schema. `CUSTOM` (and `FILE_SUBMISSION`) are **not** auto-graded and are graded manually.
 </Callout>
 
 ## Submissions and grading
 
-Learners are referenced by their existing LearnHouse `user_id`. These endpoints let you read submissions, write a learner's answer on their behalf, and finalize grades.
+Learners are referenced by their existing Studytomy Portal `user_id`. These endpoints let you read submissions, write a learner's answer on their behalf, and finalize grades.
 
 | Method | Endpoint | Action |
 | --- | --- | --- |
@@ -113,7 +113,7 @@ Learners are referenced by their existing LearnHouse `user_id`. These endpoints 
 
 ### Submitting on behalf of a learner
 
-To write a learner's answer, pass their LearnHouse id as `on_behalf_of_user_id`. The learner must already be a member of the token's organization.
+To write a learner's answer, pass their Studytomy Portal id as `on_behalf_of_user_id`. The learner must already be a member of the token's organization.
 
 ```bash
 # Save a learner's answer for a task

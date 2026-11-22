@@ -167,7 +167,7 @@ async def _make_user(db, org_id: int, username: str, email: str, user_uuid: str)
 async def test_task04_governed_playground_publish_requires_independent_review_and_invalidates_on_edit(
     db, org, admin_user, regular_user
 ):
-    # 1. Plain LearnHouse CE org (no Studytomy profiles/policies): publish works directly.
+    # 1. Plain Studytomy Portal CE org (no Studytomy profiles/policies): publish works directly.
     pg = Playground(
         org_id=org.id,
         playground_uuid="pg_task04_ce",

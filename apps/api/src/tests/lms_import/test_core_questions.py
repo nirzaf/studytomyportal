@@ -361,8 +361,8 @@ def test_unsupported_questions_are_skipped():
     assert build.tasks == []
     assert build.skipped == [
         ("Click the map", "hotspot question", "needs image"),
-        ("Untitled", "unknown question", "no LearnHouse equivalent"),
-        ("2 questions: A; B", "stack question", "no LearnHouse equivalent"),
+        ("Untitled", "unknown question", "no Studytomy Portal equivalent"),
+        ("2 questions: A; B", "stack question", "no Studytomy Portal equivalent"),
     ]
 
 

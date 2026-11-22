@@ -1,5 +1,5 @@
 """
-Shared test fixtures for the LearnHouse API test suite.
+Shared test fixtures for the Studytomy Portal API test suite.
 
 Provides reusable fixtures for database, models, users, RBAC bypass,
 and httpx AsyncClient for router tests. All integration tests use an

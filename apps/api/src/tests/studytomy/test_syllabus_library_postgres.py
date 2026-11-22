@@ -21,6 +21,7 @@ from src.db.studytomy.governance import (
     StudyPolicyKey,
     StudyPolicyStatus,
     StudyPolicyVersion,
+    StudyStaffScope,
 )
 from src.db.studytomy.adaptive import StudyConcept, StudyCurriculumRevision
 from src.db.studytomy.syllabus import (
@@ -32,6 +33,7 @@ from src.db.studytomy.syllabus import (
 from src.db.user_organizations import UserOrganization
 from src.db.users import PublicUser, User
 from src.services.studytomy import syllabus_library as library
+from src.security.studytomy_access import StudytomyCapabilityName
 from src.services.studytomy.syllabus_library import ExploreTopicRequest, _retrieve
 from src.tests.services.rag_helpers import make_pdf
 
@@ -514,6 +516,9 @@ async def test_reindex_releases_read_transaction_before_embedding_provider(
             return "e" * 64, [[1.0] + [0.0] * 767 for _ in chunks]
 
         monkeypatch.setattr(library, "_embedding_batch", embedding_batch)
+        # This test isolates the unlocked indexing transaction. Authorization is
+        # exercised by the source-library workflow test below.
+        monkeypatch.setattr(library, "require_source_manager", AsyncMock())
         result = await library.retry_syllabus_index(db, org, actor, version_uuid)
         assert result.ingestion_status == "ready"
         assert result.ingestion_attempts == 2
@@ -583,11 +588,21 @@ async def test_uploaded_syllabus_requires_review_and_revocation_removes_learner_
                 username=f"syllabus_learner_{tag}", user_uuid=f"syllabus_learner_{tag}",
                 email=f"learner-{tag}@example.invalid", first_name="Synthetic", last_name="Learner",
             )
+            course_editor_row = User(
+                username=f"syllabus_editor_{tag}", user_uuid=f"syllabus_editor_{tag}",
+                email=f"editor-{tag}@example.invalid", first_name="Synthetic", last_name="Editor",
+            )
             educator_role = Role(
                 name="Synthetic syllabus educator", org_id=org.id,
                 role_type=RoleTypeEnum.TYPE_ORGANIZATION,
                 role_uuid=f"syllabus_educator_{tag}",
-                rights={"courses": {"action_create": True, "action_update": True}},
+                rights={"studytomy": {"adaptive_curriculum_author": True}},
+            )
+            reviewer_role = Role(
+                name="Synthetic syllabus reviewer", org_id=org.id,
+                role_type=RoleTypeEnum.TYPE_ORGANIZATION,
+                role_uuid=f"syllabus_reviewer_role_{tag}",
+                rights={"studytomy": {"content_release_review": True}},
             )
             learner_role = Role(
                 name="Synthetic syllabus learner", org_id=org.id,
@@ -595,7 +610,13 @@ async def test_uploaded_syllabus_requires_review_and_revocation_removes_learner_
                 role_uuid=f"syllabus_learner_role_{tag}",
                 rights={"courses": {"action_read": True}},
             )
-            db.add_all([reviewer_row, learner_row, educator_role, learner_role])
+            course_editor_role = Role(
+                name="Synthetic course editor", org_id=org.id,
+                role_type=RoleTypeEnum.TYPE_ORGANIZATION,
+                role_uuid=f"syllabus_course_editor_{tag}",
+                rights={"courses": {"action_create": True, "action_update": True}},
+            )
+            db.add_all([reviewer_row, learner_row, course_editor_row, educator_role, reviewer_role, learner_role, course_editor_role])
             await db.flush()
             db.add_all([
                 UserOrganization(
@@ -603,14 +624,52 @@ async def test_uploaded_syllabus_requires_review_and_revocation_removes_learner_
                     creation_date=stamp, update_date=stamp,
                 )
                 for user, role in (
-                    (uploader_row, educator_role), (reviewer_row, educator_role), (learner_row, learner_role),
+                    (uploader_row, educator_role), (reviewer_row, reviewer_role),
+                    (learner_row, learner_role), (course_editor_row, course_editor_role),
                 )
             ])
             await db.flush()
-            uploader, reviewer, learner = (
-                PublicUser.model_validate(row, from_attributes=True)
-                for row in (uploader_row, reviewer_row, learner_row)
+            uploader_owner = StudyOwnerAssignment(
+                org_id=org.id, user_id=uploader_row.id, responsibility=StudyOwnerFunction.EDUCATION.value,
+                scope_uuid=org.org_uuid, evidence_reference="TEST syllabus author assignment",
+                effective_from=now - timedelta(minutes=1), assigned_by_user_id=uploader_row.id,
             )
+            reviewer_owner = StudyOwnerAssignment(
+                org_id=org.id, user_id=reviewer_row.id, responsibility=StudyOwnerFunction.EDUCATION.value,
+                scope_uuid=org.org_uuid, evidence_reference="TEST syllabus reviewer assignment",
+                effective_from=now - timedelta(minutes=1), assigned_by_user_id=uploader_row.id,
+            )
+            db.add_all([uploader_owner, reviewer_owner])
+            await db.flush()
+            db.add_all([
+                StudyStaffScope(
+                    org_id=org.id, assignment_id=uploader_owner.id,
+                    capability=StudytomyCapabilityName.ADAPTIVE_CURRICULUM_AUTHOR.value,
+                    scope_kind="function", scope_uuid="syllabus_library",
+                    evidence_reference="TEST syllabus author scope", created_by_user_id=uploader_row.id,
+                ),
+                StudyStaffScope(
+                    org_id=org.id, assignment_id=reviewer_owner.id,
+                    capability=StudytomyCapabilityName.CONTENT_RELEASE_REVIEW.value,
+                    scope_kind="function", scope_uuid="syllabus_library",
+                    evidence_reference="TEST syllabus reviewer scope", created_by_user_id=uploader_row.id,
+                ),
+            ])
+            await db.flush()
+            uploader, reviewer, learner, course_editor = (
+                PublicUser.model_validate(row, from_attributes=True)
+                for row in (uploader_row, reviewer_row, learner_row, course_editor_row)
+            )
+            uploader_access = await library.syllabus_library_access(db, org, uploader)
+            reviewer_access = await library.syllabus_library_access(db, org, reviewer)
+            learner_access = await library.syllabus_library_access(db, org, learner)
+            editor_access = await library.syllabus_library_access(db, org, course_editor)
+            assert uploader_access.can_view and uploader_access.can_author and not uploader_access.can_review
+            assert reviewer_access.can_view and reviewer_access.can_review and not reviewer_access.can_author
+            assert not learner_access.can_view and not editor_access.can_view
+            with pytest.raises(HTTPException) as editor_denied:
+                await library.list_source_versions(db, org, course_editor)
+            assert editor_denied.value.status_code == 403
 
             uploaded = await library.upload_syllabus_source(
                 db, org, uploader, UploadFile(BytesIO(pdf), filename="synthetic-syllabus.pdf"),
@@ -638,59 +697,34 @@ async def test_uploaded_syllabus_requires_review_and_revocation_removes_learner_
             assert policy_missing.value.status_code == 409
             assert policy_missing.value.detail["code"] == "POLICY_NOT_APPROVED"
 
-            # Test-only rollback-scoped D-16 fixtures, not a live policy issuance.
-            key = StudyPolicyKey.D_16
             responsibility = StudyOwnerFunction.EDUCATION.value
-            policy = StudyPolicyVersion(
-                org_id=org.id, policy_key=key.value, scope_uuid=org.org_uuid,
-                status=StudyPolicyStatus.APPROVED.value,
-                evidence_reference="TEST only D-16",
-                effective_from=now - timedelta(minutes=1), effective_to=now + timedelta(hours=1),
-                created_by_user_id=uploader.id, approved_by_user_id=reviewer.id, approved_at=now,
-                body={"decision_items": {
-                    area: {
-                        "state": "not_applicable", "rationale": "Not a live policy decision.",
-                        "evidence_reference": f"TEST-{area}",
-                    }
-                    for area in POLICY_REQUIRED_DECISION_AREAS[key]
-                }},
-            )
-            owner = StudyOwnerAssignment(
-                org_id=org.id, user_id=reviewer.id, responsibility=responsibility,
-                scope_uuid=org.org_uuid, evidence_reference="TEST education owner",
-                effective_from=now - timedelta(minutes=1), effective_to=now + timedelta(hours=1),
-                assigned_by_user_id=uploader.id,
-            )
-            db.add_all([policy, owner])
-            await db.flush()
-            db.add(StudyPolicyApproval(
-                org_id=org.id, policy_version_id=policy.id, owner_assignment_id=owner.id,
-                responsibility=responsibility, approver_user_id=reviewer.id,
-                evidence_reference="TEST D-16 decision", rationale="Synthetic fixture only",
-                approved_at=now,
-            ))
-            curriculum_policy = StudyPolicyVersion(
-                org_id=org.id, policy_key=StudyPolicyKey.D_02.value, scope_uuid=org.org_uuid,
-                status=StudyPolicyStatus.APPROVED.value,
-                evidence_reference="TEST only D-02",
-                effective_from=now - timedelta(minutes=1), effective_to=now + timedelta(hours=1),
-                created_by_user_id=uploader.id, approved_by_user_id=reviewer.id, approved_at=now,
-                body={"decision_items": {
-                    area: {
-                        "state": "not_applicable", "rationale": "Not a live curriculum decision.",
-                        "evidence_reference": f"TEST-D02-{area}",
-                    }
-                    for area in POLICY_REQUIRED_DECISION_AREAS[StudyPolicyKey.D_02]
-                }},
-            )
-            db.add(curriculum_policy)
-            await db.flush()
-            db.add(StudyPolicyApproval(
-                org_id=org.id, policy_version_id=curriculum_policy.id, owner_assignment_id=owner.id,
-                responsibility=responsibility, approver_user_id=reviewer.id,
-                evidence_reference="TEST D-02 decision", rationale="Synthetic fixture only",
-                approved_at=now,
-            ))
+            # Test-only rollback-scoped policies and assignment; never a live policy issuance.
+            for key in (
+                StudyPolicyKey.D_02, StudyPolicyKey.D_10,
+                StudyPolicyKey.D_15, StudyPolicyKey.D_16,
+            ):
+                policy = StudyPolicyVersion(
+                    org_id=org.id, policy_key=key.value, scope_uuid=org.org_uuid,
+                    status=StudyPolicyStatus.APPROVED.value,
+                    evidence_reference=f"TEST only {key.value}",
+                    effective_from=now - timedelta(minutes=1), effective_to=now + timedelta(hours=1),
+                    created_by_user_id=uploader.id, approved_by_user_id=reviewer.id, approved_at=now,
+                    body={"decision_items": {
+                        area: {
+                            "state": "not_applicable", "rationale": "Not a live policy decision.",
+                            "evidence_reference": f"TEST-{key.value}-{area}",
+                        }
+                        for area in POLICY_REQUIRED_DECISION_AREAS[key]
+                    }},
+                )
+                db.add(policy)
+                await db.flush()
+                db.add(StudyPolicyApproval(
+                    org_id=org.id, policy_version_id=policy.id, owner_assignment_id=reviewer_owner.id,
+                    responsibility=responsibility, approver_user_id=reviewer.id,
+                    evidence_reference=f"TEST {key.value} decision", rationale="Synthetic fixture only",
+                    approved_at=now,
+                ))
             await db.flush()
 
             approved = await library.review_syllabus_source(db, org, reviewer, version_uuid, approval)

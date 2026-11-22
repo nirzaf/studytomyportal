@@ -8,7 +8,7 @@ export const metadata = {
 
 const POPULAR = [
   { href: '/getting-started/quickstart', title: 'Quickstart', text: 'Create your first course in a few minutes.' },
-  { href: '/self-hosting', title: 'Self-hosting', text: 'Run LearnHouse on your own server.' },
+  { href: '/self-hosting', title: 'Self-hosting', text: 'Run Studytomy Portal on your own server.' },
   { href: '/developers', title: 'Developers', text: 'Build on the API, SDK and components.' },
   { href: '/reference', title: 'API Reference', text: 'Every endpoint with examples.' },
 ]

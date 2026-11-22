@@ -516,7 +516,7 @@ function Editor(props: EditorProps) {
                       <OrgSquareLogo org={orgContext} wideInsetClassName="p-0.5" fallback={<OrgInitial org={orgContext} className="text-[11px]" />} />
                     </div>
                   ) : (
-                    <EditorLearnHouseLogo />
+                    <EditorStudytomyLogo />
                   )}
                 </Link>
                 <Link target="_blank" href={`/course/${course_uuid}`}>
@@ -801,7 +801,7 @@ const logoAnimations = [
   },
 ]
 
-const EditorLearnHouseLogo = () => {
+const EditorStudytomyLogo = () => {
   const [animation] = React.useState(
     () => logoAnimations[Math.floor(Math.random() * logoAnimations.length)]
   )

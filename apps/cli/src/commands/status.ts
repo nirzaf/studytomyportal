@@ -8,11 +8,11 @@ export async function statusCommand() {
   const dir = findInstallDir()
   const config = readConfig(dir)
   if (!config) {
-    p.log.error('No LearnHouse installation found. Run `npx learnhouse setup` first.')
+    p.log.error('No Studytomy Portal installation found. Run `npx learnhouse setup` first.')
     process.exit(1)
   }
 
-  p.intro(pc.cyan('LearnHouse Status'))
+  p.intro(pc.cyan('Studytomy Portal Status'))
 
   p.log.info(`URL: ${publicUrl(config)}`)
 

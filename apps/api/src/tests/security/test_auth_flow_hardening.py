@@ -518,13 +518,13 @@ class TestLinkHosts:
 
         cfg = SimpleNamespace(
             hosting_config=SimpleNamespace(
-                tenancy="multi", ssl=True, domain="learnhouse.test", frontend_domain="app.learnhouse.test"
+                tenancy="multi", ssl=True, domain="example.test", frontend_domain="app.example.test"
             )
         )
         with patch("src.services.email.utils.get_learnhouse_config", return_value=cfg), patch.dict(
             "os.environ", {"LEARNHOUSE_PLATFORM_URL": "https://platform.test"}
         ):
-            assert await get_org_signup_base_url("acme") == "https://acme.learnhouse.test"
+            assert await get_org_signup_base_url("acme") == "https://acme.example.test"
             assert await get_org_signup_base_url("evil.com/x") == "https://platform.test"
             assert await get_org_signup_base_url("Bad_Slug") == "https://platform.test"
 
@@ -721,7 +721,7 @@ class TestMemberLinkBaseUrl:
 
         return SimpleNamespace(
             hosting_config=SimpleNamespace(
-                tenancy="multi", domain="learnhouse.test", ssl=True, frontend_domain=""
+                tenancy="multi", domain="example.test", ssl=True, frontend_domain=""
             )
         )
 
@@ -740,12 +740,12 @@ class TestMemberLinkBaseUrl:
     async def test_member_keeps_their_org_host(self, db, org):
         await _make_user(db, 96, "member-link@test.com")
         await _join(db, 96, org.id)
-        url = await self._resolve(db, 96, "https://test-org.learnhouse.test")
-        assert url == "https://test-org.learnhouse.test"
+        url = await self._resolve(db, 96, "https://test-org.example.test")
+        assert url == "https://test-org.example.test"
 
     async def test_non_member_gets_platform_host(self, db, org):
         await _make_user(db, 97, "outsider-link@test.com")
-        url = await self._resolve(db, 97, "https://test-org.learnhouse.test")
+        url = await self._resolve(db, 97, "https://test-org.example.test")
         assert url == "https://platform.test"
 
     async def test_unknown_host_gets_platform_host(self, db, org):

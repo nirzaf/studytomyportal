@@ -152,7 +152,16 @@ export default function ExploreTopics() {
         cache: 'no-store',
         redirect: 'error',
       })
-      if (!response.ok) throw new Error('This approved PDF is no longer available.')
+      if (!response.ok) {
+        if ([403, 404, 409].includes(response.status)) {
+          popup?.close()
+          setResult(null)
+          setFollowUpContext(null)
+          setMessage('This approved PDF is no longer available. Search again to refresh the source list.')
+          return
+        }
+        throw new Error('The PDF could not be opened. Please try again.')
+      }
       const url = URL.createObjectURL(await response.blob()) + `#page=${citation.page}`
       const objectUrl = url.split('#')[0]
       pdfUrlsRef.current = [...pdfUrlsRef.current, objectUrl]
@@ -204,7 +213,13 @@ export default function ExploreTopics() {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
               Learning context
-              <Select value={selectedCurriculum} onValueChange={(value) => { setSelectedCurriculum(value); if (value === 'any') setSearchScope('all_approved'); setFollowUpContext(null) }}>
+              <Select value={selectedCurriculum} onValueChange={(value) => {
+                setSelectedCurriculum(value)
+                if (value === 'any') setSearchScope('all_approved')
+                setFollowUpContext(null)
+                setResult(null)
+                setMessage('')
+              }}>
                 <SelectTrigger aria-label="Syllabus context"><SelectValue placeholder="Any approved syllabus" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="any">Any approved syllabus</SelectItem>
@@ -214,7 +229,12 @@ export default function ExploreTopics() {
             </label>
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
               Search scope
-              <Select value={searchScope} onValueChange={(value) => { setSearchScope(value as typeof searchScope); setFollowUpContext(null) }}>
+              <Select value={searchScope} onValueChange={(value) => {
+                setSearchScope(value as typeof searchScope)
+                setFollowUpContext(null)
+                setResult(null)
+                setMessage('')
+              }}>
                 <SelectTrigger aria-label="Search scope"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all_approved">All approved resources</SelectItem>
@@ -278,7 +298,7 @@ export default function ExploreTopics() {
             <div className="space-y-3">
               <h2 className="px-1 text-base font-semibold text-slate-900">Source passages</h2>
               {result.sources.map((citation) => (
-                <article id={`source-${citation.reference}`} key={`${citation.version_uuid}:${citation.page}`} className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <article id={`source-${citation.reference}`} key={citation.reference} className="scroll-mt-20 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">

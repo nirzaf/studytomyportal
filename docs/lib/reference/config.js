@@ -7,22 +7,16 @@
  */
 
 export const API_BASE_URL = (
-  process.env.LEARNHOUSE_API_URL || 'https://api.learnhouse.io'
+  process.env.NEXT_PUBLIC_API_URL || process.env.LEARNHOUSE_API_URL || 'http://localhost:1338'
 ).replace(/\/$/, '')
 
 export const SPEC_REVALIDATE_SECONDS = 3600 // 1h ISR window for all reference pages
 
 /** Public origin of the docs site (canonical URLs, JSON-LD, llms.txt links). */
-export const SITE_URL = 'https://docs.learnhouse.app'
+export const SITE_URL = process.env.NEXT_PUBLIC_DOCS_URL?.replace(/\/+$/, '') || ''
 
 /** Where the API lives, per deployment type. Paths below are relative to these. */
 export const BASE_URLS = [
-  {
-    key: 'cloud',
-    label: 'LearnHouse Cloud',
-    url: 'https://api.learnhouse.io',
-    note: 'Hosted LearnHouse. API tokens need the Pro plan or higher.',
-  },
   {
     key: 'self-hosted',
     label: 'Self-hosted',
@@ -33,7 +27,7 @@ export const BASE_URLS = [
     key: 'local',
     label: 'Local development',
     url: 'http://localhost:1338',
-    note: 'The default port of the API when you run LearnHouse locally.',
+    note: 'The default port used by the local development configuration.',
   },
 ]
 
@@ -245,7 +239,7 @@ export const API_GROUPS = [
     tags: ['webhooks'],
     access: 'session',
     rightsBucket: null,
-    description: 'Register HTTP endpoints that receive event notifications from LearnHouse.',
+    description: 'Register HTTP endpoints that receive event notifications from Studytomy Portal.',
   },
   {
     slug: 'headless',

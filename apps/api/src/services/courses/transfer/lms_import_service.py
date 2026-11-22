@@ -2,7 +2,7 @@
 Import courses exported from another LMS (Moodle, Canvas, Blackboard,
 Brightspace, Open edX, Common Cartridge).
 
-The upload is converted into a LearnHouse course package by
+The upload is converted into a Studytomy Portal course package by
 ``services.courses.lms_import`` and written straight into the course
 importer's temp folder, so the regular ``POST /courses/import`` step imports
 it. Conversion can take minutes on a large backup, so it runs in a worker
@@ -52,7 +52,7 @@ from .models import ImportCourseInfo
 
 logger = logging.getLogger(__name__)
 
-# LMS backups are much larger than LearnHouse packages (Moodle .mbz files ship
+# LMS backups are much larger than Studytomy Portal packages (Moodle .mbz files ship
 # every video). The nginx in the image accepts bodies up to 6 GB.
 MAX_LMS_UPLOAD_SIZE = int(os.environ.get("LEARNHOUSE_LMS_IMPORT_MAX_MB", "4096")) * 1024 * 1024
 UPLOAD_CHUNK = 1024 * 1024
@@ -144,7 +144,7 @@ async def _authorize(request: Request, org_id: int, current_user, db_session: As
     organization = (await db_session.execute(statement)).scalars().first()
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
-    # Same gate as the LearnHouse package import: the result ends in courses
+    # Same gate as the Studytomy Portal package import: the result ends in courses
     await check_resource_access(request, db_session, current_user, "course_x", AccessAction.CREATE)
     await require_org_create_permission(current_user, org_id, db_session, "courses")
 

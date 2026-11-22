@@ -17,53 +17,57 @@ const textOf = (node) => {
   return textOf(node.props?.children)
 }
 
-const HOME_TITLE = 'LearnHouse Docs: Open-Source LMS Documentation'
+const HOME_TITLE = 'Studytomy Portal Docs'
 
 export async function generateMetadata(props) {
   const { slug = [] } = await props.params
   const page = getPage(slug)
   if (!page) return {}
-  const url = `${SITE_URL}${page.route === '/' ? '' : page.route}`
-  const md = `${SITE_URL}${page.route === '/' ? '/index' : page.route}.md`
-  const image = { url: `${SITE_URL}/og${page.route === '/' ? '' : page.route}`, width: 1200, height: 630, alt: page.title }
+  const path = page.route === '/' ? '' : page.route
+  const url = SITE_URL ? `${SITE_URL}${path}` : undefined
+  const md = SITE_URL ? `${SITE_URL}${page.route === '/' ? '/index' : page.route}.md` : undefined
+  const image = SITE_URL ? { url: `${SITE_URL}/og${path}`, width: 1200, height: 630, alt: page.title } : undefined
   const description = clampDescription(page.description) || undefined
   return {
     title: page.route === '/' ? { absolute: HOME_TITLE } : page.title,
     description,
-    alternates: { canonical: url, types: { 'text/markdown': md } },
+    alternates: { ...(url ? { canonical: url } : {}), ...(md ? { types: { 'text/markdown': md } } : {}) },
     openGraph: {
       type: 'article',
-      url,
+      ...(url ? { url } : {}),
       title: page.route === '/' ? HOME_TITLE : page.title,
       description,
-      siteName: 'LearnHouse Docs',
-      images: [image],
+      siteName: 'Studytomy Portal Docs',
+      ...(image ? { images: [image] } : {}),
     },
-    twitter: { card: 'summary_large_image', title: page.route === '/' ? HOME_TITLE : page.title, description, images: [image.url] },
+    twitter: { card: 'summary_large_image', title: page.route === '/' ? HOME_TITLE : page.title, description, ...(image ? { images: [image.url] } : {}) },
   }
 }
 
 const ORGANIZATION = {
   '@type': 'Organization',
-  '@id': 'https://learnhouse.app/#organization',
-  name: 'LearnHouse',
-  url: 'https://learnhouse.app',
-  logo: `${SITE_URL}/img/logos/black_logo.png`,
-  sameAs: ['https://github.com/learnhouse/learnhouse', 'https://discord.gg/CMyZjjYZ6x'],
+  name: 'Studytomy',
+  sameAs: ['https://github.com/nirzaf/studytomyportal'],
+  ...(SITE_URL
+    ? {
+        '@id': `${SITE_URL}/#organization`,
+        url: SITE_URL,
+        logo: `${SITE_URL}/studytomy-logo.png`,
+      }
+    : {}),
 }
 
 function JsonLd({ page, crumbs }) {
-  const url = `${SITE_URL}${page.route === '/' ? '' : page.route}`
+  const url = SITE_URL ? `${SITE_URL}${page.route === '/' ? '' : page.route}` : undefined
   const graph =
     page.route === '/'
       ? [
           {
             '@type': 'WebSite',
-            '@id': `${SITE_URL}/#website`,
-            name: 'LearnHouse Docs',
-            url: SITE_URL,
+            ...(url ? { '@id': `${SITE_URL}/#website`, url: SITE_URL } : {}),
+            name: 'Studytomy Portal Docs',
             inLanguage: 'en',
-            publisher: { '@id': 'https://learnhouse.app/#organization' },
+            publisher: ORGANIZATION,
           },
           ORGANIZATION,
         ]
@@ -72,11 +76,11 @@ function JsonLd({ page, crumbs }) {
             '@type': 'TechArticle',
             headline: page.title,
             description: page.description || undefined,
-            url,
+            ...(url ? { url } : {}),
             dateModified: page.lastModified ? new Date(page.lastModified).toISOString() : undefined,
             inLanguage: 'en',
-            isPartOf: { '@type': 'WebSite', name: 'LearnHouse Docs', url: SITE_URL },
-            image: `${SITE_URL}/og${page.route}`,
+            isPartOf: { '@type': 'WebSite', name: 'Studytomy Portal Docs', ...(SITE_URL ? { url: SITE_URL } : {}) },
+            ...(SITE_URL ? { image: `${SITE_URL}/og${page.route}` } : {}),
             publisher: ORGANIZATION,
           },
           {
@@ -85,7 +89,7 @@ function JsonLd({ page, crumbs }) {
               '@type': 'ListItem',
               position: i + 1,
               name: crumb.title,
-              item: `${SITE_URL}${crumb.route === '/' ? '' : crumb.route}`,
+              ...(SITE_URL ? { item: `${SITE_URL}${crumb.route === '/' ? '' : crumb.route}` } : {}),
             })),
           },
         ]

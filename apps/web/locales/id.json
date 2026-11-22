@@ -236,7 +236,7 @@
     "billing": "Tagihan",
     "create_organization": "Buat organisasi",
     "start_your_own_organization": "Buat organisasi Anda sendiri",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Tidak dapat menghapus organisasi ini. Silakan coba lagi.",
     "org_actions": "Tindakan organisasi",
     "manage_upgrade": "Kelola / Tingkatkan",
@@ -3040,7 +3040,7 @@
           "description": "Konfigurasikan pengaturan pribadi, kata sandi, email Anda"
         }
       },
-      "learnhouse_university": "Universitas Studytomy",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Selamat datang kembali",
       "plan": "paket",
       "create_course": "Buat Kursus",
@@ -7138,7 +7138,7 @@
           "keywords": "jalur belajar, jalur, trek, program, kurikulum, urutan, sertifikat, paths, learning paths"
         },
         "live_sessions": {
-          "keywords": "sesi langsung kelas webinar rapat video kehadiran rekaman polling learnhouse meet zoom meet teams live sessions attendance recordings polls",
+          "keywords": "sesi langsung kelas webinar rapat video kehadiran rekaman polling meet zoom meet teams live sessions attendance recordings polls",
           "description": "Jadwalkan sesi langsung, pantau kehadiran, dan kelola rekaman"
         }
       }
@@ -10650,8 +10650,8 @@
       "inactive_desc": "Pemeriksaan lisensi EE gagal (<code>{{reason}}</code>). Setiap endpoint <code>/ee/*</code> mengembalikan 503, sehingga halaman ini tidak dapat memuat datanya.",
       "what_to_check": "Yang perlu diperiksa",
       "check_diagnostics": "Buka <code>{{path}}</code>. Endpoint ini menjawab bahkan saat lisensi tidak aktif, dan kolom <code>hint</code>-nya menyebutkan perbaikannya.",
-      "check_saas": "Untuk deployment SaaS: pastikan <code>LEARNHOUSE_SAAS=true</code> diatur di lingkungan API. SaaS melewati pemeriksaan lisensi.",
-      "check_self_hosted": "Untuk EE self-hosted: pastikan <code>LEARNHOUSE_LICENSE_KEY</code> diatur dan server lisensi (atau masa tenggang) dapat dijangkau.",
+      "check_saas": "Untuk deployment SaaS: pastikan <code>SaaS mode</code> diatur di lingkungan API. SaaS melewati pemeriksaan lisensi.",
+      "check_self_hosted": "Untuk EE self-hosted: pastikan <code>license key</code> diatur dan server lisensi (atau masa tenggang) dapat dijangkau.",
       "check_logs": "Jika Anda memiliki akses shell, log API memuat alasan yang sama dengan detail lengkap: <code>[EE] license inactive …</code>",
       "failed_to_load": "Gagal memuat"
     },

@@ -26,6 +26,7 @@ from src.services.studytomy.syllabus_library import (
     SyllabusSourceReview,
     SyllabusSourceUpload,
     SyllabusSourceVersionRead,
+    SyllabusLibraryAccess,
     ActivitySyllabusSourceRead,
     SyllabusCurriculumOption,
     SyllabusConceptOption,
@@ -43,6 +44,7 @@ from src.services.studytomy.syllabus_library import (
     review_syllabus_source,
     revoke_syllabus_mapping,
     revoke_syllabus_source,
+    syllabus_library_access,
     upload_syllabus_source,
 )
 
@@ -61,6 +63,22 @@ async def _organization(org_uuid: str, actor: PublicUser, db: AsyncSession) -> O
         raise HTTPException(404, "Organization not found.")
     await require_org_membership(actor.id, org.id, db)
     return org
+
+
+@router.get(
+    "/orgs/{org_uuid}/syllabus-library/access",
+    response_model=SyllabusLibraryAccess,
+)
+async def api_syllabus_library_access(
+    org_uuid: str,
+    response: Response,
+    actor: Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> SyllabusLibraryAccess:
+    org = await _organization(org_uuid, actor, db)
+    result = await syllabus_library_access(db, org, actor)
+    response.headers.update(PRIVATE_HEADERS)
+    return result
 
 
 def _form_metadata(raw: str) -> SyllabusSourceUpload:

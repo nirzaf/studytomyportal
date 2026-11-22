@@ -1,7 +1,7 @@
 {
   "name": "@learnhouse/sdk",
   "version": "1.4.3",
-  "description": "Typed JavaScript/TypeScript client for the LearnHouse API. Runs in browsers, Node 18+, Bun, Deno, edge workers and React Native.",
+  "description": "Typed JavaScript/TypeScript client for the Studytomy Portal API. Runs in browsers, Node 18+, Bun, Deno, edge workers and React Native.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -39,12 +39,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/learnhouse/learnhouse.git",
+    "url": "https://github.com/nirzaf/studytomyportal.git",
     "directory": "packages/sdk"
   },
-  "homepage": "https://learnhouse.app",
+  "homepage": "https://github.com/nirzaf/studytomyportal/tree/main/packages/sdk",
   "bugs": {
-    "url": "https://github.com/learnhouse/learnhouse/issues"
+    "url": "https://github.com/nirzaf/studytomyportal/issues"
   },
   "keywords": [
     "learnhouse",
@@ -55,7 +55,7 @@
     "education",
     "react-native"
   ],
-  "author": "LearnHouse",
+  "author": "Studytomy Portal",
   "license": "MIT",
   "engines": {
     "node": ">=18"

@@ -159,7 +159,7 @@ export const OrgMenu = (props: any) => {
                       className="h-full w-auto max-w-[150px] lg:max-w-[180px] shrink-0 object-contain rounded-md"
                     />
                   ) : showBranding ? (
-                    <LearnHouseLogo logoFilter={colors.logoFilter} />
+                    <StudytomyLogo logoFilter={colors.logoFilter} />
                   ) : (
                     <span className={`text-lg font-bold truncate max-w-[200px] ${colors.text}`}>{org?.name}</span>
                   )}
@@ -438,7 +438,7 @@ export const OrgMenu = (props: any) => {
   )
 }
 
-const LearnHouseLogo = ({ logoFilter }: { logoFilter: string }) => {
+const StudytomyLogo = ({ logoFilter }: { logoFilter: string }) => {
   return (
     <Image
       src="/studytomy-logo.png"

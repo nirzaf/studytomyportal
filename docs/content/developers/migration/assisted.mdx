@@ -1,13 +1,13 @@
 ---
 title: AI-Assisted Migration
-description: Upload a folder of videos, PDFs, images and audio, let LearnHouse AI propose chapters and activities, then create the whole course in one API call.
+description: Upload a folder of videos, PDFs, images and audio, let Studytomy Portal AI propose chapters and activities, then create the whole course in one API call.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # AI-Assisted Migration
 
-LearnHouse exposes a three-call API that uploads a folder of media files, asks the instance's configured AI model (see [AI Setup](/self-hosting/configuration/ai-setup)) to organise them into chapters and activities, and then creates the entire course in a single transaction. This is the right path when you have a directory full of legacy lecture recordings, PDFs, and images but no existing structure.
+Studytomy Portal exposes a three-call API that uploads a folder of media files, asks the instance's configured AI model (see [AI Setup](/self-hosting/configuration/ai-setup)) to organise them into chapters and activities, and then creates the entire course in a single transaction. This is the right path when you have a directory full of legacy lecture recordings, PDFs, and images but no existing structure.
 
 The same flow is available without code in the dashboard: **Create Course** > **From Existing Content** opens the **Migrate Content** wizard. See [Import & Export](/platform/courses/import-export#from-existing-content). The suggest step uses 1 [AI credit](/platform/ai#ai-credits).
 
@@ -36,7 +36,7 @@ The API token needs the **Update** right on **Users (Admin API)**. The target mu
 | --- | --- |
 | You have a clean export from another LMS with a known chapter / activity layout | [Programmatic Migration](/developers/migration/programmatic) |
 | You need every detail of the resulting tree to be exact (titles, ordering, types) | Programmatic |
-| You have a pile of files and want LearnHouse to propose a structure | AI-assisted (this page) |
+| You have a pile of files and want Studytomy Portal to propose a structure | AI-assisted (this page) |
 | You want to author rich-text dynamic pages | Programmatic (AI-assisted produces media-only activities) |
 
 <Callout type="warning">

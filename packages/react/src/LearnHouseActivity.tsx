@@ -2,7 +2,7 @@ import React, { Component, useContext, useEffect, useMemo, useRef, useState } fr
 import type { ReactNode } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-// Straight from the LearnHouse web app: the same renderer its embed uses.
+// Straight from the Studytomy Portal web app: the same renderer its embed uses.
 import ActivityRenderer, { RENDERABLE_ACTIVITY_TYPES } from '@components/Objects/Activities/ActivityRenderer/ActivityRenderer'
 import { OrgContext } from '@components/Contexts/OrgContext'
 import { SessionContext } from '@components/Contexts/LHSessionContext'
@@ -120,7 +120,7 @@ function ActivityView(props: LearnHouseActivityProps) {
   } else if (source.status === 'error' || !activity) {
     body = errorFallback(source.error ?? new Error('Activity not found'), source.retry)
   } else if (!RENDERABLE_ACTIVITY_TYPES.includes(activity.activity_type)) {
-    body = errorFallback(new Error(`Activity type ${activity.activity_type} can't be rendered outside LearnHouse`), source.retry)
+    body = errorFallback(new Error(`Activity type ${activity.activity_type} can't be rendered outside Studytomy Portal`), source.retry)
   } else {
     const activityUrl = source.activityUrl
     body = (
@@ -151,7 +151,7 @@ function ActivityView(props: LearnHouseActivityProps) {
         {renderSlot(props.footer, activity)}
         {props.showPoweredBy && activityUrl && (
           <a className="lh-powered-by" href={activityUrl} target="_blank" rel="noopener noreferrer">
-            Made with LearnHouse
+            Made with Studytomy Portal
           </a>
         )}
       </>
@@ -172,8 +172,8 @@ function ActivityView(props: LearnHouseActivityProps) {
 }
 
 /**
- * Renders a LearnHouse activity (page, video, PDF, markdown, embed) with the
- * same blocks and styles as LearnHouse itself.
+ * Renders a Studytomy Portal activity (page, video, PDF, markdown, embed) with the
+ * same blocks and styles as Studytomy Portal itself.
  *
  * Use inside <LearnHouseProvider>, or pass `baseUrl` to use it on its own.
  */

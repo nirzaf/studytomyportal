@@ -1,6 +1,6 @@
 ---
-title: Embed LearnHouse Activities
-description: "Put a LearnHouse activity on any website with an iframe: fit it to its content, set colours and language, and react when learners finish."
+title: Embed Studytomy Portal Activities
+description: "Put a Studytomy Portal activity on any website with an iframe: fit it to its content, set colours and language, and react when learners finish."
 ---
 
 import { Callout, Steps } from '@/components/mdx'
@@ -62,12 +62,11 @@ Change the values below and copy the result. Embed URLs use the bare ids, so the
 | `bgcolor` | `bgcolor=f8fafc` | Page background, as a hex colour without `#`. It is applied before the page paints, so there is no white flash on dark sites. |
 | `textcolor` | `textcolor=1e293b` | Text colour for the activity, hex without `#`. |
 | `bgcolor` | `bgcolor=transparent` | No background, so the activity sits on your page's own background. |
-| `showlearnhouselogo` | `showlearnhouselogo=false` | Hides the small LearnHouse badge in the corner. |
-| `locale` | `locale=fr` | Shows buttons, labels and player controls in this language instead of the organization's default. Any language LearnHouse ships works; anything else is ignored. |
+| `showlearnhouselogo` | `showlearnhouselogo=false` | Hides the small Studytomy Portal badge in the corner. |
+| `locale` | `locale=fr` | Shows buttons, labels and player controls in this language instead of the organization's default. Any language Studytomy Portal ships works; anything else is ignored. |
 
 <Callout type="info">
-  On LearnHouse Cloud's Free plan the badge is always shown. Paid plans can hide it with `showlearnhouselogo=false`,
-  and white-label plans never show it. Self-hosted instances follow the org's watermark setting.
+  The badge follows the instance's branding entitlement and organization watermark settings. The parameter name is retained for compatibility with existing embeds.
 </Callout>
 
 ## What can be embedded
@@ -138,11 +137,11 @@ window.addEventListener('message', (event) => {
 })
 ```
 
-Check `event.origin` against your LearnHouse address, since any frame on the page can post messages.
+Check `event.origin` against your Studytomy Portal address, since any frame on the page can post messages.
 
 <Callout type="info">
-  Completion here means the learner saw the end of the activity on your site. To record progress in LearnHouse
-  itself, the learner has to be signed in to LearnHouse, or you record it from your server with the
+  Completion here means the learner saw the end of the activity on your site. To record progress in Studytomy Portal
+  itself, the learner has to be signed in to Studytomy Portal, or you record it from your server with the
   [SDK](/developers/sdk/resources).
 </Callout>
 

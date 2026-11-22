@@ -32,12 +32,12 @@ export function ConceptMap() {
 
 const DESCRIPTIONS = {
   start: 'This section: first steps, key concepts, and guides that walk through whole projects.',
-  platform: 'Using LearnHouse: courses, the editor, AI, users, payments, and the Enterprise Edition.',
+  platform: 'Using Studytomy Portal: courses, the editor, AI, users, payments, and the Enterprise Edition.',
   'self-hosting': 'Installing, configuring, updating and backing up your own instance, and the CLI.',
-  developers: 'Building on LearnHouse: embeds, the React and Vue components, the SDK, the REST API and webhooks.',
+  developers: 'Building on Studytomy Portal: embeds, the React and Vue components, the SDK, the REST API and webhooks.',
   demos: 'Fifty apps built on the API, live, with the code to start from.',
   reference: 'Every API endpoint, with examples in your language and a live playground.',
-  releases: 'What changed in each version of LearnHouse, the CLI and the packages.',
+  releases: 'What changed in each version of Studytomy Portal, the CLI and the packages.',
 }
 
 /** The navbar tabs, each with a one-line description. */

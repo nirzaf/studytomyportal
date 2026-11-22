@@ -5,7 +5,7 @@ import './developers.css'
 
 const strip = (value, prefix) => value.trim().replace(new RegExp(`^${prefix}`), '')
 
-// The UI languages LearnHouse ships (apps/web/locales).
+// The UI languages Studytomy Portal ships (apps/web/locales).
 const LANGUAGES = [
   ['en', 'English'], ['ar', 'Arabic'], ['bn', 'Bengali'], ['de', 'German'], ['es', 'Spanish'], ['fa', 'Persian'],
   ['fr', 'French'], ['hi', 'Hindi'], ['id', 'Indonesian'], ['it', 'Italian'], ['ja', 'Japanese'], ['ko', 'Korean'],
@@ -61,7 +61,7 @@ export default function EmbedBuilder() {
     <div className="lhd-builder lhd-card">
       <div className="lhd-builder-fields">
         <label>
-          LearnHouse site
+          Studytomy Portal site
           <input type="text" value={site} onChange={(e) => setSite(e.target.value)} />
         </label>
         <label>
@@ -117,7 +117,7 @@ export default function EmbedBuilder() {
           </span>
         </div>
         <label className="lhd-check">
-          <input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} /> Show the LearnHouse badge
+          <input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} /> Show the Studytomy Portal badge
         </label>
         <label className="lhd-check">
           <input type="checkbox" checked={autoResize} onChange={(e) => setAutoResize(e.target.checked)} /> Fit the height to the content

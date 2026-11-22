@@ -1,7 +1,7 @@
 {
   "name": "learnhouse",
   "version": "1.6.0",
-  "description": "The official LearnHouse CLI: deploy, manage, and operate your LearnHouse instance",
+  "description": "Configure, run, and maintain a Studytomy Portal installation",
   "type": "module",
   "bin": {
     "learnhouse": "./dist/bin/learnhouse.js"
@@ -24,12 +24,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/learnhouse/learnhouse.git",
+    "url": "https://github.com/nirzaf/studytomyportal.git",
     "directory": "apps/cli"
   },
-  "homepage": "https://learnhouse.app",
+  "homepage": "https://github.com/nirzaf/studytomyportal/tree/main/apps/cli",
   "bugs": {
-    "url": "https://github.com/learnhouse/learnhouse/issues"
+    "url": "https://github.com/nirzaf/studytomyportal/issues"
   },
   "keywords": [
     "learnhouse",
@@ -40,7 +40,6 @@
     "education",
     "learning-management-system"
   ],
-  "author": "LearnHouse",
   "devDependencies": {
     "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",

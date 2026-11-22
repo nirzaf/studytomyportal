@@ -1,10 +1,10 @@
-# Contributing to Studytomy (LearnHouse-based)
+# Contributing to Studytomy (Studytomy Portal-based)
 
-Follow [AGENTS.md](AGENTS.md) and [LOCAL-ONLY.md](LOCAL-ONLY.md) for this fork. The upstream contribution process below applies only when intentionally contributing to LearnHouse; Studytomy-specific work belongs in the Studytomy repository.
+Follow [AGENTS.md](AGENTS.md) and [LOCAL-ONLY.md](LOCAL-ONLY.md) for this fork. The upstream contribution process below applies only when intentionally contributing to Studytomy Portal; Studytomy-specific work belongs in the Studytomy repository.
 
 ## Getting Started
 
-To set up your development environment, use the LearnHouse CLI:
+To set up your development environment, use the Studytomy Portal CLI:
 
 ```bash
 git clone https://github.com/nirzaf/studytomyportal.git
@@ -32,13 +32,13 @@ This project follows [GitHub's standard forking model](https://guides.github.com
 
 ### Submitting a bug/fix
 
-- Start an issue [here](https://github.com/learnhouse/learnhouse/issues) to report the bug.
+- Start an issue [here](https://github.com/nirzaf/studytomyportal/issues/new) to report the bug.
 - Please include a detailed description of the bug and how it can be reproduced.
 - Someone from the team will review the issue and will give you a go ahead.
 
 ### Submitting a feature / idea
 
-- Start a Discussion [here](https://github.com/learnhouse/learnhouse/discussions/categories/ideas) to propose your idea and how it should be implemented.
+- Start a discussion or issue in the [Studytomy Portal repository](https://github.com/nirzaf/studytomyportal/issues) to propose your idea and how it should be implemented.
 - Someone from the team will review your idea and will give you a go ahead.
 - Start an issue & link the discussion to it.
 - Clone your fork locally

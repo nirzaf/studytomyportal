@@ -299,7 +299,7 @@ export async function updateEnterprise(config: LearnHouseConfigJson, options: Ee
   const targetTag = options.version ? options.version.replace(/^v(?=\d)/, '') : 'prod'
   if (!IMAGE_TAG_RE.test(targetTag)) die(`invalid version "${options.version}": expected an image tag like 1.6.0 or prod`)
   const currentTag = readEnvVar(dir, 'EE_IMAGE_TAG') || 'prod'
-  ui.log(`Upgrading LearnHouse Enterprise: ${pc.dim(currentTag)} → ${pc.cyan(targetTag)}`)
+  ui.log(`Upgrading Studytomy Portal Enterprise: ${pc.dim(currentTag)} → ${pc.cyan(targetTag)}`)
 
   if (options.backup !== false) {
     try { ui.ok(`Backup: ${await backupDatabase(config, EE_LAYOUT, ui)}`) }
@@ -358,6 +358,6 @@ export async function updateEnterprise(config: LearnHouseConfigJson, options: Ee
     ui.warn('Skipped migrations (--no-migrate). Run later: docker compose exec api sh -c "cd /app && uv run alembic upgrade head"')
   }
 
-  ui.ok(`LearnHouse Enterprise upgraded to ${targetTag}.`)
+  ui.ok(`Studytomy Portal Enterprise upgraded to ${targetTag}.`)
   ui.log(pc.dim(`  Rollback: EE_IMAGE_TAG=${currentTag} in ${dir}/.env, restore ./backups/, docker compose up -d`))
 }

@@ -205,7 +205,7 @@ class TestExplicitHost:
         with patch("config.config.get_learnhouse_config", return_value=cfg), patch(
             "src.services.admin.admin.get_org_signup_base_url",
             new_callable=AsyncMock,
-            return_value="https://acme.learnhouse.io",
+            return_value="https://acme.example.com",
         ):
             return await _magic_link_base_url(org, mock_request, db, host=host)
 
@@ -221,7 +221,7 @@ class TestExplicitHost:
         assert await self._base(org, db, mock_request, " Academy.Acme.test. ") == "https://academy.acme.test"
 
     async def test_default_is_the_org_site(self, org, db, mock_request):
-        assert await self._base(org, db, mock_request, None) == "https://acme.learnhouse.io"
+        assert await self._base(org, db, mock_request, None) == "https://acme.example.com"
 
     async def test_unverified_domain_refused(self, org, db, mock_request):
         await _domain(db, org, "pending.acme.test", status="pending")

@@ -2,7 +2,7 @@
   "index": "Overview",
   "-- Build": {
     "type": "separator",
-    "title": "Build on LearnHouse"
+    "title": "Build with Studytomy Portal"
   },
   "embed": "Embed",
   "react": "React Component",
@@ -12,7 +12,7 @@
   "versioning": "Versions & Releases",
   "-- Internals": {
     "type": "separator",
-    "title": "Inside LearnHouse"
+    "title": "Inside Studytomy Portal"
   },
   "architecture": "Architecture",
   "contributing": "Contributing",

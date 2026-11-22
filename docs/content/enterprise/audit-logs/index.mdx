@@ -1,6 +1,6 @@
 ---
 title: "Audit Logs"
-description: "Review who changed what in your LearnHouse organization with audit logs: what is recorded, how payloads are redacted, filters, CSV export and the API."
+description: "Review who changed what in your Studytomy Portal organization with audit logs: what is recorded, how payloads are redacted, filters, CSV export and the API."
 ---
 
 import { Callout } from '@/components/mdx'
@@ -10,8 +10,7 @@ import { Callout } from '@/components/mdx'
 Audit logs record the changes people make in your organization, so administrators can see who did what and when. Use them for compliance, security reviews and troubleshooting.
 
 <Callout>
-Audit logs need the Enterprise plan on LearnHouse Cloud, or the [Enterprise Edition](/enterprise) when self-hosted. On a self-hosted EE instance every organization is logged, whatever its plan.
-<PlanCta plan="Enterprise" />
+Audit logs need the Enterprise plan in deployments that enable plan entitlements, or the [Enterprise Edition](/enterprise) when self-hosted. On a self-hosted EE instance every organization is logged, whatever its plan.
 </Callout>
 
 ## Where to find them
@@ -22,7 +21,7 @@ Go to **Users** → **Audit Logs** in the dashboard. Only the **Admin** role can
 
 ## What gets recorded
 
-LearnHouse records every `POST`, `PUT`, `PATCH` and `DELETE` request made by a signed-in member of the organization, by a superadmin, or by one of the organization's API tokens. Read-only requests are not recorded, and neither are anonymous requests or health checks.
+Studytomy Portal records every `POST`, `PUT`, `PATCH` and `DELETE` request made by a signed-in member of the organization, by a superadmin, or by one of the organization's API tokens. Read-only requests are not recorded, and neither are anonymous requests or health checks.
 
 | Field | Description |
 | --- | --- |
@@ -66,7 +65,7 @@ Click a row's payload to open it in **Event Payload**. Use **Refresh logs** to l
 Entries are first queued in Redis, then written to the database in batches every 60 seconds, so logging does not slow requests down. New entries can take up to a minute to appear.
 
 <Callout type="warning">
-Audit logging needs Redis. If Redis is not configured, nothing is recorded. LearnHouse does not prune audit logs, so they are kept indefinitely.
+Audit logging needs Redis. If Redis is not configured, nothing is recorded. Studytomy Portal does not prune audit logs, so they are kept indefinitely.
 </Callout>
 
 ## API

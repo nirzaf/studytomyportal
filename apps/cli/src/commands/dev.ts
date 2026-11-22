@@ -283,12 +283,12 @@ export function killProcess(
 export async function devCommand(opts: { ee?: boolean; adminEmail?: string; adminPassword?: string }) {
   const root = findProjectRoot()
   if (!root) {
-    p.log.error('Not inside a LearnHouse project.')
+    p.log.error('Not inside a Studytomy Portal project.')
     p.log.info('Run this command from within the learnhouse monorepo (must contain dev/docker-compose.yml, apps/api/, and apps/web/).')
     process.exit(1)
   }
 
-  p.intro(pc.cyan('LearnHouse Dev Mode'))
+  p.intro(pc.cyan('Studytomy Portal Dev Mode'))
 
   // Check env files before anything else
   const envOk = await checkDevEnv(root)
@@ -522,7 +522,7 @@ export async function devCommand(opts: { ee?: boolean; adminEmail?: string; admi
 
     console.log(pc.dim('DB and Redis containers are still running for next session.'))
     console.log(pc.dim('To stop them: docker compose -f .learnhouse/docker-compose.pg19.yml -p learnhouse-dev-pg19 down'))
-    console.log(pc.dim('Thanks for building with LearnHouse!'))
+    console.log(pc.dim('Thanks for building with Studytomy Portal!'))
     process.exit(exitCode)
   }
 
@@ -547,7 +547,7 @@ export async function devCommand(opts: { ee?: boolean; adminEmail?: string; admi
 
   p.log.success('API, Web, and Collab servers started')
   console.log()
-  console.log(pc.dim('  Thank you for contributing to LearnHouse!'))
+  console.log(pc.dim('  Thank you for contributing to Studytomy Portal!'))
   console.log()
 
   printControls()

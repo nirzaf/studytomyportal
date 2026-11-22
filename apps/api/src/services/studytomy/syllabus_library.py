@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
-from sqlalchemy import case, func, literal_column, or_, select
+from sqlalchemy import String, case, column, func, literal_column, or_, select, values
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.organizations import Organization
@@ -33,7 +33,12 @@ from src.db.studytomy.syllabus import (
 from src.db.users import PublicUser
 from src.security.features_utils.usage import refund_ai_credit, reserve_ai_credit
 from src.security.file_validation import validate_upload
-from src.security.org_auth import require_org_membership, require_org_role_permission
+from src.security.org_auth import require_org_membership
+from src.security.studytomy_access import (
+    StudytomyCapabilityName,
+    authorize_studytomy_staff_action,
+    evaluate_studytomy_staff_access,
+)
 from src.services.ai.llm import AINotConfiguredError, generate, resolve_model_for_org
 from src.services.ai.llm.embeddings import DEFAULT_EMBEDDING_DIMENSIONS, embedding_provenance
 from src.services.ai.rag.embedding_service import chunk_text, embed_single_text, generate_embeddings
@@ -60,7 +65,7 @@ _QUERY_STOPWORDS = frozenset({
     "a", "an", "and", "are", "as", "at", "be", "by", "can", "compare", "could", "describe", "explain",
     "did", "do", "does", "for", "from", "give", "has", "have", "how", "in", "into", "is", "it",
     "its", "may", "of", "on", "or", "please", "same", "the", "their", "these", "this", "those",
-    "simple", "to", "use", "was", "what", "when", "where", "which", "who", "why", "will", "with", "words", "would",
+    "make", "makes", "made", "produce", "produces", "produced", "simple", "to", "use", "was", "what", "when", "where", "which", "who", "why", "will", "with", "words", "would",
 })
 _TOPIC_ALIASES = (
     (re.compile(r"\bplants?\s+(?:make|produce)\s+(?:their\s+)?food\b", re.I), "photosynthesis chlorophyll"),
@@ -314,6 +319,12 @@ class _GeneratedAnswer(BaseModel):
     claims: Annotated[list[_GeneratedClaim], Field(max_length=4)]
 
 
+class SyllabusLibraryAccess(BaseModel):
+    can_view: bool
+    can_author: bool
+    can_review: bool
+
+
 def _validate_generated_claims(
     proposal: _GeneratedAnswer, candidates: list[dict], question: str | None = None
 ) -> list[ExploreAnswerBlock]:
@@ -391,14 +402,47 @@ def _read_version(
 
 
 async def require_source_manager(
-    db: AsyncSession, org: Organization, actor: PublicUser, *, review: bool = False
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    *,
+    mode: Literal["view", "author", "review"] = "author",
 ) -> None:
-    await require_org_role_permission(
-        actor.id,
-        org.id,
-        db,
-        "courses",
-        "action_update" if review else "action_create",
+    target = {"target_scope_kind": "function", "target_resource_uuid": "syllabus_library"}
+    if mode == "view":
+        for capability in (
+            StudytomyCapabilityName.ADAPTIVE_CURRICULUM_AUTHOR,
+            StudytomyCapabilityName.CONTENT_RELEASE_REVIEW,
+        ):
+            decision = await evaluate_studytomy_staff_access(
+                db, actor, org, capability, **target,
+            )
+            if decision.allowed:
+                return
+        raise HTTPException(403, "You are not assigned to access this organization's syllabus library.")
+
+    capability = (
+        StudytomyCapabilityName.CONTENT_RELEASE_REVIEW
+        if mode == "review"
+        else StudytomyCapabilityName.ADAPTIVE_CURRICULUM_AUTHOR
+    )
+    await authorize_studytomy_staff_action(db, actor, org, capability, **target)
+
+
+async def syllabus_library_access(
+    db: AsyncSession, org: Organization, actor: PublicUser
+) -> SyllabusLibraryAccess:
+    target = {"target_scope_kind": "function", "target_resource_uuid": "syllabus_library"}
+    author = await evaluate_studytomy_staff_access(
+        db, actor, org, StudytomyCapabilityName.ADAPTIVE_CURRICULUM_AUTHOR, **target,
+    )
+    reviewer = await evaluate_studytomy_staff_access(
+        db, actor, org, StudytomyCapabilityName.CONTENT_RELEASE_REVIEW, **target,
+    )
+    return SyllabusLibraryAccess(
+        can_view=author.allowed or reviewer.allowed,
+        can_author=author.allowed,
+        can_review=reviewer.allowed,
     )
 
 
@@ -461,7 +505,7 @@ async def _embedding_batch(chunks: list[tuple[int, int, str]]) -> tuple[str, lis
 async def list_source_versions(
     db: AsyncSession, org: Organization, actor: PublicUser, *, limit: int = 100, offset: int = 0
 ) -> SyllabusSourceList:
-    await require_source_manager(db, org, actor)
+    await require_source_manager(db, org, actor, mode="view")
     page_size = min(max(limit, 1), 100)
     rows = (await db.execute(
         select(StudySyllabusSource, StudySyllabusSourceVersion)
@@ -623,7 +667,7 @@ async def upload_syllabus_source(
 async def read_source_pages(
     db: AsyncSession, org: Organization, actor: PublicUser, version_uuid: str
 ) -> SyllabusSourcePages:
-    await require_source_manager(db, org, actor)
+    await require_source_manager(db, org, actor, mode="view")
     version = (await db.execute(select(StudySyllabusSourceVersion).where(
         StudySyllabusSourceVersion.org_id == org.id,
         StudySyllabusSourceVersion.version_uuid == version_uuid,
@@ -644,7 +688,7 @@ async def retry_syllabus_index(
     *,
     commit_snapshot: bool = True,
 ) -> SyllabusSourceVersionRead:
-    await require_source_manager(db, org, actor, review=True)
+    await require_source_manager(db, org, actor, mode="review")
     # Take an unlocked immutable snapshot before invoking the embedding provider.
     # Write locks are acquired only for the short compare-and-replace phase below.
     rows = (await db.execute(
@@ -805,7 +849,7 @@ async def review_syllabus_source(
     version_uuid: str,
     command: SyllabusSourceReview,
 ) -> SyllabusSourceVersionRead:
-    await require_source_manager(db, org, actor, review=True)
+    await require_source_manager(db, org, actor, mode="review")
     await lock_organization(db, org.id)
     rows = (await db.execute(
         select(StudySyllabusSource, StudySyllabusSourceVersion)
@@ -869,7 +913,7 @@ async def review_syllabus_source(
 async def revoke_syllabus_source(
     db: AsyncSession, org: Organization, actor: PublicUser, version_uuid: str, evidence: str
 ) -> SyllabusSourceVersionRead:
-    await require_source_manager(db, org, actor, review=True)
+    await require_source_manager(db, org, actor, mode="review")
     await lock_organization(db, org.id)
     rows = (await db.execute(
         select(StudySyllabusSource, StudySyllabusSourceVersion)
@@ -945,7 +989,7 @@ async def list_published_curricula(db: AsyncSession, org: Organization) -> list[
 async def list_published_curriculum_concepts(
     db: AsyncSession, org: Organization, actor: PublicUser, curriculum_uuid: str
 ) -> list[SyllabusConceptOption]:
-    await require_source_manager(db, org, actor)
+    await require_source_manager(db, org, actor, mode="view")
     revision = (await db.execute(select(StudyCurriculumRevision).where(
         StudyCurriculumRevision.org_id == org.id,
         StudyCurriculumRevision.uuid == curriculum_uuid,
@@ -1074,7 +1118,7 @@ async def review_syllabus_mapping(
     mapping_uuid: str,
     command: SyllabusMappingReview,
 ) -> SyllabusMappingRead:
-    await require_source_manager(db, org, actor, review=True)
+    await require_source_manager(db, org, actor, mode="review")
     await lock_organization(db, org.id)
     mapping_rows = (await db.execute(
         select(StudySyllabusConceptMapping, StudySyllabusSourceVersion, StudyCurriculumRevision, StudyConcept)
@@ -1129,7 +1173,7 @@ async def revoke_syllabus_mapping(
     evidence: str,
 ) -> SyllabusMappingRead:
     """Revoke one mapping while retaining its source and historical review evidence."""
-    await require_source_manager(db, org, actor, review=True)
+    await require_source_manager(db, org, actor, mode="review")
     await lock_organization(db, org.id)
     mapping_rows = (await db.execute(
         select(StudySyllabusConceptMapping, StudySyllabusSourceVersion, StudyCurriculumRevision, StudyConcept)
@@ -1168,7 +1212,7 @@ async def revoke_syllabus_mapping(
 async def list_syllabus_mappings(
     db: AsyncSession, org: Organization, actor: PublicUser, *, limit: int = 100, offset: int = 0
 ) -> tuple[list[SyllabusMappingRead], int | None]:
-    await require_source_manager(db, org, actor)
+    await require_source_manager(db, org, actor, mode="view")
     page_size = min(max(limit, 1), 100)
     rows = (await db.execute(
         select(StudySyllabusConceptMapping, StudySyllabusSourceVersion, StudyCurriculumRevision, StudyConcept)
@@ -1286,7 +1330,7 @@ async def read_syllabus_pdf(
     version, source = row
     if version.review_status != "approved" or version.rights_status != "verified_permitted":
         try:
-            await require_source_manager(db, org, actor)
+            await require_source_manager(db, org, actor, mode="view")
         except HTTPException:
             raise HTTPException(404, "Syllabus source version not found.") from None
     content = await asyncio.to_thread(read_file_content, version.storage_reference)
@@ -1410,6 +1454,10 @@ async def _retrieve(
         base.append(StudySyllabusSourceVersion.version_uuid.in_(command.source_version_uuids))
 
     search_config = literal_column("'simple'::regconfig")
+    query_terms = _query_terms(normalized_search)
+    corpus_size, term_frequencies = await _topic_term_frequencies(
+        db, base, query_terms, search_config,
+    )
     tsvector = func.to_tsvector(search_config, StudySyllabusChunk.chunk_text)
     tsquery = func.to_tsquery(search_config, " | ".join(terms))
     lexical = tsvector.bool_op("@@")(tsquery)
@@ -1425,13 +1473,16 @@ async def _retrieve(
         .limit(32)
     )).all()
     ranked: dict[tuple[int, int, int], tuple[float, tuple]] = {}
-    query_terms = set(terms)
     identifiers = _query_identifiers(search_text)
     for rank, row in enumerate(lexical_rows, 1):
-        if not _lexical_match_is_sufficient(query_terms, identifiers, row[0].chunk_text):
+        relevance = _lexical_match_score(
+            query_terms, identifiers, row[0].chunk_text,
+            term_frequencies, corpus_size,
+        )
+        if relevance is None:
             continue
         key = (row[0].id, row[1].id, row[0].page_number)
-        ranked[key] = (1 / (60 + rank), row)
+        ranked[key] = (1 / (60 + rank) * (1 + relevance), row)
 
     concept_rows = (await db.execute(
         select(
@@ -1441,6 +1492,7 @@ async def _retrieve(
             StudyConcept.code,
             StudyConcept.title,
             StudyConcept.objective,
+            StudySyllabusConceptMapping.evidence_quote,
         )
         .join(StudySyllabusConceptMapping, StudySyllabusConceptMapping.source_version_id == StudySyllabusChunk.source_version_id)
         .join(StudyConcept, StudyConcept.id == StudySyllabusConceptMapping.concept_id)
@@ -1451,6 +1503,10 @@ async def _retrieve(
             StudySyllabusConceptMapping.status == "approved",
             StudySyllabusConceptMapping.page_start <= StudySyllabusChunk.page_number,
             StudySyllabusConceptMapping.page_end >= StudySyllabusChunk.page_number,
+            func.position(
+                func.regexp_replace(func.lower(StudySyllabusConceptMapping.evidence_quote), r"\s+", " ", "g"),
+                func.regexp_replace(func.lower(StudySyllabusChunk.chunk_text), r"\s+", " ", "g"),
+            ) > 0,
             StudyCurriculumRevision.org_id == org.id,
             StudyCurriculumRevision.status == "published",
             StudyConcept.org_id == org.id,
@@ -1467,12 +1523,16 @@ async def _retrieve(
                 tsquery,
             ).desc(),
         )
-        .distinct(StudySyllabusChunk.id)
-        .limit(32)
+        .limit(64)
     )).all()
     for rank, row in enumerate(concept_rows, 1):
         concept_text = " ".join(str(value or "") for value in row[3:6])
-        if not _lexical_match_is_sufficient(query_terms, identifiers, concept_text):
+        if _normalize_evidence(str(row[6])) not in _normalize_evidence(row[0].chunk_text):
+            continue
+        if _lexical_match_score(
+            query_terms, identifiers, concept_text,
+            term_frequencies, corpus_size,
+        ) is None:
             continue
         candidate_row = (row[0], row[1], row[2])
         key = (candidate_row[0].id, candidate_row[1].id, candidate_row[0].page_number)
@@ -1591,7 +1651,7 @@ async def _coverage_for_sources(
 
 def _query_terms(text: str) -> set[str]:
     return {
-        term.casefold()
+        _canonical_search_term(term)
         for term in re.findall(r"[^\W_]+", text, flags=re.UNICODE)
         if len(term) > 1 and term.casefold() not in _QUERY_STOPWORDS
     }
@@ -1605,18 +1665,119 @@ def _normalize_topic_query(text: str) -> str:
 
 def _topic_search_terms(text: str) -> list[str]:
     """Build safe simple-config tsquery lexemes, including exact code/formula tokens."""
-    terms = _query_terms(text)
+    terms: set[str] = set()
+    for term in _query_terms(text):
+        terms.update(_search_lexeme_variants(term))
     for identifier in _query_identifiers(text):
-        terms.update(_query_terms(identifier))
-    return sorted(terms)
+        for term in _query_terms(identifier):
+            terms.update(_search_lexeme_variants(term))
+    return sorted(terms, key=lambda term: (-len(term), term))[:32]
 
 
-def _lexical_match_is_sufficient(query_terms: set[str], identifiers: list[str], chunk_text: str) -> bool:
+def _canonical_search_term(term: str) -> str:
+    """Normalize common English plurals without stemming scientific words such as photosynthesis."""
+    token = term.casefold()
+    if token.endswith("ies") and token not in {"species", "series"} and len(token) > 4:
+        return f"{token[:-3]}y"
+    if token.endswith(("sses", "shes", "ches", "xes", "zes")):
+        return token[:-2]
+    if (
+        len(token) > 4
+        and token.endswith("s")
+        and not token.endswith(("ss", "us", "is"))
+        and token not in {"gas", "lens", "species", "series"}
+    ):
+        return token[:-1]
+    return token
+
+
+def _search_lexeme_variants(term: str) -> set[str]:
+    """Return the canonical token and its regular plural for PostgreSQL's simple config."""
+    if term.endswith("y") and len(term) > 1 and term[-2] not in "aeiou":
+        plural = f"{term[:-1]}ies"
+    elif term.endswith(("s", "x", "z", "ch", "sh")):
+        plural = f"{term}es"
+    else:
+        plural = f"{term}s"
+    return {term, plural}
+
+
+async def _topic_term_frequencies(
+    db: AsyncSession,
+    base_filters: list,
+    query_terms: set[str],
+    search_config,
+) -> tuple[int, dict[str, int]]:
+    if not query_terms:
+        return 0, {}
+    scoped_from = (
+        StudySyllabusChunk.__table__
+        .join(StudySyllabusSourceVersion.__table__, StudySyllabusChunk.source_version_id == StudySyllabusSourceVersion.id)
+        .join(StudySyllabusSource.__table__, StudySyllabusSourceVersion.source_id == StudySyllabusSource.id)
+    )
+    corpus_size = int((await db.execute(
+        select(func.count(func.distinct(StudySyllabusChunk.id)))
+        .select_from(scoped_from)
+        .where(*base_filters)
+    )).scalar_one())
+    pairs = [
+        (term, variant)
+        for term in sorted(query_terms)
+        for variant in _search_lexeme_variants(term)
+    ]
+    term_values = values(
+        column("term", String()), column("lexeme", String()), name="topic_query_terms",
+    ).data(pairs).alias("topic_query_terms")
+    term_vector = func.to_tsvector(search_config, StudySyllabusChunk.chunk_text)
+    term_query = func.plainto_tsquery(search_config, term_values.c.lexeme)
+    term_frequencies = (await db.execute(
+        select(term_values.c.term, func.count(func.distinct(StudySyllabusChunk.id)))
+        .select_from(term_values.join(StudySyllabusChunk.__table__, term_vector.bool_op("@@")(term_query)))
+        .join(StudySyllabusSourceVersion.__table__, StudySyllabusChunk.source_version_id == StudySyllabusSourceVersion.id)
+        .join(StudySyllabusSource.__table__, StudySyllabusSourceVersion.source_id == StudySyllabusSource.id)
+        .where(*base_filters)
+        .group_by(term_values.c.term)
+    )).all()
+    return corpus_size, {str(term): int(count) for term, count in term_frequencies}
+
+
+def _lexical_match_score(
+    query_terms: set[str],
+    identifiers: list[str],
+    chunk_text: str,
+    term_frequencies: dict[str, int] | None = None,
+    corpus_size: int = 0,
+) -> float | None:
     normalized_chunk = _normalize_evidence(chunk_text)
     if any(_normalize_evidence(identifier) in normalized_chunk for identifier in identifiers):
-        return True
-    required_matches = min(2, len(query_terms))
-    return required_matches > 0 and len(query_terms.intersection(_query_terms(chunk_text))) >= required_matches
+        return 1.0
+    matched = query_terms.intersection(_query_terms(chunk_text))
+    if not matched:
+        return None
+    if term_frequencies is None:
+        return 1.0 if len(matched) >= min(2, len(query_terms)) else None
+
+    def idf(term: str) -> float:
+        frequency = min(term_frequencies.get(term, 0), corpus_size)
+        return math.log((corpus_size + 1) / (frequency + 1)) + 1
+
+    total_weight = sum(idf(term) for term in query_terms)
+    matched_weight = sum(idf(term) for term in matched)
+    coverage = matched_weight / total_weight if total_weight else 0.0
+    mean_weight = matched_weight / len(matched)
+    # A single match is useful only when it is rare in this learner's authorized scope.
+    if len(matched) == 1:
+        return coverage if mean_weight >= 1.9 and coverage >= 0.20 else None
+    return coverage if mean_weight >= 1.15 and coverage >= 0.30 else None
+
+
+def _lexical_match_is_sufficient(
+    query_terms: set[str], identifiers: list[str], chunk_text: str,
+    term_frequencies: dict[str, int] | None = None, corpus_size: int = 0,
+) -> bool:
+    return _lexical_match_score(
+        query_terms, identifiers, chunk_text, term_frequencies, corpus_size,
+    ) is not None
 
 
 def _query_phrases(text: str) -> list[str]:
@@ -1677,24 +1838,26 @@ def _concept_evidence_is_relevant(concept: StudyConcept, quote: str) -> bool:
 
 
 def _claim_is_supported(statement: str, quote: str) -> bool:
-    """Conservative lexical check; exact page quotation remains the citation authority."""
-    statement_terms = _query_terms(statement)
-    quote_terms = _query_terms(quote)
-    if not statement_terms:
-        return False
-    identifiers = _query_identifiers(statement)
-    if any(_normalize_evidence(identifier) not in _normalize_evidence(quote) for identifier in identifiers):
-        return False
-    statement_words = {word.casefold() for word in re.findall(r"[^\W_]+", statement, flags=re.UNICODE)}
-    quote_words = {word.casefold() for word in re.findall(r"[^\W_]+", quote, flags=re.UNICODE)}
-    if not statement_words.intersection(_NUMBER_WORDS).issubset(quote_words):
-        return False
-    numeric_facts = set(re.findall(r"(?<!\w)\d+(?:\.\d+)?(?!\w)", statement))
-    quote_numbers = set(re.findall(r"(?<!\w)\d+(?:\.\d+)?(?!\w)", quote))
-    if not numeric_facts.issubset(quote_numbers):
-        return False
-    supported = statement_terms.intersection(quote_terms)
-    return len(supported) / len(statement_terms) >= 0.75
+    """Fail closed unless a claim preserves the source sentence's ordered facts.
+
+    Token overlap cannot detect polarity, causality, or comparison reversals. Keep
+    paraphrasing deliberately narrow: articles may vary and need/require are a
+    safe lexical equivalent; all other words, quantities, units, and their order
+    must match the reviewed quotation.
+    """
+    def facts(text: str) -> list[str]:
+        result: list[str] = []
+        for token in re.findall(r"[^\W_]+(?:[.-][^\W_]+)*", text.casefold(), flags=re.UNICODE):
+            if token in {"a", "an", "the"}:
+                continue
+            normalized = _canonical_search_term(token)
+            if normalized in {"need", "require"}:
+                normalized = "need_require"
+            result.append(normalized)
+        return result
+
+    statement_facts = facts(statement)
+    return bool(statement_facts) and statement_facts == facts(quote)
 
 
 def _claim_answers_question(statement: str, question: str) -> bool:
@@ -1702,7 +1865,15 @@ def _claim_answers_question(statement: str, question: str) -> bool:
     question_terms = _query_terms(_normalize_topic_query(question))
     statement_terms = _query_terms(statement)
     if question_terms:
-        return len(question_terms.intersection(statement_terms)) >= min(2, len(question_terms))
+        if len(question_terms.intersection(statement_terms)) >= min(2, len(question_terms)):
+            return True
+        # A curated paraphrase alias names a distinctive concept (for example,
+        # photosynthesis for "How do plants make food?"). One such term is enough.
+        return any(
+            pattern.search(question)
+            and bool(_query_terms(expansion).intersection(statement_terms))
+            for pattern, expansion in _TOPIC_ALIASES
+        )
     identifiers = _query_identifiers(question)
     normalized_statement = _normalize_evidence(statement)
     return bool(identifiers) and any(_normalize_evidence(identifier) in normalized_statement for identifier in identifiers)

@@ -154,7 +154,7 @@ export async function envCommand() {
   const dir = findInstallDir()
   const config = readConfig(dir)
   if (!config) {
-    p.log.error('No LearnHouse installation found. Run setup first.')
+    p.log.error('No Studytomy Portal installation found. Run setup first.')
     process.exit(1)
   }
 
@@ -164,7 +164,7 @@ export async function envCommand() {
     process.exit(1)
   }
 
-  p.intro(pc.cyan('LearnHouse Environment Editor'))
+  p.intro(pc.cyan('Studytomy Portal Environment Editor'))
 
   const categories = config.edition === 'enterprise' ? ENTERPRISE_CATEGORIES : COMMUNITY_CATEGORIES
   const originalContent = fs.readFileSync(envPath, 'utf-8')

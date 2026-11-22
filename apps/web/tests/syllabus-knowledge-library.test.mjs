@@ -75,17 +75,25 @@ test('learning context does not silently narrow search scope', () => {
   expect(payload).not.toHaveProperty('jurisdiction')
 })
 
-test('Educator source manager explains review and rights before learner access', () => {
+test('Educator source manager waits for server authorization before showing controls', () => {
   const markup = render(createElement(SyllabusLibraryManager))
 
   expect(markup).toContain('Syllabus source library')
-  expect(markup).toContain('Usage permission status')
-  expect(markup).toContain('Uploaded rights values are claims until an independent reviewer verifies permission.')
-  expect(markup).toContain('Image-only scans are held with OCR guidance.')
-  expect(markup).toContain('students can retrieve only approved and permitted versions')
-  expect(markup).toContain('No PDF sources uploaded yet.')
+  expect(markup).not.toContain('Usage permission status')
+  expect(markup).not.toContain('Approve for student retrieval')
 
   const source = readFileSync(new URL('../components/Studytomy/SyllabusLibraryManager.tsx', import.meta.url), 'utf8')
+  expect(source).toContain('/syllabus-library/access')
+  expect(source).toContain('access?.can_author && <section')
+  expect(source).toContain('access?.can_review && mapping.status')
   expect(source).toContain('Independently verified license / permission reference')
   expect(source).toContain('Approve for student retrieval')
+  expect(source).toContain('canReviewRole && version.uploaded_by_user_id !== currentUserId')
+})
+
+test('Explore Topics drops stale results and follow-up scope when learning filters change', () => {
+  const source = readFileSync(new URL('../components/Studytomy/ExploreTopics.tsx', import.meta.url), 'utf8')
+  expect(source).toContain('setFollowUpContext(null)\n                setResult(null)')
+  expect(source).toContain('key={citation.reference}')
+  expect(source).toContain('This approved PDF is no longer available. Search again to refresh the source list.')
 })

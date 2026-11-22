@@ -342,13 +342,13 @@ const OrgEditAutomations: React.FC = () => {
     }
   }
 
-  // Zapier hero card stays hidden until the LearnHouse Zapier app is live
+  // Zapier hero card stays hidden until the Studytomy Portal Zapier app is live
   const showZapierHeroCard = false
 
   return (
     <FeatureGate feature="webhooks">
       <>
-        {/* ── Zapier hero card (hidden until the LearnHouse Zapier app is live) ────────────────────── */}
+        {/* ── Zapier hero card (hidden until the Studytomy Portal Zapier app is live) ────────────────────── */}
         {showZapierHeroCard && (
         <div className="sm:mx-10 mx-0 mb-6 bg-white rounded-xl nice-shadow overflow-hidden">
           <div className="px-5 py-4 flex items-center gap-4">
@@ -381,7 +381,7 @@ const OrgEditAutomations: React.FC = () => {
                 {t('dashboard.organization.automations.manage_zaps')}
               </a>
               <a
-                href="https://zapier.com/apps/learnhouse/integrations"
+                href="https://zapier.com/apps"
                 target="_blank"
                 rel="noopener noreferrer"
               >

@@ -186,7 +186,7 @@ async function ch1Settings(browser: Browser, admin: any) {
   await page.goto(`${BASE}/dash/live-sessions/settings`)
   await settle(page, 2000)
   await caption(page, '1 · Setup', 'Admins turn Live sessions on and pick which meeting providers hosts can use')
-  await caption(page, '1 · Setup', 'LearnHouse Meet is built in. Nothing to install, nothing to configure')
+  await caption(page, '1 · Setup', 'Studytomy Portal Meet is built in. Nothing to install, nothing to configure')
   await page.getByText('Microsoft Teams').first().scrollIntoViewIfNeeded()
   await caption(page, '1 · Setup', 'Google Meet and Teams: one click to connect the org account. No keys, no config files. Meetings, invites and attendance then sync on their own')
   await page.mouse.wheel(0, 600)
@@ -306,8 +306,8 @@ async function ch5LiveClass(browser: Browser, admin: any, learner: any) {
   await student.waitForTimeout(3500)
   await caption(student, '5 · Learner', 'Let in automatically, straight into the class video', 3400)
 
-  // LearnHouse Meet
-  await caption(host, '5 · Host', 'LearnHouse Meet: our own video room, on our own media server. Nothing to install, no outside app', 2600)
+  // Studytomy Portal Meet
+  await caption(host, '5 · Host', 'Studytomy Portal Meet: our own video room, on our own media server. Nothing to install, no outside app', 2600)
   await caption(student, '5 · Learner', 'Learners arrive muted with the camera off. One click to talk, or raise a hand', 1200)
   await student.getByRole('button', { name: 'Turn microphone on' }).click()
   await student.getByRole('button', { name: 'Raise hand' }).click()

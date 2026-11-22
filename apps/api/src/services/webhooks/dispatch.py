@@ -106,7 +106,7 @@ def _get_webhook_client() -> httpx.AsyncClient:
             transport=pinned_transport(),
             timeout=10.0,
             follow_redirects=False,
-            headers={"User-Agent": "LearnHouse-Webhooks/1.0"},
+            headers={"User-Agent": "Studytomy Portal-Webhooks/1.0"},
         )
     return _webhook_client
 

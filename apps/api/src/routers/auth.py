@@ -99,7 +99,7 @@ def get_cookie_domain_for_request(request: Request) -> str | None:
       localhost dev and self-hosted VPS deployments on any domain.
     - tenancy == "multi":
         - request from a subdomain of LEARNHOUSE_DOMAIN → configured cookie
-          domain (e.g. ".learnhouse.io") so subdomains share the session.
+          domain (e.g. ".example.com") so subdomains share the session.
         - request from a custom (per-org) domain or unknown host → None
           (host-only cookie).
     """

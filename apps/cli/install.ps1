@@ -1,9 +1,9 @@
 # -------------------------------------------------------------
-# LearnHouse Install Script (Windows PowerShell)
+# Studytomy Portal Install Script (Windows PowerShell)
 # Installs Docker and Node.js if missing, then runs the CLI.
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/learnhouse/learnhouse/main/apps/cli/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/nirzaf/studytomyportal/main/apps/cli/install.ps1 | iex
 #
 # Output is plain ASCII so it renders on consoles without UTF-8. Failures
 # throw instead of calling `exit`, which would close the user's PowerShell
@@ -41,7 +41,7 @@ function Install-LearnHouse {
     }
 
     Write-Host ""
-    Write-Host "LearnHouse Installer" -ForegroundColor White
+    Write-Host "Studytomy Portal Installer" -ForegroundColor White
     Write-Host "Platform: Windows ($env:PROCESSOR_ARCHITECTURE)" -ForegroundColor DarkGray
     Write-Host ""
 
@@ -79,7 +79,7 @@ function Install-LearnHouse {
         # after a restart), so stop here rather than continue half-ready.
         Write-Ok "Docker Desktop installed"
         Write-Host ""
-        Write-Warn "Docker Desktop must be started before LearnHouse can use it."
+        Write-Warn "Docker Desktop must be started before Studytomy Portal can use it."
         Write-Host "  1. Restart your computer if the installer asked you to" -ForegroundColor DarkGray
         Write-Host "  2. Open Docker Desktop from the Start Menu and wait for it to finish starting" -ForegroundColor DarkGray
         Write-Host "  3. Re-run this installer" -ForegroundColor DarkGray
@@ -150,13 +150,13 @@ function Install-LearnHouse {
     Write-Host ""
     Write-Host "All dependencies installed!" -ForegroundColor Green
     Write-Host ""
-    Write-Host "  Run LearnHouse setup with:" -ForegroundColor DarkGray
+    Write-Host "  Run Studytomy Portal setup with:" -ForegroundColor DarkGray
     Write-Host "  npx learnhouse@latest setup" -ForegroundColor Cyan
     Write-Host ""
 
     # -- Launch ---------------------------------------------------
 
-    Write-Host "Launching LearnHouse setup..." -ForegroundColor Cyan
+    Write-Host "Launching Studytomy Portal setup..." -ForegroundColor Cyan
     Write-Host ""
     & npx.cmd learnhouse@latest setup
 }

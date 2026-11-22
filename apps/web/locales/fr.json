@@ -236,7 +236,7 @@
     "billing": "Facturation",
     "create_organization": "Créer une organisation",
     "start_your_own_organization": "Créer votre propre organisation",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Impossible de supprimer cette organisation. Veuillez réessayer.",
     "org_actions": "Actions de l’organisation",
     "manage_upgrade": "Gérer / Mettre à niveau",
@@ -3108,7 +3108,7 @@
           "description": "Configurer vos paramètres personnels, mots de passe et e-mail"
         }
       },
-      "learnhouse_university": "Université Studytomy",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Bienvenue",
       "plan": "forfait",
       "create_course": "Créer un cours",
@@ -7251,7 +7251,7 @@
           "keywords": "parcours, parcours d'apprentissage, cursus, programmes, programme d'études, séquence, certificat, paths"
         },
         "live_sessions": {
-          "keywords": "sessions en direct cours webinaire réunion vidéo présence enregistrements sondages learnhouse meet zoom meet teams",
+          "keywords": "sessions en direct cours webinaire réunion vidéo présence enregistrements sondages meet zoom meet teams",
           "description": "Planifiez des sessions en direct, suivez la présence et gérez les enregistrements"
         }
       }
@@ -10821,8 +10821,8 @@
       "inactive_desc": "La vérification de la licence EE a échoué (<code>{{reason}}</code>). Chaque point de terminaison <code>/ee/*</code> renvoie 503, cette page ne peut donc pas charger ses données.",
       "what_to_check": "À vérifier",
       "check_diagnostics": "Ouvrez <code>{{path}}</code>. Il répond même lorsque la licence est inactive, et son champ <code>hint</code> indique la solution.",
-      "check_saas": "Pour les déploiements SaaS : vérifiez que <code>LEARNHOUSE_SAAS=true</code> est défini dans l'environnement de l'API. Le mode SaaS court-circuite la vérification de licence.",
-      "check_self_hosted": "Pour l'EE auto-hébergée : vérifiez que <code>LEARNHOUSE_LICENSE_KEY</code> est défini et que le serveur de licences (ou la période de grâce) est accessible.",
+      "check_saas": "Pour les déploiements SaaS : vérifiez que <code>SaaS mode</code> est défini dans l'environnement de l'API. Le mode SaaS court-circuite la vérification de licence.",
+      "check_self_hosted": "Pour l'EE auto-hébergée : vérifiez que <code>license key</code> est défini et que le serveur de licences (ou la période de grâce) est accessible.",
       "check_logs": "Si vous avez accès au shell, les journaux de l'API contiennent la même raison avec tous les détails : <code>[EE] license inactive …</code>",
       "failed_to_load": "Échec du chargement"
     },

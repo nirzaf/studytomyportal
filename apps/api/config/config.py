@@ -130,7 +130,7 @@ class MailingConfig(BaseModel):
     # configurable would break DKIM alignment and burn a shared sending
     # reputation. Organizations may override this name per-org; see
     # ``src/services/email/sender.py``.
-    system_email_sender_name: Optional[str] = "LearnHouse"
+    system_email_sender_name: Optional[str] = "Studytomy Portal"
     resend_api_key: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = 587
@@ -351,7 +351,7 @@ def get_learnhouse_config() -> LearnHouseConfig:
     # this env var is backward-compatible:
     #   - EE/SaaS deploys with a real (non-localhost) domain that aren't marked
     #     self-hosted/dev → "multi" (preserves prior behavior of routing
-    #     `acme.learnhouse.io` to org `acme`).
+    #     `acme.example.com` to org `acme`).
     #   - Anything else → "single".
     # Existing operators upgrading do not need to set LEARNHOUSE_TENANCY for
     # behavior to stay the same; new operators only need to set it to opt in
@@ -553,11 +553,11 @@ def get_learnhouse_config() -> LearnHouseConfig:
     system_email_address = env_system_email_address or yaml_config.get(
         "mailing_config", {}
     ).get("system_email_address")
-    # Defaults to "LearnHouse" so an unset deployment keeps the historical
+    # Defaults to "Studytomy Portal" so an unset deployment keeps the historical
     # From name exactly as it was.
     system_email_sender_name = env_system_email_sender_name or yaml_config.get(
         "mailing_config", {}
-    ).get("system_email_sender_name", "LearnHouse")
+    ).get("system_email_sender_name", "Studytomy Portal")
     smtp_host = env_smtp_host or yaml_config.get("mailing_config", {}).get("smtp_host")
     smtp_port = int(env_smtp_port) if env_smtp_port else yaml_config.get("mailing_config", {}).get("smtp_port", 587)
     smtp_username = env_smtp_username or yaml_config.get("mailing_config", {}).get("smtp_username")
@@ -671,7 +671,7 @@ def get_learnhouse_config() -> LearnHouseConfig:
             if not domain or "localhost" in str(domain).lower():
                 raise ValueError(
                     "LEARNHOUSE_TENANCY=multi requires LEARNHOUSE_DOMAIN to be set "
-                    "to a routable parent domain (e.g. 'learnhouse.io'). "
+                    "to a routable parent domain (e.g. 'example.com'). "
                     f"Got domain={domain!r}."
                 )
 

@@ -67,12 +67,12 @@ class TestGetCorsOriginRegex:
         # returning an empty value (which would take the SaaS frontend offline).
         with patch(
             "src.core.middleware.cors.get_learnhouse_config",
-            return_value=_config("multi", allowed_regexp="", domain="learnhouse.io"),
+            return_value=_config("multi", allowed_regexp="", domain="example.com"),
         ):
             regex = get_cors_origin_regex()
-            assert re.fullmatch(regex, "https://learnhouse.io")
-            assert re.fullmatch(regex, "https://acme.learnhouse.io")
-            assert re.fullmatch(regex, "https://deep.sub.learnhouse.io:8443")
+            assert re.fullmatch(regex, "https://example.com")
+            assert re.fullmatch(regex, "https://acme.example.com")
+            assert re.fullmatch(regex, "https://deep.sub.example.com:8443")
             assert not re.fullmatch(regex, "https://evil.example.org")
 
     def test_multi_tenancy_falls_back_to_localhost_when_regexp_and_domain_empty(self):

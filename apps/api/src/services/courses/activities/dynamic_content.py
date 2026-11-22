@@ -66,7 +66,7 @@ class RenderContext:
     progress_completed: int = 0
     progress_total: int = 0
     completed_activity_uuids: frozenset[str] = frozenset()
-    # Certificates, assignments and communities: what the learner did elsewhere in LearnHouse.
+    # Certificates, assignments and communities: what the learner did elsewhere in Studytomy Portal.
     certified: bool = False
     certified_on: date | None = None
     assignment_total: int = 0

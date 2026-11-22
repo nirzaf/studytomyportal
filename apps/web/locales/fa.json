@@ -236,7 +236,7 @@
     "billing": "صورت‌حساب",
     "create_organization": "ایجاد سازمان",
     "start_your_own_organization": "سازمان خودتان را بسازید",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "حذف این سازمان ممکن نشد. لطفاً دوباره تلاش کنید.",
     "org_actions": "اقدامات سازمان",
     "manage_upgrade": "مدیریت / ارتقا",
@@ -3068,7 +3068,7 @@
           "description": "پیکربندی تنظیمات شخصی، رمزهای عبور، ایمیل"
         }
       },
-      "learnhouse_university": "دانشگاه Studytomy",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "خوش آمدید",
       "plan": "طرح",
       "create_course": "ایجاد دوره",
@@ -7184,7 +7184,7 @@
           "keywords": "مسیرها، مسیرهای یادگیری، برنامه‌ها، برنامه درسی، ترتیب، گواهینامه، paths, learning paths"
         },
         "live_sessions": {
-          "keywords": "جلسه زنده کلاس وبینار نشست ویدیو حضور و غیاب ضبط نظرسنجی learnhouse meet zoom meet teams live sessions",
+          "keywords": "جلسه زنده کلاس وبینار نشست ویدیو حضور و غیاب ضبط نظرسنجی meet zoom meet teams live sessions",
           "description": "زمان‌بندی جلسه‌های زنده، پیگیری حضور و مدیریت ضبط‌ها"
         }
       }
@@ -10715,8 +10715,8 @@
       "inactive_desc": "بررسی مجوز EE ناموفق بود (<code>{{reason}}</code>). همهٔ نقاط پایانی <code>/ee/*</code> خطای 503 برمی‌گردانند، بنابراین این صفحه نمی‌تواند داده‌هایش را بارگذاری کند.",
       "what_to_check": "چه چیزی را بررسی کنید",
       "check_diagnostics": "<code>{{path}}</code> را باز کنید. حتی وقتی مجوز غیرفعال است پاسخ می‌دهد و فیلد <code>hint</code> آن راه‌حل را مشخص می‌کند.",
-      "check_saas": "برای استقرارهای SaaS: مطمئن شوید <code>LEARNHOUSE_SAAS=true</code> در محیط API تنظیم شده است. SaaS بررسی مجوز را دور می‌زند.",
-      "check_self_hosted": "برای EE خودمیزبان: مطمئن شوید <code>LEARNHOUSE_LICENSE_KEY</code> تنظیم شده و سرور مجوز (یا بازهٔ مهلت) در دسترس است.",
+      "check_saas": "برای استقرارهای SaaS: مطمئن شوید <code>SaaS mode</code> در محیط API تنظیم شده است. SaaS بررسی مجوز را دور می‌زند.",
+      "check_self_hosted": "برای EE خودمیزبان: مطمئن شوید <code>license key</code> تنظیم شده و سرور مجوز (یا بازهٔ مهلت) در دسترس است.",
       "check_logs": "اگر به شل دسترسی دارید، گزارش‌های API همین دلیل را با جزئیات کامل دارند: <code>[EE] license inactive …</code>",
       "failed_to_load": "بارگذاری ناموفق بود"
     },

@@ -278,7 +278,7 @@ async def update_agent(agent_uuid: str, body: AgentUpdate, user: User, db: Async
         raise HTTPException(status_code=403, detail="Only administrators can share agents with everyone")
     if agent.is_default:
         # Copilot is the org's own agent: everyone sees it, it reads every course
-        # the asker can, and it keeps the LearnHouse AI identity.
+        # the asker can, and it keeps the Studytomy Portal AI identity.
         for locked in ("visibility", "course_uuids", "knowledge_mode", "name", "emoji", "color", "secondary_color"):
             data.pop(locked, None)
     if "course_uuids" in data:

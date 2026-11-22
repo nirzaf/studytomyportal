@@ -21,6 +21,7 @@ from src.services.studytomy.syllabus_library import (
     _indexable_chunks,
     _literal_like_pattern,
     _lexical_match_is_sufficient,
+    _lexical_match_score,
     _mapping_supports_cited_topic,
     _official_mapping_compatible,
     _normalize_topic_query,
@@ -170,6 +171,21 @@ def test_keyword_retrieval_rejects_passages_that_match_only_one_part_of_a_questi
     assert _lexical_match_is_sufficient({"chem", "iso"}, ["CHEM-ISO"], "CHEM-ISO defines atomic number.")
 
 
+def test_keyword_retrieval_uses_scoped_term_rarity_for_distinctive_single_concepts():
+    terms = {"plant", "food", "photosynthesis", "chlorophyll"}
+    frequencies = {"plant": 1, "food": 2, "photosynthesis": 2, "chlorophyll": 1}
+    assert _lexical_match_score(
+        terms, [], "Photosynthesis converts sunlight into glucose.", frequencies, 7,
+    ) is not None
+    common_frequencies = {term: 7 for term in terms}
+    assert _lexical_match_score(
+        terms, [], "Objects and plants appear in common science examples.", common_frequencies, 7,
+    ) is None
+    assert _lexical_match_score(
+        {"chem", "iso"}, ["CHEM-ISO"], "CHEM-ISO defines atomic number.", {}, 0,
+    ) == 1.0
+
+
 def test_official_mapping_requires_full_curriculum_metadata_compatibility():
     version = SimpleNamespace(
         source_type="syllabus", jurisdiction="Sri Lanka", grade="Grade 12", subject="Chemistry",
@@ -241,7 +257,7 @@ def test_generated_citations_are_checked_against_the_exact_original_page():
         "claims": [{
             "reference": 1,
             "kind": "teaching",
-            "text": "Atomic number gives the number of protons in the atom.",
+            "text": "Atomic number is the number of protons in an atom.",
             "quote": "The atomic number is the number of protons in an atom.",
         }],
     })
@@ -250,7 +266,7 @@ def test_generated_citations_are_checked_against_the_exact_original_page():
         "version": SimpleNamespace(extracted_pages=[{"page": 2, "text": "The atomic number is the number of protons in an atom."}]),
     }
     block = _validate_generated_claims(teaching, [teaching_candidate])[0]
-    assert block.text.startswith("Atomic number gives")
+    assert block.text.startswith("Atomic number is")
     assert block.evidence_quote == "The atomic number is the number of protons in an atom."
 
 
@@ -283,8 +299,104 @@ def test_zero_claims_and_conservative_semantic_evidence_threshold():
     assert not _semantic_distance_is_sufficient(0.35001)
     assert not _semantic_distance_is_sufficient(float("nan"))
     assert not _semantic_distance_is_sufficient(float("inf"))
-    assert _claim_is_supported("Carbon-14 has eight neutrons.", "Carbon-14 has six protons and eight neutrons.")
+    assert _claim_is_supported(
+        "Carbon-14 has six protons and eight neutrons.",
+        "Carbon-14 has six protons and eight neutrons.",
+    )
     assert not _claim_is_supported("Carbon-14 has twelve neutrons.", "Carbon-14 has six protons and eight neutrons.")
+
+
+@pytest.mark.parametrize(("statement", "quote"), [
+    (
+        "Plants require sunlight to make food.",
+        "Plants need sunlight to make food.",
+    ),
+    (
+        "Atomic number is the number of protons in an atom.",
+        "The atomic number is the number of protons in an atom.",
+    ),
+    (
+        "Carbon-14 has six protons and eight neutrons.",
+        "Carbon-14 has six protons and eight neutrons.",
+    ),
+])
+def test_grounded_claims_accept_exact_text_and_narrow_safe_paraphrases(statement, quote):
+    assert _claim_is_supported(statement, quote)
+
+
+@pytest.mark.parametrize(("statement", "quote"), [
+    # Negation and polarity reversals.
+    ("Plants do not need sunlight to make food.", "Plants need sunlight to make food."),
+    # Reversed comparison.
+    (
+        "Carbon-14 has fewer neutrons than Carbon-12.",
+        "Carbon-12 has fewer neutrons than Carbon-14.",
+    ),
+    # Reversed causality.
+    (
+        "Food helps plants make sunlight.",
+        "Sunlight helps plants make food.",
+    ),
+    # Incorrect number and unit.
+    ("The solution is heated to 90 degrees Celsius.", "The solution is heated to 80 degrees Celsius."),
+    # Unsupported fact and example.
+    (
+        "Plants release oxygen during photosynthesis.",
+        "Photosynthesis converts sunlight into glucose.",
+    ),
+    (
+        "For example, copper wires conduct electricity.",
+        "Metals conduct electricity because electrons move through the material.",
+    ),
+    # Correct terminology with an unsupported relationship.
+    (
+        "Atomic number is the number of neutrons in an atom.",
+        "Atomic number is the number of protons in an atom.",
+    ),
+])
+def test_grounded_claims_reject_contradictions_and_unsupported_facts(statement, quote):
+    assert not _claim_is_supported(statement, quote)
+
+
+def test_grounded_answer_with_wrong_explanation_is_rejected_even_when_quote_is_valid():
+    quote = "Plants need sunlight to make food."
+    candidate = {
+        "chunk": SimpleNamespace(page_number=2, chunk_text=quote),
+        "version": SimpleNamespace(extracted_pages=[{"page": 2, "text": quote}]),
+    }
+    proposal = _GeneratedAnswer.model_validate({
+        "claims": [{
+            "reference": 1,
+            "text": "Plants do not need sunlight to make food.",
+            "quote": quote,
+        }],
+    })
+    with pytest.raises(ValueError, match="not supported"):
+        _validate_generated_claims(proposal, [candidate], "How do plants make food?")
+
+
+def test_generated_claims_keep_individual_citations_and_no_claim_is_safe():
+    first = "Plants need sunlight to make food."
+    second = "Photosynthesis converts sunlight into glucose."
+    candidates = [
+        {
+            "chunk": SimpleNamespace(page_number=1, chunk_text=first),
+            "version": SimpleNamespace(extracted_pages=[{"page": 1, "text": first}]),
+        },
+        {
+            "chunk": SimpleNamespace(page_number=4, chunk_text=second),
+            "version": SimpleNamespace(extracted_pages=[{"page": 4, "text": second}]),
+        },
+    ]
+    proposal = _GeneratedAnswer.model_validate({
+        "claims": [
+            {"reference": 1, "text": "Plants require sunlight to make food.", "quote": first},
+            {"reference": 2, "text": second, "quote": second},
+        ],
+    })
+    blocks = _validate_generated_claims(proposal, candidates, "How do plants make food?")
+    assert [block.citations for block in blocks] == [[1], [2]]
+    assert _validate_generated_claims(_GeneratedAnswer.model_validate({"claims": []}), candidates) == []
 
 
 def test_reindex_snapshot_fence_rejects_concurrent_source_changes():

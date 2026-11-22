@@ -1,15 +1,12 @@
 ---
-description: Fix common problems on a self-hosted LearnHouse instance, such as services not starting, database errors, port conflicts and sign-in issues.
+description: Fix common problems on a self-hosted Studytomy Portal instance, such as services not starting, database errors, port conflicts and sign-in issues.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Troubleshooting
 
-This guide covers common issues with self-hosted LearnHouse instances and how to resolve them.
-
-<CloudCta variant="selfhost">On LearnHouse Cloud, keeping the servers running is our job.</CloudCta>
-
+This guide covers common issues with self-hosted Studytomy Portal instances and how to resolve them.
 ## First Step: Run Diagnostics
 
 Before diving into specific issues, run the built-in diagnostics:
@@ -29,7 +26,7 @@ If you have several installations, add `--dir` to point the CLI at the right one
 **Common causes:**
 
 - **Docker is not running.** Verify Docker is running with `docker info`. Start the Docker daemon if needed.
-- **Insufficient memory.** LearnHouse requires at least 2 GB of RAM. Check available memory with `free -m` (Linux) or Activity Monitor (macOS).
+- **Insufficient memory.** Studytomy Portal requires at least 2 GB of RAM. Check available memory with `free -m` (Linux) or Activity Monitor (macOS).
 - **Port conflicts.** Another service may be using port 80 or 443. Check with `lsof -i :80` and stop the conflicting service. `npx learnhouse doctor` also detects port conflicts.
 - **Damaged configuration.** Re-run `npx learnhouse setup` with the same installation name to regenerate the configuration files. Your deployment ID, database password, secrets and data are kept.
 - **Permission denied on the Docker socket.** On Linux, add your user to the `docker` group and log in again.
@@ -73,7 +70,7 @@ lsof -i :80
 lsof -i :443
 ```
 
-Stop the conflicting service, or reconfigure LearnHouse to use a different port by re-running `npx learnhouse setup` (or change `HTTP_PORT` with `npx learnhouse env`).
+Stop the conflicting service, or reconfigure Studytomy Portal to use a different port by re-running `npx learnhouse setup` (or change `HTTP_PORT` with `npx learnhouse env`).
 
 ## Storage Permission Errors
 
@@ -97,7 +94,7 @@ Stop the conflicting service, or reconfigure LearnHouse to use a different port 
 - Verify `LEARNHOUSE_AUTH_JWT_SECRET_KEY` is set (at least 32 characters) and has not changed. Changing it signs every user out.
 - Verify `LEARNHOUSE_COOKIE_DOMAIN` matches your actual domain. An incorrect cookie domain prevents authentication from working.
 - If using SSL, make sure the public URLs in `.env` (`NEXT_PUBLIC_LEARNHOUSE_API_URL`, `NEXT_PUBLIC_LEARNHOUSE_BACKEND_URL`, `NEXTAUTH_URL`) use `https://`, and that `NEXT_PUBLIC_LEARNHOUSE_HTTPS` is set to lowercase `true`.
-- Users who don't open LearnHouse for 30 days must sign in again. Change this with `LEARNHOUSE_AUTH_REFRESH_TOKEN_DAYS`.
+- Users who don't open Studytomy Portal for 30 days must sign in again. Change this with `LEARNHOUSE_AUTH_REFRESH_TOKEN_DAYS`.
 
 ## Performance Issues
 
@@ -148,5 +145,5 @@ npx learnhouse@latest setup
 If you cannot resolve an issue using this guide:
 
 1. Run `npx learnhouse doctor` and include the output in your report.
-2. Check the [LearnHouse GitHub issues](https://github.com/learnhouse/learnhouse/issues) for known problems and solutions.
+2. Check the [Studytomy Portal GitHub issues](https://github.com/nirzaf/studytomyportal/issues) for known problems and solutions.
 3. Open a new issue with details about your problem, including relevant log output and your environment (OS, Docker version, RAM).

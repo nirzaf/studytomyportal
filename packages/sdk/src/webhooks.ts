@@ -111,7 +111,7 @@ export async function parseWebhook<T = Record<string, unknown>>(input: ParseWebh
   }
   const b = body as { event?: unknown; delivery_id?: unknown; timestamp?: unknown; org_id?: unknown; data?: unknown }
   if (!b || typeof b !== 'object' || typeof b.event !== 'string' || typeof b.delivery_id !== 'string') {
-    throw webhookError(400, 'INVALID_PAYLOAD', 'Webhook body is not a LearnHouse event')
+    throw webhookError(400, 'INVALID_PAYLOAD', 'Webhook body is not a Studytomy Portal event')
   }
   return {
     event: b.event,

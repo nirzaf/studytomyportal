@@ -1,16 +1,16 @@
 ---
-description: Install and use the LearnHouse CLI to deploy, update, back up and manage a self-hosted instance, or run a local development stack.
+description: Install and use the Studytomy Portal CLI to deploy, update, back up and manage a self-hosted instance, or run a local development stack.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # CLI
 
-The LearnHouse CLI is the primary tool for deploying, managing, and developing LearnHouse. It generates and runs a Docker Compose deployment, provides an interactive setup wizard, and starts a full local development environment.
+The Studytomy Portal CLI is the primary tool for deploying, managing, and developing Studytomy Portal. It generates and runs a Docker Compose deployment, provides an interactive setup wizard, and starts a full local development environment.
 
-<img src="/img/pages/cli/cli-screenshot.webp" alt="The LearnHouse CLI setup wizard running in a terminal" width={1400} height={1333} style={{ borderRadius: '12px', marginTop: '1rem' }} />
+<img src="/img/pages/cli/cli-screenshot.webp" alt="The Studytomy Portal CLI setup wizard running in a terminal" width={1400} height={1333} style={{ borderRadius: '12px', marginTop: '1rem' }} />
 
-**Package**: [`learnhouse`](https://www.npmjs.com/package/learnhouse) on npm
+**CLI package**: [`learnhouse`](https://www.npmjs.com/package/learnhouse) on npm. The command name remains `learnhouse` for compatibility.
 
 ## Installation
 
@@ -37,7 +37,7 @@ The CLI handles two main workflows:
 
 The [setup wizard](/cli/setup-wizard) generates a complete Docker Compose deployment in `~/.learnhouse/<name>` with:
 
-- **LearnHouse app** container (`ghcr.io/learnhouse/app`, which bundles the Next.js web app, the FastAPI backend and the collaboration server)
+- **Studytomy Portal app** container (`ghcr.io/learnhouse/app`, which bundles the Next.js web app, the FastAPI backend and the collaboration server)
 - **PostgreSQL 19.0** with **pgvector 0.8.7** for new bundled installs (unless you use an external database)
 - **Redis** (unless you use an external Redis)
 - **Caddy** (automatic SSL) or **nginx** reverse proxy

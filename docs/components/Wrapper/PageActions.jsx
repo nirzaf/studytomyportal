@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Copy, Check, CaretDown, FileText, OpenAiLogo, Sparkle } from '@phosphor-icons/react/dist/ssr'
 
-const SITE_URL = 'https://docs.learnhouse.app'
-
 /**
  * "Copy page" plus a menu to read the page as Markdown or hand it to an AI
  * assistant. Every page has a Markdown twin at `<route>.md`.
@@ -14,7 +12,7 @@ export default function PageActions({ route }) {
   const [open, setOpen] = useState(false)
   const menuRef = useRef(null)
   const mdPath = `${route === '/' ? '/index' : route}.md`
-  const mdUrl = `${SITE_URL}${mdPath}`
+  const mdUrl = typeof window === 'undefined' ? mdPath : new URL(mdPath, window.location.origin).toString()
   const prompt = `Read ${mdUrl} so I can ask questions about it.`
 
   useEffect(() => {

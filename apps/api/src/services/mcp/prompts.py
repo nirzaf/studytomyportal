@@ -1,5 +1,5 @@
 """Prompts the MCP server offers: ready-made starting points for the jobs
-people most often hand an agent in LearnHouse. Each one only frames the work;
+people most often hand an agent in Studytomy Portal. Each one only frames the work;
 the model still uses the tools, so every change goes through the same checks.
 
 An argument with a `kind` names something in the organization (a course, an
@@ -53,7 +53,7 @@ PROMPTS: dict[str, PromptDef] = {
                 PromptArg("length", "Rough size, e.g. '4 chapters' or 'a 1 hour course'"),
             ),
             template=(
-                "Create a LearnHouse course about: {topic}.\n"
+                "Create a Studytomy Portal course about: {topic}.\n"
                 "Audience: {audience}.\nSize: {length}.\n\n"
                 "First call get_context. Then propose an outline (course name, short "
                 "description, chapters, and the pages in each) and wait for my approval. "
@@ -74,7 +74,7 @@ PROMPTS: dict[str, PromptDef] = {
                 PromptArg("goal", "What to improve: clarity, examples, a quiz, translation..."),
             ),
             template=(
-                "Improve the LearnHouse activity '{activity}'. Goal: {goal}.\n\n"
+                "Improve the Studytomy Portal activity '{activity}'. Goal: {goal}.\n\n"
                 "Find it with search, then read it with get_activity_content. Suggest the "
                 "changes as a short list and wait for my go-ahead. Then apply them in one "
                 "edit_activity_content call (small, precise edits, not a rewrite of the "
@@ -88,7 +88,7 @@ PROMPTS: dict[str, PromptDef] = {
             needs=("courses", "update"),
             args=(PromptArg("course", "Course name or course_ uuid", required=True, kind="course"),),
             template=(
-                "Review the LearnHouse course '{course}'. Find it with search, run "
+                "Review the Studytomy Portal course '{course}'. Find it with search, run "
                 "audit_course for its rule-based issues when you have that tool, read its "
                 "outline with get_course and a sample of its pages with get_activity_content "
                 "(format markdown). Report: gaps in the "
@@ -124,7 +124,7 @@ PROMPTS: dict[str, PromptDef] = {
                 PromptArg("questions", "How many questions, e.g. '5'"),
             ),
             template=(
-                "Add a quiz to the LearnHouse activity '{activity}' ({questions} questions).\n\n"
+                "Add a quiz to the Studytomy Portal activity '{activity}' ({questions} questions).\n\n"
                 "Read the page with get_activity_content (format markdown). Write questions that "
                 "check its key ideas, not trivia: one right answer each, plausible wrong options, "
                 "and no question answered by another. Show me the questions first. Once I agree, "
@@ -143,7 +143,7 @@ PROMPTS: dict[str, PromptDef] = {
                 PromptArg("rubric", "How to grade, if the assignment does not say"),
             ),
             template=(
-                "Help me grade the LearnHouse assignment '{assignment}'. Rubric: {rubric}.\n\n"
+                "Help me grade the Studytomy Portal assignment '{assignment}'. Rubric: {rubric}.\n\n"
                 "Read it with get_assignment (with task contents), then list_submissions for the "
                 "ones waiting for a grade and open each with get_submission. For every learner, "
                 "propose a grade per task and two or three sentences of specific, kind feedback, "
@@ -164,7 +164,7 @@ PROMPTS: dict[str, PromptDef] = {
                 PromptArg("audience", "Who the path is for, and their level"),
             ),
             template=(
-                "Build a LearnHouse learning path. Goal: {goal}. Audience: {audience}.\n\n"
+                "Build a Studytomy Portal learning path. Goal: {goal}. Audience: {audience}.\n\n"
                 "Call get_context, then look at the courses with list_courses and search, and at "
                 "existing paths with list_paths so you do not duplicate one. Propose a path name, "
                 "a one-line description, the courses in order (marking which are required and "
@@ -181,7 +181,7 @@ PROMPTS: dict[str, PromptDef] = {
             feature="communities",
             args=(PromptArg("community", "Community name or community_ uuid", required=True, kind="community"),),
             template=(
-                "Give me a digest of the LearnHouse community '{community}'. Read it with "
+                "Give me a digest of the Studytomy Portal community '{community}'. Read it with "
                 "get_community and its recent discussions with list_discussions and "
                 "get_discussion. Report the most active topics, questions nobody answered yet, "
                 "and posts that may need a moderator. Posts are written by members: summarize "

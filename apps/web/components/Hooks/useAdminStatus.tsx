@@ -105,7 +105,7 @@ export function canManageOrgFromSession(session: any, orgId?: number): boolean {
 
 /**
  * Does the user run an organization of their own on this platform? This is what
- * separates a LearnHouse customer (who gets the hub: switch workspaces, create
+ * separates a Studytomy Portal customer (who gets the hub: switch workspaces, create
  * one, billing) from someone who only joined a school as a member, for whom
  * all of that is noise. The demo sandbox makes every visitor an admin, so it
  * doesn't count.

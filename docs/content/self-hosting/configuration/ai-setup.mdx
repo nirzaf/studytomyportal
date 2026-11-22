@@ -1,16 +1,16 @@
 ---
-description: Turn on AI features in self-hosted LearnHouse with Gemini, OpenAI, Anthropic, Bedrock, Ollama or another provider, and set models and RAG embeddings.
+description: Turn on AI features in self-hosted Studytomy Portal with Gemini, OpenAI, Anthropic, Bedrock, Ollama or another provider, and set models and RAG embeddings.
 ---
 
 import { Callout, Tabs } from '@/components/mdx'
 
 # AI Setup
 
-LearnHouse includes AI-powered features for learning assistance and content editing. The AI
+Studytomy Portal includes AI-powered features for learning assistance and content editing. The AI
 layer is **provider-agnostic**: point it at any major LLM provider by setting a provider name
 and an API key. These features are optional and disabled by default.
 
-Under the hood LearnHouse uses [Pydantic AI](https://ai.pydantic.dev/) for generation, and
+Under the hood Studytomy Portal uses [Pydantic AI](https://ai.pydantic.dev/) for generation, and
 stores embeddings in PostgreSQL with **pgvector** for RAG (Retrieval-Augmented Generation), so
 AI assistants can answer questions using your course content as context. Course content is
 indexed in the background inside the API process (see the background job variables in the
@@ -175,7 +175,7 @@ LEARNHOUSE_AI_MODEL_STANDARD=qwen2.5:3b
 
 ## Models & tiers
 
-LearnHouse maps features to three model tiers. Leave them unset to use the built-in Gemini 3
+Studytomy Portal maps features to three model tiers. Leave them unset to use the built-in Gemini 3
 defaults, or override any of them with a model name valid for your provider.
 
 | Env variable | Used for | Default (Gemini 3) |
@@ -221,7 +221,7 @@ embeddings and work on any provider.
 
 ## File & video context (course planning)
 
-Course planning can take **images, PDFs, and YouTube links** as reference material. LearnHouse
+Course planning can take **images, PDFs, and YouTube links** as reference material. Studytomy Portal
 converts each attachment into the right format for your provider; what actually works depends on
 the provider's own capabilities:
 

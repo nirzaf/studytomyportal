@@ -1,5 +1,5 @@
 ---
-description: Walk through the LearnHouse setup wizard step by step, from edition, domain and HTTPS to database, Redis, organization, admin and features.
+description: Walk through the Studytomy Portal setup wizard step by step, from edition, domain and HTTPS to database, Redis, organization, admin and features.
 ---
 
 import { Callout } from '@/components/mdx'
@@ -31,7 +31,7 @@ Choose a name for the installation. Installations live in `~/.learnhouse/<name>`
 - **Domain**: hostname (default: `localhost`)
 - **HTTPS** (only asked for a domain other than `localhost`):
   - **Automatic SSL** (recommended): Let's Encrypt certificates through Caddy. The wizard asks for an email address for Let's Encrypt notices.
-  - **I'll handle SSL myself**: you terminate TLS in your own reverse proxy or a service like Cloudflare. LearnHouse runs on plain HTTP behind it, and the generated URLs use `https://`.
+  - **I'll handle SSL myself**: you terminate TLS in your own reverse proxy or a service like Cloudflare. Studytomy Portal runs on plain HTTP behind it, and the generated URLs use `https://`.
   - **No HTTPS**: HTTP only (not recommended for production)
 - **Port**: with automatic SSL, the HTTPS port (default `443`; Caddy also listens on `80` for redirects). Otherwise the HTTP port (default `80`). If port 80 is taken, the wizard suggests a free one such as `8080`, and it refuses a port above 1024 that is already in use.
 
@@ -84,7 +84,7 @@ The wizard shows a summary of your configuration. You can:
 - **Edit**: go back and change any step
 - **Cancel**: stop without generating anything
 
-It then asks **Start LearnHouse now?** If you accept, it runs `docker compose up -d`, waits up to 3 minutes for `/api/v1/health` to respond, and checks that your organization was created. If you decline, start it later with `npx learnhouse start`.
+It then asks **Start Studytomy Portal now?** If you accept, it runs `docker compose up -d`, waits up to 3 minutes for `/api/v1/health` to respond, and checks that your organization was created. If you decline, start it later with `npx learnhouse start`.
 
 ## Generated Files
 
@@ -116,5 +116,5 @@ Named volumes, declared in `docker-compose.yml`, hold the database (`learnhouse_
 Third-party images are pinned to a minor version, so patch releases arrive when images are pulled and new minor versions arrive with a CLI release.
 
 <Callout type="info">
-To move to a newer LearnHouse version after setup, use [`npx learnhouse update`](/cli/commands#update), or `npx learnhouse update --to <version>` to pin a version.
+To move to a newer Studytomy Portal version after setup, use [`npx learnhouse update`](/cli/commands#update), or `npx learnhouse update --to <version>` to pin a version.
 </Callout>

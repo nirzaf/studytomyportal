@@ -1,4 +1,4 @@
-// Illustrations for the Developers section, drawn as LearnHouse's own UI:
+// Illustrations for the Developers section, drawn as Studytomy Portal's own UI:
 // white surfaces, neutral greys, and colour only where a real block has it
 // (the quiz's correct answer, flipcards, the tip callout).
 
@@ -170,7 +170,7 @@ export function SdkScene() {
   const runtimes = ['Browser', 'Node', 'Bun', 'Deno', 'Edge', 'React Native']
   let x = 6
   return (
-    <svg className="lhd-scene" viewBox="0 0 400 250" role="img" aria-label="TypeScript code using the LearnHouse SDK, and the runtimes it runs on">
+    <svg className="lhd-scene" viewBox="0 0 400 250" role="img" aria-label="TypeScript code using the Studytomy Portal SDK, and the runtimes it runs on">
       <Code x={6} y={6} w={388} h={178}>
         <text fontFamily={mono} fontSize="9.5">
           <tspan x="22" y="46" fill="#737373">import</tspan>
@@ -238,22 +238,22 @@ export function ApiScene() {
   )
 }
 
-// One LearnHouse instance in the middle, the four ways around it.
+// One Studytomy Portal instance in the middle, the four ways around it.
 export function OverviewScene() {
   const sats = [
     { x: 80, y: 46, label: 'Embed', sub: '<iframe>' },
-    { x: 320, y: 46, label: 'React', sub: '<LearnHouseActivity />' },
-    { x: 80, y: 204, label: 'SDK', sub: '@learnhouse/sdk' },
+    { x: 320, y: 46, label: 'React', sub: '<StudytomyActivity />' },
+    { x: 80, y: 204, label: 'SDK', sub: 'npm package' },
     { x: 320, y: 204, label: 'REST API', sub: '/api/v1 · webhooks' },
   ]
   return (
-    <svg className="lhd-scene" viewBox="0 0 400 250" role="img" aria-label="A LearnHouse instance and four ways to build on it: embed, React, SDK and REST API">
+    <svg className="lhd-scene" viewBox="0 0 400 250" role="img" aria-label="A Studytomy Portal instance and four ways to build on it: embed, React, SDK and REST API">
       {sats.map((s) => (
         <path key={s.label} d={`M200 125 L${s.x} ${s.y}`} stroke={N.barDark} strokeWidth="1.2" strokeDasharray="3 4" />
       ))}
       <rect x="160" y="88" width="80" height="74" rx="14" fill="#fff" stroke={N.line} />
-      <image href="/img/logos/lrn.svg" x="187" y="104" width="26" height="13" />
-      <text x="200" y="140" fontSize="10" fontWeight="700" fill={N.ink} textAnchor="middle">LearnHouse</text>
+      <image href="/studytomy-mini.png" x="187" y="100" width="26" height="26" />
+      <text x="200" y="140" fontSize="10" fontWeight="700" fill={N.ink} textAnchor="middle">Studytomy</text>
       <text x="200" y="152" fontSize="7.5" fill={N.muted} textAnchor="middle" fontFamily={mono}>your instance</text>
       {sats.map((s) => (
         <g key={s.label}>

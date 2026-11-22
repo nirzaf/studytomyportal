@@ -1,15 +1,12 @@
 ---
-description: Export, clone and import LearnHouse courses, bring in courses from Moodle, Canvas and other LMSs, or build a course from a folder of videos and documents.
+description: Export, clone and import Studytomy Portal courses, bring in courses from Moodle, Canvas and other LMSs, or build a course from a folder of videos and documents.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Import & Export
 
-LearnHouse can move courses between organizations and instances, bring them in from other learning platforms, and build a course from a folder of files.
-
-<YouTube video="growth-7" />
-
+Studytomy Portal can move courses between organizations and instances, bring them in from other learning platforms, and build a course from a folder of files.
 ## Exporting courses
 
 From **Courses** in the dashboard:
@@ -17,7 +14,7 @@ From **Courses** in the dashboard:
 - Use **Export Course** on a course to download it as a `.zip` package.
 - Click **Select**, pick several courses and click **Export Selected** to download them in one `.zip`. You can export up to 20 courses at a time.
 
-An export contains the course structure, its content and its files. Import it into any LearnHouse organization with **LearnHouse Courses** below.
+An export contains the course structure, its content and its files. Import it into any Studytomy Portal organization with **Studytomy Portal Courses** below.
 
 ## Cloning a course
 
@@ -27,15 +24,15 @@ An export contains the course structure, its content and its files. Import it in
 
 Click **Import Course** in the course list and pick a source:
 
-<img src="/img/pages/courses/import-course-sources.webp" alt="The Import Course window with SCORM Package, LearnHouse Courses and Another LMS" width={1600} height={900} style={{ borderRadius: 10 }} />
+<img src="/img/pages/courses/import-course-sources.webp" alt="The Import Course window with SCORM Package, Studytomy Portal Courses and Another LMS" width={1600} height={900} style={{ borderRadius: 10 }} />
 
 | Source | Accepts |
 | --- | --- |
 | **SCORM Package** | SCORM 1.2 or SCORM 2004 packages. Enterprise only. |
-| **LearnHouse Courses** | A LearnHouse course export (`.zip`), up to 500 MB. |
+| **Studytomy Portal Courses** | A Studytomy Portal course export (`.zip`), up to 500 MB. |
 | **Another LMS** | Exports from Moodle, Canvas, Blackboard, Brightspace, Open edX or any Common Cartridge. See [Import from Another LMS](/developers/migration/from-another-lms). |
 
-### LearnHouse Courses
+### Studytomy Portal Courses
 
 1. **Upload Package**: drop the `.zip` and click **Analyze Package**.
 2. **Configure**: pick the courses to import from the package, then set the **Import Options**:
@@ -58,7 +55,7 @@ If you have a set of files but no course yet, use **New Course** > **From Existi
 
 1. **Upload**: drop your files. Accepted: videos (MP4, WebM, MOV), documents (PDF), images (PNG, JPG, WebP) and audio (MP3, WAV). Up to 5 GB per file and 20 GB in total. Enter a **Course Name** and a **One-liner Description**.
 2. **Organize**: click **Organize with AI** to have the files sorted into chapters and activities for you (1 AI credit), or **Organize Manually**. Either way you can then drag files between chapters and activities, and use **Add Chapter** and **Add Activity**.
-3. **Complete**: click **Create Course**. LearnHouse uploads the files and creates the chapters and activities.
+3. **Complete**: click **Create Course**. Studytomy Portal uploads the files and creates the chapters and activities.
 
 <Callout>
 The same flows are available through the API. See [Migrating Content](/developers/migration).

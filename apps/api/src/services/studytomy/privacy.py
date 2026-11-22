@@ -4,7 +4,7 @@ This module does not infer a learner's age. Until the applicable audience,
 publicity and authority policies are approved and a purpose-specific permission
 record exists, every account linked to a Studytomy learner profile is treated
 as protected in public projections. Accounts without such a profile keep the
-existing LearnHouse projection unchanged.
+existing Studytomy Portal projection unchanged.
 """
 
 import secrets
@@ -113,7 +113,7 @@ def studytomy_work_visibility_filter(author_id_column: Any, viewer: Any) -> Any:
 
     There is no approved publicity grant model yet. Until one exists, work by
     a protected learner is visible only to that same account. Ordinary
-    LearnHouse authors retain the existing community visibility behavior.
+    Studytomy Portal authors retain the existing community visibility behavior.
     """
     viewer_id = viewer if isinstance(viewer, int) else _acting_user_id(viewer)
     return or_(

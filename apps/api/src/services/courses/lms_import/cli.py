@@ -6,7 +6,7 @@ Command line for the LMS converter.
     python -m src.services.courses.lms_import push backup.mbz --url https://learn.example.com --token lh_... --org-id 1
 
 Also mounted on the API CLI as ``python cli.py lms-import ...`` and installed
-as ``learnhouse-lms-import`` in the LearnHouse image.
+as ``learnhouse-lms-import`` in the Studytomy Portal image.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from .package import QUIZ_MODES, ConvertOptions
 
 app = typer.Typer(
     help="Convert courses exported from Moodle, Canvas, Blackboard, Brightspace, Open edX or any "
-    "IMS Common Cartridge into LearnHouse course packages.",
+    "IMS Common Cartridge into Studytomy Portal course packages.",
     no_args_is_help=True,
 )
 
@@ -109,7 +109,7 @@ def convert_cmd(
         bool, typer.Option("--keep-due-dates", help="Keep due dates that have already passed")
     ] = False,
 ):
-    """Convert an export into a LearnHouse course package (importable from the dashboard or with `push`)."""
+    """Convert an export into a Studytomy Portal course package (importable from the dashboard or with `push`)."""
     _check_choices(source, quiz_mode)
     if os.path.exists(output) and output.lower().endswith(".zip"):
         _fail(f"{output} already exists")
@@ -133,7 +133,7 @@ def convert_cmd(
 @app.command()
 def push(
     path: Annotated[str, typer.Argument(help="Export archive to import (converted by the server)")],
-    url: Annotated[str, typer.Option("--url", envvar="LEARNHOUSE_URL", help="LearnHouse base URL")],
+    url: Annotated[str, typer.Option("--url", envvar="LEARNHOUSE_URL", help="Studytomy Portal base URL")],
     token: Annotated[str, typer.Option("--token", envvar="LEARNHOUSE_API_TOKEN", help="API token (lh_...)")],
     org_id: Annotated[int, typer.Option("--org-id", envvar="LEARNHOUSE_ORG_ID", help="Organization id")],
     source: SourceOpt = "auto",
@@ -143,7 +143,7 @@ def push(
     publish: Annotated[bool, typer.Option("--publish", help="Publish the course")] = False,
     timeout: Annotated[int, typer.Option("--timeout", help="Seconds to wait for the conversion")] = 3600,
 ):
-    """Upload an export to a LearnHouse instance and import it (needs a token with course create rights)."""
+    """Upload an export to a Studytomy Portal instance and import it (needs a token with course create rights)."""
     import httpx
 
     _check_choices(source, quiz_mode)

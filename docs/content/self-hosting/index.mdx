@@ -1,12 +1,12 @@
 ---
-description: Self-host LearnHouse on your own server with the LearnHouse CLI. Install it with one command, then configure, update, back up and monitor it.
+description: Self-host Studytomy Portal on your own server with the Studytomy Portal CLI. Install it with one command, then configure, update, back up and monitor it.
 ---
 
 import { Callout } from '@/components/mdx'
 
-# Self-Hosting LearnHouse
+# Self-Hosting Studytomy Portal
 
-LearnHouse can be self-hosted on your own infrastructure using the **LearnHouse CLI**. The CLI handles everything from initial setup to ongoing maintenance, including Docker Compose generation, environment file management, service orchestration, backups, and health checks.
+Studytomy Portal can be self-hosted on your own infrastructure using the **Studytomy Portal CLI**. The CLI handles everything from initial setup to ongoing maintenance, including Docker Compose generation, environment file management, service orchestration, backups, and health checks.
 
 ## Quick Start
 
@@ -16,13 +16,13 @@ Make sure you have **Docker** with the Compose v2 plugin and **Node.js 22+** ins
 npx learnhouse@latest setup
 ```
 
-The interactive setup wizard walks you through domain configuration, database settings, admin credentials, and optional features. At the end it offers to start LearnHouse and waits until it is ready. If you skipped that, start it with:
+The interactive setup wizard walks you through domain configuration, database settings, admin credentials, and optional features. At the end it offers to start Studytomy Portal and waits until it is ready. If you skipped that, start it with:
 
 ```bash
 npx learnhouse start
 ```
 
-LearnHouse is available at **http://localhost** (or your configured domain). Log in with the admin credentials you provided during setup. [Quick Install](/self-hosting/installation/quick-install) covers the one-line installers, non-interactive setup and checks.
+Studytomy Portal is available at **http://localhost** (or your configured domain). Log in with the admin credentials you provided during setup. [Quick Install](/self-hosting/installation/quick-install) covers the one-line installers, non-interactive setup and checks.
 
 <Callout type="info">
 The CLI generates `docker-compose.yml`, `.env`, and reverse proxy configuration for you. You do not need to write or maintain these files manually.

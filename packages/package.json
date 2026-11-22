@@ -1,7 +1,7 @@
 {
   "name": "learnhouse-packages",
   "private": true,
-  "description": "npm packages published from the LearnHouse repo, versioned with each OSS release.",
+  "description": "npm packages published from the Studytomy Portal repo, versioned with each OSS release.",
   "workspaces": [
     "sdk",
     "react",

@@ -1,20 +1,19 @@
 ---
-description: "Run several organizations on one LearnHouse instance: which editions allow it, how to turn on multi-organization mode and how data stays isolated."
+description: "Run several organizations on one Studytomy Portal instance: which editions allow it, how to turn on multi-organization mode and how data stays isolated."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Multi-Tenancy
 
-A LearnHouse instance can host one organization or many. Each organization works like its own platform, with its own courses, members, settings and branding, while sharing one deployment and one database.
+A Studytomy Portal instance can host one organization or many. Each organization works like its own platform, with its own courses, members, settings and branding, while sharing one deployment and one database.
 
 ## Who gets what
 
-| Deployment | Organizations |
+| Edition | Organizations |
 | --- | --- |
-| LearnHouse Cloud | The platform is multi-tenant. Anyone can create organizations, on any plan. |
-| Self-hosted, open source | One organization. Creating a second one is refused with "Multi-organization mode requires Enterprise Edition". |
-| Self-hosted, Enterprise Edition | As many organizations as you need. |
+| Community Edition | One organization. Creating a second one is refused with "Multi-organization mode requires Enterprise Edition". |
+| Enterprise Edition | Multiple organizations, subject to the license. |
 
 <Callout type="info">
 Running several organizations on a self-hosted instance needs a valid [Enterprise Edition](/enterprise) license.

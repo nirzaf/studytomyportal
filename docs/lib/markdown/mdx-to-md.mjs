@@ -7,7 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-export const SITE_URL = 'https://docs.learnhouse.app'
+export const SITE_URL = process.env.NEXT_PUBLIC_DOCS_URL?.replace(/\/+$/, '') || ''
 
 export function parseFrontmatter(source) {
   const match = source.match(/^---\n([\s\S]*?)\n---\n?/)
@@ -91,7 +91,6 @@ export function mdxToMarkdown(source, { title: fallbackTitle, demoList = () => '
   })
 
   // Calls to action are for readers of the site, not for agents.
-  body = body.replace(/<CloudCta\b[^>]*>[\s\S]*?<\/CloudCta>/g, '')
 
   // Callouts → blockquotes.
   body = body.replace(/<Callout\b[^>]*>([\s\S]*?)<\/Callout>/g, (_m, inner) =>
@@ -131,7 +130,7 @@ export function mdxToMarkdown(source, { title: fallbackTitle, demoList = () => '
 
   body = body.replace(/\n{3,}/g, '\n\n').trim()
 
-  const title = data.title || fallbackTitle || (body.match(/^#\s+(.+)$/m) || [])[1] || 'LearnHouse Docs'
+  const title = data.title || fallbackTitle || (body.match(/^#\s+(.+)$/m) || [])[1] || 'Studytomy Portal Docs'
   if (!/^#\s/m.test(body.split('\n').slice(0, 3).join('\n'))) body = `# ${title}\n\n${body}`
   if (data.description && !body.includes(data.description)) {
     body = body.replace(/^(# .+\n)/, `$1\n> ${data.description}\n`)
@@ -154,19 +153,4 @@ export function listContentPages(contentDir) {
   }
   walk(contentDir, '')
   return pages.sort((a, b) => (a.slug === '' ? -1 : b.slug === '' ? 1 : a.slug.localeCompare(b.slug)))
-}
-
-/** Markdown list of the LearnHouse Headless demos, for pages that show the gallery. */
-export function demoListFrom(demosJsonPath) {
-  try {
-    const { demos, sections } = JSON.parse(fs.readFileSync(demosJsonPath, 'utf8'))
-    return sections
-      .map((s) => {
-        const items = demos.filter((d) => d.section === s.id)
-        return `**${s.title}**\n\n${items.map((d) => `- [${d.name}](${SITE_URL}/demos/${d.id}): ${d.blurb}`).join('\n')}`
-      })
-      .join('\n\n')
-  } catch {
-    return ''
-  }
 }

@@ -1,7 +1,7 @@
 import type { ComponentType, CSSProperties, ReactNode } from 'react'
 import type { LearnHouseClient } from '@learnhouse/sdk'
 
-/** A TipTap / ProseMirror JSON document, as stored in a LearnHouse dynamic activity. */
+/** A TipTap / ProseMirror JSON document, as stored in a Studytomy Portal dynamic activity. */
 export interface ActivityDocument {
   type: string
   attrs?: Record<string, any>
@@ -10,7 +10,7 @@ export interface ActivityDocument {
   text?: string
 }
 
-/** The activity object returned by the LearnHouse API. */
+/** The activity object returned by the Studytomy Portal API. */
 export interface LearnHouseActivityData {
   activity_uuid: string
   name: string
@@ -86,13 +86,13 @@ export interface LearnHouseActivityProps {
   content?: ActivityDocument | string
 
   // ── Where from (defaults to the nearest LearnHouseProvider) ────────────
-  /** Base URL of the LearnHouse instance, e.g. `https://learn.acme.com`. */
+  /** Base URL of the Studytomy Portal instance, e.g. `https://learn.acme.com`. */
   baseUrl?: string
   /** A user access token. Never pass an `lh_` API token to the browser. */
   token?: string
   /** Org uuid for media URLs when rendering `content` without fetching. */
   orgId?: string
-  /** Address of the LearnHouse site (not the API), used to link back to the activity. */
+  /** Address of the Studytomy Portal site (not the API), used to link back to the activity. */
   siteUrl?: string
 
   // ── Look ───────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ export interface LearnHouseActivityProps {
   header?: ReactNode | ((activity: LearnHouseActivityData) => ReactNode)
   /** Rendered below the content; gets the loaded activity. */
   footer?: ReactNode | ((activity: LearnHouseActivityData) => ReactNode)
-  /** Small "made with LearnHouse" link to the activity. Off by default. */
+  /** Small "made with Studytomy Portal" link to the activity. Off by default. */
   showPoweredBy?: boolean
 
   // ── Content control ────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ export interface LearnHouseActivityProps {
   // ── Language ───────────────────────────────────────────────────────────
   /** UI language of the blocks (`en`, `fr`, `ar`…). Defaults to the provider's, then `en`. */
   locale?: string
-  /** Override UI strings, keyed like LearnHouse's locale files (`editor.blocks.quiz.check`…). */
+  /** Override UI strings, keyed like Studytomy Portal's locale files (`editor.blocks.quiz.check`…). */
   messages?: Record<string, any>
   /** Text direction. `auto` follows the locale. */
   dir?: 'ltr' | 'rtl' | 'auto'
@@ -148,9 +148,9 @@ export interface LearnHouseActivityProps {
 }
 
 export interface LearnHouseProviderProps {
-  /** Address of the LearnHouse site (not the API), used to link back to activities. */
+  /** Address of the Studytomy Portal site (not the API), used to link back to activities. */
   siteUrl?: string
-  /** Base URL of the LearnHouse instance, e.g. `https://learn.acme.com`. */
+  /** Base URL of the Studytomy Portal instance, e.g. `https://learn.acme.com`. */
   baseUrl: string
   /** Where media is served from, if not the instance itself (CDN, S3). */
   mediaUrl?: string

@@ -1,5 +1,5 @@
 /* Renderer root. Theme values arrive as --lh-* custom properties (theme.ts);
-   unset ones fall back to LearnHouse's own look. */
+   unset ones fall back to Studytomy Portal's own look. */
 .lh-activity {
   --font-default: var(--lh-font, ui-sans-serif, system-ui, sans-serif);
   position: relative;

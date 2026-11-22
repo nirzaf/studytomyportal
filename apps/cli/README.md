@@ -1,12 +1,8 @@
-# LearnHouse CLI
+# Studytomy Portal CLI
 
-**Studytomy fork note:** this is retained upstream CLI product documentation. Its self-hosting, install and update commands are not authorization to deploy Studytomy or overwrite a local fork with an upstream image. Follow [local-only policy](../../LOCAL-ONLY.md) and the [task index](../../docs/studytomy/README.md). Keep the `learnhouse` package/binary names where required by the actual tooling.
+The CLI helps configure, run, and maintain a local Studytomy Portal installation. The existing `learnhouse` package and command names are retained for compatibility.
 
-The official [LearnHouse](https://learnhouse.app) CLI for deploying, managing, and operating your LearnHouse instance.
-
-[Website](https://learnhouse.app) | [Documentation](https://docs.learnhouse.app) | [GitHub](https://github.com/learnhouse/learnhouse)
-
-<img width="915" height="871" alt="image" src="https://github.com/user-attachments/assets/957c6cea-3efb-4cab-a643-55df3ac4c6aa" />
+[Project](https://github.com/nirzaf/studytomyportal) | [Self-hosting guide](../../docs/content/self-hosting/index.mdx) | [Local-only policy](../../LOCAL-ONLY.md)
 
 ## Quick Start
 
@@ -15,13 +11,13 @@ The official [LearnHouse](https://learnhouse.app) CLI for deploying, managing, a
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/learnhouse/learnhouse/main/apps/cli/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nirzaf/studytomyportal/main/apps/cli/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/learnhouse/learnhouse/main/apps/cli/install.ps1 | iex
+irm https://raw.githubusercontent.com/nirzaf/studytomyportal/main/apps/cli/install.ps1 | iex
 ```
 
 ### Using npx

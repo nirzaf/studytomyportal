@@ -1,12 +1,12 @@
 ---
-description: "Use the LearnHouse admin dashboard at /admin to manage every organization and user on your instance, toggle features and create superadmin API tokens."
+description: "Use the Studytomy Portal admin dashboard at /admin to manage every organization and user on your instance, toggle features and create superadmin API tokens."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Admin Dashboard
 
-The admin dashboard at `/admin` is for whoever runs the LearnHouse instance. It looks across every organization on the instance, unlike the organization dashboard at `/dash`, which manages one organization.
+The admin dashboard at `/admin` is for whoever runs the Studytomy Portal instance. It looks across every organization on the instance, unlike the organization dashboard at `/dash`, which manages one organization.
 
 <Callout type="info">
 The admin dashboard needs the [Enterprise Edition](/enterprise) when self-hosted. Open source instances show an "Enterprise Edition required" screen instead.
@@ -14,7 +14,7 @@ The admin dashboard needs the [Enterprise Edition](/enterprise) when self-hosted
 
 ## Who can use it
 
-Only **superadmins** can open it. The first account created when you install LearnHouse is a superadmin (set with `LEARNHOUSE_INITIAL_ADMIN_EMAIL` and `LEARNHOUSE_INITIAL_ADMIN_PASSWORD` on an unattended install). There is no screen to make other users superadmins.
+Only **superadmins** can open it. The first account created when you install Studytomy Portal is a superadmin (set with `LEARNHOUSE_INITIAL_ADMIN_EMAIL` and `LEARNHOUSE_INITIAL_ADMIN_PASSWORD` on an unattended install). There is no screen to make other users superadmins.
 
 Sign in at `/admin/login` with your email and password. On multi-organization instances, the dashboard is also available at the `admin.` subdomain of your domain. Anyone else who signs in sees "Access Denied".
 
@@ -22,7 +22,7 @@ The top menu has **Organizations**, **Users**, **Analytics** and **Developers**.
 
 ## Organizations
 
-The list shows every organization with its URL, number of users, courses and admins, plan and dates. You can search by name and sort by newest, oldest, most or least users, most courses, most visits, most engaged, most admins, payments or last update. On LearnHouse Cloud you can also filter by plan.
+The list shows every organization with its URL, number of users, courses and admins, and dates. You can search by name and sort by newest, oldest, most or least users, most courses, most visits, most engaged, most admins, payments or last update.
 
 Click **New organization** to create one with a name, slug, email and description. On the Enterprise Edition, new organizations get every feature.
 
@@ -36,7 +36,6 @@ Open an organization to see these tabs:
 | **Courses** | Every course with its status and visibility |
 | **Users** | Every member with their email, role and join date |
 | **Analytics** | The organization's [analytics](/platform/analytics) over a period you pick. |
-| **Plan** | LearnHouse Cloud only. Change the plan, see feature limits and manage AI credits. |
 | **Features** | Turn features on or off for this organization: AI (and AI Copilot, which controls the agents in Messages), Analytics, API, Boards, Collaboration, Folders, Communities, Members (and the signup mode), Payments, Playgrounds and Podcasts. On the Enterprise Edition, AI credits are managed here. |
 | **Settings** | Edit the organization's name, slug, email and description |
 

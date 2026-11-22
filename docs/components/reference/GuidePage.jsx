@@ -12,7 +12,7 @@ export default function GuidePage({ slug, title, lede, toc = [], children }) {
   const next = GUIDES[index + 1]
   const path = `/reference/guides/${slug}`
   const jsonLd = jsonLdGraph(
-    techArticleLd({ title: `${title} | LearnHouse API`, description: lede, path, about: [title] }),
+    techArticleLd({ title: `${title} | Studytomy Portal API`, description: lede, path, about: [title] }),
     breadcrumbLd([{ name: 'Guides', path: '/reference' }, { name: title, path }])
   )
 

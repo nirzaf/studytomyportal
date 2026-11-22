@@ -1,9 +1,9 @@
-# LearnHouse E2E: UI acceptance tests
+# Studytomy Portal E2E: UI acceptance tests
 
-**Studytomy working-tree acceptance:** the default published LearnHouse image does not contain unpublished Studytomy changes. Point `E2E_BASE_URL` and `E2E_API_URL` at the intended local build; `core/instance.ts` supports an existing instance and `E2E_SKIP_BOOT`. Record the tested revision. Local `features/studytomy/` test files are not evidence of a passing browser run. See [documentation review](../../docs/studytomy/DOCUMENTATION-REVIEW.md). This does not enable repository CI/CD.
+**Studytomy working-tree acceptance:** the default published Studytomy Portal image does not contain unpublished Studytomy changes. Point `E2E_BASE_URL` and `E2E_API_URL` at the intended local build; `core/instance.ts` supports an existing instance and `E2E_SKIP_BOOT`. Record the tested revision. Local `features/studytomy/` test files are not evidence of a passing browser run. See [documentation review](../../docs/studytomy/DOCUMENTATION-REVIEW.md). This does not enable repository CI/CD.
 
-Browser-driven, human-like end-to-end tests for LearnHouse. The suite boots a
-real **self-host via the LearnHouse CLI** (`setup --ci`, pulling the published
+Browser-driven, human-like end-to-end tests for Studytomy Portal. The suite boots a
+real **self-host via the Studytomy Portal CLI** (`setup --ci`, pulling the published
 image) and drives the UI with Playwright like a real user. It validates the
 **shipped self-host product**.
 

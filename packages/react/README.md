@@ -2,9 +2,9 @@
 
 **Studytomy fork scope:** retained upstream package API documentation. Installing the published `@learnhouse/*` package does not include unpublished Studytomy changes. Inspect this package’s manifest, source and generated/synced output before relying on version parity. Package names and upstream attribution are intentionally retained; this documentation update does not authorize npm publication or resolve licensing decisions.
 
-Render LearnHouse activities inside any React app. Pages, quizzes, flipcards, scenarios, code playgrounds, math, video and PDFs all look and behave as they do in LearnHouse.
+Render Studytomy Portal activities inside any React app. Pages, quizzes, flipcards, scenarios, code playgrounds, math, video and PDFs all look and behave as they do in Studytomy Portal.
 
-The package is compiled from the LearnHouse web app's own source at each release. Its version always matches the LearnHouse release it was built from, so `@learnhouse/react@1.4.3` renders exactly what LearnHouse 1.4.3 renders.
+The package is compiled from the Studytomy Portal web app's own source at each release. Its version always matches the Studytomy Portal release it was built from, so `@learnhouse/react@1.4.3` renders exactly what Studytomy Portal 1.4.3 renders.
 
 ```bash
 npm install @learnhouse/react
@@ -39,7 +39,7 @@ There are four ways to say what to render:
 // An activity you fetched yourself, for example on the server with @learnhouse/sdk
 <LearnHouseActivity activity={activity} courseId="course_…" />
 
-// A raw document (the JSON LearnHouse stores), with no network calls
+// A raw document (the JSON Studytomy Portal stores), with no network calls
 <LearnHouseActivity content={doc} orgId="org_…" courseId="course_…" />
 ```
 
@@ -71,9 +71,9 @@ Never pass an `lh_` API token to the browser. In a browser, use a user's access 
 | `hideBlocks` | Node names to leave out |
 | `transformContent` | Rewrite the document before it renders |
 | `showTitle`, `header`, `footer` | The activity name, and slots above and below the content (each slot can be a function of the activity) |
-| `showPoweredBy` + `siteUrl` | A small link back to the activity on your LearnHouse site |
+| `showPoweredBy` + `siteUrl` | A small link back to the activity on your Studytomy Portal site |
 | `linkTarget`, `onLinkClick` | Choose where links open, or intercept them (return `false` to cancel) |
-| `locale`, `messages`, `dir` | UI language (22 bundled), string overrides keyed like LearnHouse's locale files, and text direction |
+| `locale`, `messages`, `dir` | UI language (22 bundled), string overrides keyed like Studytomy Portal's locale files, and text direction |
 | `fallback`, `errorFallback` | Loading and error UI. `errorFallback` can be `(error, retry) => …` |
 | `className`, `style`, `unstyled` | Hooks into the root element |
 
@@ -92,11 +92,11 @@ const Callout = ({ Default, ...props }) => (
 />
 ```
 
-In dark mode, text and background follow the theme. Blocks keep the light cards they use in LearnHouse.
+In dark mode, text and background follow the theme. Blocks keep the light cards they use in Studytomy Portal.
 
 ## Events
 
-`onEvent` receives `load`, `ready`, `error`, `link_click`, `media` (`play`/`pause`/`ended`/`progress` for video and audio), `resize` (useful for sizing an iframe or modal), `visible`, `complete` (the end of the activity scrolled into view, with `trackCompletion`) and `analytics` (the events LearnHouse's own blocks send). There are also `onLoad` and `onError` callbacks.
+`onEvent` receives `load`, `ready`, `error`, `link_click`, `media` (`play`/`pause`/`ended`/`progress` for video and audio), `resize` (useful for sizing an iframe or modal), `visible`, `complete` (the end of the activity scrolled into view, with `trackCompletion`) and `analytics` (the events Studytomy Portal's own blocks send). There are also `onLoad` and `onError` callbacks.
 
 ## Custom element
 
@@ -115,10 +115,10 @@ Attributes: `activity-id`, `activity-name`, `course-id`, `base-url`, `media-url`
 
 ## Styles
 
-`@learnhouse/react/styles.css` is LearnHouse's own stylesheet, compiled for the blocks the renderer uses and scoped under `.lh-activity`, so it doesn't leak into your page.
+`@learnhouse/react/styles.css` is Studytomy Portal's own stylesheet, compiled for the blocks the renderer uses and scoped under `.lh-activity`, so it doesn't leak into your page.
 
 ## Notes
 
-- Blocks render without an editor: the document goes through TipTap's static renderer into LearnHouse's block components. A block's code loads only when a document contains that block.
-- One LearnHouse instance per page: media URLs come from the most recently mounted provider's `baseUrl`.
+- Blocks render without an editor: the document goes through TipTap's static renderer into Studytomy Portal's block components. A block's code loads only when a document contains that block.
+- One Studytomy Portal instance per page: media URLs come from the most recently mounted provider's `baseUrl`.
 - License: TODO (to be confirmed by the maintainers before the first publish).

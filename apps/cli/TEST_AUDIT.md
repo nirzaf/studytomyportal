@@ -1,4 +1,4 @@
-# LearnHouse CLI: Test Genuineness Audit
+# Studytomy Portal CLI: Test Genuineness Audit
 
 **Historical audit record:** mutation counts and “fixed” findings below describe the original audit, not a fresh verification of this fork. Re-run the affected tests/mutations before using it as current release evidence. Preserve the detailed findings; current commands are in [README.md](README.md).
 

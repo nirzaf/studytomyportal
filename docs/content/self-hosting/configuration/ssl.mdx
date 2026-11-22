@@ -1,16 +1,13 @@
 ---
-description: Set up a domain and SSL for self-hosted LearnHouse with automatic Let's Encrypt certificates or your own reverse proxy, and set the cookie domain.
+description: Set up a domain and SSL for self-hosted Studytomy Portal with automatic Let's Encrypt certificates or your own reverse proxy, and set the cookie domain.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # SSL and Domain Setup
 
-Securing your LearnHouse instance with SSL is strongly recommended for production deployments. This guide covers domain configuration and SSL setup options.
-
-<CloudCta variant="selfhost">LearnHouse Cloud handles certificates for you, custom domains included.</CloudCta>
-
-Make sure your DNS records point to the server running LearnHouse before enabling SSL.
+Securing your Studytomy Portal instance with SSL is strongly recommended for production deployments. This guide covers domain configuration and SSL setup options.
+Make sure your DNS records point to the server running Studytomy Portal before enabling SSL.
 
 ## Option 1: Automatic SSL with the setup wizard
 
@@ -22,7 +19,7 @@ Both ports must be free on the server and reachable from the internet.
 
 ## Option 2: Your own reverse proxy
 
-Choose **I'll handle SSL myself** in the wizard when TLS ends in a proxy you run (or a service like Cloudflare). LearnHouse then serves plain HTTP on the port you picked, and the generated URLs use `https://`. Point your proxy at that port.
+Choose **I'll handle SSL myself** in the wizard when TLS ends in a proxy you run (or a service like Cloudflare). Studytomy Portal then serves plain HTTP on the port you picked, and the generated URLs use `https://`. Point your proxy at that port.
 
 ### Caddy
 
@@ -65,11 +62,11 @@ server {
 }
 ```
 
-`client_max_body_size 6G` matches the upload limit of the nginx inside the LearnHouse container, so large video uploads are not cut off by your proxy.
+`client_max_body_size 6G` matches the upload limit of the nginx inside the Studytomy Portal container, so large video uploads are not cut off by your proxy.
 
 ### Traefik
 
-If you use Traefik as your reverse proxy, route your domain to the LearnHouse port and let Traefik handle Let's Encrypt certificates through its built-in ACME support.
+If you use Traefik as your reverse proxy, route your domain to the Studytomy Portal port and let Traefik handle Let's Encrypt certificates through its built-in ACME support.
 
 ## Variables to check
 

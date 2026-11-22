@@ -240,7 +240,7 @@
     "billing": "الفوترة",
     "create_organization": "إنشاء مؤسسة",
     "start_your_own_organization": "أنشئ مؤسستك الخاصة",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "تعذّر حذف هذه المؤسسة. يرجى المحاولة مرة أخرى.",
     "org_actions": "إجراءات المؤسسة",
     "manage_upgrade": "إدارة / ترقية",
@@ -3358,7 +3358,7 @@
           "description": "تكوين إعداداتك الشخصية وكلمات المرور والبريد الإلكتروني"
         }
       },
-      "learnhouse_university": "جامعة ليرن هاوس",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "مرحباً بعودتك",
       "plan": "الخطة",
       "create_course": "إنشاء دورة",
@@ -7610,7 +7610,7 @@
           "keywords": "مسارات, مسارات تعليمية, برامج, منهج, تسلسل, شهادة, paths"
         },
         "live_sessions": {
-          "keywords": "جلسات مباشرة دروس ندوة اجتماع فيديو حضور تسجيلات استطلاعات live sessions webinar learnhouse meet zoom meet teams",
+          "keywords": "جلسات مباشرة دروس ندوة اجتماع فيديو حضور تسجيلات استطلاعات live sessions webinar meet zoom meet teams",
           "description": "جدولة الجلسات المباشرة ومتابعة الحضور وإدارة التسجيلات"
         }
       }
@@ -7800,7 +7800,7 @@
       "toggle": "السماح باتصالات تطبيقات الذكاء الاصطناعي",
       "on": "مفعّل",
       "off": "متوقف",
-      "server_disabled": "خدمة MCP متوقفة على هذا الخادم (LEARNHOUSE_MCP_ENABLED=false).",
+      "server_disabled": "خدمة MCP متوقفة على هذا الخادم (server configuration).",
       "server_url": "عنوان الخادم",
       "copy": "نسخ",
       "copied": "تم النسخ",
@@ -7828,8 +7828,8 @@
           "شغّل الخادم وسجّل الدخول إلى Studytomy عند الطلب."
         ],
         "claude_code": [
-          "شغّل: claude mcp add --transport http learnhouse {{url}}",
-          "داخل Claude Code شغّل /mcp واختر learnhouse لتسجيل الدخول."
+          "شغّل: claude mcp add --transport http studytomy {{url}}",
+          "داخل Claude Code شغّل /mcp واختر studytomy لتسجيل الدخول."
         ]
       },
       "connections_title": "التطبيقات المتصلة",
@@ -11614,8 +11614,8 @@
       "inactive_desc": "فشل التحقق من ترخيص EE (<code>{{reason}}</code>). تُرجع كل نقاط النهاية <code>/ee/*</code> الخطأ 503، لذا لا تستطيع هذه الصفحة تحميل بياناتها.",
       "what_to_check": "ما الذي يجب التحقق منه",
       "check_diagnostics": "افتح <code>{{path}}</code>. يستجيب حتى عندما يكون الترخيص غير نشط، ويحدد حقل <code>hint</code> فيه الحل.",
-      "check_saas": "لعمليات نشر SaaS: تأكد من ضبط <code>LEARNHOUSE_SAAS=true</code> في بيئة API. يتجاوز SaaS فحص الترخيص.",
-      "check_self_hosted": "لـ EE المستضاف ذاتيًا: تأكد من ضبط <code>LEARNHOUSE_LICENSE_KEY</code> وإمكانية الوصول إلى خادم الترخيص (أو فترة السماح).",
+      "check_saas": "لعمليات نشر SaaS: تأكد من ضبط <code>SaaS mode</code> في بيئة API. يتجاوز SaaS فحص الترخيص.",
+      "check_self_hosted": "لـ EE المستضاف ذاتيًا: تأكد من ضبط <code>license key</code> وإمكانية الوصول إلى خادم الترخيص (أو فترة السماح).",
       "check_logs": "إذا كان لديك وصول إلى الطرفية، فإن سجلات API تحمل السبب نفسه بالتفصيل الكامل: <code>[EE] license inactive …</code>",
       "failed_to_load": "تعذّر التحميل"
     },

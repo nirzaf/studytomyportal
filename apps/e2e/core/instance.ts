@@ -2,7 +2,7 @@
  * Shared configuration for the E2E suite.
  *
  * Everything is overridable via env so the same specs can run against:
- *  - a self-host the suite boots itself via the LearnHouse CLI (default), or
+ *  - a self-host the suite boots itself via the Studytomy Portal CLI (default), or
  *  - an already-running instance (set E2E_BASE_URL to skip the boot).
  */
 

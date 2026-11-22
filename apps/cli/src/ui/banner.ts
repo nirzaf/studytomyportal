@@ -45,9 +45,9 @@ function buildInfoBox(): string[] {
 
   return [
     top,
-    boxLine(pc.bold(pc.white('LearnHouse')) + pc.dim(` // v${VERSION}`)),
+    boxLine(pc.bold(pc.white('Studytomy Portal')) + pc.dim(` // v${VERSION}`)),
     boxLine(sep),
-    boxLine(pc.white('Deploy LearnHouse with a single command.')),
+    boxLine(pc.white('Deploy Studytomy Portal with a single command.')),
     boxLine(pc.white('Handles configuration, Docker, SSL, DB.')),
     empty,
     boxLine(pc.white('> ') + pc.dim('npx learnhouse@latest')),

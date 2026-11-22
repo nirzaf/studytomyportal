@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import {
   ArrowRight,
-  Cloud,
   HardDrives,
   Code,
   BookOpen,
@@ -12,36 +11,25 @@ import {
   GearSix,
   ArrowsClockwise,
   BracketsCurly,
-  Tag,
   GithubLogo,
-  DiscordLogo,
-  GraduationCap,
 } from '@phosphor-icons/react/dist/ssr'
 import './home.css'
 
 const START = [
   {
-    href: '/getting-started/quickstart#option-a-learnhouse-cloud',
-    icon: Cloud,
-    label: 'Fastest',
-    title: 'Use LearnHouse Cloud',
-    text: 'Create your academy in a few minutes. Hosting, updates and backups are handled for you.',
-    action: 'Start with Cloud',
-  },
-  {
-    href: '/self-hosting/installation/quick-install',
+    href: '/getting-started/quickstart',
     icon: HardDrives,
-    label: 'Your servers',
-    title: 'Self-host it',
-    text: 'One command sets up LearnHouse on any machine with Docker.',
-    code: 'npx learnhouse@latest setup',
-    action: 'Install guide',
+    label: 'Start here',
+    title: 'Run locally',
+    text: 'Start Studytomy Portal from this source checkout.',
+    code: 'npx learnhouse dev',
+    action: 'Quickstart',
   },
   {
     href: '/developers',
     icon: Code,
     label: 'Headless',
-    title: 'Build on LearnHouse',
+    title: 'Build with Studytomy',
     text: 'Embed lessons, render them in React, or drive everything from the API and SDK.',
     action: 'Developer docs',
   },
@@ -58,24 +46,14 @@ const TOPICS = [
   { href: '/reference', icon: BracketsCurly, title: 'API reference', text: 'Every endpoint, with a playground' },
 ]
 
-export function HomeHero({ version, date }) {
+export function HomeHero() {
   return (
     <section className="lhh-hero">
-      <span className="lhh-label">LearnHouse documentation</span>
-      <h1 className="lhh-title">Run your academy. Build anything on top.</h1>
+    <span className="lhh-label">Studytomy Portal documentation</span>
+      <h1 className="lhh-title">Learn, teach, and build with Studytomy.</h1>
       <p className="lhh-lede">
-        Guides for teaching on LearnHouse, running your own instance, and building with its API, SDK and components.
+        Guides for using Studytomy Portal, self-hosting the codebase, and building with its API and activity components.
       </p>
-      {version && (
-        <Link href="/releases" className="lhh-release">
-          <Tag size={13} weight="bold" />
-          <span>
-            Latest release <strong>v{version}</strong>
-            {date && <> · {date}</>}
-          </span>
-          <ArrowRight size={12} weight="bold" />
-        </Link>
-      )}
     </section>
   )
 }
@@ -122,9 +100,7 @@ export function TopicGrid() {
 
 export function CommunityRow() {
   const items = [
-    { href: 'https://github.com/learnhouse/learnhouse', icon: GithubLogo, title: 'GitHub', text: 'Source, issues and discussions' },
-    { href: 'https://discord.gg/CMyZjjYZ6x', icon: DiscordLogo, title: 'Discord', text: 'Ask the team and the community' },
-    { href: 'https://university.learnhouse.io', icon: GraduationCap, title: 'LearnHouse University', text: 'Video courses on using LearnHouse' },
+    { href: 'https://github.com/nirzaf/studytomyportal', icon: GithubLogo, title: 'Studytomy Portal source', text: 'Browse the repository and its documentation' },
   ]
   return (
     <div className="lhh-community">

@@ -1,5 +1,5 @@
 ---
-description: "Send signed LearnHouse webhook events to your own server, verify HMAC-SHA256 signatures, handle retries and manage endpoints from the dashboard or API."
+description: "Send signed Studytomy Portal webhook events to your own server, verify HMAC-SHA256 signatures, handle retries and manage endpoints from the dashboard or API."
 ---
 
 import { Callout, Tabs } from '@/components/mdx'
@@ -7,21 +7,20 @@ import WebhookFlowDiagram from '../../../components/diagrams/WebhookFlowDiagram'
 
 # Webhooks
 
-Webhooks deliver real-time event notifications to any endpoint you control. When something happens in LearnHouse, such as a learner completing a course, a user signing up, or an assignment being graded, LearnHouse sends a signed `POST` request with a JSON payload to every matching endpoint. Use them to sync a CRM, send custom emails, update a dashboard or start any workflow without polling the API.
+Webhooks deliver real-time event notifications to any endpoint you control. When something happens in Studytomy Portal, such as a learner completing a course, a user signing up, or an assignment being graded, Studytomy Portal sends a signed `POST` request with a JSON payload to every matching endpoint. Use them to sync a CRM, send custom emails, update a dashboard or start any workflow without polling the API.
 
 <WebhookFlowDiagram />
 
 <Callout type="info">
 Webhooks are available on the **Pro plan** or higher. Manage endpoints under **Developers → Automations** in the organization dashboard, or through the [REST API](#api-reference) while signed in. API tokens cannot manage webhooks.
-<PlanCta plan="Pro" />
 </Callout>
 
 ## How it works
 
 1. You register an **endpoint** (a public URL) and choose which events it receives.
-2. When one of those events fires, LearnHouse sends a `POST` to your URL with a JSON body, **signed** with the endpoint's secret.
+2. When one of those events fires, Studytomy Portal sends a `POST` to your URL with a JSON body, **signed** with the endpoint's secret.
 3. Your receiver **verifies the signature**, then handles the event.
-4. If your endpoint doesn't return a `2xx`, LearnHouse **retries**, and it logs every attempt.
+4. If your endpoint doesn't return a `2xx`, Studytomy Portal **retries**, and it logs every attempt.
 
 ## Quick start
 
@@ -74,7 +73,7 @@ The shape of `data` varies per event. See the [Event Catalogue](/platform/automa
 | Header | Value |
 | --- | --- |
 | `Content-Type` | `application/json` |
-| `User-Agent` | `LearnHouse-Webhooks/1.0` |
+| `User-Agent` | `Studytomy Portal-Webhooks/1.0` |
 | `X-Webhook-Event` | Event name (e.g. `course_completed`) |
 | `X-Webhook-Delivery` | Unique delivery ID (matches `delivery_id` in the body) |
 | `X-Webhook-Signature` | `sha256=<hex_digest>`, the HMAC-SHA256 of the raw body |
@@ -82,10 +81,10 @@ The shape of `data` varies per event. See the [Event Catalogue](/platform/automa
 
 ## Verifying the signature
 
-LearnHouse signs every payload with HMAC-SHA256, using the endpoint's signing secret. The signature covers the **raw request body** (exactly the bytes sent over the wire, before any JSON parsing) and is delivered in the `X-Webhook-Signature` header as `sha256=<hex_digest>`. GitHub and Stripe use the same convention.
+Studytomy Portal signs every payload with HMAC-SHA256, using the endpoint's signing secret. The signature covers the **raw request body** (exactly the bytes sent over the wire, before any JSON parsing) and is delivered in the `X-Webhook-Signature` header as `sha256=<hex_digest>`. GitHub and Stripe use the same convention.
 
 <Callout type="warning">
-Always verify the signature before trusting a payload. Anyone who discovers your endpoint URL can send unsigned requests. The signature is the only thing that proves the request came from LearnHouse.
+Always verify the signature before trusting a payload. Anyone who discovers your endpoint URL can send unsigned requests. The signature is the only thing that proves the request came from Studytomy Portal.
 </Callout>
 
 <Tabs items={['Next.js', 'Node.js', 'Python']}>
@@ -127,7 +126,7 @@ export async function POST(req: NextRequest) {
       break
   }
 
-  // 4. Return 2xx quickly so LearnHouse marks the delivery successful.
+  // 4. Return 2xx quickly so Studytomy Portal marks the delivery successful.
   return NextResponse.json({ received: true })
 }
 ```
@@ -178,14 +177,14 @@ If your framework parses the body into a dict before you see it (Express without
 - **Retries**: Up to **3 attempts** per event: the first try, then a retry after **1 s**, then a last one after **4 s**. Any non-2xx response, timeout, or network error triggers a retry.
 - **Success**: A response with an HTTP status in `2xx` marks the delivery as successful and stops further retries.
 - **Ordering**: Deliveries are fire-and-forget and may arrive slightly out of order under load. Use the `timestamp` field if you need strict ordering.
-- **Delivery logs**: The most recent **200 attempts per endpoint** are retained. Each log entry records the HTTP status, the start of the response body (LearnHouse reads up to 8 KB and stores the first 500 characters), the attempt number, and any transport-level error.
+- **Delivery logs**: The most recent **200 attempts per endpoint** are retained. Each log entry records the HTTP status, the start of the response body (Studytomy Portal reads up to 8 KB and stores the first 500 characters), the attempt number, and any transport-level error.
 - **Plan**: If the organization drops below the Pro plan, deliveries stop.
 
 In the dashboard, the **View delivery logs** icon on an endpoint card opens **Delivery Logs** with the last 30 attempts (status, event, response, attempt and time). The API returns up to 200 through `GET /api/v1/orgs/{org_id}/webhooks/{webhook_uuid}/deliveries`.
 
 ## Your endpoint: what to return
 
-- **Respond quickly.** LearnHouse uses a 10 s per-attempt timeout; if your handler does heavy work, enqueue a job and return `200` immediately.
+- **Respond quickly.** Studytomy Portal uses a 10 s per-attempt timeout; if your handler does heavy work, enqueue a job and return `200` immediately.
 - **Respond with any 2xx status.** Body content is ignored (but captured in the delivery log for debugging).
 - **Be idempotent.** Deliveries are at-least-once: after a retry, the same `delivery_id` can arrive twice. Record the IDs you have processed and treat a repeat as a no-op.
 - **Verify the signature.** Do this before any database write.
@@ -193,8 +192,8 @@ In the dashboard, the **View delivery logs** icon on an endpoint card opens **De
 ## Security
 
 - **Schemes.** Only `https://` and `http://` URLs are accepted. Use `http://` for local testing only, since payloads would travel unencrypted.
-- **Private address protection (SSRF guard).** LearnHouse resolves every webhook URL to an IP when you save it and again before every delivery, and refuses private and reserved ranges (`10.0.0.0/8`, `127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, link-local, etc.) and `localhost`, in every environment. The check is repeated **after** the connection is established to defeat DNS rebinding.
-- **Signing secret at rest.** Secrets start with `whsec_`. They are stored encrypted (Fernet, key derived from the application's JWT secret) and are returned in plaintext **only** at creation and when you rotate the secret. LearnHouse cannot recover a lost secret. You can only rotate it.
+- **Private address protection (SSRF guard).** Studytomy Portal resolves every webhook URL to an IP when you save it and again before every delivery, and refuses private and reserved ranges (`10.0.0.0/8`, `127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, link-local, etc.) and `localhost`, in every environment. The check is repeated **after** the connection is established to defeat DNS rebinding.
+- **Signing secret at rest.** Secrets start with `whsec_`. They are stored encrypted (Fernet, key derived from the application's JWT secret) and are returned in plaintext **only** at creation and when you rotate the secret. Studytomy Portal cannot recover a lost secret. You can only rotate it.
 - **Scope.** A webhook endpoint is scoped to a single organization. It can only subscribe to events fired for that org.
 
 ## Regenerating a secret
@@ -302,7 +301,7 @@ Delivers a synthetic `ping` event:
   "delivery_id": "dlv_…",
   "timestamp": "2026-04-19T14:31:02Z",
   "org_id": 1,
-  "data": { "message": "This is a test webhook event from LearnHouse." }
+  "data": { "message": "This is a test webhook event from Studytomy Portal." }
 }
 ```
 

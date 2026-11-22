@@ -1,24 +1,28 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { track } from '../Analytics/PostHogProvider'
 import { ctaUrl } from '@/lib/cta'
 
 /**
- * A link to LearnHouse Cloud with UTM tags for the current page, that records
- * a `docs_cta_click` event. Use it for every link that asks readers to sign up.
+ * A docs navigation link with UTM tags and click tracking.
  */
 export default function CtaLink({ href, placement, term, children, ...props }) {
   const route = usePathname() || '/'
   const url = ctaUrl(href, { placement, route, term })
+  const onClick = (event) => {
+    track('docs_cta_click', { placement, destination: href, page: route, term })
+    props.onClick?.(event)
+  }
+  if (href.startsWith('/')) {
+    return <Link {...props} href={url} onClick={onClick}>{children}</Link>
+  }
   return (
     <a
       {...props}
       href={url}
-      onClick={(event) => {
-        track('docs_cta_click', { placement, destination: href, page: route, term })
-        props.onClick?.(event)
-      }}
+      onClick={onClick}
     >
       {children}
     </a>

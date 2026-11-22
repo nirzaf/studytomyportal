@@ -16,7 +16,7 @@ const LEDE =
 export const metadata = referenceMetadata({
   title: 'Authenticating API Requests',
   description:
-    'Authenticate to the LearnHouse API with lh_ API tokens or user session JWTs: token rights, session-only endpoints, login, refresh and MFA.',
+    'Authenticate to the Studytomy Portal API with lh_ API tokens or user session JWTs: token rights, session-only endpoints, login, refresh and MFA.',
   path: '/reference/guides/authentication',
 })
 
@@ -122,8 +122,8 @@ export default async function AuthenticationGuide() {
       <GuideSection id="api-tokens" title="API tokens">
         <p>
           Create tokens in the dashboard under <strong>Developers → API Access</strong>. The full
-          value is shown once; LearnHouse keeps only a hash and the first 12 characters. A token
-          belongs to one organization. On LearnHouse Cloud tokens need the Pro plan or higher;
+          value is shown once; Studytomy Portal keeps only a hash and the first 12 characters. A token
+          belongs to one organization. In deployments that enable plan entitlements tokens need the Pro plan or higher;
           every self-hosted instance has them.
         </p>
         <CodePanel

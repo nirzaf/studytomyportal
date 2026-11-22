@@ -4,25 +4,26 @@ import CustomNavbar from '../components/Navbar/Navbar'
 import SectionMain from '../components/site/SectionMain'
 import CustomFooter from '../components/Footer/Footer'
 import PostHogProvider from '../components/Analytics/PostHogProvider'
-import { getLatestVersions } from '../lib/releases'
+
+const docsSiteUrl = process.env.NEXT_PUBLIC_DOCS_URL
 
 export const metadata = {
   title: {
-    default: 'LearnHouse Docs',
-    template: '%s – LearnHouse Docs',
+    default: 'Studytomy Portal Docs',
+    template: '%s – Studytomy Portal Docs',
   },
   description:
-    'Official documentation for LearnHouse, the open-source learning management system (LMS). Guides for self-hosting, course creation, AI features, API reference, and more.',
+    'Documentation for Studytomy Portal, including self-hosting, course workflows, AI features, and API reference.',
   keywords: [
-    'LearnHouse',
+    'Studytomy Portal',
     'open source LMS',
     'learning management system',
     'self-hosted LMS',
     'course creation',
-    'LearnHouse documentation',
-    'LearnHouse docs',
+    'Studytomy documentation',
+    'Studytomy Portal docs',
   ],
-  metadataBase: new URL('https://docs.learnhouse.app'),
+  ...(docsSiteUrl ? { metadataBase: new URL(docsSiteUrl) } : {}),
   robots: {
     index: true,
     follow: true,
@@ -37,23 +38,20 @@ export const metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://docs.learnhouse.app',
-    siteName: 'LearnHouse Docs',
+    ...(docsSiteUrl ? { url: docsSiteUrl } : {}),
+    siteName: 'Studytomy Portal Docs',
     description:
-      'Official documentation for LearnHouse, the open-source learning management system (LMS). Guides for self-hosting, course creation, AI features, API reference, and more.',
-    images: [{ url: 'https://docs.learnhouse.app/og', alt: 'LearnHouse Docs', width: 1200, height: 630 }],
+      'Documentation for Studytomy Portal, including self-hosting, course workflows, AI features, and API reference.',
+    ...(docsSiteUrl ? { images: [{ url: '/og', alt: 'Studytomy Portal Docs', width: 1200, height: 630 }] } : {}),
   },
   twitter: {
-    creator: '@getlearnhouse',
-    site: '@getlearnhouse',
     card: 'summary_large_image',
   },
   icons: {
     icon: [
-      { url: '/favicons/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/favicons/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/studytomy-mini.png', sizes: '87x87', type: 'image/png' },
     ],
-    apple: '/favicons/apple-touch-icon.png',
+    apple: '/studytomy-mini.png',
   },
   manifest: '/favicons/site.webmanifest',
 }
@@ -65,22 +63,12 @@ const wix = Wix_Madefor_Text({
   variable: '--font-wix',
 })
 
-async function latestAppVersion() {
-  try {
-    const { app } = await getLatestVersions()
-    return app?.version ?? null
-  } catch {
-    return null
-  }
-}
-
-export default async function RootLayout({ children }) {
-  const version = await latestAppVersion()
+export default function RootLayout({ children }) {
   return (
     <html lang="en" dir="ltr" className={wix.variable} suppressHydrationWarning>
       <body>
         <PostHogProvider>
-          <CustomNavbar version={version} />
+          <CustomNavbar />
           <SectionMain>{children}</SectionMain>
           <CustomFooter />
         </PostHogProvider>

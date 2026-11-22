@@ -83,7 +83,7 @@ const COLLAB_ENV: AppEnvSpec = {
     {
       name: 'LEARNHOUSE_API_URL',
       required: true,
-      description: 'LearnHouse API base URL',
+      description: 'Studytomy Portal API base URL',
       defaultValue: 'http://localhost:1338',
     },
     {

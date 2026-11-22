@@ -8,11 +8,11 @@ export async function startCommand() {
   const dir = findInstallDir()
   const config = readConfig(dir)
   if (!config) {
-    p.log.error('No LearnHouse installation found. Run `npx learnhouse setup` first.')
+    p.log.error('No Studytomy Portal installation found. Run `npx learnhouse setup` first.')
     process.exit(1)
   }
 
-  p.intro(pc.cyan('Starting LearnHouse'))
+  p.intro(pc.cyan('Starting Studytomy Portal'))
 
   // Community only: Enterprise always mounted its content volume.
   if (config.edition !== 'enterprise') {
@@ -33,7 +33,7 @@ export async function startCommand() {
 
   try {
     dockerComposeUp(config.installDir)
-    p.log.success('LearnHouse is running!')
+    p.log.success('Studytomy Portal is running!')
   } catch {
     p.log.error('Failed to start services. Check Docker output above.')
     process.exit(1)

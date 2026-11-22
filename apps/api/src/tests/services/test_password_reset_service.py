@@ -125,7 +125,7 @@ class TestPasswordResetService:
         ), patch(
             "src.services.users.password_reset.get_member_link_base_url",
             new_callable=AsyncMock,
-            return_value="https://learnhouse.test",
+            return_value="https://example.test",
         ), patch(
             "src.services.users.password_reset.send_password_reset_email",
             return_value=True,
@@ -166,7 +166,7 @@ class TestPasswordResetService:
         ), patch(
             "src.services.users.password_reset.get_member_link_base_url",
             new_callable=AsyncMock,
-            return_value="https://learnhouse.test",
+            return_value="https://example.test",
         ), patch(
             "src.services.users.password_reset.send_password_reset_email_platform",
             return_value=True,
@@ -278,7 +278,7 @@ class TestPasswordResetService:
         ), patch(
             "src.services.users.password_reset.get_member_link_base_url",
             new_callable=AsyncMock,
-            return_value="https://learnhouse.test",
+            return_value="https://example.test",
         ), patch(
             "src.services.users.password_reset.send_password_reset_email",
             return_value=False,
@@ -571,7 +571,7 @@ class TestPasswordResetService:
         ), patch(
             "src.services.users.password_reset.get_member_link_base_url",
             new_callable=AsyncMock,
-            return_value="https://learnhouse.test",
+            return_value="https://example.test",
         ), patch(
             "src.services.users.password_reset.send_password_reset_email_platform",
             return_value=True,

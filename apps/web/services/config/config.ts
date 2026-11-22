@@ -185,9 +185,9 @@ export const getBackendUrl = () => getLEARNHOUSE_BACKEND_URL()
 /**
  * Get the upgrade/plan URL for a given org.
  *
- * In SaaS the billing/upgrade hub lives IN-APP on the apex (learnhouse.io
+ * In SaaS the billing/upgrade hub lives IN-APP on the apex (example.com
  * /billing); see app/(hub)/billing. We return an absolute apex URL so an
- * upgrade CTA rendered inside an org subdomain ({slug}.learnhouse.io) crosses
+ * upgrade CTA rendered inside an org subdomain ({slug}.example.com) crosses
  * to the root hub; the `.{top_domain}`-scoped session cookie carries the login
  * across the hop. Returns null in OSS/EE, where there is no SaaS billing
  * surface; callers MUST treat null as "hide the upgrade CTA".
@@ -203,7 +203,7 @@ export const getUpgradeUrl = (orgSlug: string, plan?: string | null): string | n
 }
 
 /**
- * Build a URL on the platform domain (e.g. learnhouse.app).
+ * Build a URL on the configured platform domain.
  * Use this for links that should point to the main platform site,
  * not the org subdomain (e.g. upgrade, billing, account management).
  * Returns null when platform URL is not configured.

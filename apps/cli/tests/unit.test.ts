@@ -1484,7 +1484,7 @@ describe('CLI: version and help', () => {
   it('no-argument invocation shows the welcome screen, not an error', () => {
     const r = runCli('')
     expect(r.exitCode).toBe(0)
-    expect(r.stdout).toContain('LearnHouse')
+    expect(r.stdout).toContain('Studytomy Portal')
   })
 })
 

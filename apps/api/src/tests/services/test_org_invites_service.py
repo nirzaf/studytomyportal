@@ -499,7 +499,7 @@ class TestOrgInvitesService:
         ), patch(
             "src.services.email.utils.get_org_signup_base_url",
             new_callable=AsyncMock,
-            return_value="https://test-org.learnhouse.io",
+            return_value="https://test-org.example.com",
         ), patch(
             "src.services.orgs.invites.send_invitation_email",
             return_value={"id": "email"},
@@ -520,7 +520,7 @@ class TestOrgInvitesService:
         ), patch(
             "src.services.email.utils.get_org_signup_base_url",
             new_callable=AsyncMock,
-            return_value="https://test-org.learnhouse.io",
+            return_value="https://test-org.example.com",
         ), patch(
             "src.services.orgs.invites.send_invitation_email",
             side_effect=RuntimeError("boom"),
@@ -565,7 +565,7 @@ class TestSendInviteEmailLangLookup:
         with patch(
             "src.services.email.utils.get_org_signup_base_url",
             new_callable=AsyncMock,
-            return_value="https://test-org.learnhouse.io",
+            return_value="https://test-org.example.com",
         ), patch(
             "src.services.orgs.invites.send_invitation_email",
             return_value={"id": "email"},
@@ -592,7 +592,7 @@ class TestSendInviteEmailLangLookup:
         with patch(
             "src.services.email.utils.get_org_signup_base_url",
             new_callable=AsyncMock,
-            return_value="https://test-org.learnhouse.io",
+            return_value="https://test-org.example.com",
         ), patch(
             "src.services.orgs.invites.send_invitation_email",
             return_value={"id": "email"},
@@ -624,7 +624,7 @@ class TestSendInviteEmailExceptionBranch:
         with patch(
             "src.services.email.utils.get_org_signup_base_url",
             new_callable=AsyncMock,
-            return_value="https://test-org.learnhouse.io",
+            return_value="https://test-org.example.com",
         ), patch(
             "src.services.orgs.invites.send_invitation_email",
             return_value={"id": "email"},

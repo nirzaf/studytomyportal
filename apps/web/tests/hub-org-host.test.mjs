@@ -1,6 +1,6 @@
 // The platform hub (/home, /new, /billing, ...) belongs to the apex. A member
 // who signed up on a school's own host must land on that school, never on the
-// LearnHouse workspace picker. All fixtures are synthetic.
+// Studytomy Portal workspace picker. All fixtures are synthetic.
 
 import { afterAll, describe, expect, mock, test } from "bun:test";
 import { NextRequest } from "next/server";

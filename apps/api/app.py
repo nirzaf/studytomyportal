@@ -4,9 +4,9 @@
 #  | |__|  __/ (_| | |  | | | |  _  | (_) | |_| \__ \  __/
 #  |_____\___|\__,_|_|  |_| |_|_| |_|\___/ \__,_|___/\___|
 #
-#  LearnHouse · open-source learning platform · FastAPI entrypoint
+#  Studytomy Portal · open-source learning platform · FastAPI entrypoint
 #
-#  ↳ learnhouse.app · github.com/learnhouse/learnhouse
+#  ↳ Studytomy Portal source repository
 #  ↳ Created and maintained by @swve © 2022–present
 
 import logging

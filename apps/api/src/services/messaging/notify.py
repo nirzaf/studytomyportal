@@ -203,7 +203,7 @@ async def run_unread_emails(db: AsyncSession, now: Optional[datetime] = None) ->
             branding, base = org_cache[org_id]
             ordered = sorted(convs.values(), key=lambda c: c["last_id"], reverse=True)
             for c in ordered:
-                # Copilot wears the LearnHouse AI mark, served by the org's own site.
+                # Copilot wears the Studytomy Portal AI mark, served by the org's own site.
                 if c.pop("copilot", False):
                     c["image"] = f"{base}{COPILOT_LOGO_PATH}"
             cta = f"{base}/messages"

@@ -7,7 +7,7 @@ import type { LearnHouseEvent, LearnHouseTheme } from '@learnhouse/react'
 export type LinkTarget = '_blank' | '_self' | '_parent' | '_top'
 
 export interface LearnHouseOptions {
-  /** Base URL of the LearnHouse instance, e.g. `https://learn.acme.com`. */
+  /** Base URL of the Studytomy Portal instance, e.g. `https://learn.acme.com`. */
   baseUrl: string
   /** A user access token. Never pass an `lh_` API token to the browser. */
   token?: string
@@ -15,7 +15,7 @@ export interface LearnHouseOptions {
   getToken?: () => string | null | undefined | Promise<string | null | undefined>
   /** Where media is served from, if not the instance itself (CDN, S3). */
   mediaUrl?: string
-  /** Address of the LearnHouse site (not the API), used to link back to activities. */
+  /** Address of the Studytomy Portal site (not the API), used to link back to activities. */
   siteUrl?: string
   /** Bring your own @learnhouse/sdk client (shared cache, custom fetch, hooks). */
   client?: LearnHouseClient

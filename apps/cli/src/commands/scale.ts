@@ -187,11 +187,11 @@ export async function scaleCommand() {
   const dir = findInstallDir()
   const config = readConfig(dir)
   if (!config) {
-    p.log.error('No LearnHouse installation found. Run setup first.')
+    p.log.error('No Studytomy Portal installation found. Run setup first.')
     process.exit(1)
   }
 
-  p.intro(pc.cyan('LearnHouse Resource Limits'))
+  p.intro(pc.cyan('Studytomy Portal Resource Limits'))
   await scaleResources(config)
   p.outro(pc.dim('Done'))
 }

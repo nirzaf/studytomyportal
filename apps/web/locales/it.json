@@ -236,7 +236,7 @@
     "billing": "Fatturazione",
     "create_organization": "Crea organizzazione",
     "start_your_own_organization": "Crea la tua organizzazione",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Impossibile eliminare questa organizzazione. Riprova.",
     "org_actions": "Azioni dell’organizzazione",
     "manage_upgrade": "Gestisci / Aggiorna",
@@ -3108,7 +3108,7 @@
           "description": "Configura le tue impostazioni personali, password ed email"
         }
       },
-      "learnhouse_university": "Università Studytomy",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Bentornato",
       "plan": "piano",
       "create_course": "Crea corso",
@@ -7251,7 +7251,7 @@
           "keywords": "percorsi, percorsi di apprendimento, programmi, itinerari, curriculum, sequenza, certificato, paths"
         },
         "live_sessions": {
-          "keywords": "sessioni live lezioni webinar riunione video presenze registrazioni sondaggi learnhouse meet zoom meet teams",
+          "keywords": "sessioni live lezioni webinar riunione video presenze registrazioni sondaggi meet zoom meet teams",
           "description": "Pianifica sessioni live, monitora le presenze e gestisci le registrazioni"
         }
       }
@@ -10821,8 +10821,8 @@
       "inactive_desc": "Il controllo della licenza EE non è riuscito (<code>{{reason}}</code>). Ogni endpoint <code>/ee/*</code> restituisce 503, quindi questa pagina non può caricare i suoi dati.",
       "what_to_check": "Cosa controllare",
       "check_diagnostics": "Apri <code>{{path}}</code>. Risponde anche mentre la licenza è inattiva e il suo campo <code>hint</code> indica come risolvere.",
-      "check_saas": "Per le installazioni SaaS: verifica che <code>LEARNHOUSE_SAAS=true</code> sia impostato nell'ambiente dell'API. SaaS salta il controllo della licenza.",
-      "check_self_hosted": "Per EE self-hosted: verifica che <code>LEARNHOUSE_LICENSE_KEY</code> sia impostata e che il server delle licenze (o la finestra di tolleranza) sia raggiungibile.",
+      "check_saas": "Per le installazioni SaaS: verifica che <code>SaaS mode</code> sia impostato nell'ambiente dell'API. SaaS salta il controllo della licenza.",
+      "check_self_hosted": "Per EE self-hosted: verifica che <code>license key</code> sia impostata e che il server delle licenze (o la finestra di tolleranza) sia raggiungibile.",
       "check_logs": "Se hai accesso alla shell, i log dell'API riportano lo stesso motivo con tutti i dettagli: <code>[EE] license inactive …</code>",
       "failed_to_load": "Caricamento non riuscito"
     },

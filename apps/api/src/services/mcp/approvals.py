@@ -5,7 +5,7 @@ can end up in the model's context and ask it to delete a course or make
 someone an admin. So for tools marked as needing approval, the yes has to
 come from the person, through one of two channels:
 
-* an approval link. The person opens it in LearnHouse, signed in as
+* an approval link. The person opens it in Studytomy Portal, signed in as
   themselves, and approves or declines. The app then repeats the call with
   the `approval_id`, which only works once, for the same connection, member,
   organization, tool and arguments, within ten minutes. This is the only

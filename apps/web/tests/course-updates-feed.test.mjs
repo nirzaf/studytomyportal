@@ -91,7 +91,7 @@ describe("course updates RSS feed", () => {
 
   test("links use the host the feed was fetched on, custom domains included", async () => {
     globalThis.fetch = async () => new Response("[]", { status: 200 });
-    orgBase = "https://acme.learnhouse.test/";
+    orgBase = "https://acme.example.test/";
 
     let response = await GET(
       withNextUrl(makeRequest({ host: "learn.acme-school.test", "x-forwarded-proto": "https" })),
@@ -106,7 +106,7 @@ describe("course updates RSS feed", () => {
       { params: Promise.resolve({ courseuuid: "abc" }) }
     );
     body = await response.text();
-    expect(body).toContain("<link>https://acme.learnhouse.test/course/abc</link>");
+    expect(body).toContain("<link>https://acme.example.test/course/abc</link>");
   });
 
   test("hides courses the anonymous API call may not read", async () => {

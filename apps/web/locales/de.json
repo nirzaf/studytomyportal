@@ -236,7 +236,7 @@
     "billing": "Abrechnung",
     "create_organization": "Organisation erstellen",
     "start_your_own_organization": "Eigene Organisation gründen",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Diese Organisation konnte nicht gelöscht werden. Bitte versuche es erneut.",
     "org_actions": "Organisationsaktionen",
     "manage_upgrade": "Verwalten / Upgrade",
@@ -3068,7 +3068,7 @@
           "description": "Persönliche Einstellungen, Passwörter und E-Mail konfigurieren"
         }
       },
-      "learnhouse_university": "Studytomy Universität",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Willkommen zurück",
       "plan": "Tarif",
       "create_course": "Kurs erstellen",
@@ -7184,7 +7184,7 @@
           "keywords": "lernpfade, pfade, paths, lernwege, programme, lehrplan, reihenfolge, zertifikat"
         },
         "live_sessions": {
-          "keywords": "Live-Sitzungen Kurse Webinar Meeting Video Anwesenheit Aufzeichnungen Umfragen learnhouse meet zoom meet teams",
+          "keywords": "Live-Sitzungen Kurse Webinar Meeting Video Anwesenheit Aufzeichnungen Umfragen meet zoom meet teams",
           "description": "Live-Sitzungen planen, Anwesenheit verfolgen und Aufzeichnungen verwalten"
         }
       }
@@ -10715,8 +10715,8 @@
       "inactive_desc": "Die EE-Lizenzprüfung ist fehlgeschlagen (<code>{{reason}}</code>). Jeder <code>/ee/*</code>-Endpunkt liefert 503, daher kann diese Seite ihre Daten nicht laden.",
       "what_to_check": "Was zu prüfen ist",
       "check_diagnostics": "Öffnen Sie <code>{{path}}</code>. Das antwortet auch bei inaktiver Lizenz, und sein Feld <code>hint</code> nennt die Lösung.",
-      "check_saas": "Für SaaS-Deployments: Stellen Sie sicher, dass <code>LEARNHOUSE_SAAS=true</code> in der API-Umgebung gesetzt ist. SaaS umgeht die Lizenzprüfung.",
-      "check_self_hosted": "Für selbst gehostete EE: Stellen Sie sicher, dass <code>LEARNHOUSE_LICENSE_KEY</code> gesetzt ist und der Lizenzserver (oder das Kulanzfenster) erreichbar ist.",
+      "check_saas": "Für SaaS-Deployments: Stellen Sie sicher, dass <code>SaaS mode</code> in der API-Umgebung gesetzt ist. SaaS umgeht die Lizenzprüfung.",
+      "check_self_hosted": "Für selbst gehostete EE: Stellen Sie sicher, dass <code>license key</code> gesetzt ist und der Lizenzserver (oder das Kulanzfenster) erreichbar ist.",
       "check_logs": "Wenn Sie Shell-Zugriff haben, enthalten die API-Logs denselben Grund mit allen Details: <code>[EE] license inactive …</code>",
       "failed_to_load": "Laden fehlgeschlagen"
     },

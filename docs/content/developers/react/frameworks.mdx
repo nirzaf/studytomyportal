@@ -129,14 +129,13 @@ The core of the package is small; most of the weight is the blocks themselves, l
 
 ## Where to fetch: browser or server
 
-When you pass `activityId`, the component fetches the activity from the browser. LearnHouse's API only answers browsers
+When you pass `activityId`, the component fetches the activity from the browser. Studytomy Portal's API only answers browsers
 on origins it trusts:
 
 | Instance | Browser requests are accepted from |
 | --- | --- |
 | Self-hosted, single organization | The instance's own domain, and `localhost` |
 | Self-hosted, multi-organization | Origins matching `LEARNHOUSE_ALLOWED_REGEXP` (by default the instance domain and its subdomains) |
-| LearnHouse Cloud | LearnHouse's own domains |
 
 So if your app runs on another domain, **fetch on your server and pass `activity`** (or `content`), as in
 [Fetch on the server](#fetch-on-the-server-render-with-no-client-round-trip) above. It is also the faster option:

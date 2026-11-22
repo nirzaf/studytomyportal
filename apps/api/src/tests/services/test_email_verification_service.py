@@ -119,7 +119,7 @@ class TestEmailVerificationService:
             return_value="verification-token",
         ), patch(
             "src.services.users.email_verification.get_base_url_from_request",
-            return_value="https://learnhouse.test",
+            return_value="https://example.test",
         ), patch(
             "src.services.users.email_verification.send_email_verification_email",
             return_value=True,
@@ -196,7 +196,7 @@ class TestEmailVerificationService:
             return_value=Mock(setex=Mock()),
         ), patch(
             "src.services.users.email_verification.get_base_url_from_request",
-            return_value="https://learnhouse.test",
+            return_value="https://example.test",
         ), patch(
             "src.services.email.utils.get_media_base_url", return_value="https://api.test"
         ), patch(
@@ -248,7 +248,7 @@ class TestEmailVerificationService:
             return_value="verification-token",
         ), patch(
             "src.services.users.email_verification.get_base_url_from_request",
-            return_value="https://learnhouse.test",
+            return_value="https://example.test",
         ), patch(
             "src.services.users.email_verification.send_email_verification_email",
             return_value=False,
@@ -274,7 +274,7 @@ class TestEmailVerificationService:
         fake_redis.setex = Mock()
 
         with patch.dict(
-            os.environ, {"LEARNHOUSE_PLATFORM_URL": "https://www.learnhouse.app"}
+            os.environ, {"LEARNHOUSE_PLATFORM_URL": "https://www.example.com"}
         ), patch(
             "src.services.users.email_verification.get_redis_connection",
             return_value=fake_redis,
@@ -283,7 +283,7 @@ class TestEmailVerificationService:
             return_value="verification-token",
         ), patch(
             "src.services.users.email_verification.get_base_url_from_request",
-            return_value="https://learnhouse.io",
+            return_value="https://example.com",
         ), patch(
             "src.services.users.email_verification.send_email_verification_email",
             return_value=True,
@@ -293,7 +293,7 @@ class TestEmailVerificationService:
         assert result == "Verification email sent"
         # mock_request has no Origin/Referer, so the trusted-origin step yields
         # nothing and the platform URL must win over the (patched) fallback.
-        assert mock_send.call_args.kwargs["base_url"] == "https://www.learnhouse.app"
+        assert mock_send.call_args.kwargs["base_url"] == "https://www.example.com"
 
     @pytest.mark.asyncio
     async def test_verify_email_token_paths(

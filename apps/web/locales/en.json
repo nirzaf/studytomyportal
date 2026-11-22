@@ -240,7 +240,7 @@
     "billing": "Billing",
     "create_organization": "Create organization",
     "start_your_own_organization": "Start your own organization",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Could not delete this organization. Please try again.",
     "org_actions": "Organization actions",
     "manage_upgrade": "Manage / Upgrade",
@@ -3192,7 +3192,7 @@
           "description": "Configure your personal settings, passwords, email"
         }
       },
-      "learnhouse_university": "Studytomy University",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Welcome back",
       "plan": "plan",
       "create_course": "Create Course",
@@ -7332,7 +7332,7 @@
           "keywords": "paths, learning paths, tracks, programs, curriculum, sequence, certificate"
         },
         "live_sessions": {
-          "keywords": "live sessions classes webinar meeting video attendance recordings polls learnhouse meet zoom meet teams",
+          "keywords": "live sessions classes webinar meeting video attendance recordings polls meet zoom meet teams",
           "description": "Schedule live sessions, track attendance and manage recordings"
         }
       }
@@ -7522,7 +7522,7 @@
       "toggle": "Allow AI app connections",
       "on": "On",
       "off": "Off",
-      "server_disabled": "MCP is turned off on this server (LEARNHOUSE_MCP_ENABLED=false).",
+      "server_disabled": "MCP is turned off on this server (server configuration).",
       "server_url": "Server URL",
       "copy": "Copy",
       "copied": "Copied",
@@ -7550,8 +7550,8 @@
           "Start the server and sign in to Studytomy when prompted."
         ],
         "claude_code": [
-          "Run: claude mcp add --transport http learnhouse {{url}}",
-          "Inside Claude Code run /mcp and choose learnhouse to sign in."
+          "Run: claude mcp add --transport http studytomy {{url}}",
+          "Inside Claude Code run /mcp and choose studytomy to sign in."
         ]
       },
       "connections_title": "Connected apps",
@@ -11176,8 +11176,8 @@
       "inactive_desc": "The EE license check failed (<code>{{reason}}</code>). Every <code>/ee/*</code> endpoint is returning 503, so this page can't load its data.",
       "what_to_check": "What to check",
       "check_diagnostics": "Open <code>{{path}}</code>. It answers even while the license is inactive, and its <code>hint</code> field names the fix.",
-      "check_saas": "For SaaS deployments: confirm <code>LEARNHOUSE_SAAS=true</code> is set in the API environment. SaaS short-circuits the license check.",
-      "check_self_hosted": "For self-hosted EE: confirm <code>LEARNHOUSE_LICENSE_KEY</code> is set and the license server (or grace window) is reachable.",
+      "check_saas": "For SaaS deployments: confirm <code>SaaS mode</code> is set in the API environment. SaaS short-circuits the license check.",
+      "check_self_hosted": "For self-hosted EE: confirm <code>license key</code> is set and the license server (or grace window) is reachable.",
       "check_logs": "If you have shell access, the API logs carry the same reason with full detail: <code>[EE] license inactive …</code>",
       "failed_to_load": "Failed to load"
     },

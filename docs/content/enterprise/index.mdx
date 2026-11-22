@@ -1,23 +1,21 @@
 ---
 title: Enterprise Edition
-description: Learn what the LearnHouse Enterprise Edition adds, which Cloud plans include each feature, and how to activate a license on a self-hosted instance.
+description: Review Enterprise Edition licensing boundaries and configuration points documented in this repository.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Enterprise Edition
 
-The LearnHouse Enterprise Edition (EE) is a commercially licensed extension of the open source platform. It adds single sign-on, audit logs, SCORM, payments, analytics, multiple organizations and the admin dashboard.
+The Studytomy Portal Enterprise Edition (EE) is a commercially licensed extension of the open source platform. It adds single sign-on, audit logs, SCORM, payments, analytics, multiple organizations and the admin dashboard.
 
 ## Licensing
 
 The Enterprise Edition is covered by a separate **EE license**, not by the open source license of the core platform.
 
 - **Self-hosted**: EE features ship in the Enterprise images and only turn on with a valid license key.
-- **LearnHouse Cloud**: EE features are part of the plans. Payments and analytics start on the Standard plan, live sessions on the Pro plan, and Messages is on every plan; SSO, LTI, audit logs and SCORM need the Enterprise plan. See [Plans & Limits](/platform/organizations/plans).
-
 <Callout type="info">
-Interested in the Enterprise Edition? Visit [learnhouse.app](https://www.learnhouse.app) to learn more about pricing and licensing.
+This repository does not document a Studytomy hosted Enterprise service or its pricing. Verify licensing and availability with the deployment owner.
 </Callout>
 
 ## Enterprise features
@@ -26,7 +24,7 @@ Interested in the Enterprise Edition? Visit [learnhouse.app](https://www.learnho
 | --- | --- |
 | **[Single Sign-On](/enterprise/sso)** | Sign members in through WorkOS (SAML and OIDC) or any OpenID Connect provider |
 | **[LTI 1.3](/enterprise/lti)** | Launch courses from Moodle, Canvas, Open edX, Sakai, ILIAS, Chamilo, OpenOLAT and other LTI 1.3 platforms, with deep linking, grade sync and roster sync |
-| **[Live Sessions](/enterprise/live-sessions)** | Schedule classes in LearnHouse Meet, Google Meet, Zoom or any meeting link, with chat, Q&A, polls, breakout rooms, recordings and attendance |
+| **[Live Sessions](/enterprise/live-sessions)** | Schedule classes in Studytomy Portal Meet, Google Meet, Zoom or any meeting link, with chat, Q&A, polls, breakout rooms, recordings and attendance |
 | **[Messages](/platform/messages)** | Direct messages, group chats, course announcements, AI agents and reminders |
 | **[Audit Logs](/enterprise/audit-logs)** | A record of every change made in an organization, with filters and CSV export |
 | **[SCORM](/enterprise/scorm)** | Import and run SCORM 1.2 and 2004 packages |
@@ -44,7 +42,7 @@ Set your license key on the API container:
 | Variable | Purpose |
 | --- | --- |
 | `LEARNHOUSE_LICENSE_KEY` | Your license key. Required. |
-| `LEARNHOUSE_LICENSE_SERVER_URL` | The license server. Defaults to `https://partners.learnhouse.app`. |
+| `LEARNHOUSE_LICENSE_SERVER_URL` | License service endpoint configured for the licensed installation. |
 | `LEARNHOUSE_LICENSE_GRACE_HOURS` | How long the instance keeps working when it cannot reach the license server. Defaults to 25 hours (1 to 168). |
 | `LEARNHOUSE_DATA_DIR` | Where the validated license is cached. Defaults to `/app/data`. |
 

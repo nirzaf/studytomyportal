@@ -1,9 +1,9 @@
 // The docs are split into tabs. The navbar shows them, and the sidebar only
 // lists the content folders of the active one.
-import { RocketLaunch, AppWindow, HardDrives, Code, SquaresFour, BracketsCurly, Tag } from '@phosphor-icons/react/dist/ssr'
+import { RocketLaunch, AppWindow, HardDrives, Code, BracketsCurly } from '@phosphor-icons/react/dist/ssr'
 import { TAB_DATA } from './tabs.mjs'
 
-const ICONS = { start: RocketLaunch, platform: AppWindow, 'self-hosting': HardDrives, developers: Code, demos: SquaresFour, reference: BracketsCurly, releases: Tag }
+const ICONS = { start: RocketLaunch, platform: AppWindow, 'self-hosting': HardDrives, developers: Code, reference: BracketsCurly }
 
 export const TABS = TAB_DATA.map((tab) => ({ ...tab, icon: ICONS[tab.key] }))
 

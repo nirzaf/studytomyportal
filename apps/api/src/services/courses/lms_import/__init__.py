@@ -1,5 +1,5 @@
 """
-Convert courses exported from other LMSes into LearnHouse course packages.
+Convert courses exported from other LMSes into Studytomy Portal course packages.
 
 Supported sources: Moodle (.mbz backups), Canvas (.imscc), Blackboard Learn
 (course export/archive .zip), D2L Brightspace (export .zip), Open edX (OLX

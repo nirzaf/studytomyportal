@@ -1,15 +1,12 @@
 ---
-description: Back up and restore a self-hosted LearnHouse instance with the CLI, covering the database, .env file and uploaded content, plus cron automation.
+description: Back up and restore a self-hosted Studytomy Portal instance with the CLI, covering the database, .env file and uploaded content, plus cron automation.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Backups
 
-Back up your LearnHouse data regularly. The LearnHouse CLI has built-in backup and restore commands.
-
-<CloudCta variant="selfhost">LearnHouse Cloud backs up your academy for you.</CloudCta>
-
+Back up your Studytomy Portal data regularly. The Studytomy Portal CLI has built-in backup and restore commands.
 ## Creating a Backup
 
 Create a backup with a single command:
@@ -22,7 +19,7 @@ In a terminal, the command asks whether to create or restore a backup. Without a
 
 The archive contains:
 
-- **`database.sql`**: a `pg_dump` of the LearnHouse PostgreSQL database
+- **`database.sql`**: a `pg_dump` of the Studytomy Portal PostgreSQL database
 - **`.env`**: a copy of your instance's environment file
 - **`content.tar`**: uploaded files (images, videos, documents) from the app container. Skipped when content is stored in S3, and when the app container is not running (the CLI warns you).
 - **`backup.json`**: the CLI version, deployment ID, edition and creation date

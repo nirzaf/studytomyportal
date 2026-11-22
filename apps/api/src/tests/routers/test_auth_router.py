@@ -43,8 +43,8 @@ def _mock_config(tenancy: str = "multi"):
     return SimpleNamespace(
         hosting_config=SimpleNamespace(
             tenancy=tenancy,
-            domain="learnhouse.test",
-            cookie_config=SimpleNamespace(domain=".learnhouse.test"),
+            domain="example.test",
+            cookie_config=SimpleNamespace(domain=".example.test"),
         )
     )
 
@@ -89,13 +89,13 @@ class TestAuthHelpers:
     def test_get_cookie_domain_for_configured_subdomain(self):
         request = Mock()
         request.headers = {
-            "origin": "https://app.learnhouse.test",
+            "origin": "https://app.example.test",
             "referer": "",
             "host": "",
         }
 
         with patch("src.routers.auth.get_learnhouse_config", return_value=_mock_config()):
-            assert get_cookie_domain_for_request(request) == ".learnhouse.test"
+            assert get_cookie_domain_for_request(request) == ".example.test"
 
     def test_get_cookie_domain_for_custom_domain_and_localhost(self):
         custom_request = Mock()
@@ -119,7 +119,7 @@ class TestAuthHelpers:
         # In single tenancy the same code path serves localhost dev and any
         # self-hosted VPS hostname; cookies are always host-only.
         for origin in (
-            "https://app.learnhouse.test",  # would be subdomain match in multi
+            "https://app.example.test",  # would be subdomain match in multi
             "https://learn.someschool.edu",  # arbitrary VPS host
             "http://localhost:3000",
             "",
@@ -161,7 +161,7 @@ class TestAuthHelpers:
         response = Response()
         request = Mock()
         request.client = SimpleNamespace(host="127.0.0.1")
-        request.headers = {"origin": "https://app.learnhouse.test"}
+        request.headers = {"origin": "https://app.example.test"}
         request.url = SimpleNamespace(scheme="https")
 
         with patch("src.routers.auth.get_learnhouse_config", return_value=_mock_config()):
@@ -208,7 +208,7 @@ class TestAuthHelpers:
             "src.routers.auth.isDevModeEnabled",
             return_value=False,
         ):
-            assert get_cookie_domain_for_request(empty_request) == ".learnhouse.test"
+            assert get_cookie_domain_for_request(empty_request) == ".example.test"
             assert is_request_secure(None) is True
             assert is_request_secure(invalid_ip_request) is True
             assert is_request_secure(http_proxy_request) is False

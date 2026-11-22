@@ -2,32 +2,29 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { API_GROUPS, METHOD_TO_ACTION } from '../lib/reference/config.js'
-import { demoListFrom, listContentPages, mdxToMarkdown } from '../lib/markdown/mdx-to-md.mjs'
+import { listContentPages, mdxToMarkdown } from '../lib/markdown/mdx-to-md.mjs'
 import { TAB_DATA } from '../components/site/tabs.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CONTENT_DIR = path.join(__dirname, '..', 'content')
 const OUTPUT_FILE = path.join(__dirname, '..', 'public', 'llms-full.txt')
-const SITE_URL = 'https://docs.learnhouse.app'
-const API_BASE_URL = (process.env.LEARNHOUSE_API_URL || 'https://api.learnhouse.io').replace(/\/$/, '')
+const SITE_URL = process.env.NEXT_PUBLIC_DOCS_URL?.replace(/\/+$/, '') || ''
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || process.env.LEARNHOUSE_API_URL || 'http://localhost:1338').replace(/\/$/, '')
 const SNAPSHOT_PATH = path.join(__dirname, '..', 'lib', 'reference', 'openapi.snapshot.json')
 
 
 
 
-const DEMOS_JSON = path.join(__dirname, '..', 'components', 'headless', 'demos.json')
 const pages = listContentPages(CONTENT_DIR).map(({ slug, file }) => {
-  const { title, description, markdown } = mdxToMarkdown(fs.readFileSync(file, 'utf-8'), {
-    demoList: () => demoListFrom(DEMOS_JSON),
-  })
+  const { title, description, markdown } = mdxToMarkdown(fs.readFileSync(file, 'utf-8'))
   return { slug, title, description, markdown, url: slug ? `${SITE_URL}/${slug}` : SITE_URL }
 })
 
 const sections = []
 
-sections.push('# LearnHouse Documentation: Full Content')
+sections.push('# Studytomy Portal Documentation: Full Content')
 sections.push('')
-sections.push('> This file contains the complete text of all LearnHouse documentation pages.')
+sections.push('> This file contains the complete text of all Studytomy Portal documentation pages.')
 sections.push(`> Source: ${SITE_URL}. Each page is also available on its own at <page URL>.md`)
 sections.push('')
 
@@ -42,9 +39,9 @@ for (const page of pages) {
 
 // ── llms.txt: an index of every page, grouped like the site's tabs ───────────
 const llms = [
-  '# LearnHouse Documentation',
+  '# Studytomy Portal Documentation',
   '',
-  '> LearnHouse is an open-source learning platform: a block editor for courses, AI tutoring, assignments, payments and communities, on LearnHouse Cloud or self-hosted with one command. Developers can build on it with the REST API, the @learnhouse/sdk TypeScript client, and the @learnhouse/react and @learnhouse/vue components.',
+  '> Studytomy Portal documentation for using the learning platform, self-hosting this codebase, and integrating with its API and activity components.',
   '',
   'Every page below is plain Markdown at its URL. The complete text of all pages is at ' + SITE_URL + '/llms-full.txt.',
   '',
@@ -59,14 +56,6 @@ for (const tab of TAB_DATA) {
       `- [Operations JSON](${SITE_URL}/reference/operations.json): machine-readable list of every operation`,
       '',
     )
-    continue
-  }
-  if (tab.key === 'releases') {
-    llms.push('## Releases', '', `- [Releases](${SITE_URL}/releases): release notes for LearnHouse, the CLI and the npm packages`, '')
-    continue
-  }
-  if (tab.key === 'demos') {
-    llms.push('## Demos', '', `- [Demos](${SITE_URL}/demos): fifty apps built on the LearnHouse API, each with a live version and source`, '')
     continue
   }
   if (!inTab.length) continue
@@ -122,7 +111,7 @@ for (const [specPath, methods] of Object.entries(spec.paths || {})) {
 
 sections.push('---')
 sections.push('')
-sections.push('# LearnHouse API Reference')
+sections.push('# Studytomy Portal API Reference')
 sections.push(`URL: ${SITE_URL}/reference`)
 sections.push('')
 sections.push(`Base URL: ${API_BASE_URL} (all endpoints are prefixed with /api/v1).`)

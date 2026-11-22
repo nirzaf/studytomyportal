@@ -18,7 +18,7 @@ const LEDE =
 export const metadata = referenceMetadata({
   title: 'Using @learnhouse/sdk with the API',
   description:
-    'Map any LearnHouse API endpoint to a typed @learnhouse/sdk call: lh.GET, lh.POST, lh.PUT, lh.PATCH and lh.DELETE with path, query and body parameters.',
+    'Map any Studytomy Portal API endpoint to a typed @learnhouse/sdk call: lh.GET, lh.POST, lh.PUT, lh.PATCH and lh.DELETE with path, query and body parameters.',
   path: '/reference/guides/sdk',
 })
 
@@ -61,7 +61,7 @@ const lh = createClient({
   token: process.env.LEARNHOUSE_TOKEN,
 });
 
-// Browser on your LearnHouse domain: the session cookie
+// Browser on your Studytomy Portal domain: the session cookie
 const web = createClient({ baseUrl: "${API_BASE_URL}", credentials: "include" });`,
     'javascript'
   )
@@ -94,7 +94,7 @@ await lh.PUT("/api/v1/courses/{course_uuid}/thumbnail", {
       <GuideSection id="install" title="Install and connect">
         <p>
           The SDK has no runtime dependencies and runs in browsers, Node 18+, Bun, Deno, edge
-          workers and React Native. Its version matches the LearnHouse release it was generated
+          workers and React Native. Its version matches the Studytomy Portal release it was generated
           from. The full documentation lives at <Link href="/developers/sdk">Developers → SDK</Link>.
         </p>
         <CodePanel title="Install" snippets={{ curl: install }} tabs={[{ key: 'curl', label: 'npm' }]} />

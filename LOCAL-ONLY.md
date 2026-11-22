@@ -25,7 +25,7 @@ provider and disposable PostgreSQL tests for runner verification. A future
 authorized local operation must use synthetic recipients and a mocked email
 provider; do not use this opt-in as learner or guardian activation.
 
-Dockerfiles and CLI-generated Compose files remain available for local builds and local service dependencies. The LearnHouse CLI is product tooling; its non-interactive setup mode and user-facing self-hosting commands do not configure deployment or CI/CD for this repository.
+Dockerfiles and CLI-generated Compose files remain available for local builds and local service dependencies. The Studytomy Portal CLI is product tooling; its non-interactive setup mode and user-facing self-hosting commands do not configure deployment or CI/CD for this repository.
 
 ## External integrations
 

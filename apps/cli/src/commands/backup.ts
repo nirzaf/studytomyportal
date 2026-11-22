@@ -88,7 +88,7 @@ function loadInstall(): { dir: string; config: LearnHouseConfigJson } {
   const dir = findInstallDir()
   const config = readConfig(dir)
   if (!config) {
-    p.log.error('No LearnHouse installation found. Run setup first.')
+    p.log.error('No Studytomy Portal installation found. Run setup first.')
     process.exit(1)
   }
   return { dir, config }
@@ -426,7 +426,7 @@ export async function restoreBackup(archivePath: string, options: RestoreOptions
 
 export async function backupCommand(archivePath?: string, options?: { restore?: boolean; yes?: boolean }) {
   if (options?.restore) {
-    p.intro(pc.cyan('LearnHouse Restore'))
+    p.intro(pc.cyan('Studytomy Portal Restore'))
     if (!archivePath) {
       if (!process.stdin.isTTY) {
         p.log.error('Usage: npx learnhouse backup --restore <backup-file.tar.gz>')
@@ -448,7 +448,7 @@ export async function backupCommand(archivePath?: string, options?: { restore?: 
     process.exit(1)
   }
 
-  p.intro(pc.cyan('LearnHouse Backup'))
+  p.intro(pc.cyan('Studytomy Portal Backup'))
 
   // Non-interactive: create (the safe action) without asking
   if (!process.stdin.isTTY || !process.stdout.isTTY) {

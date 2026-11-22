@@ -392,7 +392,7 @@ async def _gate_and_execute(
             return ToolOutcome.proposed(proposal)
         if mode == "execute" and spec.approval_for(params) and not ctx.approved:
             # The MCP layer collects the approval (a form in the client, a
-            # page in LearnHouse, or confirm=true for API tokens) and marks
+            # page in Studytomy Portal, or confirm=true for API tokens) and marks
             # the context; nothing else can.
             return ToolOutcome.denied(
                 "approval_required",

@@ -1,12 +1,12 @@
 ---
-description: Install LearnHouse on your own server in a few minutes. Run the setup wizard with npx or a one-line installer, start the stack and log in.
+description: Install Studytomy Portal on your own server in a few minutes. Run the setup wizard with npx or a one-line installer, start the stack and log in.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Quick Install
 
-Follow these steps to install and start a self-hosted LearnHouse instance using the LearnHouse CLI.
+Follow these steps to install and start a self-hosted Studytomy Portal instance using the Studytomy Portal CLI.
 
 ## Step 1: Run the Setup Wizard
 
@@ -21,12 +21,12 @@ You can also use the one-line installer scripts. They install Docker and Node.js
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/learnhouse/learnhouse/main/apps/cli/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nirzaf/studytomyportal/main/apps/cli/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/learnhouse/learnhouse/main/apps/cli/install.ps1 | iex
+irm https://raw.githubusercontent.com/nirzaf/studytomyportal/main/apps/cli/install.ps1 | iex
 ```
 </Callout>
 
@@ -54,9 +54,9 @@ LEARNHOUSE_ADMIN_PASSWORD=change-me-please npx learnhouse@latest setup --ci \
 
 See [`setup` flags](/cli/commands#setup) for every option.
 
-## Step 2: Start LearnHouse
+## Step 2: Start Studytomy Portal
 
-At the end of the wizard, accept **Start LearnHouse now?**. The CLI pulls the images, starts the containers, and waits up to 3 minutes for LearnHouse to respond. This typically takes one to two minutes on the first launch.
+At the end of the wizard, accept **Start Studytomy Portal now?**. The CLI pulls the images, starts the containers, and waits up to 3 minutes for Studytomy Portal to respond. This typically takes one to two minutes on the first launch.
 
 If you declined, start it later:
 
@@ -64,7 +64,7 @@ If you declined, start it later:
 npx learnhouse start
 ```
 
-## Step 3: Access LearnHouse
+## Step 3: Access Studytomy Portal
 
 Once all services are running, open your configured domain, or **http://localhost** for a local install. The CLI prints the URL when setup finishes.
 

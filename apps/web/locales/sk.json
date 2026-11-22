@@ -236,7 +236,7 @@
     "billing": "Fakturácia",
     "create_organization": "Vytvoriť organizáciu",
     "start_your_own_organization": "Založte si vlastnú organizáciu",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Túto organizáciu sa nepodarilo odstrániť. Skúste to znova.",
     "org_actions": "Akcie organizácie",
     "manage_upgrade": "Spravovať / Inovovať",
@@ -3148,7 +3148,7 @@
           "description": "Konfigurujte osobné nastavenia, heslá, e-mail"
         }
       },
-      "learnhouse_university": "Studytomy University",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Vitajte späť",
       "plan": "plán",
       "create_course": "Vytvoriť kurz",
@@ -7318,7 +7318,7 @@
           "keywords": "cesty, vzdelávacie cesty, študijné cesty, programy, učebný plán, poradie, certifikát"
         },
         "live_sessions": {
-          "keywords": "živé relácie hodiny webinár stretnutie video účasť nahrávky ankety learnhouse meet zoom meet teams",
+          "keywords": "živé relácie hodiny webinár stretnutie video účasť nahrávky ankety meet zoom meet teams",
           "description": "Plánujte živé relácie, sledujte účasť a spravujte nahrávky"
         }
       }
@@ -10927,8 +10927,8 @@
       "inactive_desc": "Kontrola licencie EE zlyhala (<code>{{reason}}</code>). Každý koncový bod <code>/ee/*</code> vracia 503, preto táto stránka nemôže načítať svoje údaje.",
       "what_to_check": "Čo skontrolovať",
       "check_diagnostics": "Otvorte <code>{{path}}</code>. Odpovedá aj vtedy, keď je licencia neaktívna, a jeho pole <code>hint</code> pomenúva riešenie.",
-      "check_saas": "Pri nasadeniach SaaS: skontrolujte, či je v prostredí API nastavené <code>LEARNHOUSE_SAAS=true</code>. SaaS preskakuje kontrolu licencie.",
-      "check_self_hosted": "Pri vlastne hostovanom EE: skontrolujte, či je nastavený <code>LEARNHOUSE_LICENSE_KEY</code> a licenčný server (alebo odkladná lehota) je dostupný.",
+      "check_saas": "Pri nasadeniach SaaS: skontrolujte, či je v prostredí API nastavené <code>SaaS mode</code>. SaaS preskakuje kontrolu licencie.",
+      "check_self_hosted": "Pri vlastne hostovanom EE: skontrolujte, či je nastavený <code>license key</code> a licenčný server (alebo odkladná lehota) je dostupný.",
       "check_logs": "Ak máte prístup k shellu, logy API obsahujú rovnaký dôvod s úplnými podrobnosťami: <code>[EE] license inactive …</code>",
       "failed_to_load": "Načítanie zlyhalo"
     },

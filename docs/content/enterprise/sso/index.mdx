@@ -1,17 +1,16 @@
 ---
 title: "Single Sign-On (SSO)"
-description: "Set up single sign-on for your LearnHouse organization: pick a provider, limit email domains, auto-provision accounts and set the callback URL."
+description: "Set up single sign-on for your Studytomy Portal organization: pick a provider, limit email domains, auto-provision accounts and set the callback URL."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Single Sign-On (SSO)
 
-SSO lets members sign in to your organization through your company's identity provider. They use their work credentials and do not need a LearnHouse password.
+SSO lets members sign in to your organization through your company's identity provider. They use their work credentials and do not need a Studytomy Portal password.
 
 <Callout>
-SSO needs the Enterprise plan on LearnHouse Cloud, or the [Enterprise Edition](/enterprise) when self-hosted.
-<PlanCta plan="Enterprise" />
+SSO needs the Enterprise plan in deployments that enable plan entitlements, or the [Enterprise Edition](/enterprise) when self-hosted.
 </Callout>
 
 ## Supported providers
@@ -45,11 +44,11 @@ To make SSO the only way in, also restrict the [allowed sign-in methods](/platfo
 
 1. On your login page, the member clicks **Sign in with SSO**.
 2. They are sent to your identity provider and sign in there.
-3. The provider sends them back to LearnHouse, signed in.
+3. The provider sends them back to Studytomy Portal, signed in.
 
 ## New accounts
 
-With **Auto-provision Users** on, a member's first SSO sign-in creates their LearnHouse account:
+With **Auto-provision Users** on, a member's first SSO sign-in creates their Studytomy Portal account:
 
 - First name, last name, email and avatar come from the identity provider.
 - They get the **User** role. A different default role can only be set through the API.
@@ -58,7 +57,7 @@ With **Auto-provision Users** on, a member's first SSO sign-in creates their Lea
 
 ## Existing accounts
 
-LearnHouse does **not** link an SSO identity to an existing account just because the email matches. An existing account is accepted only when:
+Studytomy Portal does **not** link an SSO identity to an existing account just because the email matches. An existing account is accepted only when:
 
 - it was linked to this SSO identity before, or
 - it has never signed in any other way and belongs only to this organization.
@@ -71,10 +70,10 @@ Members who sign in through SSO can be exempted from your two-factor requirement
 
 ## Callback URL
 
-Your identity provider needs LearnHouse's callback URL:
+Your identity provider needs Studytomy Portal's callback URL:
 
 ```
 <base URL>/api/v1/auth/sso/callback
 ```
 
-LearnHouse builds it from `SSO_REDIRECT_URI_BASE`, or from `LEARNHOUSE_DOMAIN` when that is not set. On a self-hosted instance, set `SSO_REDIRECT_URI_BASE` to the public URL of your instance, including `https://`. To use a completely different URL, set `SSO_REDIRECT_URI` to the full callback URL instead.
+Studytomy Portal builds it from `SSO_REDIRECT_URI_BASE`, or from `LEARNHOUSE_DOMAIN` when that is not set. On a self-hosted instance, set `SSO_REDIRECT_URI_BASE` to the public URL of your instance, including `https://`. To use a completely different URL, set `SSO_REDIRECT_URI` to the full callback URL instead.

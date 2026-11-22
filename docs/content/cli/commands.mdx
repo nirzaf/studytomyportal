@@ -1,12 +1,12 @@
 ---
-description: Reference for every LearnHouse CLI command, including setup, start, update, backup, restore, doctor, env, scale and dev, with flags and exit codes.
+description: Reference for every Studytomy Portal CLI command, including setup, start, update, backup, restore, doctor, env, scale and dev, with flags and exit codes.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Commands
 
-Full reference for all LearnHouse CLI commands.
+Full reference for all Studytomy Portal CLI commands.
 
 ## Global options
 
@@ -147,7 +147,7 @@ npx learnhouse config
 
 ## `update`
 
-Update LearnHouse to the latest release or a specific version. See [Updates](/self-hosting/maintenance/updates) for details.
+Update Studytomy Portal to the latest release or a specific version. See [Updates](/self-hosting/maintenance/updates) for details.
 
 ```bash
 # Update to the latest version on your release channel
@@ -245,7 +245,7 @@ npx learnhouse doctor
 Checks:
 - Docker installation and daemon status
 - Container state and restart counts (warns after more than 3 restarts)
-- Whether the HTTP port is free or used by LearnHouse
+- Whether the HTTP port is free or used by Studytomy Portal
 - DNS resolution (for non-localhost domains)
 - Free disk space (warns below 1 GB) and Docker disk usage
 - Errors in the last 50 log lines of each running container
@@ -256,13 +256,13 @@ Checks:
 
 ## `deployments`
 
-View all LearnHouse deployments on this machine or set resource limits.
+View all Studytomy Portal deployments on this machine or set resource limits.
 
 ```bash
 npx learnhouse deployments
 ```
 
-- **View deployments**: lists every LearnHouse deployment found in Docker, with each container's status
+- **View deployments**: lists every Studytomy Portal deployment found in Docker, with each container's status
 - **Set resource limits**: same as [`scale`](#scale)
 
 ## `scale`
@@ -342,7 +342,7 @@ Run `npx learnhouse doctor`. It scans recent logs and reports errors. Common cau
 
 ### `update` migration fails
 
-If the migrations fail, `update` restores the previous image in `docker-compose.yml` and starts the previous version again. Your pre-upgrade dump is in `backups/`. Check the [LearnHouse releases page](https://github.com/learnhouse/learnhouse/releases) and the [GitHub issues](https://github.com/learnhouse/learnhouse/issues) for your version before retrying. To run the migrations by hand, from the installation directory:
+If the migrations fail, `update` restores the previous image in `docker-compose.yml` and starts the previous version again. Your pre-upgrade dump is in `backups/`. Check the [Studytomy Portal releases page](https://github.com/nirzaf/studytomyportal/releases) and the [GitHub issues](https://github.com/nirzaf/studytomyportal/issues) for your version before retrying. To run the migrations by hand, from the installation directory:
 
 ```bash
 docker compose exec learnhouse-app sh -c "cd /app/api && uv run python cli.py migrate"

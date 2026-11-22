@@ -48,7 +48,7 @@ class TestDevRouter:
     async def test_config_redacts_secrets_and_forbidden(self, client, app, admin_user):
         mock_config = SimpleNamespace(
             model_dump=lambda: {
-                "name": "LearnHouse",
+                "name": "Studytomy Portal",
                 "token": "abcd1234",
                 "nested": {
                     "password": "secret-value",

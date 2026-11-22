@@ -64,7 +64,7 @@ export const HeaderProfileBox = ({ primaryColor = '' }: { primaryColor?: string 
   }, [session?.data?.roles])
   // Platform entries (hub, workspace switcher, billing, create) only make sense
   // to people who run an organization. A member who signed up to this school
-  // sees the school, not LearnHouse; one who belongs to several schools still
+  // sees the school, not Studytomy Portal; one who belongs to several schools still
   // gets the switcher.
   const managesAnyOrg = seesPlatformHubFromSession(session)
   // Any second organization, the demo included, is somewhere to switch back from.

@@ -1,13 +1,13 @@
 ---
 title: "Programmatic Migration"
-description: "Script a full course migration through the LearnHouse API: create the course, chapters and every activity type, upload media, reorder and publish."
+description: "Script a full course migration through the Studytomy Portal API: create the course, chapters and every activity type, upload media, reorder and publish."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Programmatic Migration
 
-This guide walks through the full sequence of API calls needed to build a course from scratch. These are the same calls the LearnHouse web UI makes when an editor clicks through the dashboard. Use it as a reference when writing your own migration script.
+This guide walks through the full sequence of API calls needed to build a course from scratch. These are the same calls the Studytomy Portal web UI makes when an editor clicks through the dashboard. Use it as a reference when writing your own migration script.
 
 The base URL in every example is `http://localhost:1338/api/v1`. Replace it with your instance domain.
 
@@ -415,7 +415,7 @@ Save the assets you want to use to a folder (the script expects `thumbnail.jpg`,
 
 ```bash
 #!/usr/bin/env bash
-# build-demo-course.sh: create a complete course end-to-end via the LearnHouse API.
+# build-demo-course.sh: create a complete course end-to-end via the Studytomy Portal API.
 set -euo pipefail
 
 # ── Config ───────────────────────────────────────────────────────────────────
@@ -445,7 +445,7 @@ COURSE=$(curl -fsS -X POST "$API/courses/?org_id=$ORG_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -F 'name=The Complete Demo Course' \
   -F 'description=One of every activity type, built via the API' \
-  -F 'about=Created end-to-end by the LearnHouse migration quickstart script.' \
+  -F 'about=Created end-to-end by the Studytomy Portal migration quickstart script.' \
   -F 'public=true' \
   -F 'thumbnail_type=image' \
   -F "thumbnail=@$ASSETS/thumbnail.jpg;type=image/jpeg")
@@ -570,7 +570,7 @@ What you should see in the browser at the printed URL:
 - **Welcome page** with the heading, bold paragraph, embedded image, bullet list, and Python-highlighted code block, plus a TOC sidebar generated from the headings.
 - **Markdown remote page** rendering the GitHub README with full formatting.
 - **Embed example** showing a Wikipedia article inside an iframe.
-- **Hosted MP4 sample** in the LearnHouse video player.
+- **Hosted MP4 sample** in the Studytomy Portal video player.
 - **YouTube embed** with the YouTube iframe player.
 - **Sample PDF document** in the embedded PDF.js viewer with toolbar.
 - **Final assignment** showing the description, due date, and File Submission widget, **but only when signed in**. The `/api/v1/assignments/*` endpoints reject anonymous requests, so on a public course an anonymous viewer sees a blank panel where the assignment widget would be. Sign in (or open via the dashboard) to see the description, tasks, and submission UI.

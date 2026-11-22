@@ -1,5 +1,5 @@
 ---
-description: "Manage LearnHouse members: search and export the Users list, set open or closed signup, create invite codes, add signup fields and invite people by email."
+description: "Manage Studytomy Portal members: search and export the Users list, set open or closed signup, create invite codes, add signup fields and invite people by email."
 ---
 
 import { Callout } from '@/components/mdx'
@@ -7,9 +7,6 @@ import { Callout } from '@/components/mdx'
 # Members & Invites
 
 This page covers the **Users**, **Signups & Invite Codes** and **Invite Members** tabs under **Users** in the dashboard.
-
-<YouTube video="guide-5" />
-
 ## The Users list
 
 The **Users** tab lists everyone in the organization, 10 per page. Use **Search users...** to find someone, and **Filters** to narrow by role, by verification status (**Verified** or **Unverified**) or by user group. Each row shows the member's groups, role and how they signed up (Email, Google, and so on).
@@ -86,5 +83,5 @@ The **Invited Users** table shows each invite's **Signup Status** (**Pending** o
 Each invitation fires the `user_invited_to_org` event for [webhooks and Zapier](/platform/automations/events).
 
 <Callout type="warning">
-On the LearnHouse Cloud free plan, both the organization and your own account must be at least 7 days old before you can send invites or create invite codes. Paid plans are not affected.
+Invite and signup limits depend on the installed edition and server configuration. This repository does not document hosted subscription-specific limits.
 </Callout>

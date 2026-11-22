@@ -1,5 +1,5 @@
 ---
-description: "Learn what the Admin, Maintainer, Instructor and User roles can do in LearnHouse, and create custom roles with their own permissions on the Pro plan."
+description: "Learn what the Admin, Maintainer, Instructor and User roles can do in Studytomy Portal, and review custom role permissions where enabled."
 ---
 
 import { Callout } from '@/components/mdx'
@@ -52,7 +52,7 @@ Some settings are restricted to the Admin role specifically, such as the [sign-i
 ## Custom roles
 
 <Callout type="info">
-Custom roles need the **Pro** plan or higher on LearnHouse Cloud. They are included on every self-hosted instance.
+Custom roles need the **Pro** plan or higher in deployments that enable plan entitlements. They are included on every self-hosted instance.
 </Callout>
 
 Go to **Users** → **Roles** and click **Create a Role**.
@@ -68,4 +68,4 @@ Custom roles belong to your organization. Deleting a role cannot be undone, and 
 
 ## Admin seats
 
-On LearnHouse Cloud, every member whose role has dashboard access takes an admin seat. See [member limits](/platform/users#member-limits-on-learnhouse-cloud).
+Where the deployment enables member limits, each member whose role has dashboard access counts toward the configured admin-seat limit. This repository does not document hosted subscription limits; see [feature availability](/platform/users#feature-availability).

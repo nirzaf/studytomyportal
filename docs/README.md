@@ -1,19 +1,17 @@
 <p align="center">
-  <a href="https://docs.learnhouse.app">
-    <img alt="LearnHouse" src=".github/images/learnhouse-github.png" width="600" />
-  </a>
+  <img alt="Studytomy" src="public/studytomy-logo.png" width="600" />
 </p>
 
 <p align="center">
-  <strong>LearnHouse Documentation</strong>
+  <strong>Studytomy Portal Documentation</strong>
 </p>
 
 <p align="center">
-  LearnHouse-derived documentation site retained in the Studytomy fork. Studytomy-specific engineering evidence is under <code>docs/studytomy/</code>.
+  Documentation for the Studytomy Portal codebase. Product-specific engineering evidence is under <code>docs/studytomy/</code>.
 </p>
 
 <p align="center">
-  <a href="https://docs.learnhouse.app">docs.learnhouse.app</a>
+  <a href="../README.md">Studytomy Portal repository</a>
 </p>
 
 ---

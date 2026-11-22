@@ -6,9 +6,9 @@ import { scrubUrl } from "../services/utils/ts/scrubUrl.ts";
 // must never reach analytics or error reports.
 describe("scrubUrl", () => {
   test("redacts LTI hand-off codes and picker contexts", () => {
-    const out = scrubUrl("https://acme.learnhouse.app/lti/select?ctx=abc123&mode=bind");
+    const out = scrubUrl("https://acme.example.com/lti/select?ctx=abc123&mode=bind");
     expect(out).not.toContain("abc123");
     expect(out).toContain("mode=bind");
-    expect(scrubUrl("https://acme.learnhouse.app/lti/launch?code=secret")).not.toContain("secret");
+    expect(scrubUrl("https://acme.example.com/lti/launch?code=secret")).not.toContain("secret");
   });
 });

@@ -1,13 +1,13 @@
 ---
 title: Import from Another LMS
-description: Import a Moodle, Canvas, Blackboard, Brightspace, Open edX or Common Cartridge export into LearnHouse from the dashboard, the CLI or the API.
+description: Import a Moodle, Canvas, Blackboard, Brightspace, Open edX or Common Cartridge export into Studytomy Portal from the dashboard, the CLI or the API.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Import from Another LMS
 
-LearnHouse converts course exports from other learning platforms into native LearnHouse courses: pages built with the course editor, graded assignments with auto-graded tasks, quiz blocks, videos, PDFs and SCORM activities. Supported formats:
+Studytomy Portal converts course exports from other learning platforms into native Studytomy Portal courses: pages built with the course editor, graded assignments with auto-graded tasks, quiz blocks, videos, PDFs and SCORM activities. Supported formats:
 
 | Platform | Export to use | File |
 | --- | --- | --- |
@@ -19,12 +19,6 @@ LearnHouse converts course exports from other learning platforms into native Lea
 | Any IMS Common Cartridge 1.0 to 1.3 (Schoology, Sakai, Thin CC, publishers) | Common Cartridge export | `.imscc` / `.zip` |
 
 The format is detected automatically. A zip holding several exports (a publisher test bank with one archive per chapter, for example) is combined into one course. You can import from the dashboard, from the command line, or through the API.
-
-<YouTube video="migrate-1" />
-<YouTube video="migrate-2" />
-<YouTube video="migrate-3" />
-<YouTube video="growth-12" />
-
 ## From the dashboard
 
 1. Go to **Courses** in the dashboard and click **Import Course**.
@@ -35,13 +29,13 @@ The format is detected automatically. A zip holding several exports (a publisher
 
 <img src="/img/pages/courses/import-another-lms.webp" alt="The Import from Another LMS window on the Upload Package step, with Source platform set to Auto-detect and the two quiz options" width={1600} height={900} style={{ borderRadius: 10 }} />
 
-The report lists every source item that has no LearnHouse equivalent under **Skipped items** (discussions, LTI tools, files missing from the export...). **Warnings** only appear when something in the export could not be read or converted, so a healthy export shows none.
+The report lists every source item that has no Studytomy Portal equivalent under **Skipped items** (discussions, LTI tools, files missing from the export...). **Warnings** only appear when something in the export could not be read or converted, so a healthy export shows none.
 
 Imported courses are private and unpublished by default, so you can review them before learners see them.
 
 ## What gets converted
 
-| Source content | LearnHouse result |
+| Source content | Studytomy Portal result |
 | --- | --- |
 | Sections, modules, topics, weeks, chapters | Chapters, in source order |
 | Pages, labels, books, wiki pages, HTML files | Pages (editor documents) with headings, lists, tables, code, links, math and callouts |
@@ -75,7 +69,7 @@ Choose one of two modes:
 | Essay, file upload | File submission (graded by an instructor) | Not shown |
 | Text-only and description items | Part of the next task's description | Text |
 
-Consecutive multiple choice questions are grouped into a single quiz task. Images in a question become the task's reference file. When answers are pictures (graphs, diagrams) or several questions in one task have images, a "figures" page is added right before the assignment and the picture answers are labelled "Option A", "Option B" and so on. A quiz with no question LearnHouse can grade (for example only STACK or drag-onto-image questions) is kept as a page with its questions.
+Consecutive multiple choice questions are grouped into a single quiz task. Images in a question become the task's reference file. When answers are pictures (graphs, diagrams) or several questions in one task have images, a "figures" page is added right before the assignment and the picture answers are labelled "Option A", "Option B" and so on. A quiz with no question Studytomy Portal can grade (for example only STACK or drag-onto-image questions) is kept as a page with its questions.
 
 ### What is not migrated
 
@@ -86,20 +80,20 @@ The report lists every skipped item. Not migrated:
 - Hot spot, drag-onto-image, STACK and script-graded questions (their text is kept, they are not graded). CodeRunner questions become code tasks; tests that call the learner's code from test code are listed in the prompt instead, and problems graded by an external code queue arrive without tests.
 - Availability and release conditions, completion rules and rubrics. Point values are kept as task weights (the heaviest task is worth 100).
 - Due dates that have already passed: they would close the assignment to learners, so they are removed (the report counts them). Set new ones after the import.
-- Time limits, question shuffling and quiz passwords, which LearnHouse assignments do not have.
+- Time limits, question shuffling and quiz passwords, which Studytomy Portal assignments do not have.
 - Random question draws import every question of the pool; calculated questions use their first set of values; A/B test variants show their first group.
 
-Media in formats LearnHouse cannot play (such as `.mov` or `.bmp`) is converted when `ffmpeg` and Pillow are available; otherwise the original file is kept as a downloadable Library file.
+Media in formats Studytomy Portal cannot play (such as `.mov` or `.bmp`) is converted when `ffmpeg` and Pillow are available; otherwise the original file is kept as a downloadable Library file.
 
 ## From the command line
 
-The converter ships in the LearnHouse image as `learnhouse-lms-import`:
+The converter ships in the Studytomy Portal image as `learnhouse-lms-import`:
 
 ```bash
 # What is in this export?
 docker exec -it learnhouse learnhouse-lms-import inspect /data/backup.mbz
 
-# Convert to a LearnHouse course package (import it from the dashboard: Import Course › LearnHouse Courses)
+# Convert to a Studytomy Portal course package (import it from the dashboard: Import Course › Studytomy Portal Courses)
 docker exec -it learnhouse learnhouse-lms-import convert /data/backup.mbz -o /data/course.zip --report /data/report.json
 
 # Convert and import into an instance in one step, with an API token
@@ -133,7 +127,7 @@ curl -X POST "https://learn.example.com/api/v1/courses/import/lms/analyze?org_id
 curl "https://learn.example.com/api/v1/courses/import/lms/analyze/{temp_id}?org_id=1" -H "Authorization: Bearer lh_..."
 # → {"status": "ready", "source": "moodle", "courses": [...], "report": {"counts": {...}, "warnings": [...], "skipped": [...]}}
 
-# 3. Import, exactly like a LearnHouse package
+# 3. Import, exactly like a Studytomy Portal package
 curl -X POST "https://learn.example.com/api/v1/courses/import?org_id=1" -H "Authorization: Bearer lh_..." \
   -H "Content-Type: application/json" \
   -d '{"temp_id": "…", "course_uuids": ["course_…"], "set_private": true, "set_unpublished": true}'
@@ -142,5 +136,5 @@ curl -X POST "https://learn.example.com/api/v1/courses/import?org_id=1" -H "Auth
 `GET /api/v1/courses/import/lms/sources` lists the supported formats. All three calls need permission to create courses in the organization; a conversion is only visible to the user or token that uploaded it.
 
 <Callout type="info">
-Uploads are limited to 4 GB by default. Set `LEARNHOUSE_LMS_IMPORT_MAX_MB` on the API to change it, and make sure your reverse proxy accepts bodies that large. The upload request must carry a `Content-Length` header (browsers and `curl -F` always do); a larger declared size is refused before the body is read. Like the LearnHouse package import, the upload and the import must reach the same API instance. Each API process converts at most 2 exports at a time and queues up to 8 more, with a limit of 2 conversions per user.
+Uploads are limited to 4 GB by default. Set `LEARNHOUSE_LMS_IMPORT_MAX_MB` on the API to change it, and make sure your reverse proxy accepts bodies that large. The upload request must carry a `Content-Length` header (browsers and `curl -F` always do); a larger declared size is refused before the body is read. Like the Studytomy Portal package import, the upload and the import must reach the same API instance. Each API process converts at most 2 exports at a time and queues up to 8 more, with a limit of 2 conversions per user.
 </Callout>

@@ -10,9 +10,7 @@ export const dynamicParams = false
 
 // Sections that aren't MDX pages get a card of their own.
 const EXTRA = {
-  reference: { section: 'API Reference', title: 'LearnHouse REST API', description: 'Every endpoint with parameters, schemas and examples in cURL, JavaScript, Python and the SDK.' },
-  releases: { section: 'Releases', title: 'Releases and versions', description: 'Every LearnHouse and CLI release with its notes, and the current version of each package.' },
-  demos: { section: 'Demos', title: 'LearnHouse Headless demos', description: 'Fifty learning apps built on the LearnHouse API, from course catalogs to quiz games.' },
+  reference: { section: 'API Reference', title: 'Studytomy Portal API', description: 'API operations with parameters, schemas and examples.' },
 }
 
 export function generateStaticParams() {
@@ -25,7 +23,7 @@ export async function GET(_req, { params }) {
   const page = extra ? null : getPage(slug)
   const crumbs = page ? getBreadcrumbs(page.route) : []
   const section = extra?.section ?? (crumbs.length > 1 ? crumbs[0].title : 'Documentation')
-  const title = extra?.title ?? (page?.route === '/' ? 'Run your academy. Build anything on top.' : (page?.title ?? 'LearnHouse Docs'))
+  const title = extra?.title ?? (page?.route === '/' ? 'Studytomy Portal documentation' : (page?.title ?? 'Studytomy Portal Docs'))
   const description = extra?.description ?? page?.description ?? ''
 
   return new ImageResponse(
@@ -45,7 +43,7 @@ export async function GET(_req, { params }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ display: 'flex', fontSize: 30, fontWeight: 700, color: '#0a0a0a', letterSpacing: -1 }}>learnhouse</div>
+          <div style={{ display: 'flex', fontSize: 30, fontWeight: 700, color: '#0a0a0a', letterSpacing: -1 }}>Studytomy</div>
           <div style={{ display: 'flex', fontSize: 20, fontWeight: 600, color: '#525252', background: '#f5f5f5', borderRadius: 10, padding: '4px 12px' }}>
             Docs
           </div>
@@ -63,7 +61,7 @@ export async function GET(_req, { params }) {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', fontSize: 22, color: '#737373' }}>docs.learnhouse.app</div>
+        <div style={{ display: 'flex', fontSize: 22, color: '#737373' }}>Studytomy Portal</div>
       </div>
     ),
     size,

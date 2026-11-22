@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "LearnHouse",
-    "description": "LearnHouse is an open-source platform tailored for learning experiences.",
+    "title": "Studytomy Portal",
+    "description": "Studytomy Portal is an open-source platform tailored for learning experiences.",
     "version": "1.4.3"
   },
   "paths": {
@@ -7702,7 +7702,7 @@
           "webhooks"
         ],
         "summary": "List available webhook event types",
-        "description": "Returns the catalogue of webhook event types supported by LearnHouse along with their descriptions.",
+        "description": "Returns the catalogue of webhook event types supported by Studytomy Portal along with their descriptions.",
         "operationId": "api_list_webhook_events_api_v1_orgs__org_id__webhooks_events_get",
         "responses": {
           "200": {
@@ -9733,7 +9733,7 @@
           "courses"
         ],
         "summary": "Analyze a course import package",
-        "description": "Upload and analyze a LearnHouse course export ZIP. Validates the package, extracts its contents, and returns a list of courses available for import along with a temp_id to use with the subsequent import endpoint.",
+        "description": "Upload and analyze a Studytomy Portal course export ZIP. Validates the package, extracts its contents, and returns a list of courses available for import along with a temp_id to use with the subsequent import endpoint.",
         "operationId": "api_analyze_import_package_api_v1_courses_import_analyze_post",
         "parameters": [
           {
@@ -9816,7 +9816,7 @@
           "courses"
         ],
         "summary": "Upload a course exported from another LMS",
-        "description": "Upload a course export from Moodle (.mbz), Canvas (.imscc), Blackboard Learn (.zip), D2L Brightspace (.zip), Open edX (.tar.gz) or any IMS Common Cartridge. The export is converted into LearnHouse content in the background: poll `GET /courses/import/lms/analyze/{temp_id}` until `status` is `ready`, then import the listed courses with `POST /courses/import` and the same `temp_id`.",
+        "description": "Upload a course export from Moodle (.mbz), Canvas (.imscc), Blackboard Learn (.zip), D2L Brightspace (.zip), Open edX (.tar.gz) or any IMS Common Cartridge. The export is converted into Studytomy Portal content in the background: poll `GET /courses/import/lms/analyze/{temp_id}` until `status` is `ready`, then import the listed courses with `POST /courses/import` and the same `temp_id`.",
         "operationId": "api_start_lms_import_api_v1_courses_import_lms_analyze_post",
         "parameters": [
           {
@@ -10763,7 +10763,7 @@
           "courses"
         ],
         "summary": "Export course as ZIP",
-        "description": "Export a single course and all its content (chapters, activities, blocks, and files) as a ZIP archive following the LearnHouse export format.",
+        "description": "Export a single course and all its content (chapters, activities, blocks, and files) as a ZIP archive following the Studytomy Portal export format.",
         "operationId": "api_export_course_api_v1_courses__course_uuid__export_get",
         "parameters": [
           {

@@ -1,12 +1,12 @@
 ---
-description: Environment variables the LearnHouse CLI reads, such as LEARNHOUSE_DIR and LEARNHOUSE_ADMIN_PASSWORD, and how its generated .env file is laid out.
+description: Environment variables the Studytomy Portal CLI reads, such as LEARNHOUSE_DIR and LEARNHOUSE_ADMIN_PASSWORD, and how its generated .env file is laid out.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # CLI Environment Variables
 
-This page covers two things: the environment variables the CLI itself reads, and the layout of the `.env` file it generates for a Community installation. For what each variable in that file does, and every other variable LearnHouse reads, see the [Environment Variables reference](/self-hosting/configuration/environment-variables).
+This page covers two things: the environment variables the CLI itself reads, and the layout of the `.env` file it generates for a Community installation. For what each variable in that file does, and every other variable Studytomy Portal reads, see the [Environment Variables reference](/self-hosting/configuration/environment-variables).
 
 ## Variables the CLI reads
 
@@ -58,5 +58,5 @@ Values the CLI derives for you:
 - `NEXTAUTH_SECRET`, `LEARNHOUSE_AUTH_JWT_SECRET_KEY`, `COLLAB_INTERNAL_KEY` and `POSTGRES_PASSWORD` are random. Re-running `setup` on the same installation keeps them.
 
 <Callout type="info">
-The generated `docker-compose.yml` also sets `HOSTNAME=0.0.0.0` and `LEARNHOUSE_API_URL=http://localhost:9000` for the app container. The setup wizard does not write `LEARNHOUSE_SSL`; add `LEARNHOUSE_SSL=true` yourself when you serve LearnHouse over HTTPS, so links the API builds outside a request (for example in background emails) use `https://`. See [SSL & Domain](/self-hosting/configuration/ssl).
+The generated `docker-compose.yml` also sets `HOSTNAME=0.0.0.0` and `LEARNHOUSE_API_URL=http://localhost:9000` for the app container. The setup wizard does not write `LEARNHOUSE_SSL`; add `LEARNHOUSE_SSL=true` yourself when you serve Studytomy Portal over HTTPS, so links the API builds outside a request (for example in background emails) use `https://`. See [SSL & Domain](/self-hosting/configuration/ssl).
 </Callout>

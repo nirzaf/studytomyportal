@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The SDK ships in lockstep with LearnHouse OSS releases: its version is the
+// The SDK ships in lockstep with Studytomy Portal OSS releases: its version is the
 // web app's version (apps/web/package.json). This copies that version into
 // packages/sdk/package.json and src/version.ts.
 //

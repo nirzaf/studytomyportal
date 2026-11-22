@@ -1186,7 +1186,7 @@ class _Base:
             body = html_loader()
             if body is not None:
                 return [ir.Page(title=title, parts=intro_parts + [ir.HtmlPart(body)], id=mid, visible=visible)]
-        # The package writer reports the file as left out (no LearnHouse viewer)
+        # The package writer reports the file as left out (no Studytomy Portal viewer)
         return [ir.Page(title=title, parts=intro_parts + [ir.FilePart(main, title=main.name)], id=mid,
                         visible=visible)]
 

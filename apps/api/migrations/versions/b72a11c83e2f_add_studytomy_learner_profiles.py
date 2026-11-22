@@ -4,7 +4,7 @@ Revision ID: b72a11c83e2f
 Revises: a1d9f4c8b732
 Create Date: 2026-11-15
 
-Profiles reference existing LearnHouse users. Eligibility decisions are
+Profiles reference existing Studytomy Portal users. Eligibility decisions are
 append-only, policy-bound history; they do not grant course access.
 """
 

@@ -2,13 +2,13 @@
 
 **Studytomy fork scope:** retained upstream package API documentation. Installing the published `@learnhouse/*` package does not include unpublished Studytomy changes. Inspect this package’s manifest, source and generated/synced output before relying on version parity. Package names and upstream attribution are intentionally retained; this documentation update does not authorize npm publication or resolve licensing decisions.
 
-Typed client for the [LearnHouse](https://learnhouse.app) API. No runtime
+Typed client for the Studytomy Portal API. No runtime
 dependencies: it only uses `fetch`, `AbortController`, `Headers` and
 `FormData`, so it runs in browsers, Node 18+, Bun, Deno, edge workers and
 React Native.
 
 The types are generated from the API's OpenAPI schema, and the package version
-matches the LearnHouse release it was generated from.
+matches the Studytomy Portal release it was generated from.
 
 ```sh
 npm install @learnhouse/sdk
@@ -16,7 +16,7 @@ npm install @learnhouse/sdk
 
 ## Browser (cookie session)
 
-When your page shares the LearnHouse session cookie, send it along and the API
+When your page shares the Studytomy Portal session cookie, send it along and the API
 treats the request as the signed-in user.
 
 ```ts

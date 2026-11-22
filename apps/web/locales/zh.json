@@ -236,7 +236,7 @@
     "billing": "账单",
     "create_organization": "创建组织",
     "start_your_own_organization": "创建您自己的组织",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "无法删除此组织。请重试。",
     "org_actions": "组织操作",
     "manage_upgrade": "管理 / 升级",
@@ -3040,7 +3040,7 @@
           "description": "配置您的个人设置、密码和电子邮件"
         }
       },
-      "learnhouse_university": "Studytomy 大学",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "欢迎回来",
       "plan": "方案",
       "create_course": "创建课程",
@@ -7138,7 +7138,7 @@
           "keywords": "学习路径, 路径, 学习轨道, 项目, 课程体系, 顺序, 证书, paths, learning paths, tracks, programs, curriculum, sequence, certificate"
         },
         "live_sessions": {
-          "keywords": "直播课堂 课堂 网络研讨会 会议 视频 出勤 录制 投票 learnhouse meet zoom meet teams",
+          "keywords": "直播课堂 课堂 网络研讨会 会议 视频 出勤 录制 投票 meet zoom meet teams",
           "description": "安排直播课堂、跟踪出勤并管理录制"
         }
       }
@@ -10650,8 +10650,8 @@
       "inactive_desc": "EE 许可证检查失败（<code>{{reason}}</code>）。所有 <code>/ee/*</code> 端点都返回 503，因此此页面无法加载其数据。",
       "what_to_check": "需要检查的内容",
       "check_diagnostics": "打开 <code>{{path}}</code>。即使许可证未激活，它也能响应，其 <code>hint</code> 字段会指出解决办法。",
-      "check_saas": "对于 SaaS 部署：确认 API 环境中已设置 <code>LEARNHOUSE_SAAS=true</code>。SaaS 会跳过许可证检查。",
-      "check_self_hosted": "对于自托管 EE：确认已设置 <code>LEARNHOUSE_LICENSE_KEY</code>，且许可证服务器（或宽限期窗口）可访问。",
+      "check_saas": "对于 SaaS 部署：确认 API 环境中已设置 <code>SaaS mode</code>。SaaS 会跳过许可证检查。",
+      "check_self_hosted": "对于自托管 EE：确认已设置 <code>license key</code>，且许可证服务器（或宽限期窗口）可访问。",
       "check_logs": "如果您有 shell 访问权限，API 日志中包含同样原因的完整详情：<code>[EE] license inactive …</code>",
       "failed_to_load": "加载失败"
     },

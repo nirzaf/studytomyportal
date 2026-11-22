@@ -47,7 +47,7 @@ from sqlmodel import SQLModel
 logger = logging.getLogger(__name__)
 
 API_DIR = Path(__file__).resolve().parents[2]
-# Arbitrary, fixed: every LearnHouse process agrees on it. ("LHMIGR")
+# Arbitrary, fixed: every Studytomy Portal process agrees on it. ("LHMIGR")
 ADVISORY_LOCK_KEY = 0x4C484D494752
 
 _MODEL_PACKAGES = (("src/db", "src.db"), ("ee/db", "ee.db"))

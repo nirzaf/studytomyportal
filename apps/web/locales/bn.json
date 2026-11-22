@@ -236,7 +236,7 @@
     "billing": "বিলিং",
     "create_organization": "প্রতিষ্ঠান তৈরি করুন",
     "start_your_own_organization": "নিজের প্রতিষ্ঠান শুরু করুন",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "এই প্রতিষ্ঠানটি মুছে ফেলা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।",
     "org_actions": "প্রতিষ্ঠানের কার্যক্রম",
     "manage_upgrade": "পরিচালনা / আপগ্রেড",
@@ -3068,7 +3068,7 @@
           "description": "আপনার ব্যক্তিগত সেটিংস, পাসওয়ার্ড, ইমেইল কনফিগার করুন"
         }
       },
-      "learnhouse_university": "লার্নহাউস ইউনিভার্সিটি",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "স্বাগতম",
       "plan": "পরিকল্পনা",
       "create_course": "কোর্স তৈরি করুন",
@@ -7184,7 +7184,7 @@
           "keywords": "লার্নিং পাথ, পাথ, ট্র্যাক, প্রোগ্রাম, পাঠ্যক্রম, ক্রম, শংসাপত্র, paths, learning paths"
         },
         "live_sessions": {
-          "keywords": "লাইভ সেশন ক্লাস ওয়েবিনার মিটিং ভিডিও উপস্থিতি রেকর্ডিং পোল লার্নহাউস মিট জুম মিট টিমস live sessions classes webinar meeting video attendance recordings polls learnhouse meet zoom meet teams",
+          "keywords": "লাইভ সেশন ক্লাস ওয়েবিনার মিটিং ভিডিও উপস্থিতি রেকর্ডিং পোল জুম মিট টিমস live sessions classes webinar meeting video attendance recordings polls meet zoom meet teams",
           "description": "লাইভ সেশন শিডিউল করুন, উপস্থিতি ট্র্যাক করুন এবং রেকর্ডিং পরিচালনা করুন"
         }
       }
@@ -10715,8 +10715,8 @@
       "inactive_desc": "EE লাইসেন্স যাচাই ব্যর্থ হয়েছে (<code>{{reason}}</code>)। প্রতিটি <code>/ee/*</code> এন্ডপয়েন্ট 503 ফেরত দিচ্ছে, তাই এই পেজ তার ডেটা লোড করতে পারছে না।",
       "what_to_check": "কী পরীক্ষা করবেন",
       "check_diagnostics": "<code>{{path}}</code> খুলুন। লাইসেন্স নিষ্ক্রিয় থাকলেও এটি সাড়া দেয়, এবং এর <code>hint</code> ফিল্ড সমাধানের নাম বলে দেয়।",
-      "check_saas": "SaaS ডিপ্লয়মেন্টের জন্য: নিশ্চিত করুন API এনভায়রনমেন্টে <code>LEARNHOUSE_SAAS=true</code> সেট করা আছে। SaaS লাইসেন্স যাচাই এড়িয়ে যায়।",
-      "check_self_hosted": "সেলফ-হোস্টেড EE-এর জন্য: নিশ্চিত করুন <code>LEARNHOUSE_LICENSE_KEY</code> সেট করা আছে এবং লাইসেন্স সার্ভারে (বা গ্রেস উইন্ডোতে) পৌঁছানো যাচ্ছে।",
+      "check_saas": "SaaS ডিপ্লয়মেন্টের জন্য: নিশ্চিত করুন API এনভায়রনমেন্টে <code>SaaS mode</code> সেট করা আছে। SaaS লাইসেন্স যাচাই এড়িয়ে যায়।",
+      "check_self_hosted": "সেলফ-হোস্টেড EE-এর জন্য: নিশ্চিত করুন <code>license key</code> সেট করা আছে এবং লাইসেন্স সার্ভারে (বা গ্রেস উইন্ডোতে) পৌঁছানো যাচ্ছে।",
       "check_logs": "আপনার শেল অ্যাক্সেস থাকলে API লগে একই কারণ পূর্ণ বিবরণসহ পাবেন: <code>[EE] license inactive …</code>",
       "failed_to_load": "লোড করা যায়নি"
     },

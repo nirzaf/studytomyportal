@@ -1,19 +1,15 @@
 ---
 title: Live Sessions
-description: Schedule LearnHouse live sessions in LearnHouse Meet, Google Meet, Zoom or any link, with chat, Q&A, polls, attendance, recordings and self-hosted setup.
+description: Schedule Studytomy Portal live sessions in Studytomy Portal Meet, Google Meet, Zoom or any link, with chat, Q&A, polls, attendance, recordings and self-hosted setup.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Live Sessions
 
-Live sessions let you schedule classes, office hours and events with chat, Q&A, polls, breakout rooms and attendance tracking. Sessions run in **LearnHouse Meet**, the built-in video room, or in Google Meet, Zoom, Webex, BigBlueButton or any other link. Microsoft Teams integration is coming soon; until then, hosts can paste a Teams link.
-
-<YouTube video="feature-live-sessions" />
-
+Live sessions let you schedule classes, office hours and events with chat, Q&A, polls, breakout rooms and attendance tracking. Sessions run in **Studytomy Portal Meet**, the built-in video room, or in Google Meet, Zoom, Webex, BigBlueButton or any other link. Microsoft Teams integration is coming soon; until then, hosts can paste a Teams link.
 <Callout>
-Live sessions are included from the Pro plan on LearnHouse Cloud. Self-hosted, they need an [Enterprise license](/enterprise). An admin also has to turn them on under **Live sessions** → **Settings**.
-<PlanCta plan="Pro" />
+Live sessions are included from the Pro plan in deployments that enable plan entitlements. Self-hosted, they need an [Enterprise license](/enterprise). An admin also has to turn them on under **Live sessions** → **Settings**.
 </Callout>
 
 ## Where to find them
@@ -31,7 +27,7 @@ Organization admins can schedule a session from either page. People who can edit
 2. Give it a **Title** and an optional **Description**.
 3. Under **When**, pick the **Date**, **Time**, **Duration** (15 minutes to 4 hours) and **Time zone**. The time is read in the time zone you pick, and every learner sees it in their own.
 4. Under **Repeat**, keep **Does not repeat** or choose **Every day**, **Every week** or **Every month**, and how many sessions the series has (2 to 52).
-5. Under **Where**, choose the **Meeting tool**. With LearnHouse Meet nobody needs another account. For other tools, paste the **Meeting link**, unless the provider is connected, in which case LearnHouse creates the meeting for you.
+5. Under **Where**, choose the **Meeting tool**. With Studytomy Portal Meet nobody needs another account. For other tools, paste the **Meeting link**, unless the provider is connected, in which case Studytomy Portal creates the meeting for you.
 6. Optionally pick a **Board**. Participants can open it from the room and draw on it together during the session.
 7. Set **Who can join**, a **Course** and an optional **Capacity** (see below).
 8. Click **Schedule session**.
@@ -113,17 +109,17 @@ The side panel has these tabs:
 | **People** | Who is in the room, and who is waiting. |
 | **Rooms** | Breakout rooms (host). |
 
-<img src="/img/pages/live-sessions/room-chat.webp" alt="A LearnHouse Meet room with two participants, a raised hand and the chat panel after the host muted everyone" width={1600} height={900} style={{ borderRadius: 10 }} />
+<img src="/img/pages/live-sessions/room-chat.webp" alt="A Studytomy Portal Meet room with two participants, a raised hand and the chat panel after the host muted everyone" width={1600} height={900} style={{ borderRadius: 10 }} />
 
-### LearnHouse Meet controls
+### Studytomy Portal Meet controls
 
-In LearnHouse Meet, everyone can turn their microphone and camera on and off, pick devices, share their screen and **Raise hand**. Hosts can also:
+In Studytomy Portal Meet, everyone can turn their microphone and camera on and off, pick devices, share their screen and **Raise hand**. Hosts can also:
 
 - **Mute everyone**, or mute one person.
 - **Remove from call**: the person leaves the video, but keeps chat and Q&A in the side panel.
 - **Start recording** and **Stop recording**, when recording is set up. Everyone in the call sees that it is recording, and the file appears under **Recordings** shortly after.
 
-With another meeting tool, the room shows **Join on** the provider with a button to open the meeting in a new tab. Learners keep the LearnHouse page open next to it for chat, Q&A and polls, and their attendance is counted while that page is open.
+With another meeting tool, the room shows **Join on** the provider with a button to open the meeting in a new tab. Learners keep the Studytomy Portal page open next to it for chat, Q&A and polls, and their attendance is counted while that page is open.
 
 ### The board
 
@@ -151,7 +147,7 @@ With Google Meet or Zoom connected, attendance from the meeting is imported afte
 
 The **Recordings** tab holds the session's recordings:
 
-- LearnHouse Meet recordings are added automatically.
+- Studytomy Portal Meet recordings are added automatically.
 - **Add a recording** with **Upload** (a video or audio file, stored with your organization's media) or **Link** (YouTube, Vimeo, a Zoom, Meet or Teams share link, or a direct video file).
 - With Zoom connected, **Import from Zoom** brings in the meeting's cloud recordings.
 
@@ -166,25 +162,22 @@ Learners find recordings on the session page and under **Past & recordings** on 
 A session linked to a course can appear in its outline as a **Live session** activity. When scheduling, pick the chapter under **Show in chapter**. From the course editor you can also add a **Live session** activity to a chapter, and either **Use an existing session** or **Schedule new**.
 
 Learners open the activity to RSVP, join, and later watch the recording. With **Attendance completes the activity** on, the activity counts as done once they stay long enough.
-
-<YouTube video="growth-8" />
-
 ## Settings
 
 Organization admins manage live sessions under **Live sessions** → **Settings**:
 
 - **Live sessions**: turn the feature on or off. Turning it off hides sessions from learners. Nothing is deleted.
-- **Meeting providers**: turn each provider on or off, and **Make default** the one new sessions start with. LearnHouse Meet is always on. Connect Google or Zoom here (see below).
+- **Meeting providers**: turn each provider on or off, and **Make default** the one new sessions start with. Studytomy Portal Meet is always on. Connect Google or Zoom here (see below).
 - **Defaults**: who can join new sessions by default.
 - **Reminders** and **Calendar invites**.
 
-On LearnHouse Cloud, everything below is already set up. The rest of this page is for self-hosted Enterprise installs.
+In deployments that enable plan entitlements, everything below is already set up. The rest of this page is for self-hosted Enterprise installs.
 
 ## Self-hosted setup
 
-### LearnHouse Meet
+### Studytomy Portal Meet
 
-LearnHouse Meet is the built-in video room. Its media server ships with the Enterprise package: a [LiveKit](https://livekit.io) server, with its own Docker Compose file and `.env.example`, that you run once for the whole instance. Organizations never see or configure it.
+Studytomy Portal Meet is the built-in video room. Its media server ships with the Enterprise package: a [LiveKit](https://livekit.io) server, with its own Docker Compose file and `.env.example`, that you run once for the whole instance. Organizations never see or configure it.
 
 ```bash
 # In the Meet folder of the Enterprise package
@@ -193,7 +186,7 @@ docker compose up -d                      # video
 docker compose --profile recording up -d  # video + recording
 ```
 
-Put TLS in front of port 7880 and open TCP 7881, UDP 3478, TCP 5349 and UDP 50000-60000 on the host. Then set on the LearnHouse API:
+Put TLS in front of port 7880 and open TCP 7881, UDP 3478, TCP 5349 and UDP 50000-60000 on the host. Then set on the Studytomy Portal API:
 
 | Variable | Description |
 | --- | --- |
@@ -205,11 +198,11 @@ Put TLS in front of port 7880 and open TCP 7881, UDP 3478, TCP 5349 and UDP 5000
 
 Every participant gets a room token signed by the API for one room, valid for four hours; only the session's hosts get host rights. Muting, removing people and recording go through the API, never through a browser. Finished recordings are uploaded to your storage and attached to the session automatically.
 
-Until these are set, sessions on LearnHouse Meet show **Video isn't set up on this server yet**; chat, Q&A and polls still work, and Google Meet, Zoom and pasted links keep working.
+Until these are set, sessions on Studytomy Portal Meet show **Video isn't set up on this server yet**; chat, Q&A and polls still work, and Google Meet, Zoom and pasted links keep working.
 
 ### Google Meet and Zoom
 
-Org admins connect their own Google or Zoom account from **Live sessions** → **Settings**. Once connected, LearnHouse creates the meeting, sends calendar invites to everyone who RSVPs, keeps the invites in sync when the session changes or is cancelled, and imports attendance, recordings and transcripts after class.
+Org admins connect their own Google or Zoom account from **Live sessions** → **Settings**. Once connected, Studytomy Portal creates the meeting, sends calendar invites to everyone who RSVPs, keeps the invites in sync when the session changes or is cancelled, and imports attendance, recordings and transcripts after class.
 
 To let admins connect with a single click, register one OAuth app per provider for your instance and set its credentials:
 

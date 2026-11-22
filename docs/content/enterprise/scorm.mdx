@@ -1,6 +1,6 @@
 ---
 title: SCORM
-description: Import SCORM 1.2 and 2004 packages into LearnHouse courses, check package size limits, and see how completion, scores and results are tracked.
+description: Import SCORM 1.2 and 2004 packages into Studytomy Portal courses, check package size limits, and see how completion, scores and results are tracked.
 ---
 
 import { Callout } from '@/components/mdx'
@@ -8,23 +8,22 @@ import { Callout } from '@/components/mdx'
 # SCORM
 
 <Callout>
-SCORM needs the Enterprise plan on LearnHouse Cloud, or the [Enterprise Edition](/enterprise) when self-hosted.
-<PlanCta plan="Enterprise" />
+SCORM needs the Enterprise plan in deployments that enable plan entitlements, or the [Enterprise Edition](/enterprise) when self-hosted.
 </Callout>
 
-LearnHouse imports SCORM (Sharable Content Object Reference Model) packages, the standard export format of e-learning authoring tools such as Articulate Storyline, Adobe Captivate and iSpring, and runs them inside your courses.
+Studytomy Portal imports SCORM (Sharable Content Object Reference Model) packages, the standard export format of e-learning authoring tools such as Articulate Storyline, Adobe Captivate and iSpring, and runs them inside your courses.
 
 ## Supported versions
 
 - **SCORM 1.2**
 - **SCORM 2004**
 
-LearnHouse reads the version from the package manifest. Packages that don't declare one are treated as SCORM 1.2.
+Studytomy Portal reads the version from the package manifest. Packages that don't declare one are treated as SCORM 1.2.
 
 ## Adding a package to a course
 
 1. In the course editor, add a new activity and choose **Scorm** ("SCORM-compliant learning package").
-2. Upload the **SCORM Package (.zip)** and click **Analyze Package**. LearnHouse detects the version, the title and the SCOs (the launchable units inside the package).
+2. Upload the **SCORM Package (.zip)** and click **Analyze Package**. Studytomy Portal detects the version, the title and the SCOs (the launchable units inside the package).
 3. Name the activity and pick the chapter. Each SCO becomes its own activity.
 
 ## Importing a package as a new course
@@ -50,7 +49,7 @@ Sizes in the variables are in megabytes.
 
 ## Tracking
 
-SCORM content reports back to LearnHouse while the learner works through it:
+SCORM content reports back to Studytomy Portal while the learner works through it:
 
 - Completion status (not attempted, incomplete, completed, passed, failed)
 - Success status (passed, failed, unknown)

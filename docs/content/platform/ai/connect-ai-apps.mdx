@@ -1,34 +1,34 @@
 ---
-description: "Connect Claude, ChatGPT, Cursor, VS Code and other MCP apps to LearnHouse so they can build courses, edit pages and report on learners for you."
+description: "Connect Claude, ChatGPT, Cursor, VS Code and other MCP apps to Studytomy Portal so they can build courses, edit pages and report on learners for you."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Connect AI Apps (MCP)
 
-LearnHouse works with AI apps that support the [Model Context Protocol](https://modelcontextprotocol.io), such as Claude, ChatGPT, Cursor, VS Code and Claude Code. Once connected, you can ask the app to list your courses, draft a course from an outline, rewrite a lesson, add a quiz, look up learners' progress, or find content by meaning.
+Studytomy Portal works with AI apps that support the [Model Context Protocol](https://modelcontextprotocol.io), such as Claude, ChatGPT, Cursor, VS Code and Claude Code. Once connected, you can ask the app to list your courses, draft a course from an outline, rewrite a lesson, add a quiz, look up learners' progress, or find content by meaning.
 
 Connecting AI apps is available on every plan.
 
 ## How it works
 
-- You sign in to LearnHouse from the app, pick the organization and choose what the app may do:
+- You sign in to Studytomy Portal from the app, pick the organization and choose what the app may do:
   - **Read only**: it can look but never change anything.
   - **Read and edit**: it can also create and change courses, pages, assignments and posts.
   - **Read, edit and administer** (admins and maintainers only): it can also manage members, groups, roles and organization settings.
 - Talk to it the way you would to a colleague, in your own words: "add a short quiz to the end of my solar course", "rename the myths page", "which pages are still drafts?". The app finds what you mean by name, only among what you can see, and asks you when a name could mean more than one thing.
 - What the app builds starts as a draft that only staff can see, and building drafts needs no approvals. It gives you the editor link, so you review, edit and publish when you're ready. Ask it to publish and it will, after your approval.
 - The app acts as you, inside the organization you picked. It can never do more than your role allows, and tools for features your plan doesn't include stay hidden.
-- Changes that matter always wait for your approval: deleting, making a course or learning path live or public, changing the courses of a live learning path, publishing or unpublishing inside a live course, find and replace across a live course, changing who can see or do what (co-authors included), revoking certificates, inviting people, organization settings, finalizing grades, adding embedded code or HTML to a page, and fetching files from outside links. Deletions and admin changes are always approved through a LearnHouse link, where you approve or decline while signed in. For the rest, apps that support it may ask you directly instead. An app can't approve its own requests.
+- Changes that matter always wait for your approval: deleting, making a course or learning path live or public, changing the courses of a live learning path, publishing or unpublishing inside a live course, find and replace across a live course, changing who can see or do what (co-authors included), revoking certificates, inviting people, organization settings, finalizing grades, adding embedded code or HTML to a page, and fetching files from outside links. Deletions and admin changes are always approved through a Studytomy Portal link, where you approve or decline while signed in. For the rest, apps that support it may ask you directly instead. An app can't approve its own requests.
 - Page edits are versioned, so you can always restore an earlier version.
 - You can disconnect an app at any time from **Account > AI apps**. Admins see every connected app in **Developers > AI apps** and can disconnect any of them, or turn AI app connections off for the whole organization. Changing your password or two-factor settings, or leaving the organization, disconnects your apps.
 
 ## Server URL
 
-Your server URL is shown in **Account > AI apps** (and in **Developers > AI apps** for admins). On LearnHouse Cloud it is:
+Your server URL is shown in **Account > AI apps** (and in **Developers > AI apps** for admins). For a configured server, use that address:
 
 ```
-https://api.learnhouse.io/mcp
+https://YOUR_API_HOST/mcp
 ```
 
 On a self-hosted instance it is your API address followed by `/mcp`.
@@ -39,13 +39,13 @@ On a self-hosted instance it is your API address followed by `/mcp`.
 
 1. Open **Settings > Connectors** and choose **Add custom connector**.
 2. Paste the server URL and click **Connect**.
-3. Sign in to LearnHouse and pick your organization.
+3. Sign in to Studytomy Portal and pick your organization.
 
 ### ChatGPT
 
 1. Open **Settings > Apps and connectors** and add a custom connector (developer mode may need to be on).
 2. Paste the server URL.
-3. Sign in to LearnHouse when asked.
+3. Sign in to Studytomy Portal when asked.
 
 ### Cursor
 
@@ -54,7 +54,7 @@ Add the server in **Settings > MCP**:
 ```json
 {
   "mcpServers": {
-    "learnhouse": { "url": "https://api.learnhouse.io/mcp" }
+    "studytomy": { "url": "https://YOUR_API_HOST/mcp" }
   }
 }
 ```
@@ -66,10 +66,10 @@ Run **MCP: Add Server**, choose **HTTP** and paste the server URL.
 ### Claude Code
 
 ```bash
-claude mcp add --transport http learnhouse https://api.learnhouse.io/mcp
+claude mcp add --transport http studytomy https://YOUR_API_HOST/mcp
 ```
 
-Then run `/mcp` inside Claude Code and choose `learnhouse` to sign in.
+Then run `/mcp` inside Claude Code and choose `studytomy` to sign in.
 
 ## What the app can do
 
@@ -88,7 +88,7 @@ Tools are grouped by area, and the app only sees the ones your role and plan all
 
 The server also offers ready-made prompts that apps show as shortcuts: draft a course, improve a page, add a quiz to a page, review a course, grade submissions, build a learning path, learner report and community digest. You only see the ones your role, connection and plan allow. In apps that support it, the course, page, assignment or community a prompt asks for is suggested as you type.
 
-Apps can also attach LearnHouse items as context: the organization overview, a course outline, a page, an assignment, a learning path or a community (`learnhouse://course/{id}` and so on).
+Apps can also attach Studytomy Portal items as context: the organization overview, a course outline, a page, an assignment, a learning path or a community (`learnhouse://course/{id}` and so on).
 
 <Callout type="info">
 Some apps limit how many tools they load (Cursor uses about 40). Add `?toolsets=essentials` to the server URL for course building and teaching only, `?toolsets=authoring` for writing and organizing content (courses, pages, course-wide tools, learning paths and the library), or `?toolsets=admin` for members and settings. You can also pick groups yourself with `?toolsets=courses,content` (any of `courses`, `content`, `teaching`, `advanced`, `paths`, `library`, `communities`, `playgrounds`, `boards`, `people`, `org`). Search, context and reading tools are always included.
@@ -96,7 +96,7 @@ Some apps limit how many tools they load (Cursor uses about 40). Add `?toolsets=
 
 ## Scripts and automations
 
-For scripts, an [API token](/developers/api/authentication) also works as a bearer token on the same URL (API tokens are available on the Pro plan and above). The token's own permissions apply. Changes that need approval give back a LearnHouse link that the member who created the token opens to approve; the AI app can't approve them by itself. Boards, playgrounds and personal progress need a member connection.
+For scripts, an [API token](/developers/api/authentication) also works as a bearer token on the same URL (API tokens are available on the Pro plan and above). The token's own permissions apply. Changes that need approval give back a Studytomy Portal link that the member who created the token opens to approve; the AI app can't approve them by itself. Boards, playgrounds and personal progress need a member connection.
 
 On Enterprise plans, every change an AI app makes is recorded in the audit log.
 
@@ -106,7 +106,7 @@ The MCP server is on by default. See [environment variables](/self-hosting/confi
 
 ### Adding your own tools
 
-Self-hosted instances can add tools without changing LearnHouse itself. Install a Python package that declares an entry point in the `learnhouse.ai_tools` group, pointing at a module with a `SPECS` list of tools (and optionally `TOOLSET` and `FEATURE` names):
+Self-hosted instances can add tools without changing Studytomy Portal itself. Install a Python package that declares an entry point in the `learnhouse.ai_tools` group, pointing at a module with a `SPECS` list of tools (and optionally `TOOLSET` and `FEATURE` names):
 
 ```toml
 [project.entry-points."learnhouse.ai_tools"]

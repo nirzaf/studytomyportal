@@ -4,7 +4,7 @@ Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read 
 
 **AI-assisted learning, trusted tutoring, and measurable progress.**
 
-Studytomy Portal is a LearnHouse-based learning platform under active development combining structured courses, educator-led tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The intended learner offering is the Sri Lankan National School Syllabus (National Institute of Education / Ministry of Education, Grades 6–13, English instruction) for students and their parents/guardians; see the [Sri Lankan decision baseline](docs/studytomy/SRI-LANKA-DECISION-BASELINE.md). That scope is an engineering alignment only: the programme, market and cohort decisions behind it (`D-01`, `D-02`) remain unapproved.
+Studytomy Portal is an educator-led learning platform under active development, combining structured courses, tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The intended learner offering is the Sri Lankan National School Syllabus (National Institute of Education / Ministry of Education, Grades 6–13, English instruction) for students and their parents/guardians; see the [Sri Lankan decision baseline](docs/studytomy/SRI-LANKA-DECISION-BASELINE.md). That scope is an engineering alignment only: the programme, market and cohort decisions behind it (`D-01`, `D-02`) remain unapproved.
 
 **Current operation: local development only.** This repository has no configured deployment or CI/CD workflow. See [LOCAL-ONLY.md](LOCAL-ONLY.md) for local verification commands and the external-integration boundary.
 
@@ -117,7 +117,7 @@ The public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-re
 
 ## Target architecture
 
-**Target architecture (not deployed)**: Studytomy Portal targets `lms.studytomy.com` and is built on the open-source [LearnHouse](https://github.com/learnhouse/learnhouse) Community Edition runtime and database. The repository currently supports local development only. The existing public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) remains a separate application.
+**Target architecture (not deployed)**: Studytomy Portal targets `lms.studytomy.com` and uses the existing open-source LMS runtime and database, extended for Studytomy workflows. The repository currently supports local development only. The existing public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) remains a separate application.
 
 ```mermaid
 flowchart TD
@@ -710,7 +710,7 @@ apps/
   web/       # Next.js portal and authoring interfaces
   api/       # FastAPI, database models, API routers, services, migrations
   collab/    # Collaborative editing server
-  cli/       # Local development, diagnostics and LearnHouse self-hosting tools
+  cli/       # Local development, diagnostics and self-hosting tools
 ```
 
 Studytomy-specific modules follow the existing application structure:
@@ -754,12 +754,12 @@ These are available scripts, not a statement that all checks currently pass. The
 
 ### 3. Configuration
 
-Use upstream configuration guidance as the authoritative reference for supported variable names and service setup:
+Use the checked-in guides as the reference for supported variable names and service setup:
 
-- [Installation](https://docs.learnhouse.app/self-hosting)
-- [AI provider configuration](https://docs.learnhouse.app/self-hosting/configuration/ai-setup)
-- [Email configuration](https://docs.learnhouse.app/self-hosting/configuration/email)
-- [Storage configuration](https://docs.learnhouse.app/self-hosting/configuration/storage)
+- [Installation](docs/content/self-hosting/installation/index.mdx)
+- [AI provider configuration](docs/content/self-hosting/configuration/ai-setup.mdx)
+- [Email configuration](docs/content/self-hosting/configuration/email.mdx)
+- [Storage configuration](docs/content/self-hosting/configuration/storage.mdx)
 
 Never commit `.env`, provider keys, private certificates, database passwords, or student records. Optional services (such as AI, email, S3-compatible storage, and code execution) require separate configuration and verification.
 
@@ -849,9 +849,9 @@ Phases are proposed, not committed dates or completed implementation milestones.
 - Which externally hosted services and separately licensed features are actually required?
 - Hosting region, identity/permissions model, operational owner, and go-live acceptance criteria?
 
-## Licensing and acknowledgments
+## Licensing
 
-This project builds on [LearnHouse](https://github.com/learnhouse/learnhouse) Community Edition as its open-source foundation. The upstream core is AGPL-3.0 licensed, with separate commercial licensing for Enterprise components. Comply with all applicable notices and corresponding-source/network-use obligations. Independent Studytomy modules may have obligations depending on how they combine with AGPL-covered code; obtain a legal review before promising a closed-source deliverable.
+This repository includes AGPL-3.0-covered code and may include separately licensed components. Comply with all applicable license terms, notices, and corresponding-source obligations. Review the license of each component before redistribution; obtain legal review before making closed-source or commercial licensing commitments.
 
 Third-party experiments, curriculum resources, media assets, and examination materials have independent license and distribution terms. Review each before inclusion. Do not incorporate private Enterprise code or bypass its license restrictions.
 
@@ -862,10 +862,9 @@ Studytomy branding, content, and development responsibilities are subject to the
 - [Studytomy Virtual Science Lab — Agentuto Integration Proposal](VIRTUAL_SCIENCE_LAB_PROPOSAL.md)
 - [Studytomy Portal Navigation & Initial Configuration Guide](PORTAL_GUIDE.md)
 - [Studytomy AI Agent Engineering Instructions](AGENTS.md)
-- [LearnHouse upstream source](https://github.com/learnhouse/learnhouse)
-- [LearnHouse Community/Enterprise boundaries](https://docs.learnhouse.app/enterprise)
-- [LearnHouse self-hosting documentation](https://docs.learnhouse.app/self-hosting)
-- [LearnHouse AI configuration](https://docs.learnhouse.app/self-hosting/configuration/ai-setup)
+- [Self-hosting documentation](docs/content/self-hosting/index.mdx)
+- [Enterprise feature boundaries](docs/content/enterprise/index.mdx)
+- [AI configuration](docs/content/self-hosting/configuration/ai-setup.mdx)
 - [Previous Studytomy website repository](https://github.com/nirzaf/studytomy-react) (access controlled)
 
-**Current delivery state**: LearnHouse foundation plus active Studytomy implementation, under local development. Run tests locally. This repository intentionally has no deployment or CI/CD configuration. Any future release requires separate approval and verified business, educational, privacy, security, and operational gates; this document is not a deployment receipt.
+**Current delivery state**: Studytomy Portal is under local development. Run tests locally. This repository intentionally has no deployment or CI/CD configuration. Any future release requires separate approval and verified business, educational, privacy, security, and operational gates; this document is not a deployment receipt.

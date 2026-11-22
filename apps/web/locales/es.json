@@ -236,7 +236,7 @@
     "billing": "Facturación",
     "create_organization": "Crear organización",
     "start_your_own_organization": "Crea tu propia organización",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "No se pudo eliminar esta organización. Inténtalo de nuevo.",
     "org_actions": "Acciones de la organización",
     "manage_upgrade": "Gestionar / Mejorar",
@@ -3108,7 +3108,7 @@
           "description": "Configurar sus ajustes personales, contraseñas y correo electrónico"
         }
       },
-      "learnhouse_university": "Universidad Studytomy",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Bienvenido de nuevo",
       "plan": "plan",
       "create_course": "Crear curso",
@@ -7251,7 +7251,7 @@
           "keywords": "rutas, rutas de aprendizaje, itinerarios, programas, plan de estudios, secuencia, certificado, paths"
         },
         "live_sessions": {
-          "keywords": "sesiones en vivo clases webinar reunión video asistencia grabaciones encuestas learnhouse meet zoom meet teams",
+          "keywords": "sesiones en vivo clases webinar reunión video asistencia grabaciones encuestas meet zoom meet teams",
           "description": "Programa sesiones en vivo, registra la asistencia y gestiona las grabaciones"
         }
       }
@@ -10821,8 +10821,8 @@
       "inactive_desc": "Falló la comprobación de la licencia EE (<code>{{reason}}</code>). Todos los endpoints <code>/ee/*</code> devuelven 503, por lo que esta página no puede cargar sus datos.",
       "what_to_check": "Qué revisar",
       "check_diagnostics": "Abre <code>{{path}}</code>. Responde incluso cuando la licencia está inactiva, y su campo <code>hint</code> indica la solución.",
-      "check_saas": "En despliegues SaaS: confirma que <code>LEARNHOUSE_SAAS=true</code> está definido en el entorno de la API. SaaS omite la comprobación de la licencia.",
-      "check_self_hosted": "En EE autoalojado: confirma que <code>LEARNHOUSE_LICENSE_KEY</code> está definida y que el servidor de licencias (o el periodo de gracia) es accesible.",
+      "check_saas": "En despliegues SaaS: confirma que <code>SaaS mode</code> está definido en el entorno de la API. SaaS omite la comprobación de la licencia.",
+      "check_self_hosted": "En EE autoalojado: confirma que <code>license key</code> está definida y que el servidor de licencias (o el periodo de gracia) es accesible.",
       "check_logs": "Si tienes acceso a la shell, los registros de la API incluyen el mismo motivo con todo detalle: <code>[EE] license inactive …</code>",
       "failed_to_load": "No se pudo cargar"
     },

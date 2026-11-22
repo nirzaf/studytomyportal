@@ -1,6 +1,6 @@
 # Demo bundle provenance
 
-Everything in this bundle is original work produced for LearnHouse and is
+Everything in this bundle is original work produced for Studytomy Portal and is
 redistributable under the repository's licence, with one qualified exception:
 the ten spoken episode clips under `media/podcasts/` are synthesized with a
 voice supplied by the operating system (see *Audio* below). Nothing here

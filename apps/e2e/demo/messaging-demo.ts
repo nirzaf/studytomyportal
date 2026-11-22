@@ -199,7 +199,7 @@ async function main(): Promise<void> {
     await step('presence', async () => {
       teacherOnline = goOnline(teacherToken, org.id)
       await page.waitForTimeout(2500)
-      await caption(page, 'Presence', 'Amara just opened LearnHouse on her laptop: the green dot appears instantly', 3200)
+      await caption(page, 'Presence', 'Amara just opened Studytomy Portal on her laptop: the green dot appears instantly', 3200)
     })
 
     // ── 4. Direct message with an unread question ────────────────────────

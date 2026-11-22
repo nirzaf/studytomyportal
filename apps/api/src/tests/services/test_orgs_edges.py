@@ -137,15 +137,15 @@ async def test_history_inside_the_month_without_an_opening_plan(db, org):
 def test_points_at_platform_needs_a_base_domain_and_a_domain():
     with patch.object(cd, "LEARNHOUSE_DOMAIN", ""):
         assert cd._check_points_at_platform("school.example.com", "acme") is False
-    with patch.object(cd, "LEARNHOUSE_DOMAIN", "learnhouse.test"):
+    with patch.object(cd, "LEARNHOUSE_DOMAIN", "example.test"):
         assert cd._check_points_at_platform("", "acme") is False
 
 
 def test_platform_subdomains_always_point_at_the_platform():
-    with patch.object(cd, "LEARNHOUSE_DOMAIN", "learnhouse.test"), \
+    with patch.object(cd, "LEARNHOUSE_DOMAIN", "example.test"), \
          patch.object(cd, "_dns_records") as dns:
-        assert cd._check_points_at_platform("acme.learnhouse.test", "acme") is True
-        assert cd._check_points_at_platform("learnhouse.test", "") is True
+        assert cd._check_points_at_platform("acme.example.test", "acme") is True
+        assert cd._check_points_at_platform("example.test", "") is True
     dns.assert_not_called()
 
 

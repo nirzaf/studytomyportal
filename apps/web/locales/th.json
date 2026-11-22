@@ -236,7 +236,7 @@
     "billing": "การเรียกเก็บเงิน",
     "create_organization": "สร้างองค์กร",
     "start_your_own_organization": "สร้างองค์กรของคุณเอง",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "ไม่สามารถลบองค์กรนี้ได้ กรุณาลองอีกครั้ง",
     "org_actions": "การจัดการองค์กร",
     "manage_upgrade": "จัดการ / อัปเกรด",
@@ -3040,7 +3040,7 @@
           "description": "กำหนดค่าการตั้งค่าส่วนตัว รหัสผ่าน อีเมล"
         }
       },
-      "learnhouse_university": "มหาวิทยาลัย Studytomy",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "ยินดีต้อนรับกลับ",
       "plan": "แผน",
       "create_course": "สร้างคอร์สเรียน",
@@ -7138,7 +7138,7 @@
           "keywords": "เส้นทางการเรียนรู้, เส้นทาง, แทร็ก, โปรแกรม, หลักสูตร, ลำดับ, ใบประกาศนียบัตร, paths, learning paths, tracks, programs, curriculum, sequence, certificate"
         },
         "live_sessions": {
-          "keywords": "เซสชันสด คลาส เว็บินาร์ ประชุม วิดีโอ การเข้าร่วม การบันทึก โพล learnhouse meet zoom meet teams live sessions",
+          "keywords": "เซสชันสด คลาส เว็บินาร์ ประชุม วิดีโอ การเข้าร่วม การบันทึก โพล meet zoom meet teams live sessions",
           "description": "กำหนดเวลาเซสชันสด ติดตามการเข้าร่วม และจัดการการบันทึก"
         }
       }
@@ -10650,8 +10650,8 @@
       "inactive_desc": "การตรวจสอบใบอนุญาต EE ล้มเหลว (<code>{{reason}}</code>) เอนด์พอยต์ <code>/ee/*</code> ทุกตัวส่งกลับ 503 หน้านี้จึงโหลดข้อมูลไม่ได้",
       "what_to_check": "สิ่งที่ควรตรวจสอบ",
       "check_diagnostics": "เปิด <code>{{path}}</code> ซึ่งตอบได้แม้ใบอนุญาตไม่ทำงาน และฟิลด์ <code>hint</code> ของมันระบุวิธีแก้ไข",
-      "check_saas": "สำหรับการติดตั้งแบบ SaaS: ยืนยันว่าตั้งค่า <code>LEARNHOUSE_SAAS=true</code> ในสภาพแวดล้อมของ API แล้ว SaaS จะข้ามการตรวจสอบใบอนุญาต",
-      "check_self_hosted": "สำหรับ EE ที่โฮสต์เอง: ยืนยันว่าตั้งค่า <code>LEARNHOUSE_LICENSE_KEY</code> แล้ว และเชื่อมต่อเซิร์ฟเวอร์ใบอนุญาต (หรือช่วงผ่อนผัน) ได้",
+      "check_saas": "สำหรับการติดตั้งแบบ SaaS: ยืนยันว่าตั้งค่า <code>SaaS mode</code> ในสภาพแวดล้อมของ API แล้ว SaaS จะข้ามการตรวจสอบใบอนุญาต",
+      "check_self_hosted": "สำหรับ EE ที่โฮสต์เอง: ยืนยันว่าตั้งค่า <code>license key</code> แล้ว และเชื่อมต่อเซิร์ฟเวอร์ใบอนุญาต (หรือช่วงผ่อนผัน) ได้",
       "check_logs": "หากคุณเข้าถึงเชลล์ได้ บันทึกของ API จะมีสาเหตุเดียวกันพร้อมรายละเอียดครบถ้วน: <code>[EE] license inactive …</code>",
       "failed_to_load": "โหลดไม่สำเร็จ"
     },

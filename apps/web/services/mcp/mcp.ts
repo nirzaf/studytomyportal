@@ -4,7 +4,7 @@ import {
   getResponseMetadata,
 } from '@services/utils/ts/requests'
 
-// Connecting AI apps (Claude, ChatGPT, Cursor, ...) to LearnHouse over MCP.
+// Connecting AI apps (Claude, ChatGPT, Cursor, ...) to Studytomy Portal over MCP.
 // The API is its own OAuth server: the app sends the member to
 // /oauth/consent with a signed `request`, the member picks an organization and
 // approves, and the API hands back the URL to return to.

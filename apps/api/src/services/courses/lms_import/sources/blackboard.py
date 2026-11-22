@@ -643,7 +643,7 @@ class _QtiParser:
             self._calculated(q, item, resolve)
         elif label in ("hot spot", "image hot spot"):
             q.type = ir.QType.UNSUPPORTED
-            q.reason = "hot spot questions have no LearnHouse equivalent"
+            q.reason = "hot spot questions have no Studytomy Portal equivalent"
         elif label == "presentation only":
             q.points = 0.0
         return q

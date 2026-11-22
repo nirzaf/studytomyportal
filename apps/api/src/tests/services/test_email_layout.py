@@ -70,8 +70,8 @@ class TestUnreadMessagesEmail:
 
     def test_dm_rows_have_no_author_placeholder(self):
         body = _render_unread([{"title": "Grace", "count": 1, "snippet": "hi"}])["body"]
-        assert "LearnHouse user" not in body
-        assert "Powered by LearnHouse" in body
+        assert "Studytomy Portal user" not in body
+        assert "Powered by Studytomy Portal" in body
 
     def test_group_rows_name_the_author(self):
         body = _render_unread([
@@ -88,9 +88,9 @@ class TestUnreadMessagesEmail:
 
     def test_copilot_row_uses_its_logo(self):
         body = _render_unread([
-            {"title": "Copilot", "count": 1, "emoji": "✨", "image": "https://x.test/learnhouse_ai_simple_colored.png", "snippet": "Reminder"},
+            {"title": "Copilot", "count": 1, "emoji": "✨", "image": "https://x.test/studytomy-assistant.png", "snippet": "Reminder"},
         ])["body"]
-        assert '<img src="https://x.test/learnhouse_ai_simple_colored.png"' in body
+        assert '<img src="https://x.test/studytomy-assistant.png"' in body
         assert "✨" not in body
 
     def test_long_snippets_are_shortened(self):
@@ -118,4 +118,4 @@ class TestUnreadMessagesEmail:
         )["body"]
         assert "background-color: #ff5500;" in body
         assert "https://acme.test/messages?settings=notifications" in body
-        assert "LearnHouse" not in body
+        assert "Studytomy Portal" not in body

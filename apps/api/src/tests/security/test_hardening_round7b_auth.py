@@ -51,8 +51,8 @@ def _config(tenancy: str = "multi"):
     return SimpleNamespace(
         hosting_config=SimpleNamespace(
             tenancy=tenancy,
-            domain="learnhouse.test",
-            cookie_config=SimpleNamespace(domain=".learnhouse.test"),
+            domain="example.test",
+            cookie_config=SimpleNamespace(domain=".example.test"),
         )
     )
 
@@ -473,7 +473,7 @@ class TestCustomDomainDetection:
         with patch("src.routers.auth.get_learnhouse_config", return_value=_config()):
             assert await custom_domain_org_id(_request({"origin": "https://Academy.example.com"}), db) == org.id
             assert await custom_domain_org_id(_request({"origin": "https://other.example.com"}), db) is None
-            assert await custom_domain_org_id(_request({"origin": "https://org.learnhouse.test"}), db) is None
+            assert await custom_domain_org_id(_request({"origin": "https://org.example.test"}), db) is None
             assert await custom_domain_org_id(_request({"origin": "http://localhost:3000"}), db) is None
             assert await custom_domain_org_id(_request(), db) is None
         with patch("src.routers.auth.get_learnhouse_config", return_value=_config("single")):
@@ -502,7 +502,7 @@ class TestCustomDomainDetection:
         from src.routers.auth import get_cookie_domain_for_request
 
         with patch("src.routers.auth.get_learnhouse_config", return_value=_config()):
-            assert get_cookie_domain_for_request(_request()) == ".learnhouse.test"
+            assert get_cookie_domain_for_request(_request()) == ".example.test"
 
     async def test_bind_session(self, db, org, other_org, regular_user):
         from src.routers.auth import _bind_session_to_custom_domain
@@ -511,7 +511,7 @@ class TestCustomDomainDetection:
         custom = _request({"origin": "https://academy.example.com"})
         with patch("src.routers.auth.get_learnhouse_config", return_value=_config()):
             assert await _bind_session_to_custom_domain(
-                _request({"origin": "https://org.learnhouse.test"}), db, regular_user.id, other_org.id, "password"
+                _request({"origin": "https://org.example.test"}), db, regular_user.id, other_org.id, "password"
             ) == (other_org.id, False)
             assert await _bind_session_to_custom_domain(
                 custom, db, regular_user.id, org.id, "password"

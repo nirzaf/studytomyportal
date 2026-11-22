@@ -1,7 +1,7 @@
 """Telling AI provider quota errors apart from real failures.
 
 When the provider refuses a request because a rate limit, quota, spending cap
-or prepaid credit balance is exhausted, nothing in LearnHouse is broken: the
+or prepaid credit balance is exhausted, nothing in Studytomy Portal is broken: the
 deployment has to wait or top up. Callers log these as warnings, tell the user
 AI is unavailable, and keep them out of error reporting.
 """

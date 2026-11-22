@@ -438,7 +438,7 @@ describe('CLI integration: live install (command coverage)', () => {
     it('no arguments shows the welcome screen, not an error', () => {
       const r = cli('')
       expect(r.exitCode).toBe(0)
-      expect(r.stdout).toContain('LearnHouse')
+      expect(r.stdout).toContain('Studytomy Portal')
       expect(r.stdout).toContain('Available commands')
     })
   })
@@ -610,7 +610,7 @@ describe('CLI integration: upgrade (old → new image)', () => {
       // Commander v15 intercepts --version at the global level; it must print
       // the CLI version, not perform an update (the old broken flag name).
       const r = cli('update --version 1.2.6 --no-backup --no-migrate', 30_000)
-      expect(r.stdout + r.stderr).not.toContain('Updating LearnHouse')
+      expect(r.stdout + r.stderr).not.toContain('Updating Studytomy Portal')
     })
   })
 

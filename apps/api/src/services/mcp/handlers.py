@@ -114,7 +114,7 @@ def _approval_form(spec: ToolSpec, summary: str, state: str) -> types.InputRequi
         input_requests={
             _APPROVE_KEY: types.ElicitRequest(
                 params=types.ElicitRequestFormParams(
-                    message=f"Approve in LearnHouse: {summary}",
+                    message=f"Approve in Studytomy Portal: {summary}",
                     requested_schema={
                         "type": "object",
                         "properties": {
@@ -230,7 +230,7 @@ class Handlers:
     ) -> types.CallToolResult | types.InputRequiredResult:
         principal = _principal(ctx)
         if principal is None:
-            return srv.error_result("unauthenticated", "Sign in to use LearnHouse tools")
+            return srv.error_result("unauthenticated", "Sign in to use Studytomy Portal tools")
         spec = self.registry.get(params.name)
         if spec is None:
             return srv.error_result("unknown_tool", f"Unknown tool: {params.name}")

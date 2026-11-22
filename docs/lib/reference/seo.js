@@ -4,7 +4,7 @@ import { SITE_URL } from './config'
 /** BreadcrumbList: Docs → API Reference → …crumbs ({ name, path }). */
 export function breadcrumbLd(crumbs) {
   const items = [
-    { name: 'LearnHouse Docs', path: '/' },
+    { name: 'Studytomy Portal Docs', path: '/' },
     { name: 'API Reference', path: '/reference' },
     ...crumbs,
   ]
@@ -14,7 +14,7 @@ export function breadcrumbLd(crumbs) {
       '@type': 'ListItem',
       position: i + 1,
       name: c.name,
-      item: `${SITE_URL}${c.path}`,
+      ...(SITE_URL ? { item: `${SITE_URL}${c.path}` } : {}),
     })),
   }
 }
@@ -25,13 +25,12 @@ export function techArticleLd({ title, description, path, about = [] }) {
     '@type': 'TechArticle',
     headline: title,
     description,
-    url: `${SITE_URL}${path}`,
-    mainEntityOfPage: `${SITE_URL}${path}`,
+    ...(SITE_URL ? { url: `${SITE_URL}${path}`, mainEntityOfPage: `${SITE_URL}${path}` } : {}),
     inLanguage: 'en',
     proficiencyLevel: 'Expert',
-    about: [{ '@type': 'Thing', name: 'LearnHouse REST API' }, ...about.map((name) => ({ '@type': 'Thing', name }))],
-    isPartOf: { '@type': 'WebSite', name: 'LearnHouse Docs', url: SITE_URL },
-    publisher: { '@type': 'Organization', name: 'LearnHouse', url: 'https://www.learnhouse.app' },
+    about: [{ '@type': 'Thing', name: 'Studytomy Portal API' }, ...about.map((name) => ({ '@type': 'Thing', name }))],
+    isPartOf: { '@type': 'WebSite', name: 'Studytomy Portal Docs', ...(SITE_URL ? { url: SITE_URL } : {}) },
+    publisher: { '@type': 'Organization', name: 'Studytomy', ...(SITE_URL ? { url: SITE_URL } : {}) },
   }
 }
 
@@ -42,15 +41,12 @@ export function jsonLdGraph(...nodes) {
 /** Page metadata with canonical + Open Graph URL in one place. */
 export function referenceMetadata({ title, description: full, path }) {
   const description = clampDescription(full)
-  const image = { url: `${SITE_URL}/og/reference`, width: 1200, height: 630, alt: title }
+  const image = SITE_URL ? { url: `${SITE_URL}/og/reference`, width: 1200, height: 630, alt: title } : undefined
   return {
     title,
     description,
-    alternates: {
-      canonical: path,
-      types: { 'text/markdown': '/reference/llms.txt' },
-    },
-    openGraph: { title, description, url: `${SITE_URL}${path}`, type: 'article', siteName: 'LearnHouse Docs', images: [image] },
-    twitter: { card: 'summary_large_image', title, description, images: [image.url] },
+    alternates: { types: { 'text/markdown': '/reference/llms.txt' }, ...(SITE_URL ? { canonical: `${SITE_URL}${path}` } : {}) },
+    openGraph: { title, description, ...(SITE_URL ? { url: `${SITE_URL}${path}` } : {}), type: 'article', siteName: 'Studytomy Portal Docs', ...(image ? { images: [image] } : {}) },
+    twitter: { card: 'summary_large_image', title, description, ...(image ? { images: [image.url] } : {}) },
   }
 }

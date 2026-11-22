@@ -1,6 +1,6 @@
 # API security regression tests
 
-This directory tests LearnHouse-derived and Studytomy security boundaries. It is not a certification that every route is secure, and a test file's presence is not a passing result.
+This directory tests Studytomy Portal-derived and Studytomy security boundaries. It is not a certification that every route is secure, and a test file's presence is not a passing result.
 
 ## Find the relevant checks
 

@@ -5,7 +5,7 @@ Two kinds of credential get through:
 * OAuth access tokens (`lho_at_...`) from src/services/mcp/oauth.py. They act
   as the member who consented, inside the org they picked. This is what MCP
   clients use, and it works on every plan.
-* LearnHouse API tokens (`lh_...`), bounded by the token's own rights. Handy
+* Studytomy Portal API tokens (`lh_...`), bounded by the token's own rights. Handy
   for scripts and CI. Superadmin tokens (`lh_sa_...`) are refused: they are
   cross-org and the MCP surface is strictly org scoped.
 
@@ -158,7 +158,7 @@ class MCPAuthMiddleware:
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers") or []}
         authorization = headers.get("authorization", "")
         if not authorization.lower().startswith("bearer "):
-            await _reject(scope, send, 401, None, "Sign in to connect to LearnHouse")
+            await _reject(scope, send, 401, None, "Sign in to connect to Studytomy Portal")
             return
 
         token = authorization[7:].strip()

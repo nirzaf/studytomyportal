@@ -5,7 +5,7 @@
 type Frame = { filename?: string; function?: string }
 
 // The connection dropped mid-request. Browsers word it differently; Sentry
-// appends the host in parentheses ("Failed to fetch (api.learnhouse.io)").
+// appends the host in parentheses ("Failed to fetch (api.example.com)").
 const NETWORK_FAILURE =
   /^(TypeError: |Error: )?(Failed to fetch|Load failed|NetworkError when attempting to fetch resource\.?|NetworkError: A network error occurred\.?|A network error occurred\.?)( \(.+\))?$/
 

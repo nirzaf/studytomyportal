@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Builds @learnhouse/react from the LearnHouse web app's own source.
+// Builds @learnhouse/react from the Studytomy Portal web app's own source.
 //
 // Nothing under apps/web is copied. esbuild compiles the activity renderer and
 // every block component straight out of apps/web, so a published package is

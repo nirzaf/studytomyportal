@@ -56,7 +56,7 @@ FETCHES_AT_ONCE = 4
 MAX_REDIRECTS = 3
 DEADLINE_SECONDS = 60
 ALLOWED_PORTS = (80, 443)
-_USER_AGENT = "Mozilla/5.0 (compatible; LearnHouse/1.0; +https://www.learnhouse.app)"
+_USER_AGENT = "Mozilla/5.0 (compatible; StudytomyPortal/1.0)"
 
 
 @dataclass(frozen=True)

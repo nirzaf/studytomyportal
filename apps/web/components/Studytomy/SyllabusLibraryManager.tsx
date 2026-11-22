@@ -48,6 +48,7 @@ type Curriculum = { uuid: string; curriculum_key: string; revision: number; subj
 type Concept = { uuid: string; code: string; title: string; objective: string }
 type Mapping = { mapping_uuid: string; version_uuid: string; source_title: string; source_type: string; source_publisher: string; source_edition: string; curriculum_uuid: string; curriculum_key: string; curriculum_revision: number; curriculum_subject: string; curriculum_level: string; curriculum_jurisdiction: string | null; concept_uuid: string; concept_code: string; concept_title: string; page_start: number; page_end: number; evidence_kind: string; evidence_quote: string; status: string; created_by_user_id: number; reviewed_by_user_id: number | null; review_evidence: string | null; approved_at: string | null; revoked_by_user_id: number | null; revocation_evidence: string | null; revoked_at: string | null }
 type Page = { page: number; text: string }
+type LibraryAccess = { can_view: boolean; can_author: boolean; can_review: boolean }
 
 const statusStyle: Record<string, string> = {
   approved: 'bg-teal-50 text-teal-800',
@@ -76,6 +77,7 @@ export default function SyllabusLibraryManager() {
   const [curricula, setCurricula] = useState<Curriculum[]>([])
   const [conceptsState, setConceptsState] = useState<{ curriculumUuid: string; values: Concept[] }>({ curriculumUuid: '', values: [] })
   const [mappings, setMappings] = useState<Mapping[]>([])
+  const [access, setAccess] = useState<LibraryAccess | null>(null)
   const [metadata, setMetadata] = useState(emptyMetadata)
   const [curriculumUuid, setCurriculumUuid] = useState('')
   const [conceptUuid, setConceptUuid] = useState('')
@@ -96,11 +98,29 @@ export default function SyllabusLibraryManager() {
   useEffect(() => {
     if (!base || !token) return
     const controller = new AbortController()
-    Promise.all([
-      secureFetch(`${base}/syllabus-sources?limit=100&offset=${versionOffset}`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
-      secureFetch(`${base}/explore/curricula`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
-      secureFetch(`${base}/syllabus-mappings?limit=100&offset=${mappingOffset}`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
-    ]).then(async ([sourceResponse, curriculumResponse, mappingResponse]) => {
+    setAccess(null)
+    setMessage('Loading source library…')
+    secureFetch(`${base}/syllabus-library/access`, {
+      ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal,
+    }).then(async (accessResponse) => {
+      if (!accessResponse.ok) throw new Error('This account cannot access the educator source library.')
+      const accessBody = await accessResponse.json() as LibraryAccess
+      if (controller.signal.aborted) return
+      setAccess(accessBody)
+      if (!accessBody.can_view) {
+        setVersions([])
+        setMappings([])
+        setMessage('You are not assigned to view this organization’s syllabus library.')
+        return
+      }
+      return Promise.all([
+        secureFetch(`${base}/syllabus-sources?limit=100&offset=${versionOffset}`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
+        secureFetch(`${base}/explore/curricula`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
+        secureFetch(`${base}/syllabus-mappings?limit=100&offset=${mappingOffset}`, { ...RequestBodyWithAuthHeader('GET', null, null, token), cache: 'no-store', redirect: 'error', signal: controller.signal }),
+      ])
+    }).then(async (responses) => {
+      if (!responses || controller.signal.aborted) return
+      const [sourceResponse, curriculumResponse, mappingResponse] = responses
       if (!sourceResponse.ok || !curriculumResponse.ok || !mappingResponse.ok) throw new Error('This account cannot access the educator source library.')
       const [sourceBody, curriculumBody, incomingMappings] = await Promise.all([sourceResponse.json(), curriculumResponse.json(), mappingResponse.json()])
       if (controller.signal.aborted) return
@@ -276,6 +296,7 @@ export default function SyllabusLibraryManager() {
   }
 
   if (!orgUuid || !token) return <main className="mx-auto max-w-6xl p-8"><p role="status">Sign in with an educator account to manage syllabus sources.</p></main>
+  if (access && !access.can_view) return <main className="mx-auto max-w-6xl p-8"><p role="status">You are not assigned to view this organization’s syllabus library.</p></main>
 
   const distinctSources = [...versions.reduce((sources, version) => {
     if (!sources.has(version.source_uuid)) sources.set(version.source_uuid, version)
@@ -295,7 +316,7 @@ export default function SyllabusLibraryManager() {
       </header>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="source-upload-title">
+        {access?.can_author && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="source-upload-title">
           <div className="mb-5 flex items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-800"><UploadCloud size={20} aria-hidden /></span>
           <div><h2 id="source-upload-title" className="text-lg font-semibold text-slate-900">Add a PDF source</h2><p className="mt-1 text-sm text-slate-500">Searchable PDFs up to 4 MB and 200 pages. Image-only scans are held with OCR guidance. Uploaded rights values are claims until an independent reviewer verifies permission.</p></div>
@@ -349,7 +370,7 @@ export default function SyllabusLibraryManager() {
             </label>
             <Button type="submit" disabled={busy} className="bg-blue-700 hover:bg-blue-800"><UploadCloud size={16} aria-hidden /> Upload and index PDF</Button>
           </form>
-        </section>
+        </section>}
 
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="source-list-title">
           <div className="flex items-start gap-3">
@@ -359,7 +380,7 @@ export default function SyllabusLibraryManager() {
           <p role="status" className="min-h-5 text-sm text-slate-600">{message}</p>
           {versions.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-7 text-center text-sm text-slate-500">No PDF sources uploaded yet.</div> : (
             <ul className="space-y-3">
-              {versions.map((version) => <SourceVersionCard key={version.version_uuid} version={version} currentUserId={currentUserId} busy={busy}
+              {versions.map((version) => <SourceVersionCard key={version.version_uuid} version={version} currentUserId={currentUserId} canReviewRole={Boolean(access?.can_review)} busy={busy}
                 onReview={reviewSource} onRetry={retryIndex} onRevoke={revokeSource} base={base} token={token} />)}
             </ul>
           )}
@@ -372,7 +393,7 @@ export default function SyllabusLibraryManager() {
           <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-800"><FileCheck2 size={20} aria-hidden /></span>
           <div><h2 id="mapping-title" className="text-lg font-semibold text-slate-900">Map page evidence to curriculum concepts</h2><p className="mt-1 text-sm text-slate-500">Official inclusion needs an official syllabus PDF and a separate reviewer. Resource-book mentions can only be supplementary evidence.</p></div>
         </div>
-        <form onSubmit={submitMapping} className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        {access?.can_author && <form onSubmit={submitMapping} className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <label className="grid gap-1 text-xs font-semibold text-slate-700 xl:col-span-2">Approved source
             <Select value={versionUuid} onValueChange={setVersionUuid}><SelectTrigger aria-label="Approved source"><SelectValue placeholder="Select source" /></SelectTrigger><SelectContent>
               {approvedVersions.map((version) => <SelectItem key={version.version_uuid} value={version.version_uuid}>{version.title} · v{version.version_number}</SelectItem>)}
@@ -397,15 +418,15 @@ export default function SyllabusLibraryManager() {
             <Textarea value={evidenceQuote} onChange={(event) => setEvidenceQuote(event.target.value)} minLength={15} maxLength={1000} required placeholder="Paste the exact passage from the selected PDF pages." className="min-h-16" />
           </label>
           <div className="flex items-end"><Button type="submit" disabled={busy || !versionUuid || !curriculumUuid || !conceptUuid || !evidenceQuote.trim()}><Plus size={15} aria-hidden /> Submit mapping for review</Button></div>
-        </form>
+        </form>}
         <div className="mt-6 border-t border-slate-200 pt-5">
           <h3 className="mb-3 text-sm font-semibold text-slate-900">Mapping review queue</h3>
           {mappings.length === 0 ? <p className="text-sm text-slate-500">No page-to-concept mappings submitted yet.</p> : <ul className="space-y-2">
             {mappings.map((mapping) => <li key={mapping.mapping_uuid} className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{mapping.concept_code} · {mapping.concept_title}</p><p className="mt-1 text-xs text-slate-500">Target: {mapping.curriculum_subject} · {mapping.curriculum_level} · {mapping.curriculum_key} v{mapping.curriculum_revision}{mapping.curriculum_jurisdiction ? ` · ${mapping.curriculum_jurisdiction}` : ''}</p><p className="mt-1 text-xs text-slate-500">Source: {mapping.source_type.replaceAll('_', ' ')} · {mapping.source_title} · {mapping.source_publisher} · edition {mapping.source_edition}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{mapping.evidence_kind} · PDF pages {mapping.page_start}–{mapping.page_end} · “{mapping.evidence_quote}”</p>{mapping.review_evidence && <p className="mt-1 text-xs text-slate-500">Review by educator {mapping.reviewed_by_user_id ?? '—'}: {mapping.review_evidence}</p>}{mapping.revocation_evidence && <p className="mt-1 text-xs text-rose-700">Revoked by educator {mapping.revoked_by_user_id ?? '—'}: {mapping.revocation_evidence}</p>}<a href={`#source-version-${encodeURIComponent(mapping.version_uuid)}`} className="mt-2 inline-block text-xs font-semibold text-blue-700 underline underline-offset-2">Inspect mapped source pages</a></div>
               <div className="flex shrink-0 items-center gap-2"><StatusPill value={mapping.status} />
-                {mapping.status === 'pending_review' && mapping.created_by_user_id !== currentUserId && <><Button size="sm" variant="outline" disabled={busy} onClick={() => void reviewMapping(mapping, 'approve')}>Approve</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => void reviewMapping(mapping, 'reject')}>Reject</Button></>}
-                {(mapping.status === 'pending_review' || mapping.status === 'approved') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void revokeMapping(mapping)}>Revoke</Button>}
+                {access?.can_review && mapping.status === 'pending_review' && mapping.created_by_user_id !== currentUserId && <><Button size="sm" variant="outline" disabled={busy} onClick={() => void reviewMapping(mapping, 'approve')}>Approve</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => void reviewMapping(mapping, 'reject')}>Reject</Button></>}
+                {access?.can_review && (mapping.status === 'pending_review' || mapping.status === 'approved') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void revokeMapping(mapping)}>Revoke</Button>}
               </div>
             </li>)}
           </ul>}
@@ -429,8 +450,8 @@ function StatusPill({ value }: { value: string }) {
   return <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle[value] || 'bg-slate-100 text-slate-700'}`}>{value.replaceAll('_', ' ')}</span>
 }
 
-function SourceVersionCard({ version, currentUserId, busy, onReview, onRetry, onRevoke, base, token }: {
-  version: SourceVersion; currentUserId: number; busy: boolean;
+function SourceVersionCard({ version, currentUserId, canReviewRole, busy, onReview, onRetry, onRevoke, base, token }: {
+  version: SourceVersion; currentUserId: number; canReviewRole: boolean; busy: boolean;
   onReview: (_version: SourceVersion, _decision: 'approve' | 'reject', _evidence: string, _rightsReference?: string) => void;
   onRetry: (_version: SourceVersion) => void; onRevoke: (_version: SourceVersion) => void;
   base: string; token: string;
@@ -439,7 +460,7 @@ function SourceVersionCard({ version, currentUserId, busy, onReview, onRetry, on
   const [pageState, setPageState] = useState('')
   const [evidence, setEvidence] = useState('')
   const [rightsReference, setRightsReference] = useState('')
-  const canReview = version.uploaded_by_user_id !== currentUserId
+  const canReview = canReviewRole && version.uploaded_by_user_id !== currentUserId
   const canApprove = version.ingestion_status === 'ready' && rightsReference.trim().length > 0
 
   async function loadPages() {
@@ -469,9 +490,9 @@ function SourceVersionCard({ version, currentUserId, busy, onReview, onRetry, on
       </div>
       <div className="flex shrink-0 flex-wrap gap-2">
         <Button type="button" variant="outline" size="sm" onClick={() => void loadPages()}><FileSearch size={14} aria-hidden /> {pages ? 'Hide pages' : 'Inspect pages'}</Button>
-        {version.ingestion_status === 'ready'
+        {canReviewRole && version.ingestion_status === 'ready'
           ? <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onRetry(version)}><RefreshCw size={14} aria-hidden /> Reindex if needed</Button>
-          : version.ingestion_attempts < 5 && version.ingestion_status === 'failed' && version.ingestion_error_code === 'embedding_failed'
+          : canReviewRole && version.ingestion_attempts < 5 && version.ingestion_status === 'failed' && version.ingestion_error_code === 'embedding_failed'
             ? <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onRetry(version)}><RefreshCw size={14} aria-hidden /> Retry index</Button>
             : null}
       </div>
@@ -490,6 +511,6 @@ function SourceVersionCard({ version, currentUserId, busy, onReview, onRetry, on
         {!canApprove && <p className="mt-2 text-xs text-amber-900">Student access stays blocked until indexing is ready and the independent reviewer records permitted-use evidence.</p>}
       </> : <p className="text-xs leading-5 text-amber-950">A different educator must review this upload. Student access remains blocked.</p>}
     </div>}
-    {version.review_status !== 'revoked' && version.review_status !== 'superseded' && <div className="mt-3 flex justify-end"><Button variant="ghost" size="sm" disabled={busy} onClick={() => onRevoke(version)}>Revoke this version</Button></div>}
+    {canReviewRole && version.review_status !== 'revoked' && version.review_status !== 'superseded' && <div className="mt-3 flex justify-end"><Button variant="ghost" size="sm" disabled={busy} onClick={() => onRevoke(version)}>Revoke this version</Button></div>}
   </li>
 }

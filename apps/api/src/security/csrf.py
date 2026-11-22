@@ -39,7 +39,7 @@ STATE_CHANGING_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 # The LTI 1.3 OIDC login and launch are cross-site form posts from the LMS by
 # design. They are authorized by the platform-signed id_token, state and nonce
 # and never read the session cookie, so a cookie the browser happens to carry
-# (an LMS on the same site as LearnHouse) is not what lets them through.
+# (an LMS on the same site as Studytomy Portal) is not what lets them through.
 _LTI_LAUNCH_PATH = re.compile(r"^/api/v1/lti/[A-Za-z0-9_-]+/(login|launch)$")
 
 # Short-TTL cache for the verified-custom-domain origin check, so we don't hit the
@@ -92,7 +92,7 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
     Middleware that validates Origin header on state-changing requests.
 
     This protects against CSRF attacks by ensuring that requests come from
-    allowed origins. The allowed origins are configured in the LearnHouse config.
+    allowed origins. The allowed origins are configured in the Studytomy Portal config.
     """
 
     def __init__(self, app):

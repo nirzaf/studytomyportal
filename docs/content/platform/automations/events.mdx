@@ -1,15 +1,15 @@
 ---
-description: "Browse every LearnHouse webhook event, from course completions and sign-ups to payments and community posts, with the data payload each one sends."
+description: "Browse every Studytomy Portal webhook event, from course completions and sign-ups to payments and community posts, with the data payload each one sends."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Event Catalogue
 
-Every event that can fire from LearnHouse, grouped by category. Each event delivers the same envelope (`event`, `delivery_id`, `timestamp`, `org_id`, `data`). Only the shape of `data` varies.
+Every event that can fire from Studytomy Portal, grouped by category. Each event delivers the same envelope (`event`, `delivery_id`, `timestamp`, `org_id`, `data`). Only the shape of `data` varies.
 
 <Callout type="info">
-The event registry is the single source of truth. At runtime, dispatched payloads are validated against these schemas and any drift is logged as a warning. You can also fetch the live registry from your LearnHouse instance while signed in:
+The event registry is the single source of truth. At runtime, dispatched payloads are validated against these schemas and any drift is logged as a warning. You can also fetch the live registry from your Studytomy Portal instance while signed in:
 ```http
 GET /api/v1/orgs/{org_id}/webhooks/events
 ```

@@ -29,7 +29,9 @@ export async function sendContactMail(args: {
   to?: string
 }): Promise<void> {
   const { fromEmail, name, message, to } = args
-  await send(to || 'hello@learnhouse.app', `New contact form message from ${name || fromEmail}`, {
+  const destination = to?.trim() || process.env.CONTACT_FORM_RECIPIENT?.trim()
+  if (!destination) return
+  await send(destination, `New contact form message from ${name || fromEmail}`, {
     accentColor: '#171717',
     heading: 'New contact message',
     subtitle: `From ${name ? `${name} · ` : ''}${fromEmail}`,

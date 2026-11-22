@@ -52,7 +52,7 @@ function showDeployments() {
   }
 
   if (deployments.size === 0) {
-    p.log.info('No LearnHouse deployments found.')
+    p.log.info('No Studytomy Portal deployments found.')
     p.log.message(pc.dim('  Run npx learnhouse setup to create one.'))
     return
   }
@@ -81,7 +81,7 @@ function showDeployments() {
 // --- Main command ---
 
 export async function deploymentsCommand() {
-  p.intro(pc.cyan('LearnHouse Deployments'))
+  p.intro(pc.cyan('Studytomy Portal Deployments'))
 
   const action = await p.select({
     message: 'What would you like to do?',
@@ -97,7 +97,7 @@ export async function deploymentsCommand() {
   } else {
     const config = readConfig(findInstallDir())
     if (!config) {
-      p.log.error('No LearnHouse installation found. Run setup first.')
+      p.log.error('No Studytomy Portal installation found. Run setup first.')
       process.exit(1)
     }
     await scaleResources(config)

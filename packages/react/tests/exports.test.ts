@@ -21,7 +21,7 @@ describe('public surface', () => {
     expect(runtime.VERSION).toBe(web.version)
   })
 
-  // The component runs on other people's sites: LearnHouse's own product
+  // The component runs on other people's sites: Studytomy Portal's own product
   // analytics must stay out of it (blocks report through onEvent instead).
   it('bundles no product analytics client', () => {
     const pkg = JSON.parse(readFileSync(path.join(import.meta.dirname, '../package.json'), 'utf8'))

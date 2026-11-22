@@ -9,7 +9,7 @@ from alembic import context
 from config.config import get_learnhouse_config
 from src.core.migrations import load_models, sync_database_url
 
-# LearnHouse config
+# Studytomy Portal config
 
 lh_config = get_learnhouse_config()
 

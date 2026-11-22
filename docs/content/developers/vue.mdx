@@ -1,6 +1,6 @@
 ---
-title: LearnHouse Vue Component
-description: Render LearnHouse activities in Vue 3 and Nuxt with @learnhouse/vue, using the same renderer and blocks as LearnHouse and @learnhouse/react.
+title: Studytomy Portal Vue Component
+description: Render Studytomy Portal activities in Vue 3 and Nuxt with @learnhouse/vue, using the same renderer and blocks as Studytomy Portal and @learnhouse/react.
 ---
 
 import { Callout, Steps, Tabs } from '@/components/mdx'
@@ -9,11 +9,8 @@ import { VueBridge } from '../../components/developers/Vue'
 
 <DevHero section="vue" eyebrow="@learnhouse/vue" title="Activities as a Vue component" install="npm install @learnhouse/vue">
   `<LearnHouseActivity>` for Vue 3 and Nuxt. Pages, quizzes, flipcards, scenarios, code playgrounds, math, video and
-  PDFs render with LearnHouse's own blocks, with Vue props, events and slots around them.
+  PDFs render with Studytomy Portal's own blocks, with Vue props, events and slots around them.
 </DevHero>
-
-<CloudCta variant="developer">Publish a course on a free Cloud organization and render it here. Public courses need no token.</CloudCta>
-
 ## Quickstart
 
 <Steps>
@@ -56,13 +53,13 @@ import { LearnHouseActivity } from '@learnhouse/vue'
 </template>
 ```
 
-`base-url` is the address of your LearnHouse instance (its API). Ids are the full uuids, with their `activity_` and
+`base-url` is the address of your Studytomy Portal instance (its API). Ids are the full uuids, with their `activity_` and
 `course_` prefixes.
 
 </Steps>
 
 <Callout type="info">
-  With `activity-id`, the browser fetches the activity, and LearnHouse only answers browsers on its own domain (and
+  With `activity-id`, the browser fetches the activity, and Studytomy Portal only answers browsers on its own domain (and
   `localhost`). On another domain, fetch on your server with the [SDK](/developers/sdk) and pass `:activity`, as
   described in [Where to fetch](/developers/react/frameworks#where-to-fetch-browser-or-server).
 </Callout>
@@ -90,7 +87,7 @@ import { LearnHouseActivity } from '@learnhouse/vue'
   </Tabs.Tab>
   <Tabs.Tab>
     ```vue
-    <!-- A document as LearnHouse stores it. No network calls for the content itself. -->
+    <!-- A document as Studytomy Portal stores it. No network calls for the content itself. -->
     <LearnHouseActivity :content="doc" org-id="org_…" course-id="course_…" />
     ```
   </Tabs.Tab>
@@ -271,7 +268,7 @@ const { data } = await useFetch(`/api/lessons/${route.params.id}`)
 
 `@learnhouse/react` also ships the renderer as a custom element, `<learnhouse-activity>`. `@learnhouse/vue` renders
 that element, sets its properties from your props and turns its DOM events (`lh-load`, `lh-complete`…) into Vue events.
-The blocks are the React components of the LearnHouse release you installed, so the Vue and React packages always
+The blocks are the React components of the Studytomy Portal release you installed, so the Vue and React packages always
 render the same thing.
 
 The element has no shadow DOM, which is why the one stylesheet works for both. You can also use it directly, from
@@ -309,7 +306,7 @@ blocks it contains, the video player only for videos and the PDF viewer only for
 | `base-url` | `string` | Your instance. Defaults to the provider's |
 | `token` | `string` | A user access token. Defaults to the provider's |
 | `org-id` | `string` | Org uuid for media URLs with `content` |
-| `site-url` | `string` | Your LearnHouse site, for the "Made with LearnHouse" link |
+| `site-url` | `string` | Your Studytomy Portal site, for the "Made with Studytomy Portal" link |
 | `theme` | `LearnHouseTheme` | Merged over the provider's. See [Theming](/developers/react/customization) |
 | `locale` | `string` | UI language of the blocks. Defaults to the provider's, then `en` |
 | `messages` | `object` | Override UI strings |
@@ -318,7 +315,7 @@ blocks it contains, the video player only for videos and the PDF viewer only for
 | `link-target` | `'_blank' \| '_self' \| '_parent' \| '_top'` | Where links open. Default `_blank` |
 | `track-completion` | `boolean` | Emit `complete` at the end of the activity |
 | `show-title` | `boolean` | Show the activity name above the content |
-| `show-powered-by` | `boolean` | A small "Made with LearnHouse" link |
+| `show-powered-by` | `boolean` | A small "Made with Studytomy Portal" link |
 | `unstyled` | `boolean` | Skip the root theming styles |
 | `transform-content` | `(doc) => doc` | Rewrite the document before rendering |
 
@@ -333,4 +330,4 @@ The component also exposes `reload()` (through a template ref), which mounts the
   `@learnhouse/react`, have no Vue equivalent yet. Use `hide-blocks` and `transform-content` to change what renders.
 - **`header` and `footer` inside the theme.** Vue slots render around the activity, not inside its themed root.
 - **Several instances on one page.** As with `@learnhouse/react`, media URLs follow the most recently mounted
-  `base-url`, so keep to one LearnHouse instance per page.
+  `base-url`, so keep to one Studytomy Portal instance per page.

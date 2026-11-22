@@ -10,7 +10,7 @@ export async function GET() {
   const spec = await getSpec()
   const operations = buildOperationIndex(spec).map(({ description, ...op }) => op)
   return Response.json({
-    name: 'LearnHouse API',
+    name: 'Studytomy Portal API',
     version: spec.info?.version || null,
     docs: `${SITE_URL}/reference`,
     baseUrls: BASE_URLS.map(({ key, url }) => ({ key, url: `${url}/api/v1` })),

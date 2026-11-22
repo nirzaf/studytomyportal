@@ -236,7 +236,7 @@
     "billing": "결제",
     "create_organization": "조직 만들기",
     "start_your_own_organization": "나만의 조직 시작하기",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "이 조직을 삭제할 수 없습니다. 다시 시도해 주세요.",
     "org_actions": "조직 작업",
     "manage_upgrade": "관리 / 업그레이드",
@@ -3040,7 +3040,7 @@
           "description": "개인 설정, 비밀번호, 이메일을 구성합니다"
         }
       },
-      "learnhouse_university": "Studytomy 대학교",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "다시 오신 것을 환영합니다",
       "plan": "플랜",
       "create_course": "강좌 만들기",
@@ -7138,7 +7138,7 @@
           "keywords": "학습 경로, 경로, 트랙, 프로그램, 커리큘럼, 순서, 수료증, paths, learning paths, tracks, programs, curriculum, sequence, certificate"
         },
         "live_sessions": {
-          "keywords": "라이브 세션 수업 웨비나 회의 화상 출석 녹화 투표 learnhouse meet zoom meet teams",
+          "keywords": "라이브 세션 수업 웨비나 회의 화상 출석 녹화 투표 meet zoom meet teams",
           "description": "라이브 세션을 예약하고, 출석을 확인하고, 녹화를 관리하세요"
         }
       }
@@ -10650,8 +10650,8 @@
       "inactive_desc": "EE 라이선스 확인에 실패했습니다 (<code>{{reason}}</code>). 모든 <code>/ee/*</code> 엔드포인트가 503을 반환하므로 이 페이지에서 데이터를 불러올 수 없습니다.",
       "what_to_check": "확인할 사항",
       "check_diagnostics": "<code>{{path}}</code>을(를) 여세요. 라이선스가 비활성 상태여도 응답하며, <code>hint</code> 필드에 해결 방법이 나와 있습니다.",
-      "check_saas": "SaaS 배포의 경우: API 환경에 <code>LEARNHOUSE_SAAS=true</code>가 설정되어 있는지 확인하세요. SaaS에서는 라이선스 확인이 생략됩니다.",
-      "check_self_hosted": "자체 호스팅 EE의 경우: <code>LEARNHOUSE_LICENSE_KEY</code>가 설정되어 있고 라이선스 서버(또는 유예 기간)에 접근할 수 있는지 확인하세요.",
+      "check_saas": "SaaS 배포의 경우: API 환경에 <code>SaaS mode</code>가 설정되어 있는지 확인하세요. SaaS에서는 라이선스 확인이 생략됩니다.",
+      "check_self_hosted": "자체 호스팅 EE의 경우: <code>license key</code>가 설정되어 있고 라이선스 서버(또는 유예 기간)에 접근할 수 있는지 확인하세요.",
       "check_logs": "셸 접근 권한이 있다면 API 로그에서 동일한 사유를 자세히 확인할 수 있습니다: <code>[EE] license inactive …</code>",
       "failed_to_load": "불러오지 못했습니다"
     },

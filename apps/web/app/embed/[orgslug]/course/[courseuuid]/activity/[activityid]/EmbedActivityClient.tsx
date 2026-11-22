@@ -93,7 +93,7 @@ function EmbedActivityClient({ activityId, courseuuid, orgslug }: EmbedActivityC
   const searchParams = useSearchParams()
   const options = parseEmbedOptions(searchParams, SUPPORTED_LANGUAGES)
   const showBranding = useShowLearnHouseBranding()
-  const showLearnHouseLogo = showBranding && options.showLogo
+  const showStudytomyLogo = showBranding && options.showLogo
   const endRef = useRef<HTMLDivElement>(null)
 
   const { data: activity, isLoading: activityLoading } = useActivity(activityId)
@@ -120,7 +120,7 @@ function EmbedActivityClient({ activityId, courseuuid, orgslug }: EmbedActivityC
     const cleanCourseUuid = (course?.course_uuid ?? courseuuid).replace('course_', '')
     const path = `/course/${cleanCourseUuid}/activity/${activityId}`
     // Always build an absolute org URL: the embed may be served from the main app domain
-    // (e.g. app.learnhouse.io), so a relative path would resolve to the wrong host.
+    // (e.g. app.example.com), so a relative path would resolve to the wrong host.
     if (typeof window !== 'undefined' && orgslug) {
       const domain = getLEARNHOUSE_DOMAIN_VAL()
       const protocol = getLEARNHOUSE_HTTP_PROTOCOL_VAL()
@@ -175,7 +175,7 @@ function EmbedActivityClient({ activityId, courseuuid, orgslug }: EmbedActivityC
             {t('embed.visit_activity')}
           </a>
         </div>
-        {showLearnHouseLogo && <PoweredByBadge activityUrl={getActivityUrl()} />}
+        {showStudytomyLogo && <PoweredByBadge activityUrl={getActivityUrl()} />}
       </div>
     )
   }
@@ -206,7 +206,7 @@ function EmbedActivityClient({ activityId, courseuuid, orgslug }: EmbedActivityC
         {/* Reaching this marks the activity complete for the host page. */}
         <div ref={endRef} aria-hidden style={{ height: 1 }} />
       </div>
-      {showLearnHouseLogo && ready && <PoweredByBadge activityUrl={getActivityUrl()} />}
+      {showStudytomyLogo && ready && <PoweredByBadge activityUrl={getActivityUrl()} />}
     </div>
   )
 }
@@ -224,7 +224,7 @@ function PoweredByBadge({ activityUrl }: { activityUrl: string }) {
       >
         <span className="flex items-center gap-1.5 px-1 text-xs font-medium text-gray-700">
           <span>Made with</span>
-          <Image src="/lrn-text.svg" alt="LearnHouse" width={72} height={11} />
+          <Image src="/studytomy-logo.png" alt="Studytomy" width={72} height={36} />
         </span>
       </button>
     </div>

@@ -36,16 +36,16 @@ plain object with a `type`.
 | `media` | `action` (`play`, `pause`, `ended`, `progress`), `media` (`video`, `audio`), `src`, `currentTime`, `duration` | Video and audio playback. `progress` fires at most every 5 seconds |
 | `complete` | `activityId` | The end of the activity scrolled into view. Only with `trackCompletion` |
 | `error` | `error` | Loading or rendering failed |
-| `analytics` | `name`, plus the block's own fields | The product events LearnHouse's blocks already send |
+| `analytics` | `name`, plus the block's own fields | The product events Studytomy Portal's blocks already send |
 
 `onLoad(activity)` and `onError(error)` are also available as separate props.
 
 ## Recipes
 
-### Mark the lesson complete in LearnHouse
+### Mark the lesson complete in Studytomy Portal
 
 `complete` fires when the learner reaches the end. Record it with the [SDK](/developers/sdk/resources#progress) as the
-learner, the same as the "Mark as complete" button in LearnHouse:
+learner, the same as the "Mark as complete" button in Studytomy Portal:
 
 ```tsx
 const lh = useLearnHouseClient() // the provider's @learnhouse/sdk client

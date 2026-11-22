@@ -59,7 +59,7 @@ const program = new Command()
 
 program
   .name('learnhouse')
-  .description('The official LearnHouse CLI: deploy, manage, and operate your LearnHouse instance')
+  .description('The official Studytomy Portal CLI: deploy, manage, and operate your Studytomy Portal instance')
   .version(VERSION)
   .option('--dir <path>', 'Installation directory to act on (default: current dir, else ~/.learnhouse/<name>)')
   .showSuggestionAfterError()
@@ -77,7 +77,7 @@ program
 
 program
   .command('setup')
-  .description('Interactive setup wizard for LearnHouse')
+  .description('Interactive setup wizard for Studytomy Portal')
   .option('--ci', 'Non-interactive mode with defaults (for CI/automation)')
   .option('--name <name>', 'Installation name (default: "default")')
   .option('--domain <domain>', 'Domain name (default: "localhost")')
@@ -105,22 +105,22 @@ program
 
 program
   .command('start')
-  .description('Start LearnHouse services')
+  .description('Start Studytomy Portal services')
   .action(startCommand)
 
 program
   .command('stop')
-  .description('Stop LearnHouse services')
+  .description('Stop Studytomy Portal services')
   .action(stopCommand)
 
 program
   .command('logs')
-  .description('Stream logs from LearnHouse services')
+  .description('Stream logs from Studytomy Portal services')
   .action(logsCommand)
 
 program
   .command('config')
-  .description('Show current LearnHouse configuration')
+  .description('Show current Studytomy Portal configuration')
   .action(configCommand)
 
 program
@@ -138,17 +138,17 @@ program
 
 program
   .command('doctor')
-  .description('Diagnose common issues with LearnHouse')
+  .description('Diagnose common issues with Studytomy Portal')
   .action(doctorCommand)
 
 program
   .command('shell')
-  .description('Open a shell in a LearnHouse container')
+  .description('Open a shell in a Studytomy Portal container')
   .action(shellCommand)
 
 program
   .command('update')
-  .description('Update LearnHouse to latest or a specific version (EE: backs up the DB + runs migrations)')
+  .description('Update Studytomy Portal to latest or a specific version (EE: backs up the DB + runs migrations)')
   // Note: --version is intentionally avoided here because Commander v15 intercepts
   // --version at the root program level, so subcommand --version flags silently
   // become the global version output. Use --to or -v instead.

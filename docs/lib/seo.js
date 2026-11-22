@@ -11,15 +11,16 @@ export function clampDescription(text, max = 158) {
   return cut.replace(/[\s,;:—–-]+\S*$/, '').replace(/[,;:]$/, '') + '…'
 }
 
-const SITE_URL = 'https://docs.learnhouse.app'
+const SITE_URL = process.env.NEXT_PUBLIC_DOCS_URL?.replace(/\/+$/, '')
 
 /** Open Graph and Twitter tags for a page. Without them a page inherits the home page's. */
 export function socialMetadata({ title, description, path, image = '/og' }) {
   // Generated /og cards are 1200x630; other images keep their own size.
   const size = image.startsWith('/og') ? { width: 1200, height: 630 } : {}
-  const images = [{ url: `${SITE_URL}${image}`, ...size, alt: title }]
+  const url = SITE_URL ? `${SITE_URL}${path}` : undefined
+  const images = SITE_URL ? [{ url: `${SITE_URL}${image}`, ...size, alt: title }] : undefined
   return {
-    openGraph: { type: 'article', title, description, url: `${SITE_URL}${path}`, siteName: 'LearnHouse Docs', images },
-    twitter: { card: 'summary_large_image', title, description, images: [images[0].url] },
+    openGraph: { type: 'article', title, description, siteName: 'Studytomy Portal Docs', ...(url ? { url } : {}), ...(images ? { images } : {}) },
+    twitter: { card: 'summary_large_image', title, description, ...(images ? { images: [images[0].url] } : {}) },
   }
 }

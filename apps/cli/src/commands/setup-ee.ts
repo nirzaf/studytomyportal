@@ -417,7 +417,7 @@ async function setupEnterpriseCi(options: EeSetupOptions): Promise<void> {
   })
 
   const secrets = resolveSecrets(installDir)
-  console.log(`Setting up LearnHouse Enterprise (${tenancy}) in ${installDir}`)
+  console.log(`Setting up Studytomy Portal Enterprise (${tenancy}) in ${installDir}`)
   try {
     writeEeFiles(config, secrets, database)
   } catch (err) {
@@ -541,7 +541,7 @@ async function setupEnterpriseInteractive(options: EeSetupOptions): Promise<void
   }
   s.stop('Configuration files generated')
 
-  const startNow = exit(await p.confirm({ message: 'Start LearnHouse Enterprise now?', initialValue: true })) as boolean
+  const startNow = exit(await p.confirm({ message: 'Start Studytomy Portal Enterprise now?', initialValue: true })) as boolean
   if (!startNow) {
     p.log.info(`Files generated in ${installDir}`)
     p.log.message(`  Start later with: cd ${installDir} && docker compose up -d`)

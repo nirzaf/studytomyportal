@@ -405,7 +405,7 @@ class BrandingSettings(_Strict):
     font: FontName | None = Field(None, description="One of the offered fonts; empty string for the default.")
     footer_text: str | None = Field(None, max_length=200, description="Text in the page footer.")
     default_language: str | None = Field(None, min_length=2, max_length=10, description="UI language code, e.g. 'en'.")
-    watermark: bool | None = Field(None, description="Show the LearnHouse watermark (required on the free plan).")
+    watermark: bool | None = Field(None, description="Show the Studytomy Portal watermark (required on the free plan).")
     email_sender_name: str | None = Field(
         None, max_length=64, description="Display name on email sent for the organization."
     )

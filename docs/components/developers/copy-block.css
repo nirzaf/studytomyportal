@@ -1,0 +1,30 @@
+.lhx-copy { margin: 16px 0 28px; overflow: hidden; }
+.lhx-copy-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #f5f5f5; }
+.lhx-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #0a0a0a;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.lhx-copy-btn:hover { background: rgba(10, 10, 10, 0.85); }
+.lhx-copy-pre {
+  margin: 0 !important;
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--lh-font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  color: #404040;
+  background: #fafafa !important;
+  padding: 14px 16px;
+  border-radius: 0 !important;
+}

@@ -55,7 +55,7 @@ export async function updateCommand(options: { version?: string; migrate?: boole
   const dir = findInstallDir()
   const config = readConfig(dir)
   if (!config) {
-    p.log.error('No LearnHouse installation found. Run `npx learnhouse setup` first.')
+    p.log.error('No Studytomy Portal installation found. Run `npx learnhouse setup` first.')
     process.exit(1)
     return
   }
@@ -63,7 +63,7 @@ export async function updateCommand(options: { version?: string; migrate?: boole
   // Enterprise installs use a different upgrade path: license re-auth, EE images,
   // a pre-upgrade DB backup, and Alembic migrations against the (possibly external) DB.
   if (config.edition === 'enterprise') {
-    p.intro(pc.cyan('Upgrading LearnHouse Enterprise'))
+    p.intro(pc.cyan('Upgrading Studytomy Portal Enterprise'))
     await updateEnterprise(config, {
       version: options.version,
       migrate: options.migrate,
@@ -82,9 +82,9 @@ export async function updateCommand(options: { version?: string; migrate?: boole
   }
 
   if (targetVersion) {
-    p.intro(pc.cyan(`Updating LearnHouse to v${targetVersion}`))
+    p.intro(pc.cyan(`Updating Studytomy Portal to v${targetVersion}`))
   } else {
-    p.intro(pc.cyan('Updating LearnHouse to latest'))
+    p.intro(pc.cyan('Updating Studytomy Portal to latest'))
   }
 
   const ui = {
@@ -231,12 +231,12 @@ export async function updateCommand(options: { version?: string; migrate?: boole
     s.stop('Services restarted')
 
     // 4) Wait for the app, then run migrations via the shared helper.
-    s.start('Waiting for LearnHouse to be ready')
+    s.start('Waiting for Studytomy Portal to be ready')
     const healthy = await waitForAppHealth(config)
     if (healthy) {
-      s.stop('LearnHouse is up')
+      s.stop('Studytomy Portal is up')
     } else {
-      s.stop('LearnHouse did not become healthy')
+      s.stop('Studytomy Portal did not become healthy')
       p.log.warn('Check `npx learnhouse logs`. Your DB backup is in ./backups/.')
     }
 
@@ -256,9 +256,9 @@ export async function updateCommand(options: { version?: string; migrate?: boole
     if (!healthy) process.exit(1)
 
     if (targetVersion) {
-      p.log.success(`LearnHouse has been updated to v${targetVersion}!`)
+      p.log.success(`Studytomy Portal has been updated to v${targetVersion}!`)
     } else {
-      p.log.success('LearnHouse has been updated to the latest version!')
+      p.log.success('Studytomy Portal has been updated to the latest version!')
     }
   } catch (err) {
     s.stop('Update failed')

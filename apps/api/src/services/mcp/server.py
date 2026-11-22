@@ -12,7 +12,7 @@ rights, resource RBAC, then the service's own checks.
 
 On top of the tools the server offers:
 
-* instructions telling the model how LearnHouse is organized and how to work
+* instructions telling the model how Studytomy Portal is organized and how to work
   in it (orient, resolve, read, then make the smallest change),
 * tool annotations (read-only / destructive / idempotent / open world),
 * resources for the org, courses, activities, assignments, learning paths
@@ -22,7 +22,7 @@ On top of the tools the server offers:
   learners, digest a community),
 * completion of prompt and resource arguments from what the member can see,
 * a person's approval for sensitive calls: an approval link the member opens
-  in LearnHouse, or for changes that are not deletions or admin changes, a
+  in Studytomy Portal, or for changes that are not deletions or admin changes, a
   form on 2026-07-28 clients that can show one (see approvals.py).
 """
 
@@ -57,14 +57,14 @@ from src.services.mcp.resources import parse_uri
 
 logger = logging.getLogger(__name__)
 
-SERVER_NAME = "learnhouse"
+SERVER_NAME = "studytomy"
 CALLS_PER_MINUTE = 240
 
 INSTRUCTIONS = """\
-You are connected to one LearnHouse organization, an online learning platform. Every \
+You are connected to one Studytomy Portal organization, an online learning platform. Every \
 call acts as the member (or API token) who connected you, with exactly their permissions.
 
-How LearnHouse is organized: courses have ordered chapters; chapters have ordered \
+How Studytomy Portal is organized: courses have ordered chapters; chapters have ordered \
 activities (pages made of blocks, videos, documents, assignments). The library files \
 resources in folders, communities hold discussions, usergroups gate who sees linked \
 resources, roles grant rights.
@@ -103,7 +103,7 @@ review, edit and publish it.
 publishing or unpublishing inside a live course, changing who can see or do what, \
 inviting people, finalizing grades, organization settings, fetching outside files. Before \
 calling one, tell the user what will happen. The user then approves it in their app or through \
-a LearnHouse link that the result gives you; after they approve, call the same tool \
+a Studytomy Portal link that the result gives you; after they approve, call the same tool \
 again with the same arguments and the approval_id.
 7. To see how learners are doing: list_course_learners (who is behind or overdue; filter \
 by status, overdue_only, inactive_days), get_learner_progress with course_uuid (one \
@@ -139,10 +139,9 @@ def build_mcp_server(registry: ToolRegistry | None = None) -> Server:
     return Server(
         SERVER_NAME,
         version=_version(),
-        title="LearnHouse",
-        description="Manage and author courses, content, people and communities in LearnHouse.",
+        title="Studytomy Portal",
+        description="Manage and author courses, content, people and communities in Studytomy Portal.",
         instructions=INSTRUCTIONS,
-        website_url="https://www.learnhouse.app",
         # The tool list depends on who calls (plan, role, scope, token rights),
         # so it may only be reused by the same caller, and briefly.
         cache_hints={
@@ -410,7 +409,7 @@ _HINTS = {
     "not_for_api_tokens": "Connect the app with a member account (OAuth) instead of an API token.",
     "http_400": "The request was invalid. Read the message, fix the arguments and call again.",
     "http_422": "The request was invalid. Read the message, fix the arguments and call again.",
-    "internal_error": "LearnHouse failed unexpectedly. Try once more; if it fails again, tell the user.",
+    "internal_error": "Studytomy Portal failed unexpectedly. Try once more; if it fails again, tell the user.",
     "org_not_found": "The connected organization no longer exists. The user must reconnect.",
     "unauthenticated": "The connection is signed out. The user must reconnect the app.",
     "preflight_denied": "This needs a higher role in the organization. Tell the user.",
@@ -427,7 +426,7 @@ def hint_for(code: str | None) -> str | None:
     if code in _HINTS:
         return _HINTS[code]
     if code.startswith("http_5"):
-        return "LearnHouse failed to do this. Try once more; if it fails again, tell the user."
+        return "Studytomy Portal failed to do this. Try once more; if it fails again, tell the user."
     return None
 
 

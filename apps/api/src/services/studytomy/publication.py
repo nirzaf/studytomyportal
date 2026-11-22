@@ -551,7 +551,7 @@ async def is_studytomy_governed_playground(
 ) -> bool:
     """True when this Playground belongs to a Studytomy school/minors cohort.
 
-    Plain LearnHouse Community organizations without Studytomy learner profiles,
+    Plain Studytomy Portal Community organizations without Studytomy learner profiles,
     approved Studytomy policies, or managed-course links keep upstream behavior.
     """
     from src.db.studytomy.family import StudyLearnerProfile

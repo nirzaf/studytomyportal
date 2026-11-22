@@ -37,9 +37,9 @@ function accessLine(op) {
 
 export function renderIndexMarkdown({ operations, version }) {
   const lines = []
-  lines.push('# LearnHouse API Reference', '')
+  lines.push('# Studytomy Portal API Reference', '')
   lines.push(
-    `> REST API for LearnHouse, the open-source learning platform. ${operations.length} documented endpoints${version ? ` (API ${version})` : ''}. JSON over HTTP; every path starts with /api/v1.`,
+    `> REST API for Studytomy Portal. ${operations.length} documented endpoints${version ? ` (API ${version})` : ''}. JSON over HTTP; every path starts with /api/v1.`,
     ''
   )
   lines.push('## Base URLs', '')
@@ -114,7 +114,7 @@ function paramTable(title, rows) {
 
 export function renderGroupMarkdown(group) {
   const lines = []
-  lines.push(`# ${group.title} · LearnHouse API`, '')
+  lines.push(`# ${group.title} · Studytomy Portal API`, '')
   lines.push(`> ${group.description}`, '')
   lines.push(`Access: ${ACCESS_SENTENCE[group.access]} HTML docs: ${SITE_URL}/reference/${group.slug}`, '')
   for (const op of group.operations) {

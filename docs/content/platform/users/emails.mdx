@@ -1,19 +1,19 @@
 ---
-description: "See every email LearnHouse sends for accounts, invitations, drip chapters, unread messages and live sessions, how it is branded and how to unsubscribe."
+description: "See every email Studytomy Portal sends for accounts, invitations, drip chapters, unread messages and live sessions, how it is branded and how to unsubscribe."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Emails
 
-LearnHouse sends email for account and membership events, and for a few learning events that members can control.
+Studytomy Portal sends email for account and membership events, and for a few learning events that members can control.
 
 ## Account and membership emails
 
 | Email | Sent when |
 | --- | --- |
 | Account created | Someone signs up |
-| Email verification | A new account must confirm its address (LearnHouse Cloud), or the user asks for a new link |
+| Email verification | A new account must confirm its address when email verification is enabled, or the user asks for a new link |
 | Magic login link | A member asks to sign in with a [magic link](/platform/users/authentication) |
 | Password reset | A member uses **Forgot password?** |
 | Invitation | An admin [invites someone by email](/platform/users/members-and-invites#inviting-people-by-email) |
@@ -25,10 +25,10 @@ LearnHouse sends email for account and membership events, and for a few learning
 
 These emails can't be turned off. They carry your organization's branding:
 
-- **Sender name**: the **Email Sender Name** from [organization settings](/platform/organizations/settings#general). The sending address stays the platform's own, so SPF and DKIM keep working. If you leave it empty, emails come from "LearnHouse".
+- **Sender name**: the **Email Sender Name** from [organization settings](/platform/organizations/settings#general). The sending address stays the platform's own, so SPF and DKIM keep working. If you leave it empty, emails come from "Studytomy Portal".
 - **Language**: your organization's **Default Language**.
 - **Logo and color**: your square logo (or your wide logo if there is no square one) and your primary color from **Branding**.
-- **"Powered by LearnHouse"** line: follows your watermark setting on LearnHouse Cloud and the Enterprise Edition. Open source instances always show it.
+- **"Powered by Studytomy Portal"** line: follows your watermark setting in deployments that enable plan entitlements and the Enterprise Edition. Open source instances always show it.
 
 ## Learning and activity emails
 
@@ -40,13 +40,13 @@ These carry the same branding, and each one can be turned off:
 | Unread messages | A member has [messages](/platform/messages) they haven't read for a while (1 hour by default). One summary email covers every conversation. | Each member chooses in their Messages settings. See [Messages settings](/platform/messages#settings). |
 | Live session reminders | The day before and 15 minutes before a [live session](/enterprise/live-sessions), and when it starts, for people who RSVP'd and the host. | Per session with **Reminders**. Admins pick which reminders are sent under **Settings** → **Reminders** in live sessions. |
 
-## Tips for organization admins (LearnHouse Cloud)
+## Administrator tips
 
-On LearnHouse Cloud, organization admins also receive occasional tips about their organization: for example a nudge to publish a course still in draft, a note that a published course has no learners yet, a heads-up when the organization nears a plan limit, or a message to celebrate the first enrollment or completion. Learners never receive these.
+Some deployments can send organization administrators occasional tips, such as a nudge to publish a course still in draft, a note that a published course has no learners yet, or a message to celebrate the first enrollment or completion. Learners never receive these.
 
 - They are sent once a day, at most 2 per week per admin, and at least 48 hours apart.
 - Most are skipped when the organization has been active in the last 3 days.
-- Self-hosted instances don't send them.
+- This feature depends on deployment configuration and is not enabled by this local-development repository by default.
 
 ### Unsubscribing
 

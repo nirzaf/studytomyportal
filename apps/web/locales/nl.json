@@ -236,7 +236,7 @@
     "billing": "Facturering",
     "create_organization": "Organisatie aanmaken",
     "start_your_own_organization": "Start je eigen organisatie",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Kan deze organisatie niet verwijderen. Probeer het opnieuw.",
     "org_actions": "Organisatieacties",
     "manage_upgrade": "Beheren / Upgraden",
@@ -3068,7 +3068,7 @@
           "description": "Uw persoonlijke instellingen, wachtwoorden en e-mail configureren"
         }
       },
-      "learnhouse_university": "Studytomy Universiteit",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Welkom terug",
       "plan": "abonnement",
       "create_course": "Cursus aanmaken",
@@ -7184,7 +7184,7 @@
           "keywords": "leerpaden, paden, paths, leertrajecten, programma's, curriculum, volgorde, certificaat"
         },
         "live_sessions": {
-          "keywords": "live sessies lessen webinar vergadering video aanwezigheid opnames polls learnhouse meet zoom meet teams",
+          "keywords": "live sessies lessen webinar vergadering video aanwezigheid opnames polls meet zoom meet teams",
           "description": "Plan live sessies, volg de aanwezigheid en beheer opnames"
         }
       }
@@ -10715,8 +10715,8 @@
       "inactive_desc": "De EE-licentiecontrole is mislukt (<code>{{reason}}</code>). Elk <code>/ee/*</code>-endpoint geeft 503 terug, dus deze pagina kan haar gegevens niet laden.",
       "what_to_check": "Wat je kunt controleren",
       "check_diagnostics": "Open <code>{{path}}</code>. Dit antwoordt ook als de licentie inactief is, en het veld <code>hint</code> noemt de oplossing.",
-      "check_saas": "Voor SaaS-implementaties: controleer of <code>LEARNHOUSE_SAAS=true</code> in de API-omgeving is ingesteld. SaaS slaat de licentiecontrole over.",
-      "check_self_hosted": "Voor self-hosted EE: controleer of <code>LEARNHOUSE_LICENSE_KEY</code> is ingesteld en de licentieserver (of respijtperiode) bereikbaar is.",
+      "check_saas": "Voor SaaS-implementaties: controleer of <code>SaaS mode</code> in de API-omgeving is ingesteld. SaaS slaat de licentiecontrole over.",
+      "check_self_hosted": "Voor self-hosted EE: controleer of <code>license key</code> is ingesteld en de licentieserver (of respijtperiode) bereikbaar is.",
       "check_logs": "Als je shelltoegang hebt, bevatten de API-logboeken dezelfde reden met alle details: <code>[EE] license inactive …</code>",
       "failed_to_load": "Laden mislukt"
     },

@@ -1,5 +1,5 @@
 """
-Map LMS questions onto LearnHouse's native question formats.
+Map LMS questions onto Studytomy Portal's native question formats.
 
 Two targets:
 
@@ -13,7 +13,7 @@ Two targets:
 * The editor's ``blockQuiz`` (self-check inside a page). It only knows
   multiple choice, so other types fall back to flipcards that show the answer.
 
-Task prompts and quiz texts are plain strings in LearnHouse, so rich question
+Task prompts and quiz texts are plain strings in Studytomy Portal, so rich question
 text is reduced to readable text; a single image in a question is attached as
 the task's reference file.
 """
@@ -410,7 +410,7 @@ def build_tasks(questions: list[Question], ids: IdFactory) -> TaskBuild:
     for (source_type, reason), labels in unsupported.items():
         shown = "; ".join(labels[:3]) + ("; …" if len(labels) > 3 else "")
         title = labels[0] if len(labels) == 1 else f"{len(labels)} questions: {shown}"
-        skip(title, f"{source_type} question", reason or "no LearnHouse equivalent")
+        skip(title, f"{source_type} question", reason or "no Studytomy Portal equivalent")
     close_group()
     if pending_intro and build.tasks:
         last = build.tasks[-1]

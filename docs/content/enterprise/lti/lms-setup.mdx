@@ -1,13 +1,13 @@
 ---
 title: LMS setup guides
-description: Connect LearnHouse to Moodle, Canvas, Open edX, Sakai, ILIAS, Chamilo or OpenOLAT over LTI 1.3 with step-by-step setup for each LMS.
+description: Connect Studytomy Portal to Moodle, Canvas, Open edX, Sakai, ILIAS, Chamilo or OpenOLAT over LTI 1.3 with step-by-step setup for each LMS.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # LMS setup guides
 
-Each guide starts in LearnHouse under **Developers → LTI**. Menu names are from the LMS versions we test against.
+Each guide starts in Studytomy Portal under **Developers → LTI**. Menu names are from the LMS versions we test against.
 
 | LMS | Tested version | Setup | Deep linking | Grades | Class list |
 |---|---|---|---|---|---|
@@ -21,57 +21,57 @@ Each guide starts in LearnHouse under **Developers → LTI**. Menu names are fro
 
 ## Content and assignments per LMS
 
-Every LMS above can open all LearnHouse content types and receives assignment grades. What differs is how many items one selection can add and what the LMS does with the gradebook column.
+Every LMS above can open all Studytomy Portal content types and receives assignment grades. What differs is how many items one selection can add and what the LMS does with the gradebook column.
 
-| LMS | Items per selection | Assignment while waiting for grading | Due date from LearnHouse |
+| LMS | Items per selection | Assignment while waiting for grading | Due date from Studytomy Portal |
 |---|---|---|---|
-| Moodle | Several (one activity each) | Comment "Submitted — waiting for grading in LearnHouse" | No |
-| Canvas | Several from **Modules → Add item → External Tool**; one from an assignment's submission type | "Needs grading" | Yes, and later LearnHouse changes follow |
+| Moodle | Several (one activity each) | Comment "Submitted — waiting for grading in Studytomy Portal" | No |
+| Canvas | Several from **Modules → Add item → External Tool**; one from an assignment's submission type | "Needs grading" | Yes, and later Studytomy Portal changes follow |
 | Open edX | One per LTI block | Pending | No |
-| Sakai | One per **Add Learning App** | Comment "Submitted — waiting for grading in LearnHouse" | No |
+| Sakai | One per **Add Learning App** | Comment "Submitted — waiting for grading in Studytomy Portal" | No |
 | ILIAS | One per LTI Consumer object | No score yet | No |
 | Chamilo | Several (one tool each) | No score yet | No |
 | OpenOLAT | Several in one LTI page element | No score yet | No |
 
 ## Moodle
 
-1. In LearnHouse, enter a name and click **Connect with a registration URL**.
+1. In Studytomy Portal, enter a name and click **Connect with a registration URL**.
 2. In Moodle, go to **Site administration → Plugins → Activity modules → External tool → Manage tools**, paste the URL in **Tool URL** and click **Add LTI Advantage**.
 3. Moodle shows the new tool as *Pending*. Click **Activate**.
 4. Optional: edit the tool and set **Default launch container** to *New window*.
-5. Teachers add an **External tool** activity, pick LearnHouse and click **Select content**.
+5. Teachers add an **External tool** activity, pick Studytomy Portal and click **Select content**.
 
 <Callout type="info">
-Moodle blocks outgoing requests to private network addresses by default. If LearnHouse runs on a private network, remove its address from **Site administration → General → Security → HTTP security → cURL blocked hosts list**.
+Moodle blocks outgoing requests to private network addresses by default. If Studytomy Portal runs on a private network, remove its address from **Site administration → General → Security → HTTP security → cURL blocked hosts list**.
 </Callout>
 
 ## Canvas
 
-1. In LearnHouse, click **Connect with a registration URL**.
+1. In Studytomy Portal, click **Connect with a registration URL**.
 2. In Canvas, go to **Admin → Developer Keys → + Developer Key → LTI Registration**, paste the URL and continue.
 3. Review the permissions and placements (*Link Selection* and *Assignment Selection*), then click **Enable & Close**.
 4. Install the tool in a course or account: **Settings → Apps → + App → By Client ID**.
-5. Teachers create an assignment with **Submission type: External Tool → Find → LearnHouse** to get a graded assignment. To add several items at once, use **Modules → + → External Tool → LearnHouse** instead: Canvas creates a graded assignment for each gradable item, with the LearnHouse due date. Due date and title changes made in LearnHouse later are copied to the Canvas assignment either way.
+5. Teachers create an assignment with **Submission type: External Tool → Find → Studytomy Portal** to get a graded assignment. To add several items at once, use **Modules → + → External Tool → Studytomy Portal** instead: Canvas creates a graded assignment for each gradable item, with the Studytomy Portal due date. Due date and title changes made in Studytomy Portal later are copied to the Canvas assignment either way.
 
 <Callout type="info">
-Every Canvas instance uses the issuer `https://canvas.instructure.com`. The client ID LearnHouse needs is the developer key's ID as shown in Canvas (the long form, e.g. `10000000000003`).
+Every Canvas instance uses the issuer `https://canvas.instructure.com`. The client ID Studytomy Portal needs is the developer key's ID as shown in Canvas (the long form, e.g. `10000000000003`).
 </Callout>
 
 ## Open edX
 
-Open edX creates a separate LTI registration for each LTI block, so add one platform in LearnHouse per block.
+Open edX creates a separate LTI registration for each LTI block, so add one platform in Studytomy Portal per block.
 
-1. In LearnHouse, click **Add manually** and keep the page open.
+1. In Studytomy Portal, click **Add manually** and keep the page open.
 2. In Studio, add `"lti_consumer"` to **Settings → Advanced Settings → Advanced Module List**.
 3. Add **Advanced → LTI Consumer** to a unit and edit it:
    - LTI version: **LTI 1.3**
-   - Tool launch URL, Tool initiate login URL, Registered redirect URIs: from LearnHouse
-   - Tool public key mode: **Keyset URL**, then the LearnHouse public keyset URL
-   - Deep linking: enabled, with the LearnHouse deep linking URL
+   - Tool launch URL, Tool initiate login URL, Registered redirect URIs: from Studytomy Portal
+   - Tool public key mode: **Keyset URL**, then the Studytomy Portal public keyset URL
+   - Deep linking: enabled, with the Studytomy Portal deep linking URL
    - Assignment and Grades Service: **Allow tools to manage and submit grades (programmatic)**
    - Names and Role Provisioning: enabled; Scored: yes
-4. Save. The block now shows **Client ID, Deployment ID, Keyset URL, Access Token URL and Login URL**. Copy them into LearnHouse. The issuer is your LMS root URL.
-5. Publish the unit, then click **Deep Linking Launch – Configure tool** in Studio to pick LearnHouse content.
+4. Save. The block now shows **Client ID, Deployment ID, Keyset URL, Access Token URL and Login URL**. Copy them into Studytomy Portal. The issuer is your LMS root URL.
+5. Publish the unit, then click **Deep Linking Launch – Configure tool** in Studio to pick Studytomy Portal content.
 
 <Callout type="info">
 To send names and emails, enable the course in Django admin under **LTI Consumer → Course allow PII sharing in LTI flags** and tick the *request username / full name / email* options on the block.
@@ -79,7 +79,7 @@ To send names and emails, enable the course in Django admin under **LTI Consumer
 
 ## Sakai
 
-1. In LearnHouse, click **Connect with a registration URL**.
+1. In Studytomy Portal, click **Connect with a registration URL**.
 2. In Sakai, go to **Administration Workspace → External Tools → Install LTI Tool**, enter a title and continue.
 3. Click **Use LTI Dynamic Registration**, paste the URL and click **Begin Configuration**.
 4. Sakai fills in the form. Review it: tick LTI 1.3, the Resource Link and Deep Link options, the placements you want (Lessons, assignments, site navigation), sending names and emails, returning grades, creating grade columns and providing the roster. Then **Save**.
@@ -87,28 +87,28 @@ To send names and emails, enable the course in Django admin under **LTI Consumer
 
 ## ILIAS
 
-1. In LearnHouse, click **Add manually**.
+1. In Studytomy Portal, click **Add manually**.
 2. In ILIAS, go to **Administration → LTI → ILIAS as LTI Consumer → Add Global Provider for all Users**:
    - Availability: *For Creating Objects*; LTI version **1.3**
-   - Launch URL, Initiate Login URL, Redirection URI: from LearnHouse
-   - Public key type: **URL (Json Web Token)**, then the LearnHouse public keyset URL
-   - **Support for Deep Linking** with the LearnHouse deep linking URL as *Content URL*
+   - Launch URL, Initiate Login URL, Redirection URI: from Studytomy Portal
+   - Public key type: **URL (Json Web Token)**, then the Studytomy Portal public keyset URL
+   - **Support for Deep Linking** with the Studytomy Portal deep linking URL as *Content URL*
    - **Assignment and Grade Services** and **Provider supports Outcome Service**
    - User identification: **E-Mail Address**, user name: **Entire name**
-3. Save and open the provider again. Copy the **Platform ID, Client ID, Deployment ID, Public keyset URL, Access token URL and Authentication request URL** into LearnHouse.
-4. Teachers add **LTI Consumer → LearnHouse** to a course and select content.
+3. Save and open the provider again. Copy the **Platform ID, Client ID, Deployment ID, Public keyset URL, Access token URL and Authentication request URL** into Studytomy Portal.
+4. Teachers add **LTI Consumer → Studytomy Portal** to a course and select content.
 
 ILIAS 11 also accepts a registration URL when a user creates "own settings" for a tool with dynamic registration.
 
 ## Chamilo
 
-1. In LearnHouse, click **Add manually**.
+1. In Studytomy Portal, click **Add manually**.
 2. In Chamilo, enable the **IMS/LTI client** plugin under **Administration → Plugins**, then open **Administration → IMS/LTI → Add external tool**:
-   - LTI version **1.3**, Launch URL, Login URL and Redirect URL from LearnHouse
-   - Public key type: **RSA key**, and paste the LearnHouse public key (Chamilo 1.11 ignores the keyset URL when receiving deep links)
+   - LTI version **1.3**, Launch URL, Login URL and Redirect URL from Studytomy Portal
+   - Public key type: **RSA key**, and paste the Studytomy Portal public key (Chamilo 1.11 ignores the keyset URL when receiving deep links)
    - Deep linking: enabled; Assignment and grades service: *full*; Names and Role Provisioning: enabled; share name and email
-3. Open the tool's settings to copy **Platform ID, Client ID, Deployment ID, OIDC Auth URL, OAuth2 Access Token URL and Keyset URL** into LearnHouse.
-4. Teachers open **IMS/LTI** in their course and click **Configure** on LearnHouse to pick content.
+3. Open the tool's settings to copy **Platform ID, Client ID, Deployment ID, OIDC Auth URL, OAuth2 Access Token URL and Keyset URL** into Studytomy Portal.
+4. Teachers open **IMS/LTI** in their course and click **Configure** on Studytomy Portal to pick content.
 
 <Callout type="warning">
 Chamilo 1.11 only shares the class list on launches by teachers, and needs the course gradebook to exist before grades can be stored. Open the course's **Assessments** tool once before learners start.
@@ -116,7 +116,7 @@ Chamilo 1.11 only shares the class list on launches by teachers, and needs the c
 
 ## OpenOLAT
 
-1. In LearnHouse, click **Add manually**.
-2. In OpenOLAT, go to **Administration → External tools → LTI**, enable **Module LTI 1.3**, then **External tools → Create a new tool**: tool URL, initiate login URL and redirection URI from LearnHouse, public key type **URL** with the LearnHouse keyset URL.
-3. Edit the tool, turn on **Activate Deep-Linking**, and copy **Client ID, Deployment ID, Platform ISS, Login URI, Token URI and JWK Set URI** into LearnHouse.
-4. In a course, add an **LTI page** element, choose the LearnHouse tool, click **Select content**, enable **Transfer score**, and publish the course.
+1. In Studytomy Portal, click **Add manually**.
+2. In OpenOLAT, go to **Administration → External tools → LTI**, enable **Module LTI 1.3**, then **External tools → Create a new tool**: tool URL, initiate login URL and redirection URI from Studytomy Portal, public key type **URL** with the Studytomy Portal keyset URL.
+3. Edit the tool, turn on **Activate Deep-Linking**, and copy **Client ID, Deployment ID, Platform ISS, Login URI, Token URI and JWK Set URI** into Studytomy Portal.
+4. In a course, add an **LTI page** element, choose the Studytomy Portal tool, click **Select content**, enable **Transfer score**, and publish the course.

@@ -24,7 +24,7 @@ import { QUIZ_RESPONSE_SINGLE, resolveQuizResponseType } from '@/lib/quiz/modes'
 // the teacher preview + edit them, then saves each one to the current
 // assignment via the existing `createAssignmentTask` client.
 //
-// Everything mirrors the surrounding LearnHouse design language (neutral palette, nice-shadow, rounded-lg,
+// Everything mirrors the surrounding Studytomy Portal design language (neutral palette, nice-shadow, rounded-lg,
 // lucide icons, no AI-gradient styling).
 // ---------------------------------------------------------------------------
 

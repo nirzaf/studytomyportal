@@ -1077,7 +1077,7 @@ describe('dev command guards', () => {
     vi.restoreAllMocks()
   })
 
-  it('exits when not inside a LearnHouse project', async () => {
+  it('exits when not inside a Studytomy Portal project', async () => {
     process.chdir(tmp) // a bare temp dir, no apps/api+apps/web up the tree
     await expect(devCommand({})).rejects.toBeInstanceOf(ProcessExit)
   })

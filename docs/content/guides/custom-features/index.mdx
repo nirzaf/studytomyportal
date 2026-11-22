@@ -1,13 +1,13 @@
 ---
 title: "Custom Features with the API"
-description: "Drive LearnHouse from your own scripts with an API token: create courses and chapters, search content and find every endpoint in the API Reference."
+description: "Drive Studytomy Portal from your own scripts with an API token: create courses and chapters, search content and find every endpoint in the API Reference."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Custom Features with the API
 
-The [build guide](/guides/build-learning-platform) showed how to *read* the API as a frontend. This guide is about going further: driving LearnHouse **programmatically**. You'll create and manage content from your own scripts and services. To react to what happens inside LearnHouse, pair it with [webhooks](/platform/automations/webhooks).
+The [build guide](/guides/build-learning-platform) showed how to *read* the API as a frontend. This guide is about going further: driving Studytomy Portal **programmatically**. You'll create and manage content from your own scripts and services. To react to what happens inside Studytomy Portal, pair it with [webhooks](/platform/automations/webhooks).
 
 ## Authenticate with an API token
 
@@ -18,7 +18,7 @@ curl "http://localhost:1338/api/v1/courses/org_slug/{org_slug}/page/1/limit/10" 
   -H "Authorization: Bearer lh_your_api_token_here"
 ```
 
-[Authentication](/reference/guides/authentication) covers the rest: token rights, how long tokens last, and which endpoint groups are session-only and refuse tokens with `403`. On LearnHouse Cloud, API tokens need the Pro plan or higher.
+[Authentication](/reference/guides/authentication) covers the rest: token rights, how long tokens last, and which endpoint groups are session-only and refuse tokens with `403`. In deployments that enable plan entitlements, API tokens need the Pro plan or higher.
 
 ## Request conventions
 

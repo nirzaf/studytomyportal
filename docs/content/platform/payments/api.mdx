@@ -1,10 +1,10 @@
 ---
-description: "Sell LearnHouse content through Gumroad, Paddle, Shopify or invoices, then grant, revoke or check buyer access from Zapier, Make or your backend."
+description: "Sell Studytomy Portal content through Gumroad, Paddle, Shopify or invoices, then grant, revoke or check buyer access from Zapier, Make or your backend."
 ---
 
 # Sell with Any Tool
 
-Already selling on Gumroad, Paddle, Lemon Squeezy, Shopify, or by invoice? Keep doing that. LearnHouse only needs to know who paid, and you can tell it from Zapier, Make, n8n or your own backend.
+Already selling on Gumroad, Paddle, Lemon Squeezy, Shopify, or by invoice? Keep doing that. Studytomy Portal only needs to know who paid, and you can tell it from Zapier, Make, n8n or your own backend.
 
 ## Set up
 
@@ -21,7 +21,7 @@ Find a product's `offer_uuid` in its link (**Products** → **Link** on the prod
 ## Grant access
 
 ```bash
-curl -X POST https://your-learnhouse/api/v1/payments/{org_id}/access \
+curl -X POST https://your-domain.example/api/v1/payments/{org_id}/access \
   -H "Authorization: Bearer $LEARNHOUSE_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

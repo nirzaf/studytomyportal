@@ -8,11 +8,11 @@ import { Screenshot, Gallery } from '../../../components/developers/Developers'
 
 # Customization
 
-`<LearnHouseActivity>` starts out looking exactly like LearnHouse. Everything on this page changes that, from a colour
+`<LearnHouseActivity>` starts out looking exactly like Studytomy Portal. Everything on this page changes that, from a colour
 to replacing a block with your own component.
 
 <Gallery>
-  <Screenshot src="/img/developers/react-quiz-fr.png" alt="Default look" caption="Default: LearnHouse's look." />
+  <Screenshot src="/img/developers/react-quiz-fr.png" alt="Default look" caption="Default: Studytomy Portal's look." />
   <Screenshot src="/img/developers/react-themed.png" alt="Dark theme with a wrapped callout" caption={<>theme={'{{ mode: "dark" }}'} and a <code>callout</code> override that wraps the default block.</>} />
 </Gallery>
 
@@ -40,7 +40,7 @@ to replacing a block with your own component.
 />
 ```
 
-Every value is optional; unset ones keep LearnHouse's look. A theme on `LearnHouseProvider` applies to every activity
+Every value is optional; unset ones keep Studytomy Portal's look. A theme on `LearnHouseProvider` applies to every activity
 below it, and a theme on the component is merged on top.
 
 The theme is applied as CSS custom properties (`--lh-accent`, `--lh-font`, …) on the root element, so you can also set
@@ -55,7 +55,7 @@ them from your own stylesheet:
 
 <Callout type="info">
   In dark mode the text and background follow your theme, while blocks such as quizzes and callouts keep the light
-  cards they have in LearnHouse.
+  cards they have in Studytomy Portal.
 </Callout>
 
 ## Replace or wrap a block
@@ -143,7 +143,7 @@ markup entirely.
   header={(activity) => <Breadcrumbs current={activity.name} />}
   footer={<NextLessonButton />}
   showPoweredBy
-  siteUrl="https://learn.your-school.com"   // where "Made with LearnHouse" links to
+  siteUrl="https://learn.your-school.com"   // where "Made with Studytomy Portal" links to
 />
 ```
 
@@ -162,7 +162,7 @@ markup entirely.
 ```
 
 `fallback` shows while the activity loads and while a block's code downloads. `errorFallback` covers network errors,
-missing activities and activity types that can't render outside LearnHouse.
+missing activities and activity types that can't render outside Studytomy Portal.
 
 ## Links
 

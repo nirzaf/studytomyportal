@@ -17,7 +17,7 @@ Pass one of `activityId`, `activityName` + `courseId`, `activity` or `content`.
 | `activityName` | `string` | Find the activity by name inside `courseId` (case-insensitive) |
 | `courseId` | `string` | Course uuid (`course_…`). Loads in parallel with `activityId`; lets media blocks find their files |
 | `activity` | `LearnHouseActivityData` | An activity object you already have (from the API or `@learnhouse/sdk`) |
-| `content` | `ActivityDocument \| string` | A document (TipTap JSON, as LearnHouse stores it), as an object or a JSON string |
+| `content` | `ActivityDocument \| string` | A document (TipTap JSON, as Studytomy Portal stores it), as an object or a JSON string |
 
 ### Instance
 
@@ -26,7 +26,7 @@ Pass one of `activityId`, `activityName` + `courseId`, `activity` or `content`.
 | `baseUrl` | `string` | The instance's API address. Not needed inside `LearnHouseProvider` |
 | `token` | `string` | A user access token. Never an `lh_` API token |
 | `orgId` | `string` | Org uuid, for media blocks when rendering `content` without fetching |
-| `siteUrl` | `string` | The LearnHouse site's address, for the "Made with LearnHouse" link |
+| `siteUrl` | `string` | The Studytomy Portal site's address, for the "Made with Studytomy Portal" link |
 
 ### Look
 
@@ -63,7 +63,7 @@ Pass one of `activityId`, `activityName` + `courseId`, `activity` or `content`.
 | Prop | Type | Default | |
 | --- | --- | --- | --- |
 | `locale` | `string` | `'en'` | One of [22 languages](/developers/react/localization#languages) |
-| `messages` | `object` | | String overrides, keyed like LearnHouse's locale files |
+| `messages` | `object` | | String overrides, keyed like Studytomy Portal's locale files |
 | `dir` | `'ltr' \| 'rtl' \| 'auto'` | `'auto'` | `auto` follows the locale |
 
 ### States & callbacks
@@ -86,7 +86,7 @@ Pass one of `activityId`, `activityName` + `courseId`, `activity` or `content`.
 | `token` | `string` | A user access token |
 | `getToken` | `() => string \| null \| Promise<string \| null>` | Called for each request; use it for tokens that refresh |
 | `user` | `object` | The signed-in user, for blocks that personalise |
-| `siteUrl` | `string` | The LearnHouse site's address |
+| `siteUrl` | `string` | The Studytomy Portal site's address |
 | `theme`, `locale`, `messages`, `linkTarget` | | Defaults for every activity below |
 | `onEvent` | `(event) => void` | Events from every activity below |
 
@@ -99,7 +99,7 @@ import {
   useLearnHouseClient, // the provider's @learnhouse/sdk client
   SUPPORTED_LOCALES,
   themeToStyle,        // theme object → CSS variables, for your own wrappers
-  VERSION,             // the LearnHouse release this build matches
+  VERSION,             // the Studytomy Portal release this build matches
 } from '@learnhouse/react'
 
 import type {
@@ -116,6 +116,6 @@ import type {
 
 ## Limits
 
-- One LearnHouse instance per page: media URLs follow the most recently mounted provider's `baseUrl`.
+- One Studytomy Portal instance per page: media URLs follow the most recently mounted provider's `baseUrl`.
 - Assignments, SCORM packages and other activity types that need the course player aren't rendered; `errorFallback`
   is shown instead. Pages, videos, PDFs, markdown and embedded-URL activities are.

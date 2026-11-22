@@ -63,7 +63,7 @@ An activity's `content` is the document [`<LearnHouseActivity>`](/developers/rea
 ### Load an activity to render
 
 `resolve` loads an activity the same way `<LearnHouseActivity>` does: by id, or by name inside a course. Ids work with
-or without their prefix, so you can paste them from a LearnHouse URL (`/course/<id>/activity/<id>`). Names match
+or without their prefix, so you can paste them from a Studytomy Portal URL (`/course/<id>/activity/<id>`). Names match
 without regard to case, spacing or punctuation.
 
 ```ts
@@ -77,7 +77,7 @@ course meta, pass it as `courseMeta` and the name lookup skips its own request.
 ### Fetch on the server, render in the browser
 
 Load the activity on your server with an API token, then pass it to the component as `activity`. The browser never
-calls the LearnHouse API, so you need no CORS setup, and the token stays on your server.
+calls the Studytomy Portal API, so you need no CORS setup, and the token stays on your server.
 
 ```tsx title="app/lessons/[name]/page.tsx"
 import { createClient } from '@learnhouse/sdk'
@@ -149,7 +149,7 @@ See [Authentication](/developers/sdk/authentication).
 ## Media URLs
 
 Course thumbnails, block images, videos and files live under your instance's `content/` path. `lh.media` builds those
-URLs exactly the way the LearnHouse web app does (it is the same code):
+URLs exactly the way the Studytomy Portal web app does (it is the same code):
 
 ```ts
 const org = await lh.orgs.get('your-school')

@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────
-# LearnHouse Install Script (macOS & Linux)
+# Studytomy Portal Install Script (macOS & Linux)
 # Installs Docker and Node.js if missing, then runs the CLI.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/learnhouse/learnhouse/main/apps/cli/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nirzaf/studytomyportal/main/apps/cli/install.sh | bash
 #
 # Everything runs from main(), which is only called on the last line, so a
 # download cut short by `curl | bash` never executes a partial script.
@@ -158,7 +158,7 @@ ensure_docker() {
       brew install --cask docker
       echo ""
       ok "Docker Desktop installed"
-      warn "Docker Desktop must be started once before LearnHouse can use it."
+      warn "Docker Desktop must be started once before Studytomy Portal can use it."
       echo -e "${DIM}  1. Open Docker Desktop from Applications or run: open -a Docker${RESET}"
       echo -e "${DIM}  2. Wait until it reports that Docker is running${RESET}"
       echo -e "${DIM}  3. Re-run this installer${RESET}"
@@ -322,7 +322,7 @@ install_node_linux() {
       maybe_sudo apk add --no-cache nodejs npm || fail "Could not install Node.js via apk."
       hash -r
       if [ "$(node_major)" -lt "$NODE_MIN_MAJOR" ]; then
-        fail "Alpine's nodejs package is $(node --version 2>/dev/null || echo 'unknown'); LearnHouse needs Node.js >= ${NODE_MIN_MAJOR}. Upgrade to Alpine 3.21 or newer."
+        fail "Alpine's nodejs package is $(node --version 2>/dev/null || echo 'unknown'); Studytomy Portal needs Node.js >= ${NODE_MIN_MAJOR}. Upgrade to Alpine 3.21 or newer."
       fi
       return
       ;;
@@ -460,7 +460,7 @@ launch() {
     exit 0
   fi
 
-  echo -e "${CYAN}Launching LearnHouse setup...${RESET}"
+  echo -e "${CYAN}Launching Studytomy Portal setup...${RESET}"
   echo ""
 
   # If we just added the user to the docker group, use sg to pick up the new
@@ -479,7 +479,7 @@ main() {
   detect_platform
 
   echo ""
-  echo -e "${BOLD}LearnHouse Installer${RESET}"
+  echo -e "${BOLD}Studytomy Portal Installer${RESET}"
   echo -e "${DIM}Platform: $PLATFORM ($ARCH)${RESET}"
   echo ""
 

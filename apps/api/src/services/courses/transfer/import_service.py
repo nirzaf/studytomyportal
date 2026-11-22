@@ -283,7 +283,7 @@ def lms_principal(user) -> str:
 def summarize_extracted_package(extract_dir: str, temp_id: str) -> ImportAnalysisResponse:
     """Read the manifest of an extracted package and list its courses.
 
-    Raises HTTPException(400) when the folder is not a LearnHouse package.
+    Raises HTTPException(400) when the folder is not a Studytomy Portal package.
     Shared by the ZIP upload and the LMS conversion, which writes its package
     straight into the temp import folder.
     """
@@ -302,7 +302,7 @@ def summarize_extracted_package(extract_dir: str, temp_id: str) -> ImportAnalysi
     if manifest.get("format") != "learnhouse-course-export":
         raise HTTPException(
             status_code=400,
-            detail="Invalid package: Not a LearnHouse course export"
+            detail="Invalid package: Not a Studytomy Portal course export"
         )
 
     version = manifest.get("version", "1.0.0")
@@ -371,7 +371,7 @@ async def analyze_import_package(
     db_session: AsyncSession,
 ) -> ImportAnalysisResponse:
     """
-    Analyze a LearnHouse course export package.
+    Analyze a Studytomy Portal course export package.
     Returns list of courses and stores package temporarily.
     """
     # Verify organization exists

@@ -9,6 +9,6 @@ export async function restoreCommand(archivePath: string, options: { yes?: boole
     process.exit(1)
   }
 
-  p.intro(pc.cyan('LearnHouse Restore'))
+  p.intro(pc.cyan('Studytomy Portal Restore'))
   await exitOnFailure(() => restoreBackup(archivePath, options))
 }

@@ -1,55 +1,25 @@
 ---
-title: Versions & Releases
-description: How @learnhouse/sdk, @learnhouse/react and @learnhouse/vue are versioned with LearnHouse releases, and which version to install for your instance.
+title: Package Names and Compatibility
+description: Understand the existing SDK package identifiers and their compatibility constraints.
 ---
 
-import { Callout } from '@/components/mdx'
-import { ReleaseLockstep, BuildPipeline } from '../../components/developers/Developers'
+# Package Names and Compatibility
 
-# Versions & Releases
+The repository contains React, Vue, and TypeScript SDK packages whose published identifiers use the `@learnhouse/*` scope. The CLI package and executable are also named `learnhouse`. These names are retained for compatibility with existing consumers; they are not user-facing Studytomy branding.
 
-LearnHouse, `@learnhouse/sdk`, `@learnhouse/react` and `@learnhouse/vue` share one version number. Every LearnHouse
-release publishes the app and the packages together, built from the same source.
+This checkout does not establish that a Studytomy-branded package or application image has been published. Before integrating a package, check its manifest, registry availability, and compatibility with the API version you operate.
 
-<ReleaseLockstep />
+## Existing package identifiers
 
-## Which version to install
-
-Install the version that matches the instance you talk to.
-
-| Instance | Install |
-| --- | --- |
-| LearnHouse Cloud | The latest: `npm install @learnhouse/sdk @learnhouse/react`. Cloud is updated continuously, so it can have endpoints a little before the next release ships them in the SDK |
-| Self-hosted | The version your instance runs, e.g. `npm install @learnhouse/sdk@1.4.3 @learnhouse/react@1.4.3` |
-
-Your instance's version is the tag of the `ghcr.io/learnhouse/app` image it runs (see `docker-compose.yml` in your
-installation). If you deploy `latest`, update the packages when you update the instance.
-
-Each package exports the version it was built from:
-
-```ts
-import { SDK_VERSION } from '@learnhouse/sdk'
-import { VERSION } from '@learnhouse/react'
-import { VERSION as VUE_VERSION } from '@learnhouse/vue'
+```bash
+npm install @learnhouse/sdk @learnhouse/react
+npm install @learnhouse/vue
 ```
 
-## What can differ between versions
+For self-hosted use, keep the client packages aligned with the API schema and activity types available in that installation. The packages are separate from the Portal runtime.
 
-- **Types.** The SDK's types describe the API of its release. An older instance may not have endpoints added later;
-  calling one returns a 404.
-- **Blocks.** A newer `@learnhouse/react` renders every block an older instance can produce. An older package shows the
-  text of blocks it doesn't know yet, instead of failing.
+## Compatibility notes
 
-## How a release is built
-
-<BuildPipeline />
-
-1. A LearnHouse release is tagged (for example `1.4.3`).
-2. The SDK's types are regenerated from that tag's API, and the React package is compiled from that tag's web app.
-3. All are tested, and their versions are checked against the tag. A mismatch stops the release.
-4. The SDK is published first, then `@learnhouse/react`, which depends on that exact SDK version, then
-   `@learnhouse/vue`, which depends on that exact `@learnhouse/react`.
-
-<Callout type="info">
-  Packages are published with npm provenance, so npm shows which LearnHouse release workflow built each version.
-</Callout>
+- Package APIs can differ from the API exposed by an older or modified Portal installation.
+- Activity renderer versions should support the activity types emitted by the target API.
+- Internal package names and CLI identifiers should only be renamed through a backward-compatible release and migration plan.

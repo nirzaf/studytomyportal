@@ -1,25 +1,20 @@
 ---
-title: "Migrating Content into LearnHouse"
-description: "Choose how to bring existing courses into LearnHouse: import another LMS export, script every call through the API, or let AI propose the structure."
+title: "Migrating Content into Studytomy Portal"
+description: "Choose how to bring existing courses into Studytomy Portal: import another LMS export, script every call through the API, or let AI propose the structure."
 ---
 
 import { Callout } from '@/components/mdx'
 
-# Migrating Content into LearnHouse
+# Migrating Content into Studytomy Portal
 
-This section explains how to bring existing course content into LearnHouse using the public API. There are two supported approaches:
+This section explains how to bring existing course content into Studytomy Portal using the public API. There are two supported approaches:
 
 1. **Programmatic Migration**: you script every step (create the course, then chapters, then activities, then upload files). Use this when you need full control of the resulting structure. This is typical when migrating from another LMS where you already know the chapter/activity layout.
-2. **AI-Assisted Migration**: you upload a folder of media (videos, PDFs, images, audio) and LearnHouse asks the configured AI model to propose a chapter/activity tree. You review and confirm, and a single endpoint creates the entire course in one transaction. Use this when you have a pile of files but no predefined structure.
+2. **AI-Assisted Migration**: you upload a folder of media (videos, PDFs, images, audio) and Studytomy Portal asks the configured AI model to propose a chapter/activity tree. You review and confirm, and a single endpoint creates the entire course in one transaction. Use this when you have a pile of files but no predefined structure.
 
 <Callout>
-Moving from Moodle, Canvas, Blackboard, Brightspace, Open edX or another Common Cartridge platform? You don't need to script anything: upload the course export from the dashboard and LearnHouse converts it. See [Import from Another LMS](/developers/migration/from-another-lms).
+Moving from Moodle, Canvas, Blackboard, Brightspace, Open edX or another Common Cartridge platform? You don't need to script anything: upload the course export from the dashboard and Studytomy Portal converts it. See [Import from Another LMS](/developers/migration/from-another-lms).
 </Callout>
-
-<YouTube video="migrate-1" />
-<YouTube video="migrate-2" />
-<YouTube video="migrate-3" />
-
 Both approaches share the same underlying data model: a Course contains Chapters, and each Chapter contains an ordered list of Activities.
 
 <Callout type="info">
@@ -31,7 +26,7 @@ All endpoints below are prefixed with `/api/v1/`. In local development the base 
 Every migration call must be authenticated. There are two token types:
 
 - **JWT access tokens** (`POST /api/v1/auth/login`): a user session, 8-hour lifetime, refreshable.
-- **API tokens** (`lh_…`): issued per organization, valid until revoked or until their optional expiry date. On LearnHouse Cloud they need the Pro plan or higher.
+- **API tokens** (`lh_…`): issued per organization, valid until revoked or until their optional expiry date. In deployments that enable plan entitlements they need the Pro plan or higher.
 
 Both are sent the same way:
 

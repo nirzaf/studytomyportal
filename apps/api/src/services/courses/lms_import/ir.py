@@ -2,8 +2,8 @@
 Intermediate representation shared by every LMS reader.
 
 Each source reader (Moodle, Canvas, ...) parses its export into these plain
-dataclasses; the package writer then turns them into a LearnHouse course
-package. Readers never emit LearnHouse JSON themselves, so the native mapping
+dataclasses; the package writer then turns them into a Studytomy Portal course
+package. Readers never emit Studytomy Portal JSON themselves, so the native mapping
 (dynamic pages, quiz blocks, assignment tasks) lives in one place.
 
 Rich text stays as the source HTML plus a resolver that maps a URL found in
@@ -250,7 +250,7 @@ Part = Union[
 
 @dataclass
 class Page:
-    """Becomes a TYPE_DYNAMIC activity (the LearnHouse editor document)."""
+    """Becomes a TYPE_DYNAMIC activity (the Studytomy Portal editor document)."""
 
     title: str
     parts: list[Part] = field(default_factory=list)
@@ -365,5 +365,5 @@ class Course:
     id: str = ""
     # Warnings the reader raised while parsing (the writer adds its own)
     warnings: list[str] = field(default_factory=list)
-    # (title, kind, reason) of source items that have no LearnHouse equivalent
+    # (title, kind, reason) of source items that have no Studytomy Portal equivalent
     skipped: list[tuple[str, str, str]] = field(default_factory=list)

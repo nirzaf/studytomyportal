@@ -1,15 +1,12 @@
 ---
-description: Set up email for a self-hosted LearnHouse instance with Resend or any SMTP server, and set the sender address and display name for outgoing mail.
+description: Set up email for a self-hosted Studytomy Portal instance with Resend or any SMTP server, and set the sender address and display name for outgoing mail.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Email Configuration
 
-LearnHouse supports two email providers for transactional email delivery: **Resend** and **SMTP**. Email is used for user invitations, password resets, and system notifications.
-
-<CloudCta variant="selfhost">LearnHouse Cloud sends invitations and notifications without a mail provider to set up.</CloudCta>
-
+Studytomy Portal supports two email providers for transactional email delivery: **Resend** and **SMTP**. Email is used for user invitations, password resets, and system notifications.
 ## Choosing a Provider
 
 Set the email provider in your `.env` file using the `LEARNHOUSE_EMAIL_PROVIDER` variable:
@@ -75,13 +72,13 @@ The `LEARNHOUSE_SYSTEM_EMAIL_ADDRESS` is the "from" address used for all outgoin
 
 ## Sender Display Name
 
-Emails arrive as `LearnHouse <noreply@example.com>`. `LEARNHOUSE_SYSTEM_EMAIL_SENDER_NAME` replaces the `LearnHouse` part for the whole deployment:
+Emails arrive as `Studytomy Portal <noreply@example.com>`. `LEARNHOUSE_SYSTEM_EMAIL_SENDER_NAME` replaces the `Studytomy Portal` part for the whole deployment:
 
 ```env
 LEARNHOUSE_SYSTEM_EMAIL_SENDER_NAME=Acme Academy
 ```
 
-It defaults to `LearnHouse`, so leaving it unset changes nothing.
+It defaults to `Studytomy Portal`, so leaving it unset changes nothing.
 
 ### Per-organization override
 
@@ -99,7 +96,7 @@ If email is not configured, features like user invitations and password resets w
 
 ## What Emails Are Sent
 
-LearnHouse sends the following types of email:
+Studytomy Portal sends the following types of email:
 
 - **User invitations**: when an admin invites a user to join the platform or an organization
 - **Password resets**: when a user requests a password reset

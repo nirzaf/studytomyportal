@@ -1,4 +1,4 @@
-"""Represent verified guest reporters without LearnHouse accounts."""
+"""Represent verified guest reporters without Studytomy Portal accounts."""
 
 import sqlalchemy as sa
 from alembic import op

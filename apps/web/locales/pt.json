@@ -236,7 +236,7 @@
     "billing": "Faturação",
     "create_organization": "Criar organização",
     "start_your_own_organization": "Crie sua própria organização",
-    "copyright": "© {{year}} Studytomy, Inc.",
+    "copyright": "© {{year}} Studytomy",
     "delete_organization_error": "Não foi possível eliminar esta organização. Tente novamente.",
     "org_actions": "Ações da organização",
     "manage_upgrade": "Gerir / Fazer upgrade",
@@ -3108,7 +3108,7 @@
           "description": "Configurar suas definições pessoais, senhas e e-mail"
         }
       },
-      "learnhouse_university": "Universidade Studytomy",
+      "learnhouse_university": "Studytomy",
       "welcome_back": "Bem-vindo de volta",
       "plan": "plano",
       "create_course": "Criar curso",
@@ -7251,7 +7251,7 @@
           "keywords": "trilhas, trilhas de aprendizagem, percursos, programas, currículo, sequência, certificado"
         },
         "live_sessions": {
-          "keywords": "sessões ao vivo aulas webinar reunião vídeo presença gravações enquetes learnhouse meet zoom meet teams",
+          "keywords": "sessões ao vivo aulas webinar reunião vídeo presença gravações enquetes meet zoom meet teams",
           "description": "Agende sessões ao vivo, acompanhe a presença e gerencie as gravações"
         }
       }
@@ -10821,8 +10821,8 @@
       "inactive_desc": "A verificação da licença EE falhou (<code>{{reason}}</code>). Todos os endpoints <code>/ee/*</code> estão retornando 503, então esta página não consegue carregar seus dados.",
       "what_to_check": "O que verificar",
       "check_diagnostics": "Abra <code>{{path}}</code>. Ele responde mesmo com a licença inativa, e o campo <code>hint</code> indica a correção.",
-      "check_saas": "Para implantações SaaS: confirme que <code>LEARNHOUSE_SAAS=true</code> está definido no ambiente da API. O SaaS ignora a verificação de licença.",
-      "check_self_hosted": "Para EE auto-hospedada: confirme que <code>LEARNHOUSE_LICENSE_KEY</code> está definida e que o servidor de licenças (ou a janela de carência) está acessível.",
+      "check_saas": "Para implantações SaaS: confirme que <code>SaaS mode</code> está definido no ambiente da API. O SaaS ignora a verificação de licença.",
+      "check_self_hosted": "Para EE auto-hospedada: confirme que <code>license key</code> está definida e que o servidor de licenças (ou a janela de carência) está acessível.",
       "check_logs": "Se você tem acesso ao shell, os logs da API trazem o mesmo motivo com todos os detalhes: <code>[EE] license inactive …</code>",
       "failed_to_load": "Falha ao carregar"
     },

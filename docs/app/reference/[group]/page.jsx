@@ -25,7 +25,7 @@ export async function generateMetadata({ params }) {
   if (!config) return {}
   return referenceMetadata({
     title: pageTitle(config),
-    description: `${config.description} LearnHouse REST API endpoints with parameters, schemas and code examples.`,
+    description: `${config.description} Studytomy Portal REST API endpoints with parameters, schemas and code examples.`,
     path: `/reference/${config.slug}`,
   })
 }

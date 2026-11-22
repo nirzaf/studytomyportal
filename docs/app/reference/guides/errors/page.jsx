@@ -16,7 +16,7 @@ const LEDE =
 export const metadata = referenceMetadata({
   title: 'API Errors',
   description:
-    'LearnHouse API error format: HTTP status codes, the FastAPI detail field, error codes like RATE_LIMITED, and the 422 validation error structure.',
+    'Studytomy Portal API error format: HTTP status codes, the FastAPI detail field, error codes like RATE_LIMITED, and the 422 validation error structure.',
   path: '/reference/guides/errors',
 })
 

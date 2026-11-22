@@ -20,11 +20,11 @@ export async function healthCommand() {
   const dir = findInstallDir()
   const config = readConfig(dir)
   if (!config) {
-    p.log.error('No LearnHouse installation found. Run setup first.')
+    p.log.error('No Studytomy Portal installation found. Run setup first.')
     process.exit(1)
   }
 
-  p.intro(pc.cyan('LearnHouse Health Check'))
+  p.intro(pc.cyan('Studytomy Portal Health Check'))
   failures = 0
 
   const id = config.deploymentId || autoDetectDeploymentId()

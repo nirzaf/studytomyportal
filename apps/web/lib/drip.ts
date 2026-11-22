@@ -153,7 +153,7 @@ export function buildIcs(calendarName: string, events: CalendarEvent[], now: Dat
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//LearnHouse//Drip content//EN',
+    'PRODID:-//Studytomy Portal//Drip content//EN',
     'CALSCALE:GREGORIAN',
     `X-WR-CALNAME:${icsText(calendarName)}`,
   ]

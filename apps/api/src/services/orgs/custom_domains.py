@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 # Reserved domains that cannot be used as custom domains
 RESERVED_DOMAIN_PATTERNS = [
+    r'.*\.studytomy\.com$',
+    r'^studytomy\.com$',
+    # Keep former service domains reserved to avoid accepting legacy hostnames.
     r'.*\.learnhouse\.io$',
     r'.*\.learnhouse\.app$',
     r'^learnhouse\.io$',
@@ -40,8 +43,8 @@ RESERVED_DOMAIN_PATTERNS = [
     r'^127\.0\.0\.1$',
 ]
 
-# Learnhouse domain for CNAME instructions
-LEARNHOUSE_DOMAIN = os.getenv('LEARNHOUSE_DOMAIN', 'learnhouse.io')
+# The environment variable name is retained for existing installations.
+LEARNHOUSE_DOMAIN = os.getenv('LEARNHOUSE_DOMAIN', 'studytomy.com')
 
 
 def generate_verification_token() -> str:
@@ -81,7 +84,7 @@ def is_own_agency_subdomain(domain: str, org_slug: str) -> bool:
     (the default/dev values), which would otherwise be unsafe.
     """
     base = (LEARNHOUSE_DOMAIN or "").lower().strip().split(":")[0]
-    if not base or base in ("learnhouse.io", "localhost"):
+    if not base or base in ("studytomy.com", "learnhouse.io", "localhost"):
         return False
     slug = (org_slug or "").lower().strip()
     if not slug:

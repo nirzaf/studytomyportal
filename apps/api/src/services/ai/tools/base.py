@@ -136,7 +136,7 @@ class ToolSpec:
     feature: str | None = None
     # Short human name for clients that show one (MCP `title`).
     title: str | None = None
-    # Reaches outside LearnHouse (fetches a URL the caller gave).
+    # Reaches outside Studytomy Portal (fetches a URL the caller gave).
     open_world: bool = False
     # Group name MCP clients can filter on (?toolsets=courses,content).
     toolset: str | None = None

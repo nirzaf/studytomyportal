@@ -1,15 +1,12 @@
 ---
-description: "Configure your LearnHouse organization settings, from name, branding and public menu to optional features, AI, analytics retention and the danger zone."
+description: "Configure your Studytomy Portal organization settings, from name, branding and public menu to optional features, AI, analytics retention and the danger zone."
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Organization Settings
 
-Organization settings live under **Organization** in the dashboard (`/dash/org/settings`). The page has these tabs: **General**, **Features**, **Branding**, **Menu**, **Landing Page**, **Course completion**, **AI**, **Analytics**, **Usage**, **Other** and **Danger Zone**. The **Analytics** tab only appears when [analytics](/platform/analytics) is available (Enterprise Edition or LearnHouse Cloud).
-
-<YouTube video="guide-10" />
-
+Organization settings live under **Organization** in the dashboard (`/dash/org/settings`). The page has these tabs: **General**, **Features**, **Branding**, **Menu**, **Landing Page**, **Course completion**, **AI**, **Analytics**, **Usage**, **Other** and **Danger Zone**. The **Analytics** tab only appears when [analytics](/platform/analytics) is available in the installed edition.
 Changing settings needs a role that can update the organization (the Admin role by default).
 
 <Callout type="info">
@@ -25,7 +22,7 @@ Some settings moved. Sign-in methods and two-factor are under **Users** (see [Au
 | **Organization Label** | required | A category such as Education, Tech or Business. |
 | **About Organization** | 400 characters | |
 | **Footer Text** | 100 characters | Custom text displayed at the bottom of your organization pages. |
-| **Email Sender Name** | 64 characters | The display name on emails sent for your organization: sign-in links, password resets, invitations, verification and welcome emails. Only the name changes; the sending address stays the platform's. Leave it empty to use the default ("LearnHouse"). Links and URLs are not allowed. |
+| **Email Sender Name** | 64 characters | The display name on emails sent for your organization: sign-in links, password resets, invitations, verification and welcome emails. Only the name changes; the sending address stays the platform's. Leave it empty to use the default ("Studytomy Portal"). Links and URLs are not allowed. |
 | **Default Language** | | The language new visitors see and the language of emails sent for your organization. Members can still pick their own interface language. |
 
 Click **Save Changes** to apply.
@@ -109,7 +106,7 @@ This sets the screen learners see after they finish a course. A live **Preview**
 
 Turn **Enable AI Features** on or off for the whole organization, and switch **AI Copilot** on or off. **AI Copilot** controls Copilot and the other [agents](/platform/messages#agents) in Messages. Editor assistance and AI learning activities follow the main switch. Only admins can change these. See [AI](/platform/ai) for what each feature does.
 
-On LearnHouse Cloud, the AI tab is shown from the Standard plan up.
+The AI tab's visibility depends on the installed edition and deployment configuration.
 
 ## Analytics
 
@@ -123,20 +120,18 @@ On LearnHouse Cloud, the AI tab is shown from the Standard plan up.
 - **AI Credits**: **Base Credits**, **Purchased**, **Used** and **Remaining**.
 - **Active Packs**: any add-on packs on the organization.
 
-On LearnHouse Cloud you can compare plans and buy more AI credits from here. See [Plans & Limits](/platform/organizations/plans).
+Usage and credit controls depend on the installed edition and deployment configuration. This repository does not document hosted pricing or plan limits. See [Plans and Feature Availability](/platform/organizations/plans).
 
 ## Other
 
-### "Made with LearnHouse" watermark
+### "Made with Studytomy Portal" watermark
 
-A switch controls the "Made with LearnHouse" badge on your public pages and the "Powered by LearnHouse" line in emails.
+A switch controls the "Made with Studytomy Portal" badge on your public pages and the "Powered by Studytomy Portal" line in emails.
 
-| Deployment | Behavior |
+| Edition or setting | Behavior |
 | --- | --- |
-| LearnHouse Cloud, free plan | Always shown. The switch is disabled. |
-| LearnHouse Cloud, paid plans | You choose. |
-| Enterprise Edition | Hidden by your license. |
-| Open source | The page badge follows the switch. Emails always show the line. |
+| Community Edition | The page badge follows the organization watermark setting. Emails always show the line. |
+| Enterprise Edition | A licensed white-label entitlement can hide the badge. |
 
 ### Scripts
 

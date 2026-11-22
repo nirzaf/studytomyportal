@@ -9,7 +9,7 @@ deployment; nothing here reads the database.
 import os
 
 # The demo is a product feature, not a SaaS-only one; a self-hosted install
-# showing off LearnHouse to its own stakeholders wants it too. So, unlike the
+# showing off Studytomy Portal to its own stakeholders wants it too. So, unlike the
 # nudge scheduler, none of this is gated on deployment mode.
 
 DEFAULT_SLUG = "demo"

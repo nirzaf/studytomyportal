@@ -14,9 +14,9 @@ import JsonLd from '../../components/reference/JsonLd'
 
 export const revalidate = 3600
 
-const TITLE = 'LearnHouse API Reference'
+const TITLE = 'Studytomy Portal API Reference'
 const DESCRIPTION =
-  'Reference for the LearnHouse REST API: every endpoint with parameters, request and response schemas, code examples in cURL, JavaScript, Python and @learnhouse/sdk, and a live playground.'
+  'Reference for the Studytomy Portal REST API: every endpoint with parameters, request and response schemas, code examples in cURL, JavaScript, Python and @learnhouse/sdk, and a live playground.'
 
 export const metadata = referenceMetadata({ title: TITLE, description: DESCRIPTION, path: '/reference' })
 
@@ -55,8 +55,8 @@ export default async function ReferenceOverviewPage() {
       <JsonLd data={jsonLd} />
       <PageHeader
         pattern="dots"
-        title="LearnHouse API"
-        lede="A REST API over everything LearnHouse does: courses and their content, learners and groups, assignments, certificates, payments and search. Use it to build a headless learning site, sync another system or automate admin work. This reference is generated from the API's OpenAPI document, so it matches what the server accepts."
+        title="Studytomy Portal API"
+        lede="A REST API over everything Studytomy Portal does: courses and their content, learners and groups, assignments, certificates, payments and search. Use it to build a headless learning site, sync another system or automate admin work. This reference is generated from the API's OpenAPI document, so it matches what the server accepts."
       >
         <div className="lhr-stats">
           <div className="lhr-stat">
@@ -128,10 +128,10 @@ export default async function ReferenceOverviewPage() {
               <div>
                 <h3 className="lhr-h3">Create an API token</h3>
                 <p>
-                  In your LearnHouse dashboard open <strong>Developers → API Access</strong> and
+                  In your Studytomy Portal dashboard open <strong>Developers → API Access</strong> and
                   click <strong>Create Token</strong>. Give it the <strong>Read</strong> right on{' '}
                   <strong>Courses</strong>. The full token (it starts with <code>lh_</code>) is
-                  shown once. On LearnHouse Cloud this needs the Pro plan.
+                  shown once. In deployments that enable plan entitlements this needs the Pro plan.
                 </p>
                 <p>Paste it here and every example on this site uses it.</p>
               </div>

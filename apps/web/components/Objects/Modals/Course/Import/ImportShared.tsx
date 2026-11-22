@@ -19,7 +19,7 @@ import { removeCoursePrefix } from '@components/Objects/Thumbnails/CourseThumbna
 import { ImportCourseInfo } from '@services/courses/transfer'
 
 /**
- * Building blocks shared by the course import flows (LearnHouse package,
+ * Building blocks shared by the course import flows (Studytomy Portal package,
  * other LMS export): step indicator, course selection, import options,
  * progress and result views.
  */

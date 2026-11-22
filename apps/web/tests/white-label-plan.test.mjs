@@ -1,4 +1,4 @@
-// Pro and above (and every EE install) must never show LearnHouse marks to an
+// Pro and above (and every EE install) must never show Studytomy Portal marks to an
 // org's learners. OSS keeps the mark regardless of the plan value it reports.
 
 import { describe, expect, test } from "bun:test";

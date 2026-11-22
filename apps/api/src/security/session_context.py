@@ -162,7 +162,7 @@ def refuse_lms_session() -> None:
             status_code=403,
             detail={
                 "code": "LMS_SESSION_NOT_ALLOWED",
-                "message": "Sign in to LearnHouse directly to change your account settings.",
+                "message": "Sign in to Studytomy Portal directly to change your account settings.",
             },
         )
 

@@ -61,7 +61,7 @@ function HomeClient() {
     }
   }, [isLoading, isAuthenticated, router])
 
-  // The hub is for people who run a LearnHouse (and prospects who only tried
+  // The hub is for people who run a Studytomy Portal (and prospects who only tried
   // the demo). Someone who only joined schools as a member gets a plain list of
   // them: no demo, and creating an organization is a quiet link.
   // Right after sign-in the session can carry `roles: []` until the full

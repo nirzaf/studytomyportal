@@ -1,5 +1,5 @@
 /*
- * LearnHouse embed helper. Add once to a page that shows LearnHouse activity
+ * Studytomy Portal embed helper. Add once to a page that shows Studytomy Portal activity
  * iframes:
  *
  *   <iframe src="https://<org>/embed/<org>/course/<course>/activity/<activity>" data-learnhouse-embed></iframe>
@@ -10,7 +10,7 @@
  *   learnhouse:ready, learnhouse:resize, learnhouse:complete, learnhouse:media,
  *   learnhouse:link_click, learnhouse:unavailable. The message is in event.detail.
  *
- * Only messages from the page's own LearnHouse iframes are used: each one is
+ * Only messages from the page's own Studytomy Portal iframes are used: each one is
  * matched to its iframe by event.source.
  */
 ;(function () {

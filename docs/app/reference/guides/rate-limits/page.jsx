@@ -17,7 +17,7 @@ const LEDE =
 export const metadata = referenceMetadata({
   title: 'API Rate Limits and Pagination',
   description:
-    'Which LearnHouse API endpoints are rate limited, how 429 responses tell you when to retry, and how list endpoints paginate with page, limit and offset.',
+    'Which Studytomy Portal API endpoints are rate limited, how 429 responses tell you when to retry, and how list endpoints paginate with page, limit and offset.',
   path: '/reference/guides/rate-limits',
 })
 
@@ -93,7 +93,7 @@ for (let page = 1; ; page++) {
         <p>
           These limits are enforced by the open-source API with fixed windows stored in Redis.
           Endpoints that are not listed have no per-endpoint limit in the API itself; your
-          hosting (a proxy, LearnHouse Cloud&apos;s edge) may add its own.
+          hosting infrastructure such as a reverse proxy may add its own.
         </p>
         <div className="lhr-table-wrap">
           <table className="lhr-table">

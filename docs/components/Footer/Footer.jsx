@@ -5,10 +5,7 @@ import Link from 'next/link'
 const links = [
   { label: 'Documentation', href: '/' },
   { label: 'API Reference', href: '/reference' },
-  { label: 'Releases', href: '/releases' },
-  { label: 'GitHub', href: 'https://github.com/learnhouse/learnhouse' },
-  { label: 'Discord', href: 'https://discord.gg/CMyZjjYZ6x' },
-  { label: 'Twitter', href: 'https://twitter.com/learnhouseapp' },
+  { label: 'GitHub', href: 'https://github.com/nirzaf/studytomyportal' },
 ]
 
 export default function Footer() {
@@ -16,7 +13,7 @@ export default function Footer() {
     <footer className="lh-footer" data-pagefind-ignore="all">
       <div className="lh-footer-container">
         <p className="lh-footer-copyright">
-          &copy; {new Date().getFullYear()} LearnHouse
+          &copy; {new Date().getFullYear()} Studytomy
         </p>
         <nav className="lh-footer-nav">
           {links.map((link) => {

@@ -2,9 +2,9 @@
 
 **Studytomy fork scope:** retained upstream package API documentation. Installing the published `@learnhouse/*` package does not include unpublished Studytomy changes. Inspect this package’s manifest, source and generated/synced output before relying on version parity. Package names and upstream attribution are intentionally retained; this documentation update does not authorize npm publication or resolve licensing decisions.
 
-Render LearnHouse activities inside any Vue 3 or Nuxt app. Pages, quizzes, flipcards, scenarios, code playgrounds, math, video and PDFs look and behave as they do in LearnHouse.
+Render Studytomy Portal activities inside any Vue 3 or Nuxt app. Pages, quizzes, flipcards, scenarios, code playgrounds, math, video and PDFs look and behave as they do in Studytomy Portal.
 
-There is no second renderer: the component wraps `<learnhouse-activity>`, the custom element of [`@learnhouse/react`](https://www.npmjs.com/package/@learnhouse/react), which mounts LearnHouse's own blocks in a React root. Its version always matches the LearnHouse release it was built from.
+There is no second renderer: the component wraps `<learnhouse-activity>`, the custom element of [`@learnhouse/react`](https://www.npmjs.com/package/@learnhouse/react), which mounts Studytomy Portal's own blocks in a React root. Its version always matches the Studytomy Portal release it was built from.
 
 ```bash
 npm install @learnhouse/vue
@@ -62,6 +62,6 @@ React and React DOM come with this package (about 67 KB gzipped) and load lazily
 ## Not yet supported
 
 - Block and mark overrides (`components`, `marks` in `@learnhouse/react`). Use `hide-blocks` and `transform-content` instead.
-- One LearnHouse instance per page, as with `@learnhouse/react`: media URLs follow the most recently mounted `base-url`.
+- One Studytomy Portal instance per page, as with `@learnhouse/react`: media URLs follow the most recently mounted `base-url`.
 
-Docs: https://docs.learnhouse.app/developers/vue
+Docs: https://github.com/nirzaf/studytomyportal/tree/main/docs/content/developers/vue.mdx
