@@ -1,12 +1,12 @@
 ---
-description: Install Studytomy Portal on your own server in a few minutes. Run the setup wizard with npx or a one-line installer, start the stack and log in.
+description: Configure a self-hosted runtime installation with the compatibility-named CLI, start the stack and log in.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Quick Install
 
-Follow these steps to install and start a self-hosted Studytomy Portal instance using the Studytomy Portal CLI.
+Follow these steps to configure and start a self-hosted runtime installation using the compatibility-named CLI. Its default Community application image is `ghcr.io/learnhouse/app`, a published upstream image; it does not include changes from this Studytomy repository. To run the code in this checkout, use the [local development quickstart](/getting-started/quickstart).
 
 ## Step 1: Run the Setup Wizard
 
@@ -54,9 +54,9 @@ LEARNHOUSE_ADMIN_PASSWORD=change-me-please npx learnhouse@latest setup --ci \
 
 See [`setup` flags](/cli/commands#setup) for every option.
 
-## Step 2: Start Studytomy Portal
+## Step 2: Start the configured runtime
 
-At the end of the wizard, accept **Start Studytomy Portal now?**. The CLI pulls the images, starts the containers, and waits up to 3 minutes for Studytomy Portal to respond. This typically takes one to two minutes on the first launch.
+At the end of the wizard, accept the prompt to start the configured runtime services. The CLI pulls the selected images, starts the containers, and waits up to 3 minutes for the runtime API to respond. The CLI reports the exact image and its known provenance before provisioning; no Studytomy-specific image is published by this repository.
 
 If you declined, start it later:
 
@@ -64,7 +64,7 @@ If you declined, start it later:
 npx learnhouse start
 ```
 
-## Step 3: Access Studytomy Portal
+## Step 3: Access the configured installation
 
 Once all services are running, open your configured domain, or **http://localhost** for a local install. The CLI prints the URL when setup finishes.
 

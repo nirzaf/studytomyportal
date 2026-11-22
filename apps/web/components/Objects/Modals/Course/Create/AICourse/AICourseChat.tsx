@@ -1,12 +1,11 @@
 'use client'
 import React from 'react'
 import { Send, Loader2, Paperclip, X, Image as ImageIcon, Link as LinkIcon, FileText, Video } from 'lucide-react'
-import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
 import type { CoursePlanningMessage, Attachment } from '@services/ai/courseplanning'
-import lrnaiIcon from 'public/lrnai_icon.png'
 import { safeImageSrc } from '@services/security/url'
+import { StudytomyAiMark } from '@components/Studytomy/StudytomyAiMark'
 
 interface AICourseChatProps {
   messages: CoursePlanningMessage[]
@@ -168,12 +167,7 @@ function AICourseChat({
         {messages.length === 0 && !isLoading && (
           <div className="space-y-4 pt-8">
             <div className="flex justify-center">
-              <Image
-                className="outline outline-1 outline-neutral-200/20 rounded-lg"
-                width={28}
-                src={lrnaiIcon}
-                alt="AI"
-              />
+              <StudytomyAiMark size={28} className="outline outline-1 outline-neutral-200/20 rounded-lg" />
             </div>
             <p className="text-sm text-white/50 text-center">
               {t('courses.create.ai.chat_description')}

@@ -1,5 +1,5 @@
 ---
-description: Reference for every Studytomy Portal CLI command, including setup, start, update, backup, restore, doctor, env, scale and dev, with flags and exit codes.
+description: Reference for the compatibility-named CLI commands, including setup, runtime image updates, backup, restore, doctor, env, scale and local development.
 ---
 
 import { Callout } from '@/components/mdx'
@@ -147,10 +147,10 @@ npx learnhouse config
 
 ## `update`
 
-Update Studytomy Portal to the latest release or a specific version. See [Updates](/self-hosting/maintenance/updates) for details.
+Update the configured Community runtime image to the latest upstream tag for its channel or to a specific version. The default target is a published LearnHouse image; it does not establish that the Studytomy source checkout is included. See [Runtime Image Updates](/self-hosting/maintenance/updates) for details.
 
 ```bash
-# Update to the latest version on your release channel
+# Update to the latest upstream runtime image on the configured channel
 npx learnhouse update
 
 # Update to a specific version
@@ -170,7 +170,7 @@ npx learnhouse update -v 1.4.2
 
 1. Backs up the database to `backups/db-pre-upgrade-<timestamp>.sql.gz` (unless `--no-backup`). This works for external databases too. If the backup fails, nothing changes.
 2. Stamps an Alembic baseline if the database was never migrated (installations created before Alembic tracking)
-3. Resolves the target image: with `--to`, checks that the version exists on `ghcr.io/learnhouse/app`; without it, picks the newest release (stable channel) or `:dev` (dev channel)
+3. Resolves the target image: with `--to`, checks that the version exists on `ghcr.io/learnhouse/app`; without it, picks the newest upstream LearnHouse release (stable channel) or `:dev` (dev channel). This image is not a verified build of the Studytomy repository.
 4. Moves uploaded files into a persistent Docker volume if they still live inside the app container (one-time)
 5. Points `docker-compose.yml` at the new image and pulls it
 6. Stops the app container and runs the migrations with the new image before it starts
@@ -342,7 +342,7 @@ Run `npx learnhouse doctor`. It scans recent logs and reports errors. Common cau
 
 ### `update` migration fails
 
-If the migrations fail, `update` restores the previous image in `docker-compose.yml` and starts the previous version again. Your pre-upgrade dump is in `backups/`. Check the [Studytomy Portal releases page](https://github.com/nirzaf/studytomyportal/releases) and the [GitHub issues](https://github.com/nirzaf/studytomyportal/issues) for your version before retrying. To run the migrations by hand, from the installation directory:
+If the migrations fail, `update` restores the previous image in `docker-compose.yml` and starts the previous version again. Your pre-upgrade dump is in `backups/`. Check the [upstream LearnHouse releases](https://github.com/learnhouse/learnhouse/releases) for the selected runtime version. Studytomy repository releases describe source changes and do not imply those changes are in the upstream image. To run the migrations by hand, from the installation directory:
 
 ```bash
 docker compose exec learnhouse-app sh -c "cd /app/api && uv run python cli.py migrate"

@@ -3,8 +3,6 @@ import { Node } from '@tiptap/core'
 import { X, PencilSimple, ArrowsOut, DotsSixVertical, Lock } from '@phosphor-icons/react'
 import React from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import Image from 'next/image'
-import lrnaiIcon from 'public/lrnai_icon.png'
 import { useEditorProvider } from '@components/Contexts/Editor/EditorContext'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { useCourse } from '@components/Contexts/CourseContext'
@@ -19,6 +17,7 @@ import { PlanLevel } from '@services/plans/plans'
 import PlanBadge from '@components/Dashboard/Shared/PlanRestricted/PlanBadge'
 import { useTranslation } from 'react-i18next'
 import { usePlan } from '@components/Hooks/usePlan'
+import { StudytomyAiMark } from '@components/Studytomy/StudytomyAiMark'
 
 interface EditorState {
   isEditable: boolean
@@ -245,12 +244,7 @@ function MagicBlockComponent(props: ExtendedNodeViewProps) {
           <div className="flex items-center justify-between pb-3">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <Image
-                  className="outline outline-1 outline-neutral-200/20 rounded-lg"
-                  width={20}
-                  src={lrnaiIcon}
-                  alt={t('editor.blocks.magic_block_content.title')}
-                />
+                <StudytomyAiMark size={20} className="outline outline-1 outline-neutral-200/20 rounded-lg" />
                 <span className="text-sm font-semibold text-white/70">
                   {t('editor.blocks.magic_block_content.title')}
                 </span>
@@ -278,7 +272,7 @@ function MagicBlockComponent(props: ExtendedNodeViewProps) {
                     }}
                     className="p-4 rounded-full drop-shadow-md"
                   >
-                    <Image src={lrnaiIcon} alt={t('editor.blocks.magic_block_content.title')} width={32} height={32} />
+                    <StudytomyAiMark size={32} />
                   </div>
                   <div className="space-y-1">
                     <p className="font-semibold text-white/80">
@@ -295,12 +289,7 @@ function MagicBlockComponent(props: ExtendedNodeViewProps) {
                     }}
                     className="mt-2 px-5 py-2.5 text-white text-sm font-bold rounded-full transition-all duration-300 ease-in-out hover:scale-105 flex items-center gap-2 drop-shadow-md"
                   >
-                    <Image
-                      className="outline outline-1 outline-neutral-200/20 rounded-md"
-                      width={16}
-                      src={lrnaiIcon}
-                      alt=""
-                    />
+                    <StudytomyAiMark size={16} className="outline outline-1 outline-neutral-200/20 rounded-md" />
                     {t('editor.blocks.magic_block_content.generate_with_ai')}
                   </button>
                 </div>
@@ -319,12 +308,7 @@ function MagicBlockComponent(props: ExtendedNodeViewProps) {
                     </p>
                   </div>
                   <div className="mt-2 px-5 py-2.5 bg-white/10 text-white/50 text-sm font-bold rounded-full flex items-center gap-2 cursor-not-allowed">
-                    <Image
-                      className="outline outline-1 outline-neutral-200/20 rounded-md opacity-50 grayscale"
-                      width={16}
-                      src={lrnaiIcon}
-                      alt=""
-                    />
+                    <StudytomyAiMark size={16} className="outline outline-1 outline-neutral-200/20 rounded-md opacity-50 grayscale" />
                     {t('editor.blocks.magic_block_content.generate_with_ai')}
                   </div>
                 </div>

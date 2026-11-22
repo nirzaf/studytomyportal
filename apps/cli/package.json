@@ -1,7 +1,7 @@
 {
   "name": "learnhouse",
   "version": "1.6.0",
-  "description": "Configure, run, and maintain a Studytomy Portal installation",
+  "description": "Configure and maintain a self-hosted runtime installation using LearnHouse-compatible images",
   "type": "module",
   "bin": {
     "learnhouse": "./dist/bin/learnhouse.js"

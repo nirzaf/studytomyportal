@@ -59,7 +59,7 @@ const program = new Command()
 
 program
   .name('learnhouse')
-  .description('The official Studytomy Portal CLI: deploy, manage, and operate your Studytomy Portal instance')
+  .description('Manage a self-hosted runtime installation. The default upstream LearnHouse image does not include changes from this repository.')
   .version(VERSION)
   .option('--dir <path>', 'Installation directory to act on (default: current dir, else ~/.learnhouse/<name>)')
   .showSuggestionAfterError()
@@ -77,7 +77,7 @@ program
 
 program
   .command('setup')
-  .description('Interactive setup wizard for Studytomy Portal')
+  .description('Configure a self-hosted runtime installation')
   .option('--ci', 'Non-interactive mode with defaults (for CI/automation)')
   .option('--name <name>', 'Installation name (default: "default")')
   .option('--domain <domain>', 'Domain name (default: "localhost")')
@@ -105,22 +105,22 @@ program
 
 program
   .command('start')
-  .description('Start Studytomy Portal services')
+  .description('Start services for the configured runtime image')
   .action(startCommand)
 
 program
   .command('stop')
-  .description('Stop Studytomy Portal services')
+  .description('Stop the configured runtime services')
   .action(stopCommand)
 
 program
   .command('logs')
-  .description('Stream logs from Studytomy Portal services')
+  .description('Stream logs from the configured runtime services')
   .action(logsCommand)
 
 program
   .command('config')
-  .description('Show current Studytomy Portal configuration')
+  .description('Show current runtime installation configuration')
   .action(configCommand)
 
 program
@@ -138,17 +138,17 @@ program
 
 program
   .command('doctor')
-  .description('Diagnose common issues with Studytomy Portal')
+  .description('Diagnose common runtime installation issues')
   .action(doctorCommand)
 
 program
   .command('shell')
-  .description('Open a shell in a Studytomy Portal container')
+  .description('Open a shell in a configured runtime container')
   .action(shellCommand)
 
 program
   .command('update')
-  .description('Update Studytomy Portal to latest or a specific version (EE: backs up the DB + runs migrations)')
+  .description('Update the configured runtime image (EE: backs up the DB + runs migrations)')
   // Note: --version is intentionally avoided here because Commander v15 intercepts
   // --version at the root program level, so subcommand --version flags silently
   // become the global version output. Use --to or -v instead.

@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/generate-llms-full.mjs && next build",
+    "test:snippets": "node --test scripts/check-doc-snippets.mjs",
     "postbuild": "node scripts/pagefind.mjs && node scripts/generate-sitemap.mjs",
     "start": "next start",
     "lint": "next lint"

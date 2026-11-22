@@ -1,7 +1,6 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { X, FloppyDisk, Flask, ChatCircle, ClockCounterClockwise, Sparkle, Check, Clipboard } from '@phosphor-icons/react'
-import Image from 'next/image'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
 import MagicBlockPreview from './MagicBlockPreview'
@@ -14,11 +13,11 @@ import {
   startMagicBlockSession,
   iterateMagicBlock,
 } from '@services/ai/magicblocks'
-import lrnaiIcon from 'public/lrnai_icon.png'
 import { useTranslation } from 'react-i18next'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { useOrg } from '@components/Contexts/OrgContext'
+import { StudytomyAiMark } from '@components/Studytomy/StudytomyAiMark'
 
 interface MagicBlockModalProps {
   isOpen: boolean
@@ -312,12 +311,7 @@ function MagicBlockModal({
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 flex-shrink-0">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <Image
-                    className="outline outline-1 outline-neutral-200/20 rounded-lg"
-                    width={24}
-                    src={lrnaiIcon}
-                    alt={t('editor.blocks.magic_block_content.title')}
-                  />
+                  <StudytomyAiMark size={24} className="outline outline-1 outline-neutral-200/20 rounded-lg" />
                   <span className="text-sm font-semibold text-white/70">{t('editor.blocks.magic_block_content.title')}</span>
                 </div>
                 <div className="bg-white/5 text-white/40 py-0.5 px-3 flex gap-1 rounded-full items-center">

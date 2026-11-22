@@ -7,18 +7,21 @@ import { Callout, Steps } from '@/components/mdx'
 
 # Quickstart
 
-This guide uses the local development setup from the repository. It does not require a hosted Studytomy service.
+This guide runs the application from the source checkout. It does not require a hosted Studytomy service. The `npx learnhouse@latest setup` command installs a published upstream runtime image; it does not build this repository's Studytomy changes. See [CLI compatibility](/cli) for the distinction.
 See [System requirements](/self-hosting/installation/requirements) before starting.
 
 <Steps>
 
 ### Start the local development environment
 
+From the repository root, build the checked-out CLI and run its development command:
+
 ```bash
-npx learnhouse dev
+bun --cwd apps/cli run build
+node apps/cli/dist/bin/learnhouse.js dev
 ```
 
-The command starts the repository's local development services. Open the web app at `http://localhost:3000`.
+This checked-out CLI starts the repository's local development services. Open the web app at `http://localhost:3000`.
 
 </Steps>
 

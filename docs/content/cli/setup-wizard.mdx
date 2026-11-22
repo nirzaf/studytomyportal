@@ -8,6 +8,10 @@ import { Callout } from '@/components/mdx'
 
 The setup wizard (`npx learnhouse@latest setup`) generates a complete Docker Compose deployment. You can go back to the previous step after each step, and edit any step from the summary before confirming.
 
+<Callout type="info">
+The default Community image, `ghcr.io/learnhouse/app`, is published upstream and does not include changes from this Studytomy repository. The CLI reports the resolved image and its provenance before setup. Use the [local development quickstart](/getting-started/quickstart) to run the source checkout.
+</Callout>
+
 The wizard needs a terminal. For scripts and CI, use `setup --ci` with flags instead (see [Commands](/cli/commands#setup)). For the install steps around the wizard, see [Quick Install](/self-hosting/installation/quick-install).
 
 ## Before the steps
@@ -84,7 +88,7 @@ The wizard shows a summary of your configuration. You can:
 - **Edit**: go back and change any step
 - **Cancel**: stop without generating anything
 
-It then asks **Start Studytomy Portal now?** If you accept, it runs `docker compose up -d`, waits up to 3 minutes for `/api/v1/health` to respond, and checks that your organization was created. If you decline, start it later with `npx learnhouse start`.
+It then asks whether to start the configured runtime services. If you accept, it runs `docker compose up -d`, waits up to 3 minutes for `/api/v1/health` to respond, and checks that your organization was created. If you decline, start it later with `npx learnhouse start`.
 
 ## Generated Files
 
@@ -116,5 +120,5 @@ Named volumes, declared in `docker-compose.yml`, hold the database (`learnhouse_
 Third-party images are pinned to a minor version, so patch releases arrive when images are pulled and new minor versions arrive with a CLI release.
 
 <Callout type="info">
-To move to a newer Studytomy Portal version after setup, use [`npx learnhouse update`](/cli/commands#update), or `npx learnhouse update --to <version>` to pin a version.
+To update the configured runtime image after setup, use [`npx learnhouse update`](/cli/commands#update), or `npx learnhouse update --to <version>` to pin an upstream image tag.
 </Callout>

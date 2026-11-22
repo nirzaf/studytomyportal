@@ -7,7 +7,7 @@ import { dockerComposeStop, dockerComposeUp, dockerComposePull } from '../servic
 import { migrateContentVolume } from '../services/content-volume-migration.js'
 import { waitForAppHealth } from '../services/health.js'
 import { replaceComposeImageTag } from '../services/compose-utils.js'
-import { resolveAppImage } from '../services/version-check.js'
+import { describeRuntimeImage, resolveAppImage } from '../services/version-check.js'
 import { writeFileAtomic } from '../utils/fs-atomic.js'
 import {
   updateEnterprise,
@@ -24,6 +24,20 @@ import {
 const COMMUNITY_LAYOUT: EditionLayout = { appService: 'learnhouse-app', alembicCwd: '/app/api', dbService: 'db' }
 
 const GHCR_BASE = 'ghcr.io/learnhouse/app'
+
+function composeServiceImage(compose: string, service: string): string {
+  let inService = false
+  for (const line of compose.split(/\r?\n/)) {
+    if (/^  [^ ]/.test(line)) {
+      if (inService) break
+      inService = line.trim() === `${service}:`
+    } else if (inService) {
+      const image = line.match(/^    image:\s*(\S+)/)?.[1]
+      if (image) return image
+    }
+  }
+  return ''
+}
 
 async function resolveTag(version: string): Promise<boolean> {
   try {
@@ -55,7 +69,7 @@ export async function updateCommand(options: { version?: string; migrate?: boole
   const dir = findInstallDir()
   const config = readConfig(dir)
   if (!config) {
-    p.log.error('No Studytomy Portal installation found. Run `npx learnhouse setup` first.')
+    p.log.error('No runtime installation found. Run `npx learnhouse setup` first.')
     process.exit(1)
     return
   }
@@ -82,9 +96,9 @@ export async function updateCommand(options: { version?: string; migrate?: boole
   }
 
   if (targetVersion) {
-    p.intro(pc.cyan(`Updating Studytomy Portal to v${targetVersion}`))
+    p.intro(pc.cyan(`Updating runtime image to v${targetVersion}`))
   } else {
-    p.intro(pc.cyan('Updating Studytomy Portal to latest'))
+    p.intro(pc.cyan('Updating runtime image to latest'))
   }
 
   const ui = {
@@ -94,6 +108,10 @@ export async function updateCommand(options: { version?: string; migrate?: boole
   }
   const composePath = join(config.installDir, 'docker-compose.yml')
   const originalCompose = readFileSync(composePath, 'utf-8')
+  const currentImage = composeServiceImage(originalCompose, COMMUNITY_LAYOUT.appService)
+  const currentProvenance = describeRuntimeImage(currentImage)
+  p.log.info(`Current runtime image: ${currentImage || '(not identified)'}`)
+  p.log.info(currentProvenance.disclosure)
   const s = p.spinner()
   // What to put back if anything fails after the image tag is rewritten.
   let rollbackCompose: string | null = null
@@ -150,6 +168,9 @@ export async function updateCommand(options: { version?: string; migrate?: boole
       const channel = config.channel ?? (/learnhouse\/app:dev\s*$/m.test(originalCompose) ? 'dev' : 'stable')
       targetImage = (await resolveAppImage(channel)).image
     }
+    const targetProvenance = describeRuntimeImage(targetImage)
+    p.log.info(`Target runtime image: ${targetProvenance.image}`)
+    p.log.info(targetProvenance.disclosure)
 
     // Preserve any uploaded media before the container is ever recreated. The
     // app is stopped first so nothing is uploaded into the old container after
@@ -231,12 +252,12 @@ export async function updateCommand(options: { version?: string; migrate?: boole
     s.stop('Services restarted')
 
     // 4) Wait for the app, then run migrations via the shared helper.
-    s.start('Waiting for Studytomy Portal to be ready')
+    s.start('Waiting for the configured runtime to be ready')
     const healthy = await waitForAppHealth(config)
     if (healthy) {
-      s.stop('Studytomy Portal is up')
+      s.stop('The configured runtime is up')
     } else {
-      s.stop('Studytomy Portal did not become healthy')
+      s.stop('The configured runtime did not become healthy')
       p.log.warn('Check `npx learnhouse logs`. Your DB backup is in ./backups/.')
     }
 
@@ -255,11 +276,7 @@ export async function updateCommand(options: { version?: string; migrate?: boole
 
     if (!healthy) process.exit(1)
 
-    if (targetVersion) {
-      p.log.success(`Studytomy Portal has been updated to v${targetVersion}!`)
-    } else {
-      p.log.success('Studytomy Portal has been updated to the latest version!')
-    }
+    p.log.success(`Runtime image updated to ${targetImage}.`)
   } catch (err) {
     s.stop('Update failed')
     const detail = (err as { message?: string })?.message ?? String(err)

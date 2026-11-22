@@ -1,12 +1,12 @@
 ---
-description: Install a self-hosted Studytomy Portal instance with the Studytomy Portal CLI, which generates and runs the Docker Compose stack, backups and updates for you.
+description: Configure and maintain a self-hosted runtime installation with the compatibility-named CLI.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # Installation Overview
 
-The **Studytomy Portal CLI** is the recommended and officially supported way to install and manage self-hosted Studytomy Portal instances. The CLI automates deployment, taking you from a fresh server to a running Studytomy Portal instance.
+The `learnhouse`-named CLI configures and maintains a self-hosted runtime installation. The default Community application image is published by LearnHouse and does not contain changes from this Studytomy repository; this checkout does not publish a verified Studytomy image.
 
 ## What the CLI Does
 
@@ -18,7 +18,7 @@ The Studytomy Portal CLI handles:
 - **Service management** to start, stop, and restart your instance
 - **Health checks** to verify all services are running correctly
 - **Backups and restores** for your database and uploaded content
-- **Updates** to pull the latest Studytomy Portal images and apply them
+- **Runtime image updates** with database backup, migrations, health checks and rollback behavior
 
 <Callout type="info">
 You do not need to manually create or edit Docker Compose files. The CLI generates and manages them for you based on your configuration choices.
@@ -27,5 +27,5 @@ You do not need to manually create or edit Docker Compose files. The CLI generat
 ## Next Steps
 
 - [Requirements](/self-hosting/installation/requirements): Verify your server meets the minimum system requirements.
-- [Quick Install](/self-hosting/installation/quick-install): Install the CLI and set up Studytomy Portal in minutes.
+- [Quick Install](/self-hosting/installation/quick-install): Configure and start the selected runtime image.
 - [CLI Commands](/cli/commands): Full reference of all available CLI commands and flags.

@@ -1,6 +1,6 @@
 # Studytomy Portal CLI
 
-The CLI helps configure, run, and maintain a local Studytomy Portal installation. The existing `learnhouse` package and command names are retained for compatibility.
+The compatibility-named CLI configures, runs, and maintains a self-hosted runtime installation. The existing `learnhouse` package and command names are retained for compatibility. Its default Community application image is the published upstream `ghcr.io/learnhouse/app` image. That image does not include changes from this Studytomy repository, and this repository has not verified or published a Studytomy-specific container image. The CLI reports the configured image and its provenance during setup and updates.
 
 [Project](https://github.com/nirzaf/studytomyportal) | [Self-hosting guide](../../docs/content/self-hosting/index.mdx) | [Local-only policy](../../LOCAL-ONLY.md)
 
@@ -58,6 +58,8 @@ npx learnhouse@1.0.0 setup
 | `learnhouse shell` | Open a shell in a running container |
 | `learnhouse env` | Edit environment variables |
 | `learnhouse dev` | Start local development environment |
+
+When running this checkout's source, build the local CLI with `bun run build` from `apps/cli`, then run `node apps/cli/dist/bin/learnhouse.js dev` from the repository root. The `npx learnhouse@latest` package and its default runtime image are separately published upstream artifacts.
 
 ## Setup
 

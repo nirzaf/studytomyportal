@@ -22,7 +22,7 @@ import { migrateContentVolume } from '../services/content-volume-migration.js'
 import { waitForAppHealth, waitForAppOrgSeed } from '../services/health.js'
 import { hasComposeService, publicUrl } from '../services/stack.js'
 import { checkPort, findAvailablePort } from '../utils/network.js'
-import { resolveAppImage } from '../services/version-check.js'
+import { describeRuntimeImage, resolveAppImage } from '../services/version-check.js'
 import { readEnvVar } from '../utils/env-file.js'
 import { writeFileAtomic } from '../utils/fs-atomic.js'
 import { hasPostgresServiceDeclaration, readPostgresComposeSettings, type PostgresComposeSettings } from '../services/postgres-compose.js'
@@ -160,7 +160,7 @@ async function stepInstallDir(): Promise<string | typeof BACK> {
     return BACK
   }
   if (existing) {
-    p.log.warn(`~/.learnhouse/${name as string} already contains a Studytomy Portal installation.`)
+    p.log.warn(`~/.learnhouse/${name as string} already contains a runtime installation.`)
     const overwrite = await p.confirm({
       message: 'Reconfigure it? Its deployment, database password and secrets are kept.',
       initialValue: false,
@@ -438,12 +438,14 @@ export async function setupCommand(rawOptions: SetupOptions) {
       googleOAuthEnabled: false,
     }
 
-    console.log(`${existing ? 'Reconfiguring' : 'Setting up'} Studytomy Portal in ${resolvedDir}`)
+    console.log(`${existing ? 'Reconfiguring' : 'Setting up'} runtime installation for Studytomy Portal in ${resolvedDir}`)
 
     // A reconfigure keeps the running image: a newer one needs the backup and
     // migrations that `learnhouse update` does.
     const appImage = existing?.image ?? (await resolveAppImage(config.channel)).image
-    console.log(`Using image: ${appImage}${existing?.image ? ' (kept; upgrade with `learnhouse update`)' : ''}`)
+    const imageProvenance = describeRuntimeImage(appImage)
+    console.log(`Runtime image: ${imageProvenance.image}${existing?.image ? ' (kept; update with `learnhouse update`)' : ''}`)
+    console.log(imageProvenance.disclosure)
 
     if (existing) {
       try {
@@ -474,7 +476,7 @@ export async function setupCommand(rawOptions: SetupOptions) {
 
       const healthy = await waitForAppHealth(config)
       if (!healthy) {
-        console.error('Health check timed out; Studytomy Portal did not become ready. Run `npx learnhouse logs` to inspect.')
+        console.error('Health check timed out; the configured runtime did not become ready. Run `npx learnhouse logs` to inspect.')
         process.exit(1)
       }
       const seeded = await waitForAppOrgSeed(config, config.orgSlug)
@@ -485,7 +487,7 @@ export async function setupCommand(rawOptions: SetupOptions) {
         console.error('')
         process.exit(1)
       }
-      console.log('Studytomy Portal is ready!')
+      console.log('The configured runtime API is ready.')
     }
 
     console.log(`URL: ${publicUrl(config)}`)
@@ -687,10 +689,12 @@ export async function setupCommand(rawOptions: SetupOptions) {
 
   // Resolve Docker image version
   const s0 = p.spinner()
-  s0.start('Resolving Studytomy Portal image version')
+  s0.start('Resolving runtime image version')
   const resolved = existing?.image ? { image: existing.image, isLatest: false } : await resolveAppImage(config.channel)
   const { image: appImage, isLatest } = resolved
-  s0.stop(`Using image: ${appImage}${existing?.image ? ' (kept; upgrade with `npx learnhouse update`)' : ''}`)
+  const imageProvenance = describeRuntimeImage(appImage)
+  s0.stop(`Runtime image: ${appImage}${existing?.image ? ' (kept; update with `npx learnhouse update`)' : ''}`)
+  p.log.info(imageProvenance.disclosure)
   if (isLatest) {
     p.log.warn('No versioned image found, using :latest tag. Pin to a version for stability.')
   }
@@ -713,7 +717,7 @@ export async function setupCommand(rawOptions: SetupOptions) {
 
   // Start services
   const startNow = await p.confirm({
-    message: 'Start Studytomy Portal now?',
+    message: 'Start the configured runtime services now?',
     initialValue: true,
   })
   if (p.isCancel(startNow)) { p.cancel(); process.exit(0) }
@@ -721,7 +725,7 @@ export async function setupCommand(rawOptions: SetupOptions) {
   const finalUrl = publicUrl(config)
 
   if (startNow) {
-    p.log.step('Starting Studytomy Portal')
+    p.log.step('Starting configured runtime services')
     const s2 = p.spinner()
     s2.start('Pulling images and starting services (this may take a few minutes)')
 
@@ -757,14 +761,14 @@ export async function setupCommand(rawOptions: SetupOptions) {
 
     // Health check
     const s3 = p.spinner()
-    s3.start('Waiting for Studytomy Portal to be ready (up to 3 minutes)')
+    s3.start('Waiting for the configured runtime to be ready (up to 3 minutes)')
 
     const healthy = await waitForAppHealth(config)
 
     if (healthy) {
       const seeded = await waitForAppOrgSeed(config, config.orgSlug)
       if (seeded) {
-        s3.stop('Studytomy Portal is ready!')
+        s3.stop('The configured runtime API is ready.')
       } else {
         s3.stop(`API is healthy but organization "${config.orgSlug}" was not seeded`)
         p.log.error(
@@ -775,16 +779,18 @@ export async function setupCommand(rawOptions: SetupOptions) {
       }
     } else {
       s3.stop('Health check timed out')
-      p.log.warn('Studytomy Portal did not respond within 3 minutes; it may still be starting. Check with:')
+      p.log.warn('The configured runtime did not respond within 3 minutes; it may still be starting. Check with:')
       p.log.message(`  npx learnhouse status   ${pc.dim('or')}   npx learnhouse logs`)
     }
 
     // Success (the password is not echoed back: it was just typed, and
     // terminals keep scrollback)
-    p.log.success(healthy ? pc.green(pc.bold('Studytomy Portal is installed!')) : pc.yellow(pc.bold('Studytomy Portal is installed, but not responding yet.')))
+    p.log.success(healthy ? pc.green(pc.bold('Runtime installation is configured and ready.')) : pc.yellow(pc.bold('Runtime installation is configured, but not responding yet.')))
     p.log.message([
       '',
       `  ${pc.cyan('URL:')}       ${finalUrl}`,
+      `  ${pc.cyan('Image:')}     ${appImage}`,
+      `  ${pc.dim(imageProvenance.disclosure)}`,
       `  ${pc.cyan('Admin:')}     ${config.adminEmail}`,
       '',
       `  ${pc.dim('Management commands:')}`,

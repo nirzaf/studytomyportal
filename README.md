@@ -173,7 +173,7 @@ This inventory describes the checked-out source and committed dependency declara
 | Documentation | Next.js 16.4.5, Fumadocs Core 16.18.1 / MDX 15.5.0 | `docs/package.json`, `docs/bun.lock` |
 | Headless clients | `@learnhouse/sdk`, `@learnhouse/react`, `@learnhouse/vue` 1.4.3 | `packages/*/package.json`; separate from portal runtime |
 
-The CLI's default application image is `ghcr.io/learnhouse/app:latest` (development: `:dev`), not a reproducible Studytomy build pin; do not treat it as a Studytomy artifact. The Python pgvector client version (0.5.1) is not the database extension version. Optional integrations and Enterprise-related packages in manifests do not prove that their associated features are licensed, enabled or deployed. No Supabase dependency is declared in these manifests.
+The CLI's default application image is `ghcr.io/learnhouse/app:latest` (development: `:dev`), an upstream runtime that does not include changes from this repository; it is not a verified Studytomy build. The CLI prints this identity during setup and updates. For source development, build the CLI from this checkout and run its `dev` command as shown in [Quickstart](docs/content/getting-started/quickstart.mdx). The Python pgvector client version (0.5.1) is not the database extension version. Optional integrations and Enterprise-related packages in manifests do not prove that their associated features are licensed, enabled or deployed. No Supabase dependency is declared in these manifests.
 
 ### Complete direct dependency inventory
 
@@ -739,7 +739,7 @@ bun install --frozen-lockfile
 uv sync --frozen
 ```
 
-Run commands in the component directory indicated, not as a single root script. Start required PostgreSQL/Redis services and configure supported environment variables before starting the API. The combined Dockerfile and CLI-generated Compose templates support local builds and runtime tests; they do not configure a hosted environment or deploy this project.
+Run commands in the component directory indicated, not as a single root script. Start required PostgreSQL/Redis services and configure supported environment variables before starting the API. To use the local development CLI from this checkout, build it with `bun --cwd apps/cli run build` and run `node apps/cli/dist/bin/learnhouse.js dev`. `npx learnhouse@latest setup` configures the published upstream runtime image; it does not build or deploy this checkout. The combined Dockerfile and CLI-generated Compose templates support local builds and runtime tests; they do not configure a hosted environment or deploy this project.
 
 ### 2. Development commands
 

@@ -1,12 +1,12 @@
 ---
-description: Install and use the Studytomy Portal CLI to deploy, update, back up and manage a self-hosted instance, or run a local development stack.
+description: Use the compatibility-named CLI to configure an upstream runtime image, maintain a self-hosted installation, or run this repository's local development stack.
 ---
 
 import { Callout } from '@/components/mdx'
 
 # CLI
 
-The Studytomy Portal CLI is the primary tool for deploying, managing, and developing Studytomy Portal. It generates and runs a Docker Compose deployment, provides an interactive setup wizard, and starts a full local development environment.
+The CLI retains the published `learnhouse` package and command names for compatibility. Its setup command generates and runs a Docker Compose installation, while `dev` runs the local source checkout. The default Community runtime image is published by LearnHouse and does not contain changes from this Studytomy repository; the CLI does not build or publish a Studytomy container image.
 
 <img src="/img/pages/cli/cli-screenshot.webp" alt="The Studytomy Portal CLI setup wizard running in a terminal" width={1400} height={1333} style={{ borderRadius: '12px', marginTop: '1rem' }} />
 
@@ -33,22 +33,22 @@ See [Requirements](/self-hosting/installation/requirements) for hardware, ports 
 
 The CLI handles two main workflows:
 
-### Production Deployment
+### Runtime installation
 
 The [setup wizard](/cli/setup-wizard) generates a complete Docker Compose deployment in `~/.learnhouse/<name>` with:
 
-- **Studytomy Portal app** container (`ghcr.io/learnhouse/app`, which bundles the Next.js web app, the FastAPI backend and the collaboration server)
+- **Upstream Community app** container (`ghcr.io/learnhouse/app`, which bundles the Next.js web app, the FastAPI backend and the collaboration server; it is not a verified Studytomy build)
 - **PostgreSQL 19.0** with **pgvector 0.8.7** for new bundled installs (unless you use an external database)
 - **Redis** (unless you use an external Redis)
 - **Caddy** (automatic SSL) or **nginx** reverse proxy
 
-Each deployment gets a unique ID, so you can run several installations on the same machine. The wizard can also deploy the Enterprise Edition, which uses a different set of images and a license key.
+Each installation gets a unique ID, so you can run several installations on the same machine. The wizard can also configure the separately licensed Enterprise Edition, which uses a different set of images and a license key.
 
 New CLI-managed local databases use the pinned `pgvector/pgvector:0.8.7-pg19` image and mount the parent data directory at `/var/lib/postgresql`; the image's default `PGDATA` is `/var/lib/postgresql/19/docker`. Reconfiguring an existing installation preserves its database image and mount. Moving PostgreSQL 16 data to PostgreSQL 19 requires the separate backup-and-restore migration procedure documented in `docs/studytomy/POSTGRESQL-19-UPGRADE.md`.
 
-### Local Development
+### Local source development
 
-The [`dev` command](/cli/dev-mode) starts PostgreSQL and Redis in Docker and runs the API, web, and collaboration servers locally with hot reload.
+The [`dev` command](/cli/dev-mode), when run from this repository using its checked-out CLI build, starts PostgreSQL and Redis in Docker and runs the API, web, and collaboration servers locally with hot reload. The `npx learnhouse@latest` CLI and its published application image are separate upstream artifacts.
 
 ## Choosing an Installation
 

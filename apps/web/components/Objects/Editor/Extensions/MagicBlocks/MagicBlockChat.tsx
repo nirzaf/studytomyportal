@@ -1,10 +1,9 @@
 import React from 'react'
 import { PaperPlaneTilt, CircleNotch, Sparkle, X } from '@phosphor-icons/react'
-import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import type { MagicBlockMessage } from './types'
-import lrnaiIcon from 'public/lrnai_icon.png'
 import { useTranslation } from 'react-i18next'
+import { StudytomyAiMark } from '@components/Studytomy/StudytomyAiMark'
 
 interface MagicBlockChatProps {
   messages: MagicBlockMessage[]
@@ -79,12 +78,7 @@ function MagicBlockChat({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
         <div className="flex items-center gap-2">
-          <Image
-            className="outline outline-1 outline-neutral-200/20 rounded-lg"
-            width={20}
-            src={lrnaiIcon}
-            alt={t('editor.blocks.magic_block_content.magic_chat')}
-          />
+          <StudytomyAiMark size={20} className="outline outline-1 outline-neutral-200/20 rounded-lg" />
           <span className="font-semibold text-sm text-white/70">{t('editor.blocks.magic_block_content.magic_chat')}</span>
         </div>
         {maxIterations !== undefined && (

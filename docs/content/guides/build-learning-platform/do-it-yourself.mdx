@@ -156,7 +156,7 @@ The list endpoint returns a plain JSON array of courses for an organization, **a
 
 ```tsx filename="src/app/page.tsx"
 import Link from 'next/link'
-import { lhFetch, courseThumbnail, ORG_SLUG, type Course } from '@/lib/learnhouse'
+import { lhFetch, courseThumbnail, ORG_SLUG, type Course } from '@/lib/studytomy'
 
 export default async function CataloguePage() {
   // Fetch the org (for its org_uuid, needed to build thumbnail URLs) and the
@@ -215,7 +215,7 @@ The path segment after `courses/` is the **full** `course_uuid` exactly as retur
 
 ```tsx filename="src/app/courses/[uuid]/page.tsx"
 import Link from 'next/link'
-import { lhFetch, type CourseMeta } from '@/lib/learnhouse'
+import { lhFetch, type CourseMeta } from '@/lib/studytomy'
 
 export default async function CoursePage({
   params,
@@ -266,7 +266,7 @@ export default async function CoursePage({
 Each activity carries an `activity_type` and a `content` object. Render per type. Create `src/app/courses/[uuid]/[activityUuid]/page.tsx`:
 
 ```tsx filename="src/app/courses/[uuid]/[activityUuid]/page.tsx"
-import { lhFetch, activityMedia, ORG_SLUG, type Activity } from '@/lib/learnhouse'
+import { lhFetch, activityMedia, ORG_SLUG, type Activity } from '@/lib/studytomy'
 
 export default async function ActivityPage({
   params,
@@ -399,7 +399,7 @@ The login endpoint expects **form-encoded** fields `username` (the email) and `p
 
 ```ts filename="src/app/api/auth/login/route.ts"
 import { NextRequest, NextResponse } from 'next/server'
-import { API_URL } from '@/lib/learnhouse'
+import { API_URL } from '@/lib/studytomy'
 import { setSession } from '@/lib/session'
 
 export async function POST(req: NextRequest) {
@@ -431,7 +431,7 @@ Signup creates a user in your organization with `POST /api/v1/users/{org_id}` (J
 
 ```ts filename="src/app/api/auth/signup/route.ts"
 import { NextRequest, NextResponse } from 'next/server'
-import { API_URL, lhFetch, ORG_SLUG } from '@/lib/learnhouse'
+import { API_URL, lhFetch, ORG_SLUG } from '@/lib/studytomy'
 
 export async function POST(req: NextRequest) {
   const body = await req.json() // { email, password, username, first_name, last_name }
@@ -461,7 +461,7 @@ A logout handler clears the cookie in `src/app/api/auth/logout/route.ts`:
 
 ```ts filename="src/app/api/auth/logout/route.ts"
 import { NextResponse } from 'next/server'
-import { API_URL } from '@/lib/learnhouse'
+import { API_URL } from '@/lib/studytomy'
 import { getSession, clearSession } from '@/lib/session'
 
 export async function POST() {
@@ -578,7 +578,7 @@ export default function SignupPage() {
 Add a helper that pulls the token from the session and refreshes it when it has expired. Append to `src/lib/session.ts`:
 
 ```ts filename="src/lib/session.ts (continued)"
-import { API_URL } from '@/lib/learnhouse'
+import { API_URL } from '@/lib/studytomy'
 
 /**
  * Run an API call as the logged-in user. On a 401, transparently refresh the
@@ -688,7 +688,7 @@ Now wire it all together. Update the course page from Step 4 to fetch the trail 
 
 ```tsx filename="src/app/courses/[uuid]/page.tsx (updated)"
 import Link from 'next/link'
-import { lhFetch, type CourseMeta } from '@/lib/learnhouse'
+import { lhFetch, type CourseMeta } from '@/lib/studytomy'
 import { getSession, authedFetch } from '@/lib/session'
 import EnrollButton from './EnrollButton'
 

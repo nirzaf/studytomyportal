@@ -1650,6 +1650,17 @@ describe('command success paths', () => {
     await expect(startCommand()).resolves.toBeUndefined()
   })
 
+  it('start discloses the configured upstream image without calling it a verified Studytomy build', async () => {
+    fs.writeFileSync(path.join(installDir, 'docker-compose.yml'),
+      'name: learnhouse-dep1\nservices:\n  learnhouse-app:\n    image: ghcr.io/learnhouse/app:1.4.8\n')
+    const info = vi.spyOn(H.mock.log, 'info')
+    const success = vi.spyOn(H.mock.log, 'success')
+    await startCommand()
+    expect(info).toHaveBeenCalledWith('Runtime image: ghcr.io/learnhouse/app:1.4.8')
+    expect(info.mock.calls.some(([message]) => String(message).includes('does not include changes from this Studytomy repository'))).toBe(true)
+    expect(success).toHaveBeenCalledWith('Configured runtime services are running.')
+  })
+
   it('stop stops the containers with `docker compose stop` (not down)', async () => {
     const m = (await import('node:child_process')).execSync as unknown as ReturnType<typeof vi.fn>
     await expect(stopCommand()).resolves.toBeUndefined()
@@ -2097,7 +2108,11 @@ describe('command success paths', () => {
   })
 
   it('printBanner renders without error', async () => {
+    const output = vi.spyOn(console, 'log').mockImplementation(() => {})
     await expect(printBanner()).resolves.toBeUndefined()
+    const banner = output.mock.calls.map(([line]) => String(line)).join('\n')
+    expect(banner).not.toContain('Deploy Studytomy Portal with a single command')
+    expect(banner).toContain('Default image is upstream, not this checkout.')
   })
 
   it('status / start / stop exit cleanly when Docker errors', async () => {
@@ -2157,6 +2172,7 @@ describe('setup / update in-process', () => {
   }
 
   it('setup --ci --no-start generates a complete install', async () => {
+    const output = vi.spyOn(console, 'log').mockImplementation(() => {})
     await setupCommand({
       ci: true, name: 'unit', domain: 'localhost', port: 8090,
       adminEmail: 'admin@school.dev', adminPassword: 'password123',
@@ -2168,6 +2184,9 @@ describe('setup / update in-process', () => {
     expect(fs.existsSync(path.join(dir, 'learnhouse.config.json'))).toBe(true)
     expect(fs.readFileSync(path.join(dir, '.env'), 'utf-8'))
       .toContain('LEARNHOUSE_INITIAL_ADMIN_EMAIL=admin@school.dev')
+    const messages = output.mock.calls.map(([line]) => String(line)).join('\n')
+    expect(messages).toContain('Runtime image: ghcr.io/learnhouse/app:latest')
+    expect(messages).toContain('does not include changes from this Studytomy repository')
   })
 
   it('the interactive wizard generates a complete community install', async () => {
@@ -2921,6 +2940,8 @@ describe('setup / update in-process', () => {
   })
 
   it('update runs the full upgrade flow against a fixture install', async () => {
+    const info = vi.spyOn(H.mock.log, 'info')
+    const success = vi.spyOn(H.mock.log, 'success')
     // Seed an install for findInstallDir/readConfig to pick up.
     const dir = path.join(home, '.learnhouse', 'test')
     fs.mkdirSync(dir, { recursive: true })
@@ -2938,6 +2959,11 @@ describe('setup / update in-process', () => {
     // --no-backup avoids the pg_dump (mocked execSync writes no file); --no-migrate
     // avoids alembic. waitForHealth is stubbed. The flow should complete.
     await expect(updateCommand({ backup: false, migrate: false })).resolves.toBeUndefined()
+
+    expect(info).toHaveBeenCalledWith('Current runtime image: ghcr.io/learnhouse/app:1.4.0')
+    expect(info).toHaveBeenCalledWith('Target runtime image: ghcr.io/learnhouse/app:latest')
+    expect(info.mock.calls.some(([message]) => String(message).includes('does not include changes from this Studytomy repository'))).toBe(true)
+    expect(success).toHaveBeenCalledWith('Runtime image updated to ghcr.io/learnhouse/app:latest.')
 
     // The compose tag was rewritten to :latest (offline fallback).
     expect(fs.readFileSync(path.join(dir, 'docker-compose.yml'), 'utf-8'))

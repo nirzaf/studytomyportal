@@ -5,6 +5,27 @@ import { IMAGE_TAG_RE } from '../utils/validators.js'
 const NPM_REGISTRY_URL = 'https://registry.npmjs.org/learnhouse'
 const GHCR_BASE = 'ghcr.io/learnhouse/app'
 
+export interface RuntimeImageProvenance {
+  image: string
+  origin: 'upstream' | 'unverified'
+  studytomyBuildVerified: boolean
+  disclosure: string
+}
+
+/** Describe what can be established from an image reference without changing it. */
+export function describeRuntimeImage(image: string): RuntimeImageProvenance {
+  const upstream = /^ghcr\.io\/learnhouse\/app(?=[:@]|$)/.test(image.trim())
+  return {
+    image,
+    origin: upstream ? 'upstream' : 'unverified',
+    // A registry/repository name is not build provenance for this checkout.
+    studytomyBuildVerified: false,
+    disclosure: upstream
+      ? 'This is a published upstream LearnHouse image; it does not include changes from this Studytomy repository, and no Studytomy build is verified.'
+      : 'The image publisher and Studytomy build provenance are unverified.',
+  }
+}
+
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number)
   const pb = b.split('.').map(Number)
@@ -59,7 +80,7 @@ export async function checkForUpdates(opts: { print?: boolean; signal?: AbortSig
 }
 
 /**
- * Resolve the Docker image tag for the Studytomy Portal app.
+ * Resolve the Docker image tag used by the compatible runtime installation.
  *
  * - channel 'dev'    → always returns ghcr.io/learnhouse/app:dev
  * - channel 'stable' → fetches the latest app release tag from GitHub, falls back to :latest

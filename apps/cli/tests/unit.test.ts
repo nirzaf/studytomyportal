@@ -15,7 +15,7 @@ import { validateEmail, validatePassword, validateDomain, validatePort, validate
 import { quoteEnvValue } from '../src/utils/env-quote.js'
 import { parsePostgresUrl, parseRedisUrl, getPublicIp, checkPort, findAvailablePort, checkTcpConnection } from '../src/utils/network.js'
 import net from 'node:net'
-import { resolveAppImage } from '../src/services/version-check.js'
+import { describeRuntimeImage, resolveAppImage } from '../src/services/version-check.js'
 import { formatBytes } from '../src/commands/update.js'
 import { waitForHealth, waitForOrgSeed, waitForEeReady } from '../src/services/health.js'
 import { checkForUpdates } from '../src/services/version-check.js'
@@ -2062,6 +2062,38 @@ describe('resolveAppImage', () => {
     })
     const res = await resolveAppImage('stable')
     expect(res).toEqual({ image: 'ghcr.io/learnhouse/app:latest', isLatest: true })
+  })
+})
+
+describe('describeRuntimeImage', () => {
+  it('identifies the exact upstream repository without claiming a verified Studytomy build', () => {
+    const result = describeRuntimeImage('ghcr.io/learnhouse/app:latest')
+    expect(result).toEqual({
+      image: 'ghcr.io/learnhouse/app:latest',
+      origin: 'upstream',
+      studytomyBuildVerified: false,
+      disclosure: expect.stringContaining('does not include changes from this Studytomy repository'),
+    })
+  })
+
+  it.each([
+    'ghcr.io/learnhouse/app:dev',
+    'ghcr.io/learnhouse/app@sha256:abc123',
+  ])('recognizes upstream tags and digests for %s', (image) => {
+    expect(describeRuntimeImage(image)).toMatchObject({ image, origin: 'upstream', studytomyBuildVerified: false })
+  })
+
+  it.each([
+    '',
+    '   ',
+    'ghcr.io/studytomy/app:latest',
+    'docker.io/learnhouse/app:latest',
+    'ghcr.io/learnhouse/app-fork:latest',
+  ])('keeps unknown or empty image provenance unverified for %j', (image) => {
+    const result = describeRuntimeImage(image)
+    expect(result.image).toBe(image)
+    expect(result.origin).toBe('unverified')
+    expect(result.studytomyBuildVerified).toBe(false)
   })
 })
 

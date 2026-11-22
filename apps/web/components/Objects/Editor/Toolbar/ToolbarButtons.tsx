@@ -44,14 +44,13 @@ import {
 import { SiYoutube } from '@icons-pack/react-simple-icons'
 import ToolTip from '@components/Objects/StyledElements/Tooltip/Tooltip'
 import React from 'react'
-import Image from 'next/image'
 import LinkInputTooltip from './LinkInputTooltip'
-import lrnaiIcon from 'public/lrnai_icon.png'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { useTranslation } from 'react-i18next'
 import dynamic from 'next/dynamic'
 import { useDynamicLookups } from '../Extensions/Dynamic/useDynamicLookups'
 import { useTaggableCommunities } from '@components/Objects/Communities/Tags/communityTags'
+import { StudytomyAiMark } from '@components/Studytomy/StudytomyAiMark'
 
 const VariablePicker = dynamic(() => import('../Extensions/Dynamic/VariablePicker'), { ssr: false })
 const CustomVariablesModal = dynamic(() => import('../Extensions/Dynamic/CustomVariablesModal'), { ssr: false })
@@ -704,11 +703,11 @@ export const ToolbarButtons = React.memo(({ editor }: any) => {
             }
             aria-label={t('editor.blocks.magic_block')}
           >
-            <Image src={lrnaiIcon} alt={t('editor.blocks.magic_block_content.title')} width={15} height={15} />
+            <StudytomyAiMark size={15} />
           </div>
         ) : (
           <div className="editor-tool-btn editor-tool-btn-magic editor-tool-btn-magic-disabled" aria-label={t('editor.blocks.magic_block_disabled')}>
-            <Image src={lrnaiIcon} alt={t('editor.blocks.magic_block_content.title')} width={15} height={15} />
+            <StudytomyAiMark size={15} />
           </div>
         )}
       </ToolTip>

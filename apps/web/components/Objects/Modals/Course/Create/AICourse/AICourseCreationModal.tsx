@@ -2,14 +2,12 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { X, Loader2, ArrowUpRight } from 'lucide-react'
-import Image from 'next/image'
 import { motion, AnimatePresence } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
-import lrnaiIcon from 'public/lrnai_icon.png'
 import AICoursePreview from './AICoursePreview'
 import AICourseChat from './AICourseChat'
 import type { CoursePlan, CoursePlanningMessage, CreatedChapter, Attachment } from '@services/ai/courseplanning'
@@ -20,6 +18,7 @@ import {
   parseCoursePlanFromStream,
   ENABLE_ACTIVITY_CONTENT_GENERATION,
 } from '@services/ai/courseplanning'
+import { StudytomyAiMark } from '@components/Studytomy/StudytomyAiMark'
 
 interface AICourseCreationModalProps {
   isOpen: boolean
@@ -221,12 +220,7 @@ function AICourseCreationModal({
             {/* Header - clean, minimal */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 flex-shrink-0">
               <div className="flex items-center gap-3">
-                <Image
-                  className="outline outline-1 outline-neutral-200/20 rounded-lg"
-                  width={24}
-                  src={lrnaiIcon}
-                  alt={t('courses.create.ai.title')}
-                />
+                <StudytomyAiMark size={24} className="outline outline-1 outline-neutral-200/20 rounded-lg" />
                 <span className="text-sm font-semibold text-white/70">
                   {t('courses.create.ai.title')}
                 </span>

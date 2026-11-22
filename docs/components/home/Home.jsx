@@ -21,8 +21,8 @@ const START = [
     icon: HardDrives,
     label: 'Start here',
     title: 'Run locally',
-    text: 'Start Studytomy Portal from this source checkout.',
-    code: 'npx learnhouse dev',
+    text: 'Build the checked-out CLI, then start local services from this source checkout.',
+    code: 'bun --cwd apps/cli run build',
     action: 'Quickstart',
   },
   {
