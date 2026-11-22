@@ -33,7 +33,8 @@ class RuntimeIdentitySession:
 
 def test_runtime_database_identity_is_credential_free_and_rejects_unsafe_targets():
     url = make_url("postgresql+asyncpg://user:secret@localhost/studytomy_test")
-    expected = hashlib.sha256(b"localhost\x005432\x00studytomy_test").hexdigest()
+    expected = "5cefd14c3a81e924b9e6e36e08b483e9c6c45d022994e0a9f5169cdc979afa1b"
+    assert hashlib.sha256(b"localhost\x005432\x00studytomy_test").hexdigest() == expected
     assert instance._runtime_database_identity_sha256(url, "studytomy_test") == expected
     assert instance._runtime_database_identity_sha256(
         make_url("postgresql+asyncpg://other:password@localhost:5432/studytomy_test"),
@@ -44,6 +45,7 @@ def test_runtime_database_identity_is_credential_free_and_rejects_unsafe_targets
         "postgresql+asyncpg://user:secret@db.example.org/studytomy_test",
         "postgresql+asyncpg://user:secret@localhost/studytomy_test?host=db.example.org",
         "postgresql+asyncpg://user:secret@localhost/studytomy_test?hostaddr=203.0.113.1",
+        "postgresql+asyncpg://user:secret@localhost/studytomy_test#unexpected",
     ):
         with pytest.raises(ValueError):
             instance._runtime_database_identity_sha256(make_url(unsafe), "studytomy_test")

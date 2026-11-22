@@ -694,3 +694,42 @@ The same mobile Chromium consent and approval journey passed for a synthetic tea
 ### Board snapshot stream checkpoint
 
 At `510aac605a6455b8344eba96585a42466d6d65be` the mounted FastAPI board route used an in-process ASGI client and a disposable Docker PostgreSQL session at Alembic revision `b91d2f6a08c3`. With an ephemeral local internal credential, a new synthetic board returned the empty-state marker and ETag. A two-chunk PUT with that ETag returned HTTP 200. A new GET returned the present-state marker, a new ETag and byte-identical payload, matching the row queried directly in PostgreSQL. This checks the actual route and persistence without mocking the write. Node's collaboration fixture separately verifies oversized stream cancellation. The background API launch for a combined live Redis check was blocked by automatic approval review, so this checkpoint does not add fresh Redis, WebSocket or restart evidence.
+
+## Final E2E safety and verification completion (22 November 2026)
+
+**Base source revision:** `86e875e2d4c5e9d8b88de80730e25a850da3b122` (`main`). This verification pass made no application-code changes. It added and executed focused test assertions for the shared cross-language digest, database-port variation, and URL-fragment rejection. Older checkpoints elsewhere in this file do not substitute for these results.
+
+**Environment:** macOS Darwin 27.2.0 arm64, Node.js 26.13.0, Bun 1.4.2. The E2E URL, test-database URL and source author/reviewer credentials were unset at the start. `localhost:3000` and `localhost:8000` did not serve the frontend or API (HTTP connection failure). Docker listed existing development and unrelated project containers, but none was selected as an approved isolated syllabus test database. No container, database, account or source record was changed. PostgreSQL and pgvector versions for this verification are **UNVERIFIED**.
+
+### Findings
+
+| Finding | Status | Evidence and limitation |
+| --- | --- | --- |
+| DB-01 | **PARTIALLY IMPLEMENTED** | The query-free URL validator, active-session `current_database()` identity digest, and pre-provisioning comparison are present. Runtime-identity and digest tests passed, pinning the same SHA-256 value in Python and TypeScript and covering host, port, database, host/hostaddr overrides, fragments, and digest mismatch. The API was not running, so comparison against a live database and the authenticated HTTP failure contracts remain **UNVERIFIED**. |
+| E2E-01 | **BLOCKED** | Both Explore Topics Playwright specs were attempted with loopback URLs. Global setup rejected them before health checks, authentication or account provisioning because `STUDYTOMY_TEST_DATABASE_URL` was unset. The required source author/reviewer accounts, approval policies, synthetic curriculum, private storage and approved embedding provider were also not configured or verified. Neither browser scenario executed. |
+| VERIFY-01 | **PARTIALLY IMPLEMENTED** | The available CLI, API unit, web, docs and E2E helper checks below ran. PostgreSQL integration was skipped and the live browser acceptance was blocked. |
+| WIN-01 | **UNVERIFIED** | The branding test and POSIX URL conversion passed on macOS. A Node.js 26.13.0 cross-target `fileURLToPath(..., { windows: true })` probe accepted a drive-qualified URL with an encoded space. No Windows operating-system test run occurred; Windows execution remains **UNVERIFIED**. |
+| DOC-01 | **IMPLEMENTED** | This revision-specific record distinguishes executed checks from skipped and blocked acceptance. No credentials, connection strings or private source content are recorded. |
+
+### Commands and results
+
+| Check | Actual result |
+| --- | --- |
+| `cd apps/cli && bun run typecheck` | Passed. |
+| `cd apps/cli && bun run build` | Passed. |
+| `cd apps/cli && bun run test` | 22 files passed; 854 passed, 1 skipped (855 total). The test script also built the CLI successfully. |
+| `cd apps/api && uv run pytest -q src/tests/routers/test_instance_runtime_identity.py src/tests/studytomy/test_syllabus_library_unit.py` | 40 passed. The runtime-identity tests use synthetic connection/session doubles; this is not live PostgreSQL verification. |
+| `cd apps/api && uv run ruff check src/routers/instance.py src/tests/routers/test_instance_runtime_identity.py` | Passed. |
+| `cd apps/api && uv run pytest -q -m studytomy_postgres src/tests/studytomy/test_syllabus_library_postgres.py` | 4 skipped because `STUDYTOMY_TEST_DATABASE_URL` was unset. |
+| `cd apps/e2e && bun test core/testDatabase.test.ts` | 3 passed, including host, port and database identity, host/hostaddr query and fragment rejection, and the credential-free digest contract. |
+| `cd apps/e2e && bun run test:identity` | 4 passed, including missing and incorrect database digest handling. |
+| `cd apps/e2e && bun run typecheck` | Passed. |
+| `cd apps/web && bun run test` | 788 passed; includes 4 Studytomy branding tests. |
+| `cd apps/web && bun run lint` | Exit 0; 0 errors and 966 warnings. |
+| `cd apps/web && bun run build` | Passed. Next.js reported existing dynamic-filesystem tracing warnings. |
+| `cd docs && bun run test:snippets` | 3 passed, including POSIX/Windows path containment cases. |
+| `cd docs && bun install --frozen-lockfile` | Installed the already-declared locked documentation dependencies; no dependency versions were changed. |
+| `cd docs && bun run build` | Passed, generating 461 static pages. OpenAPI fetching failed and the documented bundled snapshot fallback was used. The generated tracked `docs/public/llms.txt` was restored after the build. |
+| Playwright specs `19-explore-topics.spec.ts` and `20-explore-topics-live.spec.ts` | **BLOCKED before test execution** by the missing approved `_test` database URL. No API request or shared learner provisioning occurred. |
+
+The live blocker is environmental, not a test pass: both loopback applications were unavailable, there was no approved test database URL, and no separate source-author/reviewer fixture credentials were supplied. Until an authorized isolated environment with the documented policies, curriculum, storage and embedding prerequisites is available, active API database identity, PostgreSQL source lifecycle, browser search/citation behavior and revocation remain unverified. No production or shared database was used. This is a local verification record, not CI, deployment, educator approval or operational acceptance.
