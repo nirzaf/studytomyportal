@@ -1455,6 +1455,9 @@ async def _retrieve(
 
     search_config = literal_column("'simple'::regconfig")
     query_terms = _query_terms(normalized_search)
+    literal_topic = tuple(
+        token for token in _search_tokens(search_text) if token not in _QUERY_STOPWORDS and len(token) > 1
+    )
     corpus_size, term_frequencies = await _topic_term_frequencies(
         db, base, query_terms, search_config,
     )
@@ -1477,7 +1480,7 @@ async def _retrieve(
     for rank, row in enumerate(lexical_rows, 1):
         relevance = _lexical_match_score(
             query_terms, identifiers, row[0].chunk_text,
-            term_frequencies, corpus_size,
+            term_frequencies, corpus_size, literal_topic=literal_topic,
         )
         if relevance is None:
             continue
@@ -1503,9 +1506,9 @@ async def _retrieve(
             StudySyllabusConceptMapping.status == "approved",
             StudySyllabusConceptMapping.page_start <= StudySyllabusChunk.page_number,
             StudySyllabusConceptMapping.page_end >= StudySyllabusChunk.page_number,
-            func.position(
-                func.regexp_replace(func.lower(StudySyllabusConceptMapping.evidence_quote), r"\s+", " ", "g"),
+            func.strpos(
                 func.regexp_replace(func.lower(StudySyllabusChunk.chunk_text), r"\s+", " ", "g"),
+                func.regexp_replace(func.lower(StudySyllabusConceptMapping.evidence_quote), r"\s+", " ", "g"),
             ) > 0,
             StudyCurriculumRevision.org_id == org.id,
             StudyCurriculumRevision.status == "published",
@@ -1741,12 +1744,18 @@ async def _topic_term_frequencies(
     return corpus_size, {str(term): int(count) for term, count in term_frequencies}
 
 
+def _search_tokens(text: str) -> list[str]:
+    return [_canonical_search_term(term) for term in re.findall(r"[^\W_]+", text, flags=re.UNICODE)]
+
+
 def _lexical_match_score(
     query_terms: set[str],
     identifiers: list[str],
     chunk_text: str,
     term_frequencies: dict[str, int] | None = None,
     corpus_size: int = 0,
+    *,
+    literal_topic: tuple[str, ...] = (),
 ) -> float | None:
     normalized_chunk = _normalize_evidence(chunk_text)
     if any(_normalize_evidence(identifier) in normalized_chunk for identifier in identifiers):
@@ -1754,6 +1763,16 @@ def _lexical_match_score(
     matched = query_terms.intersection(_query_terms(chunk_text))
     if not matched:
         return None
+    # A literal topic match remains relevant even when a narrow source scope
+    # makes the topic common. Never apply this rescue to just part of a query.
+    if 1 <= len(literal_topic) <= 8 and set(literal_topic) <= matched:
+        chunk_tokens = _search_tokens(chunk_text)
+        width = len(literal_topic)
+        if any(
+            tuple(chunk_tokens[start:start + width]) == literal_topic
+            for start in range(len(chunk_tokens) - width + 1)
+        ):
+            return 1.0
     if term_frequencies is None:
         return 1.0 if len(matched) >= min(2, len(query_terms)) else None
 

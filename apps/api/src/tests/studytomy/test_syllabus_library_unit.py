@@ -186,6 +186,23 @@ def test_keyword_retrieval_uses_scoped_term_rarity_for_distinctive_single_concep
     ) == 1.0
 
 
+def test_keyword_retrieval_keeps_literal_topics_in_narrow_scopes_without_rescuing_partial_matches():
+    assert _lexical_match_score(
+        {"electrolysis"}, [], "Electrolysis drives chemical changes.", {"electrolysis": 1}, 2,
+        literal_topic=("electrolysis",),
+    ) == 1.0
+    terms = {"isotope", "evidence"}
+    frequencies = {"isotope": 2, "evidence": 2}
+    assert _lexical_match_score(
+        terms, [], "Approved isotope evidence.", frequencies, 2,
+        literal_topic=("isotope", "evidence"),
+    ) == 1.0
+    assert _lexical_match_score(
+        terms, [], "Evidence collected about an isotope.", frequencies, 2,
+        literal_topic=("isotope", "evidence"),
+    ) is None
+
+
 def test_official_mapping_requires_full_curriculum_metadata_compatibility():
     version = SimpleNamespace(
         source_type="syllabus", jurisdiction="Sri Lanka", grade="Grade 12", subject="Chemistry",
