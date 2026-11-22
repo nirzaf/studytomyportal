@@ -770,3 +770,33 @@ The task-created PostgreSQL, Redis, RustFS, Ollama, API, and web processes are d
 ### Git delivery receipt
 
 Implementation and test commit `1146e796b1d905ac299e3e20911fbf9f172387c7` was pushed normally to `origin/main` after the post-commit runtime identity check and both Explore Topics browser specs passed. `git ls-remote origin refs/heads/main` returned the same SHA. This receipt is a documentation-only follow-up; it contains no application or test-code changes.
+
+## Final isolated verification receipt (22 November 2026)
+
+**Tested revision:** `d9d35b8d90c6a770ac6a324b4d36b46c40b6858e` on `main`, with `origin/main` at the same SHA before this documentation-only update. The source tree digest reported by the live runtime was `39165f4d30b05f6753f2284808c427f0ce0a64dc5e3a041f114051b4a0a1d5cd`; the runtime reported a clean source tree and matching web/API build identity. The API and frontend/test files are unchanged from implementation commit `1146e796b1d905ac299e3e20911fbf9f172387c7` through this tested revision.
+
+**Database identity gate (DB-01):** The E2E runner accepts only a query-free loopback PostgreSQL URL naming a `_test` database. Before provisioning shared authentication state, global setup compares the runner's credential-free host/port/database digest with the authenticated API runtime-identity response. The API reports that digest only after checking its actual PostgreSQL connection and `current_database()` against its configured URL; identity failures return the guarded error path. Query overrides, remote hosts, database mismatch, missing identity configuration and unauthenticated access are covered by focused API and E2E helper tests. No database credentials are returned. The health and organization readiness requests before runtime identity are read-only.
+
+**Executed checks at this revision:**
+
+| Check | Result |
+| --- | --- |
+| API runtime-identity tests | 7 passed. |
+| Syllabus library unit tests | 36 passed. |
+| PostgreSQL syllabus integration tests | 4 passed against the disposable loopback PostgreSQL 19 database recorded above; the same API/test source is present at the tested revision. |
+| Ruff on the touched API service and test files | Passed. |
+| E2E database-guard tests | 3 passed. |
+| E2E runtime-identity tests | 4 passed. |
+| E2E TypeScript check | Passed. |
+| Mocked and live Explore Topics Playwright specs | 2 passed in headed Chromium. The live spec used the real local FastAPI routes and isolated PostgreSQL; the mocked spec remains a separate deterministic UI check. The live flow verified pending-source isolation, self-approval and learner-approval denials, rights evidence, separate reviewer approval, cited retrieval/page, authenticated PDF access, contextual follow-up, scope reset, unsupported-topic fallback, revocation, and revoked-PDF denial. |
+| CLI typecheck, build and tests | Passed; 22 test files, 854 passed, 1 skipped. |
+| Frontend branding test | 4 passed, including encoded-space file URL handling. |
+| Frontend test suite | 788 passed, 0 failed. |
+| Frontend lint | Exit 0; 0 errors and 966 warnings. |
+| Frontend production build | Passed; Next.js reported existing dynamic-filesystem tracing warnings in Sentry configuration. |
+| Documentation snippet tests | 3 passed. |
+| Documentation production build | Passed; 461 pages generated. Remote OpenAPI fetches fell back to the bundled snapshot; generated `docs/public/llms.txt` was restored afterward. |
+
+**Portability (WIN-01):** The branding fixture selects a drive-qualified Windows file URL on Windows and a POSIX file URL elsewhere. On this macOS host, the branding test passed and a Node `fileURLToPath(..., { windows: true })` probe accepted the drive-qualified URL and decoded its space. A native Windows test runner was unavailable; Windows execution remains **UNVERIFIED**.
+
+**Limits:** PostgreSQL and browser verification used synthetic records and the isolated database only. The test run used local Ollama for embeddings, with text generation disabled and no paid AI calls. The source fixture cleanup revoked its approved version while retaining audit history; no active approved synthetic source remained. These results do not establish production behavior, educator validation, real-provider answer quality, or deployment readiness. No schema migration or application-code change was made for this receipt.
