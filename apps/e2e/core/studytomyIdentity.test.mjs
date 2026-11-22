@@ -57,6 +57,10 @@ describe('Studytomy E2E identity', () => {
     expect(runtimeIdentityProblems({ ...actual, database_migration_heads: [] }, expected)).toContain(
       'database migration heads do not match the served source',
     )
+    expect(runtimeIdentityProblems({ ...actual, database_identity_sha256: 'd'.repeat(64) }, expected, 'd'.repeat(64))).toEqual([])
+    expect(runtimeIdentityProblems(actual, expected, 'd'.repeat(64))).toContain(
+      'active database identity does not match the approved test database',
+    )
   })
 
   test('guards Studytomy and full-suite runs while allowing explicit upstream-only paths', () => {

@@ -109,10 +109,14 @@ source record:
 
 * Loopback `E2E_BASE_URL` and `E2E_API_URL` served by the same local checkout;
   global setup verifies build identities and database migration heads.
-* The local API must use the same `STUDYTOMY_TEST_DATABASE_URL` passed to the
-  E2E process. It must be PostgreSQL on loopback and its database name must end
-  in `_test`; global setup refuses Studytomy browser runs before provisioning
-  shared accounts otherwise. Never point it at shared or production data.
+* The local API must use the exact same database endpoint as
+  `STUDYTOMY_TEST_DATABASE_URL` passed to the E2E process. The URL must be
+  query-free PostgreSQL on loopback and its database name must end in `_test`;
+  host-routing query overrides are rejected. Before provisioning shared
+  accounts, global setup compares the E2E endpoint digest with an authenticated,
+  opt-in API runtime identity. The API derives its digest from its active
+  connection URL and `current_database()`; credentials and the connection URL
+  are never returned. Never point it at shared or production data.
 * One pre-provisioned synthetic organization member with syllabus author scope
   and a separate educational reviewer with review scope, an education owner
   assignment, and active source-approval policy. The test checks those

@@ -1,9 +1,12 @@
+import hashlib
+import ipaddress
 import os
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.engine import URL
 from src.db.organizations import Organization
 from src.core.events.database import get_db_session
 from src.core.migrations import current_revisions, head_revisions
@@ -14,6 +17,32 @@ from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.db.users import PublicUser
 
 router = APIRouter()
+
+
+def _runtime_database_identity_sha256(database_url: URL, actual_database: str) -> str:
+    """Return a credential-free identity only for a direct local PostgreSQL test DB."""
+    host = (database_url.host or "").lower().strip("[]")
+    database = database_url.database or ""
+    if database_url.get_backend_name() != "postgresql" or database_url.query:
+        raise ValueError("Runtime database URL has an unsupported driver or query override.")
+    if host != "localhost":
+        try:
+            if not ipaddress.ip_address(host).is_loopback:
+                raise ValueError("Runtime database host is not loopback.")
+        except ValueError as error:
+            raise ValueError("Runtime database host is not loopback.") from error
+    if not re.fullmatch(r"[A-Za-z0-9_-]+_test", database, re.IGNORECASE) or actual_database != database:
+        raise ValueError("Runtime database is not the configured _test database.")
+    port = database_url.port or 5432
+    return hashlib.sha256(f"{host}\0{port}\0{actual_database}".encode("utf-8")).hexdigest()
+
+
+async def _active_runtime_database_identity_sha256(db_session: AsyncSession, connection) -> str:
+    if connection.dialect.name != "postgresql":
+        raise ValueError("Runtime database is not PostgreSQL.")
+    result = await connection.exec_driver_sql("SELECT current_database()")
+    actual_database = result.scalar_one()
+    return _runtime_database_identity_sha256(db_session.get_bind().url, actual_database)
 
 
 @router.get("/runtime-identity", include_in_schema=False)
@@ -42,10 +71,11 @@ async def get_runtime_identity(
     try:
         connection = await db_session.connection()
         database_migration_heads = await connection.run_sync(current_revisions)
+        database_identity_sha256 = await _active_runtime_database_identity_sha256(db_session, connection)
     except Exception as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Runtime database revision is unavailable.",
+            detail="Runtime database identity or revision is unavailable.",
         ) from error
 
     return {
@@ -53,6 +83,7 @@ async def get_runtime_identity(
         "source_tree_sha256": source_tree_sha256,
         "source_migration_heads": head_revisions(),
         "database_migration_heads": database_migration_heads,
+        "database_identity_sha256": database_identity_sha256,
     }
 
 

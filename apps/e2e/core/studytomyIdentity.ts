@@ -15,6 +15,7 @@ export type RuntimeIdentity = {
   source_tree_sha256: string
   source_migration_heads: string[]
   database_migration_heads: string[]
+  database_identity_sha256?: string
 }
 
 const VALUE_FLAGS = new Set([
@@ -87,6 +88,7 @@ export function currentForkIdentity(repoRoot?: string): ForkIdentity {
 export function runtimeIdentityProblems(
   actual: Partial<RuntimeIdentity> | null | undefined,
   expected: ForkIdentity,
+  expectedDatabaseIdentitySha256?: string,
 ): string[] {
   if (!actual) return ['runtime identity response is missing']
   const problems: string[] = []
@@ -105,6 +107,12 @@ export function runtimeIdentityProblems(
       JSON.stringify([...actual.source_migration_heads].sort())
   ) {
     problems.push('database migration heads do not match the served source')
+  }
+  if (
+    expectedDatabaseIdentitySha256 !== undefined &&
+    actual.database_identity_sha256 !== expectedDatabaseIdentitySha256
+  ) {
+    problems.push('active database identity does not match the approved test database')
   }
   return problems
 }

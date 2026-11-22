@@ -40,7 +40,7 @@ import {
   runtimeIdentityProblems,
   type RuntimeIdentity,
 } from './core/studytomyIdentity'
-import { isSafeStudytomyTestDatabase } from './core/testDatabase'
+import { studytomyTestDatabaseIdentity } from './core/testDatabase'
 
 const BOOT_TIMEOUT_MS = 8 * 60 * 1000 // image pull + first-run install can be slow
 const POLL_INTERVAL_MS = 3000
@@ -101,6 +101,7 @@ function bootSelfHost(): void {
 
 export default async function globalSetup(): Promise<void> {
   const verifyStudyTomy = includesStudyTomySpecs(process.argv.slice(2))
+  let testDatabaseIdentitySha256: string | null = null
   if (verifyStudyTomy) {
     if (!process.env.E2E_BASE_URL) {
       throw new Error(
@@ -111,9 +112,10 @@ export default async function globalSetup(): Promise<void> {
       throw new Error('Studytomy E2E only runs against a loopback web and API instance.')
     }
     // Global setup creates a shared learner, so guard the database before any API access.
-    if (!isSafeStudytomyTestDatabase(process.env.STUDYTOMY_TEST_DATABASE_URL)) {
+    testDatabaseIdentitySha256 = studytomyTestDatabaseIdentity(process.env.STUDYTOMY_TEST_DATABASE_URL)
+    if (!testDatabaseIdentitySha256) {
       throw new Error(
-        'Studytomy E2E requires STUDYTOMY_TEST_DATABASE_URL to identify the same loopback PostgreSQL _test database used by the API. Global setup will not provision shared test accounts without it.',
+        'Studytomy E2E requires a query-free STUDYTOMY_TEST_DATABASE_URL for a loopback PostgreSQL _test database. Global setup will not provision shared test accounts without it.',
       )
     }
   }
@@ -128,12 +130,12 @@ export default async function globalSetup(): Promise<void> {
   await waitForOk(`${API_URL}/orgs/slug/${ORG_SLUG}`, 60_000, `org "${ORG_SLUG}"`)
   console.log(`Studytomy Portal is ready at ${BASE_URL}. Admin: ${ADMIN_EMAIL}`)
 
-  if (verifyStudyTomy) await verifyStudyTomyRuntime()
+  if (verifyStudyTomy) await verifyStudyTomyRuntime(testDatabaseIdentitySha256!)
 
   await generateSharedAuth()
 }
 
-async function verifyStudyTomyRuntime(): Promise<void> {
+async function verifyStudyTomyRuntime(expectedDatabaseIdentitySha256: string): Promise<void> {
   const expected = currentForkIdentity()
   const token = await api.login(ADMIN_EMAIL, ADMIN_PASSWORD)
 
@@ -145,7 +147,7 @@ async function verifyStudyTomyRuntime(): Promise<void> {
       `Studytomy API identity is unavailable or unconfigured. Set the local build identity and STUDYTOMY_TEST_RUNTIME_IDENTITY=1. ${String(error)}`,
     )
   }
-  const apiProblems = runtimeIdentityProblems(apiIdentity, expected)
+  const apiProblems = runtimeIdentityProblems(apiIdentity, expected, expectedDatabaseIdentitySha256)
 
   let webIdentity: { build_sha?: string; source_tree_sha256?: string } | null = null
   let webFailure = ''

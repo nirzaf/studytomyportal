@@ -27,7 +27,10 @@ test('legacy LearnHouse AI icon has no active frontend callers or public asset',
 })
 
 test('frontend test root resolves encoded spaces in file URLs', () => {
-  const root = webRootFromUrl('file:///tmp/studytomy%20project/apps/web/tests/studytomy-branding.test.mjs')
+  const fixtureUrl = process.platform === 'win32'
+    ? 'file:///C:/tmp/studytomy%20project/apps/web/tests/studytomy-branding.test.mjs'
+    : 'file:///tmp/studytomy%20project/apps/web/tests/studytomy-branding.test.mjs'
+  const root = webRootFromUrl(fixtureUrl)
   expect(root).toContain('studytomy project')
   expect(root.replaceAll('\\', '/').replace(/\/$/, '')).toMatch(/studytomy project\/apps\/web$/)
 })
