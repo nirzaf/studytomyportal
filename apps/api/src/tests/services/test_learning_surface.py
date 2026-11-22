@@ -1,13 +1,18 @@
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException, Request
 from pydantic import TypeAdapter, ValidationError
 
+from src.services.ai import learning_generation
 from src.services.ai.schemas.learning_surface import (
     ActionRequest,
     LearningPresentation,
     LearningSurface,
+    StartLearningSurface,
 )
 
 
@@ -76,3 +81,35 @@ def test_action_input_has_no_evaluation_authority(surface):
     for unexpected in ({"correct": True}, {"action": "request_hint"}, {"answer": "x" * 49}):
         with pytest.raises(ValidationError):
             adapter.validate_python({**action, **unexpected})
+
+
+async def test_unapproved_practice_never_calls_provider_or_reserves_credit(monkeypatch):
+    async def deny_unapproved_source(*_args, **_kwargs):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "POLICY_NOT_APPROVED", "message": "No approved practice binding."},
+        )
+
+    provider = AsyncMock()
+    reserve_credit = AsyncMock()
+    monkeypatch.setattr(learning_generation, "_authorize_source", deny_unapproved_source)
+    monkeypatch.setattr(learning_generation, "generate", provider)
+    monkeypatch.setattr(learning_generation, "reserve_ai_credit", reserve_credit)
+
+    with pytest.raises(HTTPException) as denied:
+        await learning_generation.start_learning_surface(
+            Request({"type": "http", "headers": []}),
+            object(),
+            object(),
+            StartLearningSurface(
+                schema_version=1,
+                request_id=uuid4(),
+                activity_uuid="activity_synthetic",
+                mode="practice",
+            ),
+        )
+
+    assert denied.value.status_code == 409
+    assert denied.value.detail["code"] == "POLICY_NOT_APPROVED"
+    provider.assert_not_awaited()
+    reserve_credit.assert_not_awaited()
