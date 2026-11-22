@@ -385,6 +385,12 @@ function DashLeftMenu() {
                       <span>{t('common.all_courses')}</span>
                     </Link>
                   </HoverMenuItem>
+                  <HoverMenuItem asChild>
+                    <Link href="/dash/studytomy/syllabus-library" className="flex items-center gap-2 px-3 py-2 text-sm text-white/70 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors">
+                      <BookOpen size={16} weight="fill" />
+                      <span>Syllabus source library</span>
+                    </Link>
+                  </HoverMenuItem>
                   {recentCourses.length > 0 && (
                     <>
                       <HoverMenuSeparator />

@@ -1,6 +1,6 @@
 import { useOrg } from '@components/Contexts/OrgContext'
 import { getUriWithOrg } from '@services/config/config'
-import { Books, FolderSimple, ChatsCircle, Headphones, Cube, ShoppingBag, Steps, VideoCamera } from '@phosphor-icons/react'
+import { Books, FolderSimple, ChatsCircle, Headphones, Cube, ShoppingBag, Steps, VideoCamera, Compass } from '@phosphor-icons/react'
 import { menuIcon } from '@components/Objects/Menus/menuIcons'
 import Link from 'next/link'
 import React from 'react'
@@ -14,10 +14,11 @@ const CHORD_BY_TYPE: Record<string, string | undefined> = Object.fromEntries(
   sitePages.filter((p) => p.menuType && p.shortcut).map((p) => [p.menuType as string, p.shortcut]),
 )
 
-type Builtin = { feature: string; link: string; labelKey: string; Icon: any }
+type Builtin = { feature: string; link: string; labelKey?: string; label?: string; Icon: any }
 
 const BUILTIN: Record<string, Builtin> = {
   courses: { feature: 'courses', link: '/courses', labelKey: 'courses.courses', Icon: Books },
+  explore: { feature: 'courses', link: '/explore', label: 'Explore Topics', Icon: Compass },
   paths: { feature: 'paths', link: '/paths', labelKey: 'paths.title', Icon: Steps },
   library: { feature: 'folders', link: '/library', labelKey: 'library.library', Icon: FolderSimple },
   podcasts: { feature: 'podcasts', link: '/podcasts', labelKey: 'podcasts.podcasts', Icon: Headphones },
@@ -28,7 +29,7 @@ const BUILTIN: Record<string, Builtin> = {
 }
 
 // Default order when an org has no custom menu config.
-const DEFAULT_ORDER = ['courses', 'paths', 'library', 'podcasts', 'live', 'communities', 'playgrounds', 'store']
+const DEFAULT_ORDER = ['courses', 'explore', 'paths', 'library', 'podcasts', 'live', 'communities', 'playgrounds', 'store']
 
 export type OrgMenuItem = {
   key: string
@@ -79,7 +80,7 @@ export function useOrgMenuItems(orgslug: string): OrgMenuItem[] {
       if (!isEnabled(meta.feature)) return null // plan/feature gating
       return {
         key: item.type,
-        label: item.label || t(meta.labelKey),
+        label: item.label || meta.label || t(meta.labelKey || 'common.search'),
         Icon: meta.Icon,
         href: getUriWithOrg(orgslug, meta.link),
         external: false,

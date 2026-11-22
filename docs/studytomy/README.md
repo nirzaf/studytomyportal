@@ -15,6 +15,7 @@ Read only the documents needed for the task. Source, mounted routes and tests ar
 | Curriculum and syllabus scope | [Sri Lankan decision baseline](SRI-LANKA-DECISION-BASELINE.md) | Approved sources, rights records and the open `D-01`/`D-02` decisions |
 | Interactive lesson UI | [Generative UI implementation](GENUI-IMPLEMENTATION.md) | AI learning surface contracts and lesson components |
 | Grounded authoring or retrieval | [MCP draft authoring](MCP-DRAFT-AUTHORING.md), [grounded retrieval evaluation](GROUNDED-RETRIEVAL-EVALUATION.md) | `services/studytomy/grounding.py`, RAG authorization tests |
+| PDF syllabus sources or Explore Topics | [Syllabus Knowledge Library](SYLLABUS-KNOWLEDGE-LIBRARY.md) | `services/studytomy/syllabus_library.py`, `/studytomy` source and Explore routes, source review and consent gates |
 | Virtual laboratory work | [Momentum pilot specification](VIRTUAL-LAB-MOMENTUM-PILOT-SPEC.md) | `apps/labs/momentum-pilot`, `services/studytomy/virtual_labs.py`, managed lab specs |
 | Support, safeguarding or privacy casework | [Support configuration](SUPPORT-CONFIGURATION.md), [safeguarding configuration](SAFEGUARDING-CONFIGURATION.md) | `services/studytomy/support.py`, `cases.py`, `safeguarding_retention.py` and their policy keys |
 | Access-path or entitlement work | [Managed-course access inventory](../../STUDYTOMY-ACCESS-PATH-INVENTORY.md) | `services/studytomy/access_policy.py`, `entitlements.py`, route-level tests |

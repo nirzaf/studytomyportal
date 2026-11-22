@@ -29,8 +29,14 @@ class GroundingPDFError(ValueError):
 
 def pdf_pages(
     pdf_bytes: bytes, max_chars: int = MAX_PDF_CHARS, *, for_grounding: bool = False,
+    allow_empty: bool = False,
 ) -> list[tuple[int, str]]:
-    """Extract numbered pages. Explicit sources reject unreadable or oversized files."""
+    """Extract numbered pages. Explicit sources reject unreadable or oversized files.
+
+    ``allow_empty`` is for source-library ingestion only: it keeps the original
+    page count for an image-only scan so the educator can see why it failed and
+    receive OCR guidance. Such an extraction must never be indexed or approved.
+    """
     try:
         from pypdf import PdfReader
 
@@ -52,7 +58,7 @@ def pdf_pages(
             if text or for_grounding:
                 pages.append((number, text))
                 budget -= len(text)
-        if for_grounding and not any(text for _, text in pages):
+        if for_grounding and not allow_empty and not any(text for _, text in pages):
             raise GroundingPDFError("The PDF has no readable text. Upload a searchable or OCR-processed PDF.")
         return pages
     except GroundingPDFError:
