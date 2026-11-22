@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ from fastapi import HTTPException, Request
 from pydantic import TypeAdapter, ValidationError
 
 from src.services.ai import learning_generation
+from src.services.ai.learning_practice import PracticeSource, _project_surface
 from src.services.ai.schemas.learning_surface import (
     ActionRequest,
     LearningPresentation,
@@ -81,6 +83,52 @@ def test_action_input_has_no_evaluation_authority(surface):
     for unexpected in ({"correct": True}, {"action": "request_hint"}, {"answer": "x" * 49}):
         with pytest.raises(ValidationError):
             adapter.validate_python({**action, **unexpected})
+
+
+def test_recovery_rejects_a_visual_removed_from_the_current_approval():
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "learning_surface_v1.json"
+    surface = LearningSurface.model_validate(json.loads(fixture.read_text(encoding="utf-8")))
+    source = PracticeSource(
+        activity_uuid=surface.activity_id,
+        course_uuid="course_synthetic",
+        org_id=1,
+        identity=surface.source_identity,
+        approved_visuals=frozenset({"number_line"}),
+    )
+    record = SimpleNamespace(
+        source_identity=surface.source_identity,
+        presentation=surface.model_dump(mode="json"),
+    )
+
+    with pytest.raises(HTTPException) as denied:
+        _project_surface(source, record, None)
+
+    assert denied.value.status_code == 409
+    assert denied.value.detail["code"] == "POLICY_NOT_APPROVED"
+
+
+def test_recovery_removes_saved_hints_when_current_permission_is_revoked():
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "learning_surface_v1.json"
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    payload["components"].append({"kind": "hint", "id": "saved-hint", "text": "Synthetic approved hint."})
+    surface = LearningSurface.model_validate(payload)
+    source = PracticeSource(
+        activity_uuid=surface.activity_id,
+        course_uuid="course_synthetic",
+        org_id=1,
+        identity=surface.source_identity,
+        approved_visuals=frozenset({"fraction_explorer"}),
+        allow_hints=False,
+    )
+    record = SimpleNamespace(
+        source_identity=surface.source_identity,
+        presentation=surface.model_dump(mode="json"),
+    )
+
+    recovered = _project_surface(source, record, None)
+
+    assert "request_hint" not in recovered.actions
+    assert all(component.kind != "hint" for component in recovered.components)
 
 
 async def test_unapproved_practice_never_calls_provider_or_reserves_credit(monkeypatch):

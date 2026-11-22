@@ -25,11 +25,12 @@ export type LessonRecommendation = {
 }
 type Recommendation = LessonRecommendation | { reason: 'no_accessible_activity'; support_action: 'return_to_lesson' | null }
 
-export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, release, onOpenRecommendation }: {
+export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, release, refreshKey = 0, onOpenRecommendation }: {
   client: AdaptiveRequest
   activityUuid: string
   orgSlug?: string
   release?: AdaptiveReleaseScope
+  refreshKey?: number
   onOpenRecommendation?: (_recommendation: LessonRecommendation) => Promise<boolean>
 }) {
   const { t } = useTranslation()
@@ -38,11 +39,26 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
   const [available, setAvailable] = useState(false)
   const [open, setOpen] = useState(false)
   const [offset, setOffset] = useState(0)
-  const [page, setPage] = useState<MasteryPage | null>(null)
-  const [error, setError] = useState(false)
-  const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null)
+  const [pageResult, setPageResult] = useState<{ queryKey: string; page: MasteryPage } | null>(null)
+  const [failedPageQuery, setFailedPageQuery] = useState<string | null>(null)
+  const [recommendationResult, setRecommendationResult] = useState<{
+    queryKey: string; recommendations: Recommendation[]
+  } | null>(null)
   const [openingActivity, setOpeningActivity] = useState<string | null>(null)
   const [recommendationNotice, setRecommendationNotice] = useState('')
+  const pageQueryKey = JSON.stringify([
+    activityUuid, offset, open, refreshKey, release?.course_uuid ?? null,
+    release?.course_release_uuid ?? null,
+  ])
+  const recommendationQueryKey = JSON.stringify([
+    activityUuid, open, refreshKey, orgSlug ?? null, release?.course_uuid ?? null,
+    release?.course_release_uuid ?? null,
+  ])
+  const page = pageResult?.queryKey === pageQueryKey ? pageResult.page : null
+  const error = failedPageQuery === pageQueryKey
+  const recommendations = recommendationResult?.queryKey === recommendationQueryKey
+    ? recommendationResult.recommendations
+    : null
 
   useEffect(() => {
     const controller = new AbortController()
@@ -51,34 +67,36 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
       .then(result => {
         if (controller.signal.aborted) return
         setAvailable(true)
-        setPage(result)
+        setPageResult({ queryKey: pageQueryKey, page: result })
+        setFailedPageQuery(current => current === pageQueryKey ? null : current)
       })
       .catch(() => {
         if (controller.signal.aborted) return
-        setError(true)
+        setFailedPageQuery(pageQueryKey)
       })
     return () => controller.abort()
-  }, [activityUuid, client, offset, open, release])
+  }, [activityUuid, client, offset, open, pageQueryKey, release])
 
   useEffect(() => {
     if (!open || (!release && !orgSlug)) return
     const controller = new AbortController()
     const params = new URLSearchParams({ activity_uuid: activityUuid, ...release })
     client<Recommendation[]>(`me/recommendations?${params}`, 'GET', undefined, undefined, controller.signal)
-      .then(result => { if (!controller.signal.aborted) setRecommendations(result) })
-      .catch(() => { if (!controller.signal.aborted) setRecommendations([]) })
+      .then(result => {
+        if (!controller.signal.aborted) setRecommendationResult({ queryKey: recommendationQueryKey, recommendations: result })
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRecommendationResult({ queryKey: recommendationQueryKey, recommendations: [] })
+      })
     return () => controller.abort()
-  }, [activityUuid, client, open, orgSlug, release])
+  }, [activityUuid, client, open, orgSlug, recommendationQueryKey, release])
 
   function requestPage(next: number) {
-    setPage(null)
-    setError(false)
     setOffset(next)
   }
 
   function toggle() {
     requestPage(0)
-    setRecommendations(null)
     setRecommendationNotice('')
     setOpeningActivity(null)
     setOpen(!open)
@@ -104,7 +122,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
     }
   }
 
-  if (!available) return null
+  if (!available && !error) return null
   const states = {
     not_assessed: t('adaptiveProgress.notAssessed', 'Not yet assessed'),
     insufficient_evidence: t('adaptiveProgress.insufficient', 'More evidence needed'),

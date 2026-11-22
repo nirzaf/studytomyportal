@@ -10,7 +10,7 @@ test.skip(
   'Requires a local synthetic learner and course.',
 )
 
-test('adaptive diagnostic starts, resumes, retries and ends in the lesson', async ({ page }) => {
+test('adaptive diagnostic resumes, completes, and refreshes lesson progress', async ({ page }) => {
   test.setTimeout(180_000)
   const org = await getOrg()
   const token = await login(ADMIN_EMAIL, ADMIN_PASSWORD)
@@ -46,11 +46,17 @@ test('adaptive diagnostic starts, resumes, retries and ends in the lesson', asyn
     ...first, uuid: `issued_${randomUUID()}`, ordinal: 2,
     question: { ...first.question, prompt: 'Enter the next measurement' },
   }
-  let attempt = {
+  type MockAttempt = {
+    uuid: string; purpose: 'diagnostic'; status: 'active' | 'abandoned' | 'completed'; version: number
+    answered_count: number; skipped_count: number; current_item: typeof first | typeof second | null
+  }
+  let attempt: MockAttempt = {
     uuid: `attempt_${randomUUID()}`, purpose: 'diagnostic', status: 'active', version: 2,
     answered_count: 0, skipped_count: 0, current_item: first,
   }
+  let attemptStarts = 0
   let active = false
+  let evidenceUpdated = false
   let answerKey: string | undefined
   const api = '**/studytomy/adaptive/orgs/*/me/'
   const tutorUuid = `tutor_${randomUUID()}`
@@ -99,15 +105,19 @@ test('adaptive diagnostic starts, resumes, retries and ends in the lesson', asyn
     expect(new URL(route.request().url()).searchParams.get('activity_uuid')).toBe(lesson.activity_uuid)
     return route.fulfill({ json: {
       next_offset: null, concepts: [
-        { concept_uuid: 'synthetic-measurement', title: 'Measurement concepts', state: 'not_assessed',
-          independent_family_count: 0, assisted_count: 1, review_due: false, score: null },
+        { concept_uuid: 'synthetic-measurement', title: 'Measurement concepts',
+          state: evidenceUpdated ? 'developing' : 'not_assessed',
+          independent_family_count: evidenceUpdated ? 1 : 0, assisted_count: 1, review_due: false, score: null },
         { concept_uuid: 'synthetic-units', title: 'Units', state: 'insufficient_evidence',
           independent_family_count: 1, assisted_count: 0, review_due: false },
       ],
     } })
   })
   await page.route(`${api}recommendations?*`, route => route.fulfill({
-    json: offerSuggestion ? [{
+    json: evidenceUpdated ? [{
+      activity_uuid: suggestedActivity, course_uuid: course.course_uuid, activity_title: 'Next supported lesson',
+      reason: 'practice_needed',
+    }] : offerSuggestion ? [{
       activity_uuid: suggestedActivity, course_uuid: course.course_uuid, activity_title: 'Review measurement units',
       reason: 'practice_needed',
     }] : [{ reason: 'no_accessible_activity', support_action: 'return_to_lesson' }],
@@ -125,28 +135,54 @@ test('adaptive diagnostic starts, resumes, retries and ends in the lesson', asyn
       source_activity_uuid: lesson.activity_uuid, diagnostic_revision_uuid: revision,
     })
     expect(route.request().headers()['idempotency-key']).toBeTruthy()
+    if (attemptStarts > 0) {
+      attempt = {
+        ...attempt, uuid: `attempt_${randomUUID()}`, status: 'active', version: 2,
+        answered_count: 0, skipped_count: 0, current_item: first,
+      }
+    }
+    attemptStarts++
     active = true
     return route.fulfill({ status: 201, json: attempt })
   })
-  await page.route(`${api}attempts/${attempt.uuid}/responses`, route => {
-    expect(route.request().postDataJSON()).toEqual({
-      item_uuid: first.uuid, expected_version: 2,
-      response: { kind: 'number', value: '12.5' }, declared_external_help: false,
-    })
+  await page.route(`${api}attempts/*/responses`, route => {
+    const payload = route.request().postDataJSON()
+    expect(new URL(route.request().url()).pathname).toContain(`/attempts/${attempt.uuid}/responses`)
+    expect(payload.response).toEqual({ kind: 'number', value: '12.5' })
+    expect(payload.declared_external_help).toBe(false)
     const key = route.request().headers()['idempotency-key']
     expect(key).toBeTruthy()
     if (!answerKey) {
+      expect(payload).toEqual({
+        item_uuid: first.uuid, expected_version: 2,
+        response: { kind: 'number', value: '12.5' }, declared_external_help: false,
+      })
       answerKey = key
       attempt = { ...attempt, version: 3, answered_count: 1, current_item: second }
       return route.abort()
     }
-    expect(key).toBe(answerKey)
-    return route.fulfill({ json: { status: 'active', version: 3, next_item: second } })
-  })
-  await page.route(`${api}attempts/${attempt.uuid}/abandon`, route => {
-    expect(route.request().postDataJSON()).toEqual({ expected_version: 3, reason: 'leave_assessment' })
+    if (payload.item_uuid === first.uuid) {
+      expect(payload.item_uuid).toBe(first.uuid)
+      expect(key).toBe(answerKey)
+      attempt = { ...attempt, version: 3, answered_count: 1, current_item: second }
+      return route.fulfill({ json: { status: 'active', version: 3, next_item: second } })
+    }
+    expect(payload).toEqual({
+      item_uuid: second.uuid, expected_version: 3,
+      response: { kind: 'number', value: '12.5' }, declared_external_help: false,
+    })
+    evidenceUpdated = true
     active = false
-    return route.fulfill({ json: { ...attempt, status: 'abandoned', version: 4, current_item: null } })
+    attempt = { ...attempt, status: 'completed', version: 4, answered_count: 2, current_item: null }
+    return route.fulfill({ json: { status: 'completed', version: attempt.version, next_item: null } })
+  })
+  await page.route(`${api}attempts/*/summary`, route => route.fulfill({ json: {
+    coverage_complete: true, correct_count: 2, scored_count: 2,
+  } }))
+  await page.route(`${api}attempts/*/abandon`, route => {
+    expect(route.request().postDataJSON()).toEqual({ expected_version: 2, reason: 'leave_assessment' })
+    active = false
+    return route.fulfill({ json: { ...attempt, status: 'abandoned', version: 3, current_item: null } })
   })
 
   const path = `/course/${course.course_uuid.replace(/^course_/, '')}/activity/${lesson.activity_uuid.replace(/^activity_/, '')}`
@@ -224,25 +260,37 @@ test('adaptive diagnostic starts, resumes, retries and ends in the lesson', asyn
   await expect(answer).toBeVisible()
   await answer.fill('12.5')
   await expect(answer).toHaveValue('12.5')
-  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 })
-  await expect(guidance).toHaveCount(0)
-  await expect(explain).toHaveCount(0)
-  await expect(answer).toHaveValue('', { timeout: 60_000 })
-  await answer.fill('12.5')
-  await expect(answer).toHaveValue('12.5')
   await panel.getByRole('button', { name: 'Save response' }).click()
   await expect(panel.getByRole('alert')).toContainText('Save could not be confirmed')
   await panel.getByRole('button', { name: 'Retry save' }).click()
   await expect(panel.getByText('Response saved.')).toBeVisible()
   await expect(panel.getByRole('group', { name: 'Enter the next measurement' })).toBeVisible()
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 })
+  await expect(guidance).toHaveCount(0)
+  await expect(explain).toHaveCount(0)
+  const resumedPanel = page.getByRole('region', { name: 'Lesson diagnostic', exact: true })
+  await expect(resumedPanel.getByRole('group', { name: 'Enter the next measurement' })).toBeVisible()
+  const resumedAnswer = resumedPanel.getByRole('textbox', { name: 'Your answer (cm)' })
+  await expect(resumedAnswer).toHaveValue('')
+  const refreshedProgress = page.getByRole('button', { name: 'Concept progress', exact: true })
+  await refreshedProgress.click()
+  await expect(page.getByText('Not yet assessed', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Review measurement units' })).toBeVisible()
+  await resumedAnswer.fill('12.5')
+  await resumedPanel.getByRole('button', { name: 'Save response' }).click()
+  await expect(resumedPanel.getByText('Attempt completed.')).toBeVisible()
+  await expect(page.getByText('Developing', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Next supported lesson' })).toBeVisible()
 
-  const end = panel.getByRole('button', { name: 'End attempt', exact: true })
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 })
+  const finalPanel = page.getByRole('region', { name: 'Lesson diagnostic', exact: true })
+  await finalPanel.getByRole('button', { name: 'Start Measurements' }).click()
+  const end = finalPanel.getByRole('button', { name: 'End attempt', exact: true })
   await end.focus()
   await page.keyboard.press('Enter')
-  await expect(panel.getByRole('button', { name: 'Keep working' })).toBeFocused()
+  await expect(finalPanel.getByRole('button', { name: 'Keep working' })).toBeFocused()
   await page.keyboard.press('Tab')
-  await expect(panel.getByRole('button', { name: 'End this attempt' })).toBeFocused()
+  await expect(finalPanel.getByRole('button', { name: 'End this attempt' })).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(panel.getByText('Attempt ended.')).toBeVisible()
-  await expect(answer).toHaveCount(0)
+  await expect(finalPanel.getByText('Attempt ended.')).toBeVisible()
 })

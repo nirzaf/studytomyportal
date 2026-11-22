@@ -40,6 +40,7 @@ function RecoveredAttempts({ orgUuid, orgSlug, activityUuid, token, tutorScope, 
 }) {
   const client = useMemo(() => adaptiveRequest(orgUuid, token), [orgUuid, token])
   const [options, setOptions] = useState<StartOption[]>([])
+  const [progressRefreshKey, setProgressRefreshKey] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
     const params = new URLSearchParams({ source_activity_uuid: activityUuid, ...release })
@@ -48,12 +49,14 @@ function RecoveredAttempts({ orgUuid, orgSlug, activityUuid, token, tutorScope, 
       .catch(() => { if (!controller.signal.aborted) setOptions([]) })
     return () => controller.abort()
   }, [client, activityUuid, release])
-  return <><AdaptiveLessonProgress {...{ client, activityUuid, orgSlug, release, onOpenRecommendation }} />{purposes.map(purpose => <RecoveredAttempt key={purpose}
-    options={options.filter(option => option.purpose === purpose)} {...{ client, activityUuid, purpose, tutorScope, release }} />)}</>
+  return <><AdaptiveLessonProgress {...{ client, activityUuid, orgSlug, release, onOpenRecommendation }} refreshKey={progressRefreshKey} />{purposes.map(purpose => <RecoveredAttempt key={purpose}
+    options={options.filter(option => option.purpose === purpose)} onCompleted={() => setProgressRefreshKey(value => value + 1)}
+    {...{ client, activityUuid, purpose, tutorScope, release }} />)}</>
 }
 
-function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope, release }: {
+function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope, release, onCompleted }: {
   client: ReturnType<typeof adaptiveRequest>; activityUuid: string; purpose: AttemptPurpose; options: StartOption[]; tutorScope: string
+  onCompleted: () => void
   release?: AdaptiveReleaseScope
 }) {
   const { t } = useTranslation()
@@ -180,6 +183,7 @@ function RecoveredAttempt({ client, activityUuid, purpose, options, tutorScope, 
       setRetry(null)
       setNotice(t('adaptiveLearner.saved', 'Response saved.'))
       if (receipt.status === 'completed') {
+        onCompleted()
         const result = await client<Summary>(`me/attempts/${encodeURIComponent(attempt.uuid)}/summary`, 'GET', undefined, undefined, lifetime.signal).catch(() => null)
         if (!lifetime.signal.aborted && result) setSummary(result)
       }
