@@ -11,7 +11,8 @@ RUN bun install --frozen-lockfile
 # ───────────────────────────────────────────────
 # Stage 2: Frontend build
 # ───────────────────────────────────────────────
-FROM oven/bun:1.4.5-alpine AS frontend-builder
+# Use the same Node runtime for prerendering and serving the standalone build.
+FROM node:26.13.0-alpine3.24 AS frontend-builder
 WORKDIR /app
 COPY --from=frontend-deps /app/node_modules ./node_modules
 COPY apps/web .
@@ -30,7 +31,7 @@ RUN if [ "$LEARNHOUSE_PUBLIC" = "true" ] || { [ -L /app/ee ] && [ ! -e /app/ee ]
 # Optional explicit build identifier; see generateBuildId in apps/web/next.config.js.
 ARG BUILD_ID
 ENV BUILD_ID=$BUILD_ID
-RUN bun run build
+RUN npm run build
 
 # ───────────────────────────────────────────────
 # Stage 3: Frontend production image
