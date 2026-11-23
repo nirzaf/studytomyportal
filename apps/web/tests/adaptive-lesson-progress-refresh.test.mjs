@@ -36,6 +36,8 @@ test('completed adaptive attempts refresh visible mastery and recommendation dat
   const release = { course_uuid: 'course_synthetic', course_release_uuid: 'course_release_synthetic' }
   let completed = false
   let failNextMastery = false
+  let failNextRecommendation = false
+  let returnNoRecommendations = false
   const calls = []
   const client = async path => {
     calls.push(path)
@@ -55,6 +57,11 @@ test('completed adaptive attempts refresh visible mastery and recommendation dat
       }
     }
     if (path.startsWith('me/recommendations?')) {
+      if (failNextRecommendation) {
+        failNextRecommendation = false
+        throw new Error('Synthetic temporary recommendation failure')
+      }
+      if (returnNoRecommendations) return []
       return [{
         activity_uuid: 'activity_next', course_uuid: release.course_uuid,
         course_release_uuid: release.course_release_uuid,
@@ -103,6 +110,29 @@ test('completed adaptive attempts refresh visible mastery and recommendation dat
     expect(container.textContent).not.toContain('Concept progress is unavailable.')
     expect(calls.filter(path => path.startsWith('me/lesson-mastery?'))).toHaveLength(6)
     expect(calls.filter(path => path.startsWith('me/recommendations?'))).toHaveLength(4)
+
+    failNextRecommendation = true
+    await act(async () => render(3))
+    expect(container.textContent).toContain('Suggested activities are unavailable.')
+    expect(container.textContent).not.toContain('No activities to suggest right now.')
+    const retrySuggestions = [...container.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('Retry suggestions'))
+    expect(retrySuggestions).toBeDefined()
+
+    returnNoRecommendations = true
+    await act(async () => retrySuggestions.dispatchEvent(new dom.MouseEvent('click', { bubbles: true })))
+    expect(container.textContent).not.toContain('Suggested activities are unavailable.')
+    expect(container.textContent).toContain('No activities to suggest right now.')
+    expect(calls.filter(path => path.startsWith('me/recommendations?'))).toHaveLength(6)
+
+    returnNoRecommendations = false
+    failNextRecommendation = true
+    await act(async () => render(4))
+    expect(container.textContent).toContain('Suggested activities are unavailable.')
+    await act(async () => render(5))
+    expect(container.textContent).toContain('Next supported lesson')
+    expect(container.textContent).not.toContain('Suggested activities are unavailable.')
+    expect(calls.filter(path => path.startsWith('me/recommendations?'))).toHaveLength(8)
   } finally {
     await act(async () => root.unmount())
     await dom.happyDOM.close()

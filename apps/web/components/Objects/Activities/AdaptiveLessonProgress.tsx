@@ -44,6 +44,8 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
   const [recommendationResult, setRecommendationResult] = useState<{
     queryKey: string; recommendations: Recommendation[]
   } | null>(null)
+  const [failedRecommendationQuery, setFailedRecommendationQuery] = useState<string | null>(null)
+  const [recommendationRetry, setRecommendationRetry] = useState(0)
   const [openingActivity, setOpeningActivity] = useState<string | null>(null)
   const [recommendationNotice, setRecommendationNotice] = useState('')
   const pageQueryKey = JSON.stringify([
@@ -51,7 +53,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
     release?.course_release_uuid ?? null,
   ])
   const recommendationQueryKey = JSON.stringify([
-    activityUuid, open, refreshKey, orgSlug ?? null, release?.course_uuid ?? null,
+    activityUuid, open, refreshKey, recommendationRetry, orgSlug ?? null, release?.course_uuid ?? null,
     release?.course_release_uuid ?? null,
   ])
   const page = pageResult?.queryKey === pageQueryKey ? pageResult.page : null
@@ -59,6 +61,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
   const recommendations = recommendationResult?.queryKey === recommendationQueryKey
     ? recommendationResult.recommendations
     : null
+  const recommendationError = failedRecommendationQuery === recommendationQueryKey
 
   useEffect(() => {
     const controller = new AbortController()
@@ -83,10 +86,12 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
     const params = new URLSearchParams({ activity_uuid: activityUuid, ...release })
     client<Recommendation[]>(`me/recommendations?${params}`, 'GET', undefined, undefined, controller.signal)
       .then(result => {
-        if (!controller.signal.aborted) setRecommendationResult({ queryKey: recommendationQueryKey, recommendations: result })
+        if (controller.signal.aborted) return
+        setRecommendationResult({ queryKey: recommendationQueryKey, recommendations: result })
+        setFailedRecommendationQuery(null)
       })
       .catch(() => {
-        if (!controller.signal.aborted) setRecommendationResult({ queryKey: recommendationQueryKey, recommendations: [] })
+        if (!controller.signal.aborted) setFailedRecommendationQuery(recommendationQueryKey)
       })
     return () => controller.abort()
   }, [activityUuid, client, open, orgSlug, recommendationQueryKey, release])
@@ -173,7 +178,14 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
           </div>}
           {(release || orgSlug) && <section>
             <h3 className="font-semibold">{t('adaptiveProgress.suggestions', 'Suggested activities')}</h3>
-            {recommendations === null ? <p role="status">{t('adaptiveProgress.loadingSuggestions', 'Loading suggestions…')}</p>
+            {recommendationError ? <div className="space-y-2">
+              <p role="status">{t('adaptiveProgress.suggestionsUnavailable', 'Suggested activities are unavailable.')}</p>
+              <Button type="button" variant="outline" className="min-h-11"
+                onClick={() => setRecommendationRetry(current => current + 1)}>
+                {t('adaptiveProgress.retrySuggestions', 'Retry suggestions')}
+              </Button>
+            </div>
+              : recommendations === null ? <p role="status">{t('adaptiveProgress.loadingSuggestions', 'Loading suggestions…')}</p>
               : suggestions?.length ? <ul className="space-y-2">
                 {suggestions.map(item => {
                   if (release) return <li key={`${item.course_release_uuid}:${item.activity_uuid}`} className="[overflow-wrap:anywhere]">
