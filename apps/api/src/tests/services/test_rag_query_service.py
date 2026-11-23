@@ -61,6 +61,15 @@ class TestLabels:
 
 
 class TestQueryCourseRag:
+    async def test_empty_authorized_course_scope_skips_embedding(self):
+        embed = AsyncMock()
+        with patch.object(query_service, "embed_single_text", new=embed):
+            rows = await query_service.search_course_content(
+                "question", 1, None, SimpleNamespace(org_id=1, course_ids=[]),
+            )
+        assert rows == []
+        embed.assert_not_awaited()
+
     async def test_numbers_sources_per_place_and_labels_context(self):
         rows = [
             _row(chunk_text="first"),

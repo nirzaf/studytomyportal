@@ -137,6 +137,86 @@ class TestSweep:
         await pipeline.run(ContentRef.activity(10))
         assert (await scheduler.sweep(session)).queued == 0
 
+    async def test_embedding_revision_drift_queues_unchanged_refs_and_reindex_clears_it(
+        self, session, org, course, chapter, rag_dispatch, monkeypatch
+    ):
+        monkeypatch.setenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "fixture-revision-a")
+        await _page(session, org, course, chapter, 10)
+        await pipeline.run_course(course.id, transcribe=False)
+        original_space = pipeline.embedding_provenance()[0]
+        original_dates = (
+            (await session.execute(select(Activity.update_date).where(Activity.id == 10))).scalar_one(),
+            (await session.execute(select(Course.update_date).where(Course.id == course.id))).scalar_one(),
+        )
+
+        monkeypatch.setenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "fixture-revision-b")
+        assert scheduler.embedding_provenance()[0] != original_space
+        await scheduler.sweep(session)
+        assert _queued(rag_dispatch) == {
+            ContentRef.course(course.id): 0,
+            ContentRef.activity(10): 0,
+        }
+        assert original_dates == (
+            (await session.execute(select(Activity.update_date).where(Activity.id == 10))).scalar_one(),
+            (await session.execute(select(Course.update_date).where(Course.id == course.id))).scalar_one(),
+        )
+
+        await pipeline.run_course(course.id, transcribe=False)
+        current_space = pipeline.embedding_provenance()[0]
+        indexed_spaces = set((await session.execute(select(CourseEmbedding.embedding_space))).scalars().all())
+        assert indexed_spaces == {current_space}
+        assert (await scheduler.sweep(session)).queued == 0
+
+    async def test_mixed_current_and_legacy_spaces_queue_and_reconcile_once(
+        self, session, org, course, chapter, rag_dispatch, monkeypatch
+    ):
+        monkeypatch.setenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "fixture-current")
+        await _page(session, org, course, chapter, 10)
+        await pipeline.run_course(course.id, transcribe=False)
+        row = (await session.execute(
+            select(CourseEmbedding).where(CourseEmbedding.activity_id == 10).limit(1)
+        )).scalar_one()
+        session.add(CourseEmbedding(
+            org_id=row.org_id, course_id=row.course_id, activity_id=row.activity_id,
+            activity_uuid=row.activity_uuid, block_uuid=row.block_uuid, source_type=row.source_type,
+            chunk_text=row.chunk_text, chunk_index=row.chunk_index + 1000, locator=row.locator,
+            content_hash=row.content_hash, embedding_space=None, provenance=row.provenance,
+            activity_name=row.activity_name, chapter_name=row.chapter_name, course_name=row.course_name,
+            embedding=row.embedding, creation_date=row.creation_date, update_date=row.update_date,
+        ))
+        await session.commit()
+
+        result = await scheduler.sweep(session)
+        assert result.activities == 1
+        assert _queued(rag_dispatch) == {ContentRef.activity(10): 0}
+
+        await pipeline.run(ContentRef.activity(10), transcribe=False)
+        assert (await scheduler.sweep(session)).queued == 0
+
+    async def test_failed_embedding_drift_reindex_preserves_previous_rows(
+        self, session, org, course, chapter, rag_dispatch, monkeypatch
+    ):
+        monkeypatch.setenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "fixture-before-failure")
+        await _page(session, org, course, chapter, 10)
+        await pipeline.run_course(course.id, transcribe=False)
+        before = (await session.execute(
+            select(CourseEmbedding).where(CourseEmbedding.activity_id == 10)
+        )).scalars().all()
+        old_space = pipeline.embedding_provenance()[0]
+
+        monkeypatch.setenv("LEARNHOUSE_AI_EMBEDDING_MODEL_REVISION", "fixture-after-failure")
+        with patch.object(pipeline, "generate_embeddings", new=AsyncMock(side_effect=RuntimeError("provider down"))):
+            with pytest.raises(RuntimeError, match="provider down"):
+                await pipeline.run(ContentRef.activity(10), transcribe=False)
+
+        after = (await session.execute(
+            select(CourseEmbedding).where(CourseEmbedding.activity_id == 10)
+        )).scalars().all()
+        assert len(after) == len(before) > 0
+        assert {row.embedding_space for row in after} == {old_space}
+        await scheduler.sweep(session)
+        assert ContentRef.activity(10) in _queued(rag_dispatch)
+
     async def test_iso_dates_compare_by_the_second(self, session, org, course, chapter, rag_dispatch):
         activity = await _page(session, org, course, chapter, 10)
         await pipeline.run_course(course.id)
@@ -154,6 +234,11 @@ class TestSweep:
 
     async def test_orgs_without_ai_search_are_skipped(self, session, org, course, chapter, rag_dispatch):
         await _page(session, org, course, chapter, 10)
+        await pipeline.run_course(course.id, transcribe=False)
+        await session.execute(
+            update(CourseEmbedding).values(embedding_space="obsolete-model-space")
+        )
+        await session.commit()
         session.add(OrganizationConfig(
             org_id=org.id, config={"config_version": "2.0", "admin_toggles": {"ai": {"copilot_enabled": False}}},
             creation_date="", update_date="",

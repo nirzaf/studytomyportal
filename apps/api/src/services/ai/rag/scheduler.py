@@ -34,6 +34,7 @@ from src.db.courses.activities import Activity
 from src.db.courses.chapter_activities import ChapterActivity
 from src.db.courses.chapters import Chapter
 from src.db.courses.courses import Course
+from src.services.ai.llm.embeddings import embedding_provenance
 from src.services.ai.rag import queue
 from src.services.ai.rag.gating import orgs_using_ai
 from src.services.ai.rag.types import ContentRef
@@ -92,14 +93,16 @@ def _ts(column):
     return func.substr(func.replace(column, "T", " "), 1, 19)
 
 
-def _indexed(owner, *where):
+def _indexed(owner, *where, embedding_space: str):
     """Per owner: last indexed time, and whether any row predates content
-    hashes (written by the old indexer, which skipped most content kinds)."""
+    hashes or belongs to another embedding space."""
     return (
         select(
             owner.label("owner_id"),
             func.max(_ts(CourseEmbedding.update_date)).label("indexed_at"),
             func.sum(case((CourseEmbedding.content_hash.is_(None), 1), else_=0)).label("legacy"),  # type: ignore[union-attr]
+            func.sum(case((CourseEmbedding.embedding_space.is_distinct_from(embedding_space), 1), else_=0))
+            .label("incompatible"),
         )
         .where(*where)
         .group_by(owner)
@@ -111,15 +114,18 @@ def _is_stale(indexed, *updated):
     return or_(
         indexed.c.indexed_at.is_(None),
         indexed.c.legacy > 0,
+        indexed.c.incompatible > 0,
         *(_ts(column) > indexed.c.indexed_at for column in updated),
     )
 
 
-async def stale_activities(db: AsyncSession) -> list[Stale]:
+async def stale_activities(db: AsyncSession, active_embedding_space: str | None = None) -> list[Stale]:
     """Activities never indexed, indexed by the old indexer, or changed (they
-    or their chapter) since they were last indexed."""
+    or their chapter) since they were last indexed, or indexed in another space."""
+    active_embedding_space = active_embedding_space or embedding_provenance()[0]
     indexed = _indexed(
-        CourseEmbedding.activity_id, CourseEmbedding.activity_id.is_not(None)  # type: ignore[union-attr]
+        CourseEmbedding.activity_id, CourseEmbedding.activity_id.is_not(None),  # type: ignore[union-attr]
+        embedding_space=active_embedding_space,
     )
     chapter = (
         select(ChapterActivity.activity_id, func.max(Chapter.update_date).label("updated"))
@@ -137,11 +143,13 @@ async def stale_activities(db: AsyncSession) -> list[Stale]:
     return [Stale(*row) for row in rows.all()]
 
 
-async def stale_courses(db: AsyncSession) -> list[Stale]:
+async def stale_courses(db: AsyncSession, active_embedding_space: str | None = None) -> list[Stale]:
     """Courses whose own text (description, chapters) was never indexed, was
-    indexed by the old indexer, or changed since."""
+    indexed by the old indexer, changed since, or indexed in another space."""
+    active_embedding_space = active_embedding_space or embedding_provenance()[0]
     indexed = _indexed(
-        CourseEmbedding.course_id, CourseEmbedding.activity_id.is_(None)  # type: ignore[union-attr]
+        CourseEmbedding.course_id, CourseEmbedding.activity_id.is_(None),  # type: ignore[union-attr]
+        embedding_space=active_embedding_space,
     )
     chapter = (
         select(Chapter.course_id, func.max(Chapter.update_date).label("updated"))
@@ -162,8 +170,9 @@ async def sweep(db: AsyncSession) -> SweepResult:
     """Queue refs that are missing from the index or out of date, for orgs
     that use AI search, up to the per-sweep cap. Never transcribes: media
     transcription only runs for new uploads or an admin's re-index."""
-    courses = await stale_courses(db)
-    activities = await stale_activities(db)
+    active_embedding_space = embedding_provenance()[0]
+    courses = await stale_courses(db, active_embedding_space)
+    activities = await stale_activities(db, active_embedding_space)
     using_ai = await orgs_using_ai({item.org_id for item in courses + activities}, db)
     refs = [
         (ContentRef.course(item.id), item) for item in courses if item.org_id in using_ai

@@ -63,26 +63,9 @@ async def search_course_content(
           AND ce.course_id IN :course_ids AND ce.embedding_space = :embedding_space
     """
     scope_params = {"org_id": org_id, "course_ids": scope.course_ids, "embedding_space": embedding_space}
-    eligible_activity_ids: set[int] | None = None
-    if len(scope.course_ids) == 1 and os.getenv("LEARNHOUSE_RAG_SMALL_COURSE_EXACT") == "true":
-        bounded = text("SELECT ce.activity_id " + scope_sql + " LIMIT :chunk_limit").bindparams(
-            bindparam("course_ids", expanding=True),
-        )
-        activities = (await db_session.execute(
-            bounded, {**scope_params, "chunk_limit": _EXACT_COURSE_CHUNK_LIMIT + 1},
-        )).scalars().all()
-        if not activities:
-            return []
-        if len(activities) <= _EXACT_COURSE_CHUNK_LIMIT:
-            eligible_activity_ids = await readable_activity_ids(
-                {activity_id for activity_id in activities if activity_id is not None}, scope, db_session,
-            )
-            if not eligible_activity_ids and None not in activities:
-                return []
-    else:
-        available = text("SELECT EXISTS (SELECT 1 " + scope_sql + ")").bindparams(bindparam("course_ids", expanding=True))
-        if not (await db_session.execute(available, scope_params)).scalar_one():
-            return []
+    available = text("SELECT EXISTS (SELECT 1 " + scope_sql + ")").bindparams(bindparam("course_ids", expanding=True))
+    if not (await db_session.execute(available, scope_params)).scalar_one():
+        return []
 
     query_embedding = await embed_single_text(question)
     if len(query_embedding) != DEFAULT_EMBEDDING_DIMENSIONS:
@@ -102,22 +85,60 @@ async def search_course_content(
         **scope_params,
         "limit": top_k * OVERFETCH_FACTOR,
     }
-    if eligible_activity_ids is None:
-        sql = text(selection + ", ce.embedding <=> :query_embedding AS distance " + scope_sql + """
-            ORDER BY ce.embedding <=> :query_embedding LIMIT :limit
-        """).bindparams(bindparam("course_ids", expanding=True))
-    else:
-        # Materialize the authorized cohort so pgvector ranks it exactly.
-        sql = text("WITH authorized AS MATERIALIZED (" + selection + ", ce.embedding " + scope_sql + """
-            AND (ce.activity_id IS NULL OR ce.activity_id IN :activity_ids)
-        )
-        SELECT *, embedding <=> :query_embedding AS distance
-        FROM authorized ORDER BY distance, id LIMIT :limit
-        """).bindparams(bindparam("course_ids", expanding=True), bindparam("activity_ids", expanding=True))
-        params["activity_ids"] = sorted(eligible_activity_ids)
+    sql = text(selection + ", ce.embedding <=> :query_embedding AS distance " + scope_sql + """
+        ORDER BY ce.embedding <=> :query_embedding LIMIT :limit
+    """).bindparams(bindparam("course_ids", expanding=True))
 
     rows = (await db_session.execute(sql, params)).fetchall()
-    return (await filter_readable_chunks(rows, scope, db_session))[:top_k]
+    readable_rows = (await filter_readable_chunks(rows, scope, db_session))[:top_k]
+
+    # Keep approximate ranking as the default. Exact recovery is deliberately
+    # opt-in and bounded because it materializes the complete authorized course.
+    if (
+        len(readable_rows) < top_k
+        and len(scope.course_ids) == 1
+        and os.getenv("LEARNHOUSE_RAG_SMALL_COURSE_EXACT") == "true"
+    ):
+        bounded = text("SELECT ce.activity_id " + scope_sql + " LIMIT :chunk_limit").bindparams(
+            bindparam("course_ids", expanding=True),
+        )
+        activities = (await db_session.execute(
+            bounded, {**scope_params, "chunk_limit": _EXACT_COURSE_CHUNK_LIMIT + 1},
+        )).scalars().all()
+        if 0 < len(activities) <= _EXACT_COURSE_CHUNK_LIMIT:
+            eligible_activity_ids = await readable_activity_ids(
+                {activity_id for activity_id in activities if activity_id is not None}, scope, db_session,
+            )
+            if eligible_activity_ids or None in activities:
+                # Apply current activity ACLs before ranking so hidden chunks
+                # cannot consume the bounded exact candidate set. Recheck the
+                # 1,000-row cap in the ranking statement to close a concurrent
+                # index-replacement race between the count and materialization.
+                exact_sql = text(f"""
+                WITH compatible_scope AS MATERIALIZED (
+                    SELECT ce.id {scope_sql} LIMIT :candidate_limit
+                ), scope_size AS (
+                    SELECT count(*) AS row_count FROM compatible_scope
+                ), authorized AS MATERIALIZED (
+                    {selection}, ce.embedding {scope_sql}
+                    AND (ce.activity_id IS NULL OR ce.activity_id IN :activity_ids)
+                    AND (SELECT row_count FROM scope_size) <= :exact_limit
+                )
+                SELECT *, embedding <=> :query_embedding AS distance
+                FROM authorized ORDER BY distance, id LIMIT :limit
+                """).bindparams(
+                    bindparam("course_ids", expanding=True), bindparam("activity_ids", expanding=True),
+                )
+                exact_rows = (await db_session.execute(exact_sql, {
+                    **params, "activity_ids": sorted(eligible_activity_ids), "limit": top_k,
+                    "candidate_limit": _EXACT_COURSE_CHUNK_LIMIT + 1,
+                    "exact_limit": _EXACT_COURSE_CHUNK_LIMIT,
+                })).fetchall()
+                exact_readable = await filter_readable_chunks(exact_rows, scope, db_session)
+                if len(exact_readable) > len(readable_rows):
+                    return exact_readable[:top_k]
+
+    return readable_rows
 
 
 def source_from_row(row) -> Source:

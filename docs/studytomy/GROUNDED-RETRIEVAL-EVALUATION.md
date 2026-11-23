@@ -30,7 +30,7 @@ The existing authorized `GET /api/v1/ai/rag/status?course_uuid=<course_uuid>` en
 
 Retained PDF sources, including revoked versions, require retention review before deleting their linked lesson, course, organization, or uploader account. This local implementation rejects those deletions before native cleanup starts. A reviewed source disposal operation is still pending.
 
-The current course retrieval path uses pgvector cosine distance with organization and course filtering, bounded overfetch, and an activity-level authorization check before snippets reach model context or citations. The evaluation leaves runtime retrieval unchanged. [Current query](../../apps/api/src/services/ai/rag/query_service.py) · [Activity authorization](../../apps/api/src/services/ai/rag/access.py)
+The current course retrieval path uses pgvector cosine distance with organization and course filtering, bounded overfetch, and an activity-level authorization check before snippets reach model context or citations. The optional exact-underfill fallback is disabled unless explicitly enabled. [Current query](../../apps/api/src/services/ai/rag/query_service.py) · [Activity authorization](../../apps/api/src/services/ai/rag/access.py)
 
 The offline comparison used a disposable loopback-only PostgreSQL 16 container with pgvector. A temporary table held six eligible curriculum chunks and three controls from another tenant, a draft, and a revoked source. Four queries covered an exact curriculum code, an exact teaching term, and two conceptual paraphrases. The vectors were hand-authored to isolate ranking behavior. Every candidate set was authorized before ranking.
 
@@ -46,7 +46,19 @@ Filtered approximate search can return too few matches because pgvector applies 
 
 A PostgreSQL stress fixture adds 96 closer ineligible vectors and three eligible lesson vectors. Fixed twenty-row overfetch returned zero eligible results. A forced filtered HNSW scan at `ef_search=8` with iterative scans disabled also returned zero. Exact ranking after scope and authorization returned all three, and no path returned an ineligible source. This verifies two underfill cases on synthetic data. The fixture does not establish runtime latency or recall at the production index settings. [Stress fixture](../../apps/api/src/tests/studytomy/test_grounded_retrieval_postgres.py)
 
-For local comparison, `LEARNHOUSE_RAG_SMALL_COURSE_EXACT=true` enables an exact path for single-course native RAG requests whose compatible index has at most 1,000 chunks. The existing activity access helper filters candidates before the exact rank, and a final access check still filters the ranked results. Larger and multi-course scopes keep the existing ranker. The default is off pending representative recall and latency checks. This switch does not affect managed lesson drafting or enable hybrid retrieval.
+For local comparison, `LEARNHOUSE_RAG_SMALL_COURSE_EXACT=true` opts into exact recovery for a single-course native RAG request only when the normal cosine search returns fewer than `top_k` readable rows. The fallback inspects at most 1,001 compatible course rows, resolves activity permissions before ranking, and rechecks the 1,000-row ceiling in the ranking statement to avoid a concurrent index replacement expanding the candidate set. It ranks the complete authorized cohort by cosine distance and row ID, then applies the final access filter. Larger and multi-course scopes keep the current approximate ranker. The default remains off. This switch does not affect managed lesson drafting or enable hybrid retrieval.
+
+#### Filtered HNSW iterative-scan comparison (23 November 2026)
+
+The isolated loopback fixture used PostgreSQL 19.0 and pgvector 0.8.7. It contained 99 synthetic 3-dimensional vectors: three authorized relevant rows and 96 closer controls excluded by organization, lesson, approval, or permission filters. With `ef_search=8`, `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` and five repeated executions measured:
+
+| Ranking path | Rows | Recall@3 | Median executor time | Temp local buffer hits | HNSW index |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Exact authorized ranking | 3 | 1.00 | 0.013 ms | 1 | No |
+| Filtered HNSW, iterative scan off | 0 | 0.00 | 0.010 ms | 24 | Yes |
+| Filtered HNSW, `strict_order` | 3 | 1.00 | 0.014 ms | 29 | Yes |
+
+Shared buffer hits and reads were zero for these temporary-table plans. The timing is PostgreSQL's `EXPLAIN ANALYZE` executor time on this tiny local fixture; it is not a throughput or production-latency estimate. The result confirms that iterative scanning recovers this test's selective result set, while exact authorized ranking provides the comparison baseline. It does not justify changing HNSW defaults or enabling iterative scans globally. The runtime setting and HNSW index remain unchanged. The native RAG exact fallback remains opt-in and only addresses underfilled, bounded, single-course scopes.
 
 Row-level security remains deferred. Any future local evaluation should use a non-owner role without `BYPASSRLS`, test default denial and cross-tenant access, and account for transaction and connection reuse. No shared roles or policies changed. [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
 

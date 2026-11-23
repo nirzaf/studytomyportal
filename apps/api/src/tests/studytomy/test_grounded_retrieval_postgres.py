@@ -1,5 +1,6 @@
 """Offline PostgreSQL retrieval comparison over synthetic authorized materials."""
 
+import json
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -193,10 +194,11 @@ async def test_selective_lesson_scope_underfills_fixed_overfetch_and_filtered_hn
             )
             SELECT id FROM ranked WHERE {allowed}
         """))).scalars().all()
-        exact = (await db.execute(text(f"""
+        exact_query = f"""
             WITH authorized AS MATERIALIZED (SELECT * FROM scoped_retrieval WHERE {allowed})
             SELECT id FROM authorized ORDER BY {order}, id LIMIT 3
-        """))).scalars().all()
+        """
+        exact = (await db.execute(text(exact_query))).scalars().all()
         assert fixed == []
         assert exact == [101, 102, 103]
 
@@ -204,12 +206,181 @@ async def test_selective_lesson_scope_underfills_fixed_overfetch_and_filtered_hn
         await db.execute(text("ANALYZE scoped_retrieval"))
         await db.execute(text("SET LOCAL enable_seqscan = off"))
         await db.execute(text("SET LOCAL hnsw.ef_search = 8"))
-        await db.execute(text("SET LOCAL hnsw.iterative_scan = off"))
         approximate_query = f"SELECT id FROM scoped_retrieval WHERE {allowed} ORDER BY {order} LIMIT 3"
-        plan = (await db.execute(text("EXPLAIN " + approximate_query))).scalars().all()
-        assert any("Index Scan" in line and "_embedding_idx" in line for line in plan)
-        approximate = (await db.execute(text(approximate_query))).scalars().all()
-        assert approximate == []
-        # Neither ranking method can expose the ineligible neighbors.
-        assert set(fixed + approximate) <= set(exact)
+
+        async def explain_analyze(query: str):
+            result = (await db.execute(text("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + query))).scalar_one()
+            return json.loads(result) if isinstance(result, str) else result
+
+        exact_plan = await explain_analyze(exact_query)
+        assert exact_plan[0]["Execution Time"] >= 0
+        assert not any(
+            node.get("Index Name") == "scoped_retrieval_embedding_idx"
+            for node in _plan_nodes(exact_plan[0]["Plan"])
+        )
+
+        scan_results = {}
+        scan_plans = {}
+        for iterative_scan in ("off", "strict_order"):
+            await db.execute(text(f"SET LOCAL hnsw.iterative_scan = '{iterative_scan}'"))
+            scan_plans[iterative_scan] = await explain_analyze(approximate_query)
+            scan_results[iterative_scan] = (await db.execute(text(approximate_query))).scalars().all()
+            assert any(
+                node.get("Index Name") == "scoped_retrieval_embedding_idx"
+                for node in _plan_nodes(scan_plans[iterative_scan][0]["Plan"])
+            )
+        assert scan_results["off"] == []
+        assert scan_results["strict_order"] == exact
+        assert scan_plans["off"][0]["Execution Time"] >= 0
+        assert scan_plans["strict_order"][0]["Execution Time"] >= 0
+        # The plans exercise filtered HNSW with iterative scans off/on; the
+        # SQL authorization predicate still excludes every control row.
+        assert set(fixed + scan_results["off"] + scan_results["strict_order"]) <= set(exact)
+        await db.rollback()
+
+
+def _plan_nodes(plan):
+    yield plan
+    for child in plan.get("Plans", []):
+        yield from _plan_nodes(child)
+
+
+@pytest.mark.studytomy_postgres
+async def test_runtime_small_course_fallback_recovers_only_readable_rows(postgres_session_factory, monkeypatch):
+    tag = uuid4().hex
+    monkeypatch.setenv("LEARNHOUSE_RAG_SMALL_COURSE_EXACT", "true")
+    async with postgres_session_factory() as db:
+        org = Organization(
+            name="Synthetic scoped retrieval", slug=f"scope-{tag}", org_uuid=f"scope_{tag}",
+            email=f"scope-{tag}@example.invalid",
+        )
+        db.add(org)
+        await db.flush()
+        course = Course(
+            org_id=org.id, course_uuid=f"scope-course-{tag}", name="Synthetic public course",
+            public=True, published=True, open_to_contributors=False, studytomy_managed=False,
+        )
+        db.add(course)
+        await db.flush()
+        vector = [1.0] + [0.0] * 767
+        near = [0.99, 0.1] + [0.0] * 766
+        activity_rows = []
+        for index in range(25):
+            activity_rows.append(Activity(
+                name=f"Unpublished control {index}", activity_type=ActivityTypeEnum.TYPE_DYNAMIC,
+                activity_sub_type=ActivitySubTypeEnum.SUBTYPE_DYNAMIC_PAGE, content={}, published=False,
+                org_id=org.id, course_id=course.id, activity_uuid=f"draft-{tag}-{index}",
+            ))
+        for index in range(3):
+            activity_rows.append(Activity(
+                name=f"Readable lesson {index}", activity_type=ActivityTypeEnum.TYPE_DYNAMIC,
+                activity_sub_type=ActivitySubTypeEnum.SUBTYPE_DYNAMIC_PAGE, content={}, published=True,
+                org_id=org.id, course_id=course.id, activity_uuid=f"published-{tag}-{index}",
+            ))
+        db.add_all(activity_rows)
+        await db.flush()
+        space = query_service.embedding_provenance()[0]
+        db.add_all([
+            CourseEmbedding(
+                org_id=org.id, course_id=course.id, activity_id=activity.id,
+                activity_uuid=activity.activity_uuid, course_name=course.name, activity_name=activity.name,
+                source_type="page", chunk_text=activity.name,
+                embedding=vector if not activity.published else near, embedding_space=space,
+            )
+            for activity in activity_rows
+        ])
+        await db.flush()
+        scope = RagAccessScope(
+            request=make_synthetic_request(), current_user=AnonymousUser(), org_id=org.id,
+            courses={course.id: CourseGrant(course.course_uuid)},
+        )
+        embed = AsyncMock(return_value=vector)
+        monkeypatch.setattr(query_service, "embed_single_text", embed)
+
+        # Fixed 20-row overfetch sees only the closer unpublished lessons.
+        monkeypatch.delenv("LEARNHOUSE_RAG_SMALL_COURSE_EXACT", raising=False)
+        assert await query_service.search_course_content("question", org.id, db, scope, top_k=5) == []
+        embed.assert_awaited_once()
+
+        # Explicitly opted-in exact recovery ranks only the readable cohort and
+        # returns every eligible row even though there are fewer than top_k.
+        monkeypatch.setenv("LEARNHOUSE_RAG_SMALL_COURSE_EXACT", "true")
+        rows = await query_service.search_course_content("question", org.id, db, scope, top_k=5)
+        assert [row.chunk_text for row in rows] == ["Readable lesson 0", "Readable lesson 1", "Readable lesson 2"]
+        assert len(rows) == 3
+        assert all(row.course_id == course.id and row.activity_id in {item.id for item in activity_rows if item.published}
+                   for row in rows)
+        assert not any("Unpublished" in row.chunk_text for row in rows)
+        await db.rollback()
+
+
+@pytest.mark.studytomy_postgres
+@pytest.mark.parametrize("chunk_count", [1000, 1001])
+async def test_exact_fallback_respects_course_chunk_and_scope_bounds(
+    postgres_session_factory, monkeypatch, chunk_count,
+):
+    tag = uuid4().hex
+    monkeypatch.setenv("LEARNHOUSE_RAG_SMALL_COURSE_EXACT", "true")
+    async with postgres_session_factory() as db:
+        org = Organization(
+            name="Synthetic exact bound", slug=f"bound-{tag}", org_uuid=f"bound_{tag}",
+            email=f"bound-{tag}@example.invalid",
+        )
+        db.add(org)
+        await db.flush()
+        course = Course(
+            org_id=org.id, course_uuid=f"bound-course-{tag}", name="Bounded course",
+            public=True, published=True, open_to_contributors=False, studytomy_managed=False,
+        )
+        other_course = Course(
+            org_id=org.id, course_uuid=f"bound-other-{tag}", name="Second course",
+            public=True, published=True, open_to_contributors=False, studytomy_managed=False,
+        )
+        db.add_all([course, other_course])
+        await db.flush()
+        draft = Activity(
+            name="Unpublished control", activity_type=ActivityTypeEnum.TYPE_DYNAMIC,
+            activity_sub_type=ActivitySubTypeEnum.SUBTYPE_DYNAMIC_PAGE, content={}, published=False,
+            org_id=org.id, course_id=course.id, activity_uuid=f"bound-draft-{tag}",
+        )
+        db.add(draft)
+        await db.flush()
+        vector = [1.0] + [0.0] * 767
+        space = query_service.embedding_provenance()[0]
+        db.add_all([
+            CourseEmbedding(
+                org_id=org.id, course_id=course.id, activity_id=draft.id,
+                activity_uuid=draft.activity_uuid, activity_name=draft.name, course_name=course.name,
+                source_type="page", chunk_text=f"Unpublished chunk {index}", chunk_index=index,
+                embedding=vector, embedding_space=space,
+            )
+            for index in range(chunk_count)
+        ])
+        await db.flush()
+        single_scope = RagAccessScope(
+            request=make_synthetic_request(), current_user=AnonymousUser(), org_id=org.id,
+            courses={course.id: CourseGrant(course.course_uuid)},
+        )
+        multi_scope = RagAccessScope(
+            request=make_synthetic_request(), current_user=AnonymousUser(), org_id=org.id,
+            courses={course.id: CourseGrant(course.course_uuid), other_course.id: CourseGrant(other_course.course_uuid)},
+        )
+        monkeypatch.setattr(query_service, "embed_single_text", AsyncMock(return_value=vector))
+        original_readable = query_service.readable_activity_ids
+        authorization_calls = []
+
+        async def track_authorization(activity_ids, scope, session):
+            authorization_calls.append(set(activity_ids))
+            return await original_readable(activity_ids, scope, session)
+
+        monkeypatch.setattr(query_service, "readable_activity_ids", track_authorization)
+        assert await query_service.search_course_content("question", org.id, db, single_scope, top_k=5) == []
+        # The test spy observes the exact-recovery candidate check. The initial
+        # ranking uses access.filter_readable_chunks directly. At 1,000 rows
+        # the fallback checks candidates; 1,001 rows skips it.
+        assert len(authorization_calls) == (1 if chunk_count == 1000 else 0)
+
+        authorization_calls.clear()
+        assert await query_service.search_course_content("question", org.id, db, multi_scope, top_k=5) == []
+        assert authorization_calls == []
         await db.rollback()
