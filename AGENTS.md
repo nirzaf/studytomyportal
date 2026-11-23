@@ -100,7 +100,7 @@ For every substantive change:
 
 ### Check cadence and triggers
 
-- Review upstream at least weekly. The scheduled repository security scan does not monitor upstream releases. Any separate monitoring automation requires its own owner and approval.
+- Review upstream at least weekly. The read-only LearnHouse workflow reports stable branch changes after it reaches the default branch. Follow the [upstream monitoring runbook](docs/studytomy/UPSTREAM-MONITORING.md) for the local equivalent and review procedure.
 - Check on demand when requested, before any planned upgrade, and when relevant upstream changes could solve an approved Studytomy requirement.
 - Prioritize tagged stable releases, security advisories, migrations, and bug fixes. Follow the upstream `dev` branch for discovery only; never merge it directly into production.
 - Compare against the last adopted upstream tag and exact SHA recorded in the Studytomy fork (currently `144c843b`). If this baseline is absent, report `BASELINE UNKNOWN` and establish it read-only before suggesting an upgrade.
@@ -115,19 +115,16 @@ For every substantive change:
 5. Categorize: **Security fix**, **Bug fix**, **Useful feature**, **Performance/reliability**, **Breaking change**, **Enterprise-only**, or **Irrelevant**.
 6. Produce the decision report below. Never automatically upgrade packages, fetch-and-merge, cherry-pick, rebase, alter DB schema, open PRs, deploy, or change production. Read-only fetching of upstream history is allowed.
 
-Useful commands when running in a configured local fork (adapt to the actual remotes):
+With the upstream remote configured as described in the runbook:
 
 ```bash
 git status --short --branch
 git remote -v
-git ls-remote https://github.com/learnhouse/learnhouse.git HEAD refs/heads/dev
-# Using the configured upstream remote (e.g. origin or upstream):
-git fetch origin --tags
-git log --oneline <LAST_ADOPTED_SHA>..origin/dev
-git diff --stat <LAST_ADOPTED_SHA>..origin/dev
+git fetch origin main
+python3 scripts/report_learnhouse_upstream.py --fetch --studytomy-ref origin/main
 ```
 
-`<LAST_ADOPTED_SHA>` is explanatory notation, not a shell command to run unchanged. Do not execute commands requiring it until the real SHA is verified. A newer `dev` commit is not automatically a newer stable release.
+Keep discovery on stable `upstream/main` by default. A separate review of `dev` needs to identify its source branch and release status explicitly.
 
 ### Required upstream benefit report
 
