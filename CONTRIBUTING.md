@@ -1,6 +1,6 @@
-# Contributing to Studytomy (Studytomy Portal-based)
+# Contributing to Studytomy Portal
 
-Follow [AGENTS.md](AGENTS.md) and [LOCAL-ONLY.md](LOCAL-ONLY.md) for this fork. The upstream contribution process below applies only when intentionally contributing to Studytomy Portal; Studytomy-specific work belongs in the Studytomy repository.
+This repository is public. Follow [AGENTS.md](AGENTS.md) and [LOCAL-ONLY.md](LOCAL-ONLY.md) for the project conventions and local setup.
 
 ## Getting Started
 
@@ -34,9 +34,9 @@ scripts/lockfiles.sh --check  # verify locally without rewriting lockfiles
 
 - Never commit API keys, passwords, private certificates, local `.env` files, database dumps, real learner records, or private educational documents.
 - Use synthetic fixtures and keep local secrets in ignored environment files. Check `git status --ignored` before staging configuration files.
-- Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md); do not include exploit details in public issues.
+- Report vulnerabilities through GitHub's private reporting form. Keep vulnerability details, credentials, and scanner reports out of public issues and pull requests. See [SECURITY.md](SECURITY.md).
 - Include source and license information for third-party code, fonts, icons, audio, images, and educational material. Do not contribute proprietary Enterprise code or content without redistribution rights.
-- Run the repository security checks and the relevant component tests before opening a pull request. A green scanner is not a substitute for legal, educational, or production approval.
+- Run the relevant component tests before opening a pull request. GitHub Actions runs the required secret and dependency scans for `main`. Contact a maintainer privately if a scan reports a possible secret or a disputed finding.
 
 This project follows [GitHub's standard forking model](https://guides.github.com/activities/forking/). Please fork the project to submit pull requests.
 

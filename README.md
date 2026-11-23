@@ -6,7 +6,7 @@ Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read 
 
 Studytomy Portal is an educator-led learning platform under active development, combining structured courses, tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The intended learner offering is the Sri Lankan National School Syllabus (National Institute of Education / Ministry of Education, Grades 6–13, English instruction) for students and their parents/guardians; see the [Sri Lankan decision baseline](docs/studytomy/SRI-LANKA-DECISION-BASELINE.md). That scope is an engineering alignment only: the programme, market and cohort decisions behind it (`D-01`, `D-02`) remain unapproved.
 
-**Current operation: local development only.** Repository security checks run in GitHub Actions; no application deployment workflow is configured. See [LOCAL-ONLY.md](LOCAL-ONLY.md) for local verification commands and the external-integration boundary, and [SECURITY.md](SECURITY.md) for vulnerability reporting and release gates.
+**Studytomy Portal is a public source repository.** The application is in local development. GitHub Actions runs build and repository security checks. For local setup and private vulnerability reporting, see [LOCAL-ONLY.md](LOCAL-ONLY.md) and [SECURITY.md](SECURITY.md).
 
 ## Contents
 
@@ -799,8 +799,8 @@ The platform involves minors and potentially sensitive educational information. 
 - **AI governance**: Approved providers, human oversight, versioned prompts/rubrics, safe errors, transparent limitations, and no secret exposure.
 - **Children's safeguards**: Obtain legal/privacy review for Sri Lankan operations, guardian consent rules, cross-border data access, and applicable retention requirements.
 - **Operations**: Centralized error logs without leaking learner content; rate limiting; restore drills; dependency updates; alert ownership.
-- **Repository release checks**: Secret and dependency scanners run in GitHub Actions. Their checks must be made required by repository branch rules before merging or public release; see [Security](SECURITY.md). A workflow result alone does not enforce branch protection.
-- **Irreversible changes**: Require an explicit user instruction naming the action before merges, destructive production operations, critical deletions, or history rewrites. No codeword is required.
+- **Repository security checks.** The `main` ruleset requires Gitleaks and OSV checks from GitHub Actions. See the [security policy](SECURITY.md) for private reporting and the scope of each check.
+- **Change approvals.** Obtain maintainer authorization for merges, destructive production operations, critical deletions, and Git history rewrites.
 
 ## Engineering standards
 
@@ -868,4 +868,4 @@ Studytomy branding, content, and development responsibilities are subject to the
 - [AI configuration](docs/content/self-hosting/configuration/ai-setup.mdx)
 - [Previous Studytomy website repository](https://github.com/nirzaf/studytomy-react) (access controlled)
 
-**Current delivery state**: Studytomy Portal is under local development. Run application tests locally; GitHub Actions currently provides repository security checks only. There is no application deployment workflow. Any future release requires separate approval and verified business, educational, privacy, security, and operational gates; this document is not a deployment receipt.
+**Current delivery state.** GitHub Actions checks builds and repository security. Run the application and its tests locally. Any application release requires separate approval and verified business, educational, privacy, security, and operational gates.
