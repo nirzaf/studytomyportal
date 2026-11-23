@@ -42,9 +42,9 @@ Versions below are manifest declarations unless explicitly marked observed runti
 
 | Layer | Inspected version/evidence |
 |---|---|
-| Web | Next.js `^16.4.5`, React/React DOM `19.3.1`, TypeScript `6.0.3`, Tailwind `^4.3.4`; `apps/web/package.json` |
-| Web data/editor | TanStack React Query `^5.106.1` (not a replacement framework), Tiptap `3.32.3`, Yjs `^13.6.33`, Hocuspocus provider `^4.8.0`; web manifest |
-| Web package manager | `bun@1.4.4` declared by web manifest |
+| Web | Next.js `^16.4.6`, React/React DOM `19.3.1`, TypeScript `6.0.3`, Tailwind `^4.3.5`; `apps/web/package.json` |
+| Web data/editor | TanStack React Query `^5.108.4` (not a replacement framework), Tiptap `3.32.3`, Yjs `^13.6.33`, Hocuspocus provider `^4.9.0`; web manifest |
+| Web package manager | `bun@1.4.5` from the web manifest and `.bun-version`. The combined Dockerfile remains on Bun 1.4.4. |
 | API | Python `>=3.14.7,<3.14.8`, FastAPI `0.162.0`, Pydantic `2.14.3`, SQLModel `0.0.44`, Uvicorn `0.54.0`; `apps/api/pyproject.toml` |
 | Database/migrations | PostgreSQL **16.16 observed in earlier local checks** and **19.0 observed in an isolated 2026-11-21 upgrade test**; Alembic `1.20.1`, asyncpg `0.32.0`, psycopg2-binary `2.9.13` declared |
 | Vector retrieval | PostgreSQL vector extension **0.8.7 observed locally**; Python pgvector `0.5.1`; `Vector(768)` and cosine HNSW |
@@ -206,6 +206,6 @@ Observed Codex checkpoints are bounded reports, not independently rerun certific
 2. Reuse native services and current equivalents; classify work as implemented, partial, missing or unverified.
 3. Consult this guide as a dated map, never as permission or proof of completion. Preserve LearnHouse licensing and upstream boundaries.
 4. Keep implementation small and dependency-complete; include migration/rollback notes and focused tests. Do not weaken authorization, independent review or immutable evidence to pass tests.
-5. Local-only boundaries remain: no CI/CD, push, merge, deployment, production migration or destructive action without separate applicable authorization.
+5. CI builds and security scans run on GitHub. Application runtime verification uses isolated environments. Push, merge, deployment, production migration, and destructive actions require the applicable authorization.
 
 Primary technical references: [pgvector](https://github.com/pgvector/pgvector), [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html), [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). These guide design; repository code and verified results determine actual behavior.

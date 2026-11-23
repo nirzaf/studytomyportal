@@ -26,7 +26,7 @@ learnhouse/
 ├── docs/         # This documentation site
 ├── docker/       # Helpers for the app image (internal nginx config, start.sh)
 ├── scripts/      # Repository scripts (for example lockfile regeneration)
-└── Dockerfile    # Single image (ghcr.io/learnhouse/app) used by CLI deployments
+└── Dockerfile    # Combined Dockerfile for building this source checkout
 ```
 
 The repository does not include a production deployment compose file. The CLI (`apps/cli`) contains setup templates for generating Compose, environment, and reverse-proxy configuration; this is not evidence of a released Studytomy deployment.

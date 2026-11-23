@@ -1,5 +1,17 @@
 # Studytomy Family Learning Implementation Status
 
+## Current source summary
+
+Reviewed public `main` at `dd12ed6362a392924d65edaaf56aa1f46c9f14bc`. The dated checkpoints below retain their original test results and approval status.
+
+| Area | Current implementation and remaining evidence |
+|---|---|
+| Adaptive progress | Diagnostic completion triggers mastery and recommendation refresh. Recommendation transport errors show a retry state. Formal assessments retain their existing scoring and evidence paths. |
+| Reviewed lesson practice | The API checks current lesson, curriculum, educator review, consent, and retention authority. It returns separate exploration and practice permissions and checks them again for saved actions and recovery. Exploration visuals remain interactive. Scored visuals follow the server-issued question and stay read-only. Practice is ungraded and creates no independent mastery evidence. Real learner activation and a complete real-backend browser journey remain unverified. [Practice implementation](GENUI-IMPLEMENTATION.md) |
+| Syllabus and Explore Topics | Approved PDF sources support independent search scope and syllabus comparison, citation pages, and source-limited follow-ups. Native course retrieval checks activity access and queues stale embedding spaces for bounded reindexing. Exact recovery for underfilled small single-course searches remains opt-in. [Syllabus library](SYLLABUS-KNOWLEDGE-LIBRARY.md) · [Retrieval evaluation](GROUNDED-RETRIEVAL-EVALUATION.md) |
+| Database | The source has one Alembic head, `2d6a1b7c9e40`. Verify the target database separately before migration. [Migration and rollback](MIGRATION-AND-ROLLBACK.md) |
+| GitHub | CI Build and both required security checks passed on the inspected SHA. The history scan recorded the owner-confirmed rotated key. The LearnHouse monitor passed a manual run on `main`. See the [security policy](../../SECURITY.md) for the rules and private reporting. [Build run](https://github.com/nirzaf/studytomyportal/actions/runs/45241524537) · [Security run](https://github.com/nirzaf/studytomyportal/actions/runs/45241524581) · [Monitor run](https://github.com/nirzaf/studytomyportal/actions/runs/45241526754) |
+
 ## Incremental delivery checkpoint (22 November 2026)
 
 **Inspected repository:** local and `origin/main` both resolve to `a37dd3923c36f90138efc07a59b66ffd0d42da40`. The primary worktree is dirty with extensive pre-existing UI, AI, branding, and course changes; this checkpoint preserves them and covers only the Create Course save/close path plus source-level status reconciliation. It is not a full platform acceptance or release sign-off.
