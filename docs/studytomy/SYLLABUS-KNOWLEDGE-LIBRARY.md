@@ -4,7 +4,7 @@
 
 This feature adds an organization-scoped PDF reference library and a student-facing, source-first topic search. It reuses the existing FastAPI, PostgreSQL/pgvector, curriculum, policy, consent, private file-storage, embedding, and AI-provider paths. It does not create a course or change the existing course/lesson RAG routes.
 
-The database schema is introduced by Alembic revision `d9f74c2a81e6` (down revision `c5d1e8f2a904`). The migration has not been applied to an application database as part of this change. Local API unit checks and offline migration generation are not proof of a successful PostgreSQL upgrade.
+The database schema is introduced by Alembic revision `d9f74c2a81e6` (down revision `c5d1e8f2a904`). The current source migration graph includes later provenance, revocation, and practice-retention revisions. Disposable PostgreSQL checks and a synthetic live Explore Topics run are recorded separately from any production migration. See the [local verification record](LOCAL-VERIFICATION.md).
 
 No official syllabus PDF or copyright permission is bundled with this implementation. A source is searchable by learners only after it has a nonempty permission evidence reference, a different educator has approved the indexed version, and the source passes the active D-16 content-rights review gate. Educators must confirm source rights before approval. The feature does not make rights determinations or claim that a source is official based on its title or publisher text.
 
@@ -65,7 +65,7 @@ General-knowledge answers are not implemented in this surface. Explore does not 
 - Students: `/orgs/{orgslug}/explore` (also shown as **Explore Topics** in the organization menu when courses are enabled).
 - Educators: `/orgs/{orgslug}/dash/studytomy/syllabus-library` (linked from the dashboard Courses menu).
 
-The learner page supports optional syllabus/grade/subject/jurisdiction filters, a source-limited follow-up search, visible coverage status and authenticated PDF opening at a cited page. Published lessons show linked approved source passages when the existing curriculum lesson map is current. The educator page supports upload/version creation, extracted-page inspection, indexing retry, independent source review/revocation, and page-quote curriculum mapping/review.
+The learner can select a syllabus for comparison while searching all approved resources, the selected syllabus, or the selected subject. Follow-ups can stay within the selected source set. Citations open authenticated PDF pages, and coverage labels reflect reviewed evidence. Published lessons show linked approved source passages when the existing curriculum lesson map is current. The educator page supports upload/version creation, extracted-page inspection, indexing retry, independent source review/revocation, and page-quote curriculum mapping/review.
 
 ## Migration, verification and rollback
 

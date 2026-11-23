@@ -1,0 +1,28 @@
+name: LearnHouse upstream review
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: learnhouse-upstream-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    name: Report changes on stable main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out Studytomy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch stable upstream and summarize changes
+        run: python3 scripts/report_learnhouse_upstream.py --fetch > "$GITHUB_STEP_SUMMARY"

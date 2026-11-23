@@ -26,6 +26,6 @@ uv run --no-sync pytest src/tests/security/test_rag_access_scope.py -q
 uv run --no-sync pytest src/tests/security/ -q
 ```
 
-The shared `../conftest.py` sets `TESTING=true`, forces OSS and disables the demo. It supplies in-memory SQLite fixtures as well as mocks; do not claim all tests are mock-only or establish PostgreSQL locking behavior. Check each test and fixture for its dependencies, skips and platform restrictions. Use the explicit disposable PostgreSQL fixtures for database concurrency acceptance, never runtime data. Record the exact command, checkout and result. Repository CI/CD is disabled by local-only project policy; run these checks locally.
+The shared `../conftest.py` sets `TESTING=true`, forces OSS and disables the demo. It supplies in-memory SQLite fixtures as well as mocks; do not claim all tests are mock-only or establish PostgreSQL locking behavior. Check each test and fixture for its dependencies, skips and platform restrictions. Use the explicit disposable PostgreSQL fixtures for database concurrency acceptance, never runtime data. Record the exact command, checkout and result. GitHub CI builds and compiles the API. Run these security test suites locally against the appropriate fixtures.
 
 Preserve real authorization checks in regression cases. Do not weaken guards to make a fixture pass or treat approved synthetic policy fixtures as permission for real learners.

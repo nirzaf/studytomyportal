@@ -6,7 +6,7 @@ Read only the documents needed for the task. Source, mounted routes and tests ar
 |---|---|---|
 | Any code change | Root `AGENTS.md` and applicable scoped instructions | Current HEAD, worktree/index, actual callers and tests |
 | Architecture or ownership | [Agent architecture guide](AGENT-ARCHITECTURE-GUIDE.md) | Referenced models, services and contracts |
-| Current-vs-planned status | [Documentation review](DOCUMENTATION-REVIEW.md) | [Implementation status](IMPLEMENTATION-STATUS.md), then [architecture inventory](ARCHITECTURE-IMPLEMENTATION-INVENTORY.md) and source; do not read every historical checkpoint |
+| Current vs. planned status | [Implementation status](IMPLEMENTATION-STATUS.md) | [Dated documentation review](DOCUMENTATION-REVIEW.md), [architecture inventory](ARCHITECTURE-IMPLEMENTATION-INVENTORY.md), and current source |
 | Task or acceptance-checklist state | [Atomic implementation checklist](../../STUDYTOMY-FAMILY-LEARNING-ATOMIC-IMPLEMENTATION-SPEC.md) | [Implementation status](IMPLEMENTATION-STATUS.md) for per-task evidence; the checklist is not acceptance proof |
 | Frozen baseline and decision gates | [Baseline record](BASELINE.md) (see its §7 dated addendum) | Current source, migrations and tests |
 | Local setup and verification | [Root README](../../README.md), [local-only policy](../../LOCAL-ONLY.md) | [Local verification log](LOCAL-VERIFICATION.md), [end-to-end testing runbook](../LOCAL_END_TO_END_TESTING.md), component manifests and test scripts |
@@ -21,12 +21,12 @@ Read only the documents needed for the task. Source, mounted routes and tests ar
 | Access-path or entitlement work | [Managed-course access inventory](../../STUDYTOMY-ACCESS-PATH-INVENTORY.md) | `services/studytomy/access_policy.py`, `entitlements.py`, route-level tests |
 | Migration, rollback or database version | [Migration and rollback notes](MIGRATION-AND-ROLLBACK.md), [PostgreSQL 19 upgrade note](POSTGRESQL-19-UPGRADE.md) | Actual Alembic graph and schema/bootstrap code; no implied production authorization |
 | Operations or incident response | [Operations record](OPERATIONS.md) | Configured schedulers, workers, retention jobs and their enablement flags |
-| Upstream security or feature review | [PR #1192 security review](UPSTREAM-PR-1192-SECURITY-REVIEW.md) | Upstream source at the named commit, then this fork's equivalent path |
+| Upstream security or feature review | [LearnHouse monitoring runbook](UPSTREAM-MONITORING.md) | Stable upstream source at the named commit and this fork's equivalent path. The [PR #1192 review](UPSTREAM-PR-1192-SECURITY-REVIEW.md) is a dated example. |
 | Learner login design | [Credential ADR](ADR-LEARNER-CREDENTIALS.md) | Existing identity/auth contracts and explicit decisions |
 | SDK or embedded renderer | `packages/sdk/README.md`, `packages/react/README.md`, `packages/vue/README.md` | Local manifests/generated contracts; published upstream packages are not unpublished fork code. Build each package before running its tests |
 | Native CLI or E2E | [CLI guide](../../apps/cli/README.md), [E2E guide](../../apps/e2e/README.md) | Verify whether tests use the current local build or a published upstream image |
 
-Most evidence documents are tracked on `main`. The exceptions as of 2026-11-20 are the in-flight `apps/cli` PostgreSQL-19 work and the uncommitted revisions to [PostgreSQL 19 upgrade note](POSTGRESQL-19-UPGRADE.md); treat claims that depend on them as work-in-progress and re-check the worktree before citing them. Do not manufacture missing files or treat absence from the remote as absence from local work.
+The [PostgreSQL 19 runbook](POSTGRESQL-19-UPGRADE.md) describes the current CLI-managed database image and retains dated migration rehearsals. For hosted build checks, security scans, and required checks on `main`, see the [local development guide](../../LOCAL-ONLY.md) and [security policy](../../SECURITY.md).
 
 ## Working conventions
 

@@ -1,10 +1,10 @@
 # Local-only development
 
-Studytomy Portal is currently developed and tested locally. This repository does not configure project deployment or continuous integration/continuous delivery. A local build or test does not certify a live service. Normal source pushes may be separately authorized; a push is not permission to run a deployment command or evidence that a deployment did or did not occur.
+Studytomy Portal is a public source repository. GitHub Actions builds the web, API, collaboration server, packages, and CLI. The repository also runs secret and dependency scans. Application setup and functional verification use local or isolated test environments. There is no application deployment workflow. See the [security policy](SECURITY.md) for the checks required on `main`.
 
 ## Local verification
 
-Install dependencies with the frozen lockfiles, then run the existing component scripts from their component directories. The root README lists the web, API, collaboration, CLI, browser, and SDK commands. The `scripts/lockfiles.sh --check` command verifies lockfile consistency locally. Run applicable tests before committing; no hosted test workflow is configured here.
+Install dependencies with the frozen lockfiles, then run the existing component scripts from their component directories. The root README lists the web, API, collaboration, CLI, browser, and SDK commands. The `scripts/lockfiles.sh --check` command verifies lockfile consistency locally. Run applicable tests before committing. The hosted build workflow checks builds and API compilation. Run application tests, migrations against a disposable database, and browser acceptance separately.
 
 See the [AUD-18 local verification record](docs/studytomy/LOCAL-VERIFICATION.md) for a dated command-by-command evidence snapshot and explicit skipped/unverified checks.
 
@@ -25,7 +25,7 @@ provider and disposable PostgreSQL tests for runner verification. A future
 authorized local operation must use synthetic recipients and a mocked email
 provider; do not use this opt-in as learner or guardian activation.
 
-Dockerfiles and CLI-generated Compose files remain available for local builds and local service dependencies. The Studytomy Portal CLI is product tooling; its non-interactive setup mode and user-facing self-hosting commands do not configure application deployment or application CI for this repository. GitHub Actions security checks are separate repository safeguards.
+Dockerfiles and CLI-generated Compose files remain available for local builds and local service dependencies. The CLI generates installation and development configuration. See the [CLI guide](apps/cli/README.md) for the difference between the published upstream image and a source build of this checkout.
 
 ## External integrations
 

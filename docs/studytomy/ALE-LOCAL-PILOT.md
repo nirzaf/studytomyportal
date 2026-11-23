@@ -1,6 +1,6 @@
 # Adaptive Learning Engine local pilot runbook
 
-This runbook is for synthetic local verification. The adaptive pilot remains closed to real learners pending the approvals and acceptance evidence below. The ALE source snapshot is `4bff1a6a4124f93ed516f90378c65f48c1bd2741`. The implementation checkout was inspected at `43f314540404c1c1478744e6bf7a53802d1fb430` with ALE and other project work in progress. See [implementation evidence](ALE-IMPLEMENTATION.md) for the initial inventory, current code references and individual test outcomes.
+This runbook is for synthetic local verification. The adaptive pilot remains closed to real learners pending the approvals and acceptance evidence below. Use the [current implementation summary](IMPLEMENTATION-STATUS.md) for the current code boundaries and the [implementation evidence](ALE-IMPLEMENTATION.md) for dated test outcomes.
 
 ## Reproduce the API checks
 
@@ -70,7 +70,7 @@ $env:NEXT_PUBLIC_LEARNHOUSE_DEFAULT_ORG = 'default'
 bun x next dev --webpack --hostname localhost --port 3421
 ```
 
-Confirm the API health and login page respond. The global setup creates synthetic accounts in the portal. Stop the two local servers and the two labeled disposable containers after the run.
+Confirm the API health and login page respond. Follow the [E2E isolation and identity checks](../../apps/e2e/README.md) before running global setup. The E2E process needs the matching loopback test database URL and runtime identity. Stop the local servers and labeled disposable containers after the run.
 
 ```powershell
 # Run from apps/e2e, using the bound ports of the isolated portal.
