@@ -168,7 +168,7 @@ This inventory describes the checked-out source and committed dependency declara
 | API | Python 3.14.7, FastAPI 0.162.0, Pydantic 2.14.3, SQLModel 0.0.44, Alembic 1.20.1 | `apps/api/pyproject.toml`, `apps/api/uv.lock` |
 | Collaboration | Hocuspocus 4.9.0, Yjs 13.6.33, ioredis 6.1.0 | `apps/collab/package.json`, `apps/collab/bun.lock` |
 | AI adapters | Pydantic AI Slim 2.66.0 (OpenAI, Anthropic, Google, Mistral extras), Google GenAI 2.34.0 | API inventory; provider configuration and approval still required |
-| Package/build tooling | Bun 1.4.5 in CI and component images. The combined Dockerfile still pins Bun 1.4.4. It uses Node 26.13.0 and PM2 7.1.0. | `.bun-version`, `.github/workflows/ci-build.yml`, root and component Dockerfiles |
+| Package/build tooling | Bun 1.4.5 in CI, component images, and the combined Dockerfile. The combined image uses Node 26.13.0 and PM2 7.1.0. | `.bun-version`, `.github/workflows/ci-build.yml`, root and component Dockerfiles |
 | Database and cache templates | Fresh CLI-managed local databases use `pgvector/pgvector:0.8.7-pg19` pinned by multi-architecture digest; local development uses an isolated PG19 profile | `apps/cli/src/constants.ts`, `apps/cli/src/commands/dev.ts`; existing installs retain their selected database image and mount until explicitly migrated |
 | Proxy templates | `nginx:1.30-alpine`, `caddy:2.11-alpine`, `alpine/socat:1.8.1.3` | `apps/cli/src/constants.ts`; OS packages installed by `apk` are not exactly pinned |
 | Tests | Bun test, pytest 9.2.0, Playwright 1.65.1, CLI Vitest 5.1.1 | Per-component manifests below |

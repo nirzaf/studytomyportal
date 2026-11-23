@@ -156,7 +156,7 @@ class StudySyllabusChunk(SQLModel, table=True):
             "ix_st_syllabus_chunk_fts",
             text("to_tsvector('simple', chunk_text)"),
             postgresql_using="gin",
-        ),
+        ).ddl_if(dialect="postgresql"),
     )
 
     id: int | None = Field(default=None, sa_type=BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
