@@ -69,7 +69,7 @@ async function waitForOk(url: string, timeoutMs: number, label: string): Promise
 }
 
 function bootSelfHost(): void {
-  console.log(`Booting Studytomy Portal self-host via CLI (install "${INSTALL_NAME}")…`)
+  console.log('Booting the local Studytomy Portal self-host via CLI…')
   const cmd = [
     CLI,
     'setup',
@@ -93,13 +93,19 @@ function bootSelfHost(): void {
   if (result.status !== 0) {
     throw new Error(
       `CLI setup failed (exit ${result.status}). ` +
-        `Command: ${cmd}\n` +
+      'Command details are omitted because setup arguments contain credentials. ' +
         `If you already have an instance running, set E2E_BASE_URL to skip booting.`,
     )
   }
 }
 
 export default async function globalSetup(): Promise<void> {
+  if (!ADMIN_PASSWORD.trim()) {
+    throw new Error(
+      'Set E2E_ADMIN_PASSWORD to a unique test-only credential before running Playwright; no repository default is provided.',
+    )
+  }
+
   const verifyStudyTomy = includesStudyTomySpecs(process.argv.slice(2))
   let testDatabaseIdentitySha256: string | null = null
   if (verifyStudyTomy) {
@@ -128,7 +134,7 @@ export default async function globalSetup(): Promise<void> {
 
   await waitForOk(`${API_URL}/health`, SKIP_BOOT ? 60_000 : BOOT_TIMEOUT_MS, 'API health')
   await waitForOk(`${API_URL}/orgs/slug/${ORG_SLUG}`, 60_000, `org "${ORG_SLUG}"`)
-  console.log(`Studytomy Portal is ready at ${BASE_URL}. Admin: ${ADMIN_EMAIL}`)
+  console.log(`Studytomy Portal is ready at ${BASE_URL}. Admin account is configured.`)
 
   if (verifyStudyTomy) await verifyStudyTomyRuntime(testDatabaseIdentitySha256!)
 

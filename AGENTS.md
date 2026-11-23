@@ -3,7 +3,7 @@
 Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read the relevant source and scoped guidance rather than every historical document.
 
 - **Scope**: Place this file at the root of the new Studytomy modernization fork based on LearnHouse Community Edition. It is not an instruction to rewrite or modify the legacy `nirzaf/studytomy-react` repository.
-- **Project status**: Modernization is in local development only. This repository has no configured deployment or CI/CD workflow. Do not represent any proposed Studytomy feature, migration, integration, or deployment as implemented without verifying the actual target repository.
+- **Project status**: Modernization is in local development only. Repository security checks may run in GitHub Actions; there is no application deployment workflow. Do not represent any proposed Studytomy feature, migration, integration, or deployment as implemented without verifying the actual target repository.
 - **Priority**: Apply this root file together with more specific repository instructions (including upstream `apps/web/AGENTS.md`); the more specific instructions govern their respective paths, except where they conflict with the project's approval, security, or licensing requirements.
 
 ---
@@ -76,7 +76,7 @@ Before changing code, classify each requested behavior as **Implemented / Partia
 
 For every substantive change:
 
-1. **Understand**: Inspect the current target branch, actual call sites, `README.md`, applicable nested `AGENTS.md`, schemas, migrations, and tests. Record the inspected commit SHA. This checkout has no configured CI/CD; do not infer deployed behavior from a prior discussion.
+1. **Understand**: Inspect the current target branch, actual call sites, `README.md`, applicable nested `AGENTS.md`, schemas, migrations, and tests. Record the inspected commit SHA. Repository security checks do not constitute application CI/CD or deployment; do not infer deployed behavior from a prior discussion.
 2. **Specify**: State the requested behavior, affected workflows, non-goals, compatibility concerns, roles/permissions and objective acceptance criteria. For changes larger than a small fix, propose the minimal plan first.
 3. **Implement minimally**: Follow upstream naming and folder conventions, normally `apps/web`, `apps/api/src/routers`, `apps/api/src/services`, `apps/api/src/db`, `apps/api/migrations`, and `apps/collab`. Avoid unrelated refactors and speculative abstractions.
 4. **Protect boundaries**: Enforce permissions, student/guardian relationships, validation, transactionality, concurrency, retries, idempotency, and auditability at the server boundary.

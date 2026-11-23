@@ -1,0 +1,85 @@
+name: Repository security checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret history and source scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan reachable history and tracked source
+        shell: bash
+        env:
+          GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+        run: |
+          set -uo pipefail
+          umask 077
+
+          history_status=0
+          tree_status=0
+          source_dir="$RUNNER_TEMP/studytomy-tracked-source"
+
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo:ro" \
+            -w /repo \
+            "$GITLEAKS_IMAGE" \
+            git --log-opts='--all --reflog' \
+              --redact=100 --report-format=json --report-path=/tmp/history.json \
+              --exit-code=1 --log-level=error --no-banner || history_status=$?
+
+          mkdir -p "$source_dir"
+          if ! git archive HEAD | tar -x -C "$source_dir"; then
+            echo 'Could not create the tracked source snapshot.' >&2
+            exit 1
+          fi
+
+          docker run --rm \
+            -v "$source_dir:/source:ro" \
+            -w /source \
+            "$GITLEAKS_IMAGE" \
+            dir /source --redact=100 --report-format=json --report-path=/tmp/source.json \
+              --exit-code=1 --log-level=error --no-banner || tree_status=$?
+
+          if [[ "$history_status" -ne 0 || "$tree_status" -ne 0 ]]; then
+            echo 'Secret scanning found an unapproved finding. Review the redacted report locally; do not publish secret values.' >&2
+            exit 1
+          fi
+
+  dependencies:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out lockfiles
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Scan lockfiles with OSV-Scanner
+        env:
+          OSV_SCANNER_IMAGE: ghcr.io/google/osv-scanner@sha256:a70ffffc2bfd33482953e5d6b64c6fcdb30239717a07b0f0d3ab2859ce3e4cde
+        run: >-
+          docker run --rm
+          -v "$GITHUB_WORKSPACE:/src:ro"
+          -w /src
+          "$OSV_SCANNER_IMAGE"
+          scan source -r /src --format table

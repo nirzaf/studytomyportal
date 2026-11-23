@@ -208,7 +208,7 @@ export function BuildPipeline() {
 }
 
 /** One release tag, three artifacts with the same version. */
-export function ReleaseLockstep({ version = '1.4.3' }) {
+export function ReleaseLockstep({ version = '1.4.4' }) {
   const items = [
     { icon: SiDocker, name: 'Configured app image', sub: 'Container image' },
     { icon: SiNpm, name: '@learnhouse/sdk', sub: 'npm' },

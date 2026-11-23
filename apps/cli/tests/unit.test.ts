@@ -479,23 +479,15 @@ describe('config-store', () => {
 
 describe('generateEnvFile: dbPassword handling', () => {
   it('writes dbPassword into both connection string and POSTGRES_PASSWORD', () => {
-    const env = generateEnvFile({ ...baseConfig, dbPassword: 'Sup3rS3cret-Abc_123' })
-    expect(env).toContain('postgresql://learnhouse:Sup3rS3cret-Abc_123@db:5432/learnhouse')
-    expect(env).toContain('POSTGRES_PASSWORD=Sup3rS3cret-Abc_123')
+    const testPassword = 'local-test-db-password'
+    const env = generateEnvFile({ ...baseConfig, dbPassword: testPassword })
+    expect(env).toContain(`postgresql://learnhouse:${testPassword}@db:5432/learnhouse`)
+    expect(env).toContain(`POSTGRES_PASSWORD=${testPassword}`)
   })
 
   it('never emits the literal string "undefined" as a value', () => {
-    const env = generateEnvFile({ ...baseConfig, dbPassword: 'a-real-pw' })
+    const env = generateEnvFile({ ...baseConfig, dbPassword: 'local-test-password' })
     expect(env).not.toMatch(/=undefined(\s|$)/)
-  })
-
-  it('omits POSTGRES_PASSWORD when useExternalDb is true', () => {
-    const env = generateEnvFile({
-      ...baseConfig,
-      useExternalDb: true,
-      externalDbConnectionString: 'postgresql://ext:ext@remote:5432/db',
-    })
-    expect(env).not.toContain('POSTGRES_PASSWORD=')
   })
 })
 

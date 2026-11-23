@@ -1,6 +1,7 @@
 {
   "name": "@learnhouse/e2e",
   "version": "0.1.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "description": "End-to-end UI acceptance tests for Studytomy Portal, driving a CLI-installed self-host like a human.",
   "type": "module",

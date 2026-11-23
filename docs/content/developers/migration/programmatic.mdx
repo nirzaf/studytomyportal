@@ -17,9 +17,11 @@ Most examples use an API token (`Authorization: Bearer lh_...`). A user JWT work
 
 ## 1. Create the course
 
+The authenticated examples use the `ACCESS_TOKEN` shell variable; set it to a valid local token before running them. Keep tokens out of tracked files and logs.
+
 ```bash
 curl -X POST "http://localhost:1338/api/v1/courses/?org_id=1" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'name=Introduction to Python' \
   -F 'description=A beginner-friendly Python course' \
   -F 'public=false' \
@@ -70,7 +72,7 @@ Chapters are created one at a time with a JSON body:
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/chapters/" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Chapter 1: Getting set up",
@@ -124,7 +126,7 @@ Use this for **dynamic pages, markdown pages, embeds, assignments (shell), and c
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/activities/" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Hello, world",
@@ -157,7 +159,7 @@ Multipart form data. Creates a `TYPE_VIDEO` / `SUBTYPE_VIDEO_HOSTED` activity in
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/activities/video" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'name=Lesson 1 walkthrough' \
   -F 'chapter_id=7' \
   -F 'video_file=@./lesson-01.mp4;type=video/mp4' \
@@ -176,7 +178,7 @@ JSON body. Creates a `TYPE_VIDEO` / `SUBTYPE_VIDEO_YOUTUBE` activity that embeds
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/activities/external_video" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Intro lecture",
@@ -195,7 +197,7 @@ Multipart form data. Creates a `TYPE_DOCUMENT` / `SUBTYPE_DOCUMENT_PDF` activity
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/activities/documentpdf" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'name=Course syllabus' \
   -F 'chapter_id=7' \
   -F 'pdf_file=@./syllabus.pdf;type=application/pdf'
@@ -212,7 +214,7 @@ An assignment is **never just an activity**. It is an activity shell + an `Assig
 ```bash
 # 1. Activity shell
 ACT=$(curl -fsS -X POST "http://localhost:1338/api/v1/activities/" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Final project",
@@ -226,7 +228,7 @@ ACT_ID=$(echo "$ACT" | jq -r .id)
 
 # 2. Assignment record (all four foreign keys are required)
 ASSIGN=$(curl -fsS -X POST "http://localhost:1338/api/v1/assignments/" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{
     \"title\":\"Final project\",
@@ -243,7 +245,7 @@ ASSIGN_UUID=$(echo "$ASSIGN" | jq -r .assignment_uuid)
 
 # 3. At least one task. Without it, the assignment renders without a submission UI
 curl -fsS -X POST "http://localhost:1338/api/v1/assignments/$ASSIGN_UUID/tasks" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "title":"Submit your project file",
@@ -269,7 +271,7 @@ Upload an image block (note: the blocks router rejects API tokens, so use a JWT,
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/blocks/image" \
-  -H "Authorization: Bearer $JWT" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'activity_uuid=activity_91c...' \
   -F 'file_object=@./diagram.png'
 ```
@@ -319,7 +321,7 @@ After creating a dynamic-page activity (`content: {}`), upload any media blocks,
 
 ```bash
 curl -X PUT "http://localhost:1338/api/v1/activities/activity_91c..." \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "content": {
@@ -355,7 +357,7 @@ Chapters and the activities inside them appear in the order they were created. T
 
 ```bash
 curl -X PUT "http://localhost:1338/api/v1/chapters/course/course_8e3.../order" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "chapter_order_by_ids": [
@@ -385,13 +387,13 @@ When the migration is complete, flip the course and each activity to `published:
 ```bash
 # Publish the course
 curl -X PUT "http://localhost:1338/api/v1/courses/course_8e3..." \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{ "published": true }'
 
 # Publish an activity
 curl -X PUT "http://localhost:1338/api/v1/activities/activity_91c..." \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{ "published": true }'
 ```
@@ -400,7 +402,7 @@ To preview unpublished work, fetch the course tree with the `with_unpublished_ac
 
 ```bash
 curl "http://localhost:1338/api/v1/courses/course_8e3.../meta?with_unpublished_activities=true" \
-  -H "Authorization: Bearer lh_your_api_token"
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 ## End-to-end script (bash)
@@ -432,17 +434,17 @@ ASSETS=./assets                    # folder containing thumbnail.jpg, diagram.jp
 # session. The token needs the Update right on Users (Admin API), and the JWT
 # lasts 1 hour. See Overview → Authentication for the swap rules.
 TOKEN=$(curl -fsS -X POST "$API/admin/$ORG_SLUG/auth/token" \
-  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H 'Content-Type: application/json' \
   -d "{\"user_id\":$USER_ID}" | jq -r .access_token)
 
 # Tiny helpers
-post_json() { curl -fsS -X POST "$1" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$2"; }
-put_json()  { curl -fsS -X PUT  "$1" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$2"; }
+post_json() { curl -fsS -X POST "$1" -H "Authorization: Bearer ${ACCESS_TOKEN}" -H 'Content-Type: application/json' -d "$2"; }
+put_json()  { curl -fsS -X PUT  "$1" -H "Authorization: Bearer ${ACCESS_TOKEN}" -H 'Content-Type: application/json' -d "$2"; }
 
 # ── 1. Course (multipart, with a real JPEG thumbnail) ───────────────────────
 COURSE=$(curl -fsS -X POST "$API/courses/?org_id=$ORG_ID" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'name=The Complete Demo Course' \
   -F 'description=One of every activity type, built via the API' \
   -F 'about=Created end-to-end by the Studytomy Portal migration quickstart script.' \
@@ -469,7 +471,7 @@ PAGE=$(post_json "$API/activities/" \
 PAGE_UUID=$(echo "$PAGE" | jq -r .activity_uuid)
 
 BLOCK=$(curl -fsS -X POST "$API/blocks/image" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F "activity_uuid=$PAGE_UUID" \
   -F "file_object=@$ASSETS/diagram.jpg;type=image/jpeg")
 echo "$BLOCK" > /tmp/lh-block.json
@@ -517,7 +519,7 @@ post_json "$API/activities/" \
 # ── 4a. Hosted MP4 (multipart, then PUT to publish) ─────────────────────────
 # /activities/video forces published=false on create; we flip it after.
 VID=$(curl -fsS -X POST "$API/activities/video" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'name=Hosted MP4 sample' \
   -F "chapter_id=$CH2_ID" \
   -F "video_file=@$ASSETS/clip.mp4;type=video/mp4" \
@@ -531,7 +533,7 @@ put_json "$API/activities/$(echo "$YT" | jq -r .activity_uuid)" '{"published":tr
 
 # ── 4c. PDF document (multipart, then PUT to publish) ───────────────────────
 PDF=$(curl -fsS -X POST "$API/activities/documentpdf" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'name=Sample PDF document' \
   -F "chapter_id=$CH2_ID" \
   -F "pdf_file=@$ASSETS/doc.pdf;type=application/pdf")
@@ -556,7 +558,7 @@ put_json "$API/courses/$CUUID" '{"published":true,"public":true}' > /dev/null
 echo ""
 echo "Tree:"
 curl -fsS "$API/courses/$CUUID/meta?with_unpublished_activities=true&slim=true" \
-  -H "Authorization: Bearer $TOKEN" | jq -r '
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq -r '
     "course: \(.name) (public=\(.public), published=\(.published))",
     (.chapters[] | "  \(.name)",
       (.activities[] | "    - \(.name) [\(.activity_type)/\(.activity_sub_type)]"))'
@@ -581,7 +583,7 @@ After migration, fetch the full course tree and inspect it before announcing the
 
 ```bash
 curl "http://localhost:1338/api/v1/courses/$CUUID/meta?with_unpublished_activities=true&slim=true" \
-  -H "Authorization: Bearer $TOKEN" | jq '
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '
     {chapters: (.chapters | length),
      activities: (.chapters | map(.activities | length) | add)}'
 ```
@@ -591,5 +593,5 @@ curl "http://localhost:1338/api/v1/courses/$CUUID/meta?with_unpublished_activiti
 If anything is wrong, every resource has a `DELETE` endpoint. The safest fix is to delete the course (`DELETE /api/v1/courses/{course_uuid}`), which cascades to its chapters, activities, and blocks, and then re-run the script.
 
 ```bash
-curl -X DELETE "$API/courses/$CUUID" -H "Authorization: Bearer $TOKEN"
+curl -X DELETE "$API/courses/$CUUID" -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```

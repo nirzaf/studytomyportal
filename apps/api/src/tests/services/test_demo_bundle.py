@@ -16,6 +16,9 @@ from src.services.demo.bundle_loader import (
     BUNDLE_ROOT,
     MAX_BUNDLE_BYTES,
     BundleError,
+    Bundle,
+    PodcastEpisodeSpec,
+    PodcastSpec,
     bundle_size_bytes,
     load_bundle,
 )
@@ -647,6 +650,42 @@ def test_the_same_block_compiles_identically_every_time():
 # engagement, podcasts and the storefront
 # ---------------------------------------------------------------------------
 
+def _isolated_podcast_media(monkeypatch, tmp_path):
+    """Keep podcast-validator coverage without shipping unlicensed demo audio."""
+    original_media_path = Bundle.media_path
+    media_root = tmp_path / "media"
+    podcast_root = media_root / "podcasts"
+    podcast_root.mkdir(parents=True)
+    (podcast_root / "cover.webp").write_bytes(b"synthetic test cover")
+
+    def media_path(self, *parts):
+        if parts and parts[0] == "podcasts":
+            return str(media_root.joinpath(*parts))
+        return original_media_path(self, *parts)
+
+    monkeypatch.setattr(Bundle, "media_path", media_path)
+
+
+def _test_podcast(*, cover="cover.webp", episodes=None):
+    if episodes is None:
+        episodes = [
+            PodcastEpisodeSpec(
+                slug="test-episode",
+                title="Synthetic test episode",
+                audio="test.mp3",
+            )
+        ]
+    return PodcastSpec(
+        slug="test-podcast",
+        name="Synthetic test podcast",
+        cover=cover,
+        episodes=episodes,
+    )
+
+
+def test_demo_bundle_does_not_ship_podcast_voice_recordings(bundle):
+    assert bundle.engagement.podcasts == []
+
 def _with_engagement(bundle, **updates):
     return bundle.model_copy(
         update={"engagement": bundle.engagement.model_copy(update=updates)}
@@ -696,36 +735,26 @@ def test_a_playground_linking_an_unknown_course_is_rejected(bundle):
         _validated(broken)
 
 
-def test_a_podcast_with_a_missing_cover_is_rejected(bundle):
+def test_a_podcast_with_a_missing_cover_is_rejected(bundle, monkeypatch, tmp_path):
     """A missing cover is a blank tile in the catalogue."""
-    podcast = bundle.engagement.podcasts[0].model_copy(update={"cover": "gone.webp"})
-    broken = _with_engagement(
-        bundle, podcasts=[podcast, *bundle.engagement.podcasts[1:]]
-    )
+    _isolated_podcast_media(monkeypatch, tmp_path)
+    broken = _with_engagement(bundle, podcasts=[_test_podcast(cover="gone.webp")])
     with pytest.raises(BundleError, match="missing cover"):
         _validated(broken)
 
 
-def test_a_podcast_with_no_episodes_is_rejected(bundle):
-    podcast = bundle.engagement.podcasts[0].model_copy(update={"episodes": []})
-    broken = _with_engagement(
-        bundle, podcasts=[podcast, *bundle.engagement.podcasts[1:]]
-    )
+def test_a_podcast_with_no_episodes_is_rejected(bundle, monkeypatch, tmp_path):
+    _isolated_podcast_media(monkeypatch, tmp_path)
+    broken = _with_engagement(bundle, podcasts=[_test_podcast(episodes=[])])
     with pytest.raises(BundleError, match="no episodes"):
         _validated(broken)
 
 
-def test_an_episode_with_missing_audio_is_rejected(bundle):
+def test_an_episode_with_missing_audio_is_rejected(bundle, monkeypatch, tmp_path):
     """A missing audio file is a player that spins forever."""
-    podcast = bundle.engagement.podcasts[0]
-    episode = podcast.episodes[0].model_copy(update={"audio": "silence.mp3"})
-    broken = _with_engagement(
-        bundle,
-        podcasts=[
-            podcast.model_copy(update={"episodes": [episode, *podcast.episodes[1:]]}),
-            *bundle.engagement.podcasts[1:],
-        ],
-    )
+    _isolated_podcast_media(monkeypatch, tmp_path)
+    podcast = _test_podcast()
+    broken = _with_engagement(bundle, podcasts=[podcast])
     with pytest.raises(BundleError, match="missing audio"):
         _validated(broken)
 
@@ -976,17 +1005,14 @@ def test_a_task_with_a_missing_or_duplicated_key_is_rejected(bundle):
         _validated(bundle.model_copy(update={"assignments": {course_key: keyless}}))
 
 
-def test_a_duplicate_episode_slug_is_rejected(bundle):
-    podcast = bundle.engagement.podcasts[0]
-    broken = _with_engagement(
-        bundle,
-        podcasts=[
-            podcast.model_copy(
-                update={"episodes": [podcast.episodes[0], podcast.episodes[0]]}
-            ),
-            *bundle.engagement.podcasts[1:],
-        ],
+def test_a_duplicate_episode_slug_is_rejected(bundle, monkeypatch, tmp_path):
+    _isolated_podcast_media(monkeypatch, tmp_path)
+    (tmp_path / "media" / "podcasts" / "unused.mp3").write_bytes(b"synthetic test audio")
+    episode = PodcastEpisodeSpec(
+        slug="same-episode", title="Synthetic test episode", audio="unused.mp3"
     )
+    podcast = _test_podcast(episodes=[episode, episode.model_copy()])
+    broken = _with_engagement(bundle, podcasts=[podcast])
     with pytest.raises(BundleError, match="duplicate episode slug"):
         _validated(broken)
 

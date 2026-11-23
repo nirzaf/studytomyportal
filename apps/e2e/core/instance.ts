@@ -23,7 +23,7 @@ export const ORG_SLUG = process.env.E2E_ORG_SLUG || 'default'
 
 /** Bootstrapped admin / teacher account. */
 export const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'admin@school.dev'
-export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'E2eTestAdmin!234'
+export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? ''
 
 /** CLI install name (also the docker-compose project dir under ~/.learnhouse). */
 export const INSTALL_NAME = process.env.E2E_INSTALL_NAME || 'e2e'
@@ -50,7 +50,7 @@ export function makeStudent(label: string) {
     // validator rejects them. A normal .com domain validates fine.
     email: `student-${label}-${suffix}@e2e-tests.com`,
     username: `student_${label}_${suffix}`.replace(/-/g, '_'),
-    password: 'E2eStudent!234',
+    password: `Test-${suffix}-Pass!`,
     firstName: 'Stu',
     lastName: label,
   }

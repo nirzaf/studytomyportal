@@ -163,7 +163,8 @@ bunx playwright test features/assignments/tests/06-manual-grading.spec.ts
 | --- | --- | --- |
 | `E2E_BASE_URL` | unset | Use an existing instance; skips boot + teardown. |
 | `E2E_PORT` | `8080` | HTTP port for the self-host. |
-| `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` | `admin@school.dev` / `E2eTestAdmin!234` | Bootstrapped admin. |
+| `E2E_ADMIN_EMAIL` | `admin@school.dev` | Synthetic local administrator account. |
+| `E2E_ADMIN_PASSWORD` | Required; no default | Unique test-only credential supplied through the environment. |
 | `E2E_ORG_SLUG` | `default` | Bootstrapped org slug. |
 | `E2E_CLI` | `npx --yes learnhouse@latest` | CLI used to boot (override for a local build). |
 | `E2E_SKIP_BOOT` | unset | `1` to skip booting (assumes instance already up). |

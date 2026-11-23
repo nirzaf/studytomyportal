@@ -51,7 +51,7 @@ optional: the feature stays disabled or uses a runtime fallback when the variabl
 | Variable | Description | Type | Default / required | Used by |
 | --- | --- | --- | --- | --- |
 | `LEARNHOUSE_SQL_CONNECTION_STRING` | PostgreSQL connection string for the API and Alembic migrations. | PostgreSQL URL | `postgresql://learnhouse:learnhouse@localhost:5432/learnhouse`; production installs should set it | API, API migrations, CLI |
-| `LEARNHOUSE_DB_URL` | Fallback database URL for the standalone `apps/api/scripts/migrate.py` migration helper when `DATABASE_URL` is unset. | PostgreSQL URL | `postgresql://learnhouse:learnhouse@localhost:5432/learnhouse` | API migration script |
+| `LEARNHOUSE_DB_URL` | Fallback database URL for the standalone `apps/api/scripts/migrate.py` migration helper when `DATABASE_URL` is unset. The default is for local development only; set a separately managed URL for any hosted environment. | PostgreSQL URL | `postgresql://learnhouse:learnhouse@localhost:5432/learnhouse` (local development only) | API migration script |
 | `LEARNHOUSE_AUTO_MIGRATE` | Migrate the database schema when the API starts. Set to `false` to run migrations yourself (`uv run python cli.py migrate`); the API then only creates missing tables. See [Database Migrations](/self-hosting/maintenance/updates#database-migrations). | boolean | `true` | API |
 | `LEARNHOUSE_DB_PING_AFTER_IDLE_SECONDS` | A pooled database connection that sat idle this many seconds is checked before reuse. Lower it if a pooler or firewall drops idle connections sooner. | number | `10` | API |
 | `LEARNHOUSE_PGBOUNCER` | Forces PgBouncer/Supavisor-safe asyncpg settings even when the URL does not reveal a pooler. | boolean | `false` | API |

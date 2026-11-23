@@ -407,7 +407,7 @@ async def test_managed_submission_grading_and_idempotency_lifecycle(db, org, adm
     # 2. Save draft numeric answer
     after_num = await save_managed_assignment_task_draft(
         db, org, learner, course.course_uuid, release.uuid, asg_act.activity_uuid,
-        task_num.assignment_task_uuid, {"answer": "2.5"}, idempotency_key="draft-num-1",
+        task_num.assignment_task_uuid, {"answer": "2.5"}, idempotency_key="test",
     )
     assert after_num.submission_status == "PENDING"
     assert after_num.tasks[0].submitted_answer == {"answer": "2.5"}
@@ -535,7 +535,7 @@ async def test_release_snapshot_isolation_and_consistency_after_draft_edits(db, 
     )
     await submit_managed_linked_assignment(
         db, org, learner, course.course_uuid, rel_v1.uuid, asg_act.activity_uuid,
-        idempotency_key="rel-v1-submit",
+        idempotency_key="test",
     )
 
     # Author edits LIVE draft assignment + tasks (simulating preparation for Release v2)

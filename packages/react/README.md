@@ -4,7 +4,7 @@
 
 Render Studytomy Portal activities inside any React app. Pages, quizzes, flipcards, scenarios, code playgrounds, math, video and PDFs all look and behave as they do in Studytomy Portal.
 
-The package is compiled from the Studytomy Portal web app's own source at each release. Its version always matches the Studytomy Portal release it was built from, so `@learnhouse/react@1.4.3` renders exactly what Studytomy Portal 1.4.3 renders.
+The package is compiled from the Studytomy Portal web app's own source at each release. Its version always matches the Studytomy Portal release it was built from, so `@learnhouse/react@1.4.4` renders exactly what Studytomy Portal 1.4.4 renders.
 
 ```bash
 npm install @learnhouse/react

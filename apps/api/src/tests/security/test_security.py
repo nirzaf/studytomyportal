@@ -107,7 +107,7 @@ class TestSecurity:
         assert security_verify_password("wrong", hashed) is False
 
     def test_security_verify_token_round_trip(self):
-        token = "lh_abc1234567890"
+        token = "lh_test_fixture"
         assert security_verify_token(token, security_hash_token(token)) is True
         assert security_verify_token("lh_other", security_hash_token(token)) is False
 

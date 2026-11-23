@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security Contact
-    about: Report security vulnerabilities privately through GitHub Security Advisories.
+    about: Use private vulnerability reporting only if enabled. Otherwise see SECURITY.md; do not disclose vulnerabilities in a public issue.
     url: https://github.com/nirzaf/studytomyportal/security/advisories/new
   - name: Question or Problem
     about: Ask a question or report a problem in the Studytomy Portal repository.

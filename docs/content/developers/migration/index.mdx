@@ -30,9 +30,11 @@ Every migration call must be authenticated. There are two token types:
 
 Both are sent the same way:
 
+The authenticated examples use the `ACCESS_TOKEN` shell variable; set it to a valid local token before running them. Keep tokens out of tracked files and logs.
+
 ```bash
 curl http://localhost:1338/api/v1/courses/?org_id=1 \
-  -H "Authorization: Bearer lh_your_api_token_here"
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 API tokens are bound to a single organization at creation time. Any attempt to operate on a different `org_id` is rejected at the auth layer, so a leaked token cannot reach across tenants.
@@ -43,7 +45,7 @@ API tokens are bound to a single organization at creation time. Any attempt to o
 ```bash
 # Mint a user JWT using your API token
 curl -X POST 'http://localhost:1338/api/v1/admin/{org_slug}/auth/token' \
-  -H 'Authorization: Bearer lh_your_api_token' \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{"user_id": 1}'
 # → { "access_token": "eyJ...", "token_type": "bearer", "user_id": 1, "user_uuid": "..." }

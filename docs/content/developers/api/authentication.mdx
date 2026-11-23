@@ -24,9 +24,11 @@ curl -X POST http://localhost:1338/api/v1/auth/login \
 
 It returns an access token valid for 8 hours. Send it in the `Authorization` header:
 
+The authenticated examples use the `ACCESS_TOKEN` shell variable; set it to a valid local token before running them. Keep tokens out of tracked files and logs.
+
 ```bash
 curl http://localhost:1338/api/v1/users/profile \
-  -H "Authorization: Bearer <access_token>"
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 Browsers get the same tokens as `HttpOnly` cookies: `LH_access` (8 hours) and `LH_refresh` (30 days of inactivity; self-hosted instances can change this with `LEARNHOUSE_AUTH_REFRESH_TOKEN_DAYS`, minimum 14). `GET /api/v1/auth/refresh` issues a new access token from the refresh cookie.
@@ -63,7 +65,7 @@ API tokens let your own servers call Studytomy Portal without a user session. Ea
 
 ```bash
 curl http://localhost:1338/api/v1/courses/... \
-  -H "Authorization: Bearer lh_your_api_token_here"
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 ### Creating a token

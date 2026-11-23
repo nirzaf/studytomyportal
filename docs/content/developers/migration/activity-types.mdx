@@ -266,9 +266,11 @@ The endpoint creates the activity with `published: false` regardless of any payl
 
 **Create endpoint:** `POST /api/v1/activities/video`
 
+The authenticated examples use the `ACCESS_TOKEN` shell variable; set it to a valid local token before running them. Keep tokens out of tracked files and logs.
+
 ```bash
 curl -X POST "http://localhost:1338/api/v1/activities/video" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'name=Lesson 1 walkthrough' \
   -F 'chapter_id=7' \
   -F 'video_file=@./lesson-01.mp4;type=video/mp4' \
@@ -301,7 +303,7 @@ For YouTube and Vimeo embeds. Note the sub-type name is historical. The same sub
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/activities/external_video" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Intro lecture",
@@ -332,7 +334,7 @@ The persisted `content` is `{ uri, type, activity_uuid }`.
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/activities/documentpdf" \
-  -H "Authorization: Bearer lh_your_api_token" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'name=Course syllabus' \
   -F 'chapter_id=7' \
   -F 'pdf_file=@./syllabus.pdf;type=application/pdf'

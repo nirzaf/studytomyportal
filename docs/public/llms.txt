@@ -97,8 +97,8 @@ Every page below is plain Markdown at its URL. The complete text of all pages is
 
 ## Self-hosting
 
-- [CLI](/cli.md): Install and use the Studytomy Portal CLI to deploy, update, back up and manage a self-hosted instance, or run a local development stack.
-- [Commands](/cli/commands.md): Reference for every Studytomy Portal CLI command, including setup, start, update, backup, restore, doctor, env, scale and dev, with flags and exit codes.
+- [CLI](/cli.md): Use the compatibility-named CLI to configure an upstream runtime image, maintain a self-hosted installation, or run this repository's local development stack.
+- [Commands](/cli/commands.md): Reference for the compatibility-named CLI commands, including setup, runtime image updates, backup, restore, doctor, env, scale and local development.
 - [Dev Mode](/cli/dev-mode.md): Run Studytomy Portal locally with npx learnhouse dev. PostgreSQL and Redis run in Docker, and the API, web and collab servers run with hot reload.
 - [CLI Environment Variables](/cli/environment-variables.md): Environment variables the Studytomy Portal CLI reads, such as LEARNHOUSE_DIR and LEARNHOUSE_ADMIN_PASSWORD, and how its generated .env file is laid out.
 - [Setup Wizard](/cli/setup-wizard.md): Walk through the Studytomy Portal setup wizard step by step, from edition, domain and HTTPS to database, Redis, organization, admin and features.
@@ -109,14 +109,14 @@ Every page below is plain Markdown at its URL. The complete text of all pages is
 - [Environment Variables](/self-hosting/configuration/environment-variables.md): Reference for every environment variable a self-hosted Studytomy Portal instance reads, with types, defaults and the service that uses each one.
 - [SSL and Domain Setup](/self-hosting/configuration/ssl.md): Set up a domain and SSL for self-hosted Studytomy Portal with automatic Let's Encrypt certificates or your own reverse proxy, and set the cookie domain.
 - [Content Storage](/self-hosting/configuration/storage.md): Choose where a self-hosted Studytomy Portal instance stores uploaded content, either a local Docker volume or S3-compatible storage such as AWS S3, R2 or MinIO.
-- [Installation Overview](/self-hosting/installation.md): Install a self-hosted Studytomy Portal instance with the Studytomy Portal CLI, which generates and runs the Docker Compose stack, backups and updates for you.
-- [Quick Install](/self-hosting/installation/quick-install.md): Install Studytomy Portal on your own server in a few minutes. Run the setup wizard with npx or a one-line installer, start the stack and log in.
+- [Installation Overview](/self-hosting/installation.md): Configure and maintain a self-hosted runtime installation with the compatibility-named CLI.
+- [Quick Install](/self-hosting/installation/quick-install.md): Configure a self-hosted runtime installation with the compatibility-named CLI, start the stack and log in.
 - [System Requirements](/self-hosting/installation/requirements.md): Check the system requirements for self-hosting Studytomy Portal, including Docker with Compose v2, Node.js 22+, at least 2 GB of RAM and free ports.
 - [Maintenance Overview](/self-hosting/maintenance.md): Keep a self-hosted Studytomy Portal instance healthy with the CLI. Update it, back up and restore data, monitor services and fix common problems.
 - [Backups](/self-hosting/maintenance/backups.md): Back up and restore a self-hosted Studytomy Portal instance with the CLI, covering the database, .env file and uploaded content, plus cron automation.
 - [Monitoring](/self-hosting/maintenance/monitoring.md): Monitor a self-hosted Studytomy Portal instance with CLI health checks, the /api/v1/health endpoint, logs, Sentry error tracking and resource limits.
 - [Troubleshooting](/self-hosting/maintenance/troubleshooting.md): Fix common problems on a self-hosted Studytomy Portal instance, such as services not starting, database errors, port conflicts and sign-in issues.
-- [Updates](/self-hosting/maintenance/updates.md): Update a self-hosted Studytomy Portal instance with npx learnhouse update, learn how database migrations run, and roll back to an earlier version.
+- [Runtime Image Updates](/self-hosting/maintenance/updates.md): Update the configured upstream runtime image with npx learnhouse update, understand database migrations, and roll back safely.
 
 ## Developers
 

@@ -6,7 +6,7 @@ Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read 
 
 Studytomy Portal is an educator-led learning platform under active development, combining structured courses, tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The intended learner offering is the Sri Lankan National School Syllabus (National Institute of Education / Ministry of Education, Grades 6–13, English instruction) for students and their parents/guardians; see the [Sri Lankan decision baseline](docs/studytomy/SRI-LANKA-DECISION-BASELINE.md). That scope is an engineering alignment only: the programme, market and cohort decisions behind it (`D-01`, `D-02`) remain unapproved.
 
-**Current operation: local development only.** This repository has no configured deployment or CI/CD workflow. See [LOCAL-ONLY.md](LOCAL-ONLY.md) for local verification commands and the external-integration boundary.
+**Current operation: local development only.** Repository security checks run in GitHub Actions; no application deployment workflow is configured. See [LOCAL-ONLY.md](LOCAL-ONLY.md) for local verification commands and the external-integration boundary, and [SECURITY.md](SECURITY.md) for vulnerability reporting and release gates.
 
 ## Contents
 
@@ -74,7 +74,7 @@ Use these terms consistently:
 
 ### Studytomy code currently present
 
-**Local evidence update, 17 November 2026:** the inspected development worktree at HEAD `4f3346af99b516bab2d422217905d078096d55ac` contains additional uncommitted implementation beyond the published architecture checkpoint `d34ebb50b7191730a37452fe3324679b2f5e7a47`. The [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) records source references, scope and limitations. A reader of GitHub alone may not yet have these application files.
+**Source status, 23 November 2026:** the modules listed below are present in tracked `main` at `55d0ac90899736013b4cbb69ad80bd7617ca5092`. Their presence is source evidence only; it does not establish educator approval, complete acceptance, production readiness, or deployment. See the [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) for scope and limitations.
 
 The working source contains additive Studytomy modules, rather than only a proposed fork. The following are **source-present / acceptance pending**; file presence and targeted tests are not production certification or completion of the 73-task specification.
 
@@ -141,7 +141,7 @@ flowchart TD
   Marketing -. Optional navigation link .-> Web
 ```
 
-**Current operation**: Run and verify the portal locally. A future deployment to `lms.studytomy.com` would require separate operational and business approval. No deployment or CI/CD configuration is included in this repository, and removing repository configuration does not disconnect external GitHub Apps or hosting accounts. The public website remains separate with its own deployment, authentication sessions, and data storage.
+**Current operation**: Run and verify the portal locally. A future deployment to `lms.studytomy.com` would require separate operational and business approval. Repository security workflows do not build or deploy the application, and removing repository configuration does not disconnect external GitHub Apps or hosting accounts. The public website remains separate with its own deployment, authentication sessions, and data storage.
 
 ### Architecture boundaries
 
@@ -171,7 +171,7 @@ This inventory describes the checked-out source and committed dependency declara
 | Proxy templates | `nginx:1.30-alpine`, `caddy:2.11-alpine`, `alpine/socat:1.8.1.3` | `apps/cli/src/constants.ts`; OS packages installed by `apk` are not exactly pinned |
 | Tests | Bun test, pytest 9.2.0, Playwright 1.64.1, Vitest 5.1.0 | Per-component manifests below |
 | Documentation | Next.js 16.4.5, Fumadocs Core 16.18.1 / MDX 15.5.0 | `docs/package.json`, `docs/bun.lock` |
-| Headless clients | `@learnhouse/sdk`, `@learnhouse/react`, `@learnhouse/vue` 1.4.3 | `packages/*/package.json`; separate from portal runtime |
+| Headless clients | `@learnhouse/sdk`, `@learnhouse/react`, `@learnhouse/vue` 1.4.4 | `packages/*/package.json`; separate from portal runtime |
 
 The CLI's default application image is `ghcr.io/learnhouse/app:latest` (development: `:dev`), an upstream runtime that does not include changes from this repository; it is not a verified Studytomy build. The CLI prints this identity during setup and updates. For source development, build the CLI from this checkout and run its `dev` command as shown in [Quickstart](docs/content/getting-started/quickstart.mdx). The Python pgvector client version (0.5.1) is not the database extension version. Optional integrations and Enterprise-related packages in manifests do not prove that their associated features are licensed, enabled or deployed. No Supabase dependency is declared in these manifests.
 
@@ -469,7 +469,7 @@ Source: [packages/react/package.json](packages/react/package.json); lock: [packa
 | `@codemirror/view` | dependencies | `^6.43.15` | `6.43.15` |
 | `@emoji-mart/react` | dependencies | `^1.1.1` | `1.1.1` |
 | `@icons-pack/react-simple-icons` | dependencies | `^13.15.1` | `13.15.1` |
-| `@learnhouse/sdk` | dependencies | `1.4.3` | `1.4.3 (workspace)` |
+| `@learnhouse/sdk` | dependencies | `1.4.4` | `1.4.4 (workspace)` |
 | `@phosphor-icons/react` | dependencies | `^2.1.10` | `2.1.10` |
 | `@radix-ui/react-checkbox` | dependencies | `^1.4.1` | `1.4.1` |
 | `@radix-ui/react-dialog` | dependencies | `^1.3.1` | `1.3.1` |
@@ -552,8 +552,8 @@ Source: [packages/vue/package.json](packages/vue/package.json); lock: [packages/
 
 | Library | Manifest group | Declared | Locked |
 |---|---|---|---|
-| `@learnhouse/react` | dependencies | `1.4.3` | `1.4.3 (workspace)` |
-| `@learnhouse/sdk` | dependencies | `1.4.3` | `1.4.3 (workspace)` |
+| `@learnhouse/react` | dependencies | `1.4.4` | `1.4.4 (workspace)` |
+| `@learnhouse/sdk` | dependencies | `1.4.4` | `1.4.4 (workspace)` |
 | `react` | dependencies | `^19.3.1` | `19.3.1` |
 | `react-dom` | dependencies | `^19.3.1` | `19.3.1` |
 | `@types/node` | devDependencies | `^26.6.6` | `26.6.6` |
@@ -799,6 +799,7 @@ The platform involves minors and potentially sensitive educational information. 
 - **AI governance**: Approved providers, human oversight, versioned prompts/rubrics, safe errors, transparent limitations, and no secret exposure.
 - **Children's safeguards**: Obtain legal/privacy review for Sri Lankan operations, guardian consent rules, cross-border data access, and applicable retention requirements.
 - **Operations**: Centralized error logs without leaking learner content; rate limiting; restore drills; dependency updates; alert ownership.
+- **Repository release checks**: Secret and dependency scanners run in GitHub Actions. Their checks must be made required by repository branch rules before merging or public release; see [Security](SECURITY.md). A workflow result alone does not enforce branch protection.
 - **Irreversible changes**: Require an explicit user instruction naming the action before merges, destructive production operations, critical deletions, or history rewrites. No codeword is required.
 
 ## Engineering standards
@@ -851,7 +852,7 @@ Phases are proposed, not committed dates or completed implementation milestones.
 
 ## Licensing
 
-This repository includes AGPL-3.0-covered code and may include separately licensed components. Comply with all applicable license terms, notices, and corresponding-source obligations. Review the license of each component before redistribution; obtain legal review before making closed-source or commercial licensing commitments.
+Studytomy Portal is derived from the [LearnHouse Community Edition](https://github.com/learnhouse/learnhouse), which is licensed under AGPL-3.0. This repository includes AGPL-3.0-covered code and may include separately licensed components. Comply with all applicable license terms, notices, and corresponding-source obligations. Review the license of each component before redistribution; obtain legal review before making closed-source or commercial licensing commitments.
 
 Third-party experiments, curriculum resources, media assets, and examination materials have independent license and distribution terms. Review each before inclusion. Do not incorporate private Enterprise code or bypass its license restrictions.
 
@@ -867,4 +868,4 @@ Studytomy branding, content, and development responsibilities are subject to the
 - [AI configuration](docs/content/self-hosting/configuration/ai-setup.mdx)
 - [Previous Studytomy website repository](https://github.com/nirzaf/studytomy-react) (access controlled)
 
-**Current delivery state**: Studytomy Portal is under local development. Run tests locally. This repository intentionally has no deployment or CI/CD configuration. Any future release requires separate approval and verified business, educational, privacy, security, and operational gates; this document is not a deployment receipt.
+**Current delivery state**: Studytomy Portal is under local development. Run application tests locally; GitHub Actions currently provides repository security checks only. There is no application deployment workflow. Any future release requires separate approval and verified business, educational, privacy, security, and operational gates; this document is not a deployment receipt.

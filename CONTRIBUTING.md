@@ -4,21 +4,23 @@ Follow [AGENTS.md](AGENTS.md) and [LOCAL-ONLY.md](LOCAL-ONLY.md) for this fork. 
 
 ## Getting Started
 
-To set up your development environment, use the Studytomy Portal CLI:
+To use the local development CLI from this checkout, build it locally:
 
 ```bash
 git clone https://github.com/nirzaf/studytomyportal.git
 cd studytomyportal
-npx learnhouse dev
+bun --cwd apps/cli install --frozen-lockfile
+bun --cwd apps/cli run build
+node apps/cli/dist/bin/learnhouse.js dev
 ```
 
-This will spin up PostgreSQL and Redis containers, install dependencies, and start the API, Web, and Collab servers. See the [CLI documentation](apps/cli/README.md) for more details.
+This starts the local development services using this checkout. The published `npx learnhouse` package and its default application image are upstream artifacts and do not contain changes from this repository. See the [CLI documentation](apps/cli/README.md) for details.
 
 ## Dependencies and lockfiles
 
 Local and Docker image installs use frozen lockfiles, so a manifest change
 that skips the lockfile fails with `lockfile had changes, but lockfile is
-frozen`. This repository has no configured CI workflow. After touching a
+frozen`. The repository security workflow does not replace application test/build verification. After touching a
 `package.json`, `apps/api/pyproject.toml` or a version number, run:
 
 ```bash
@@ -27,6 +29,14 @@ scripts/lockfiles.sh --check  # verify locally without rewriting lockfiles
 ```
 
 ## Submitting Contributions
+
+### Security, privacy, and licensing
+
+- Never commit API keys, passwords, private certificates, local `.env` files, database dumps, real learner records, or private educational documents.
+- Use synthetic fixtures and keep local secrets in ignored environment files. Check `git status --ignored` before staging configuration files.
+- Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md); do not include exploit details in public issues.
+- Include source and license information for third-party code, fonts, icons, audio, images, and educational material. Do not contribute proprietary Enterprise code or content without redistribution rights.
+- Run the repository security checks and the relevant component tests before opening a pull request. A green scanner is not a substitute for legal, educational, or production approval.
 
 This project follows [GitHub's standard forking model](https://guides.github.com/activities/forking/). Please fork the project to submit pull requests.
 

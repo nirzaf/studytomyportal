@@ -16,15 +16,17 @@ All three endpoints live under `/api/v1/courses/migrate/`. They require an **aut
 <Callout type="warning">
 **API tokens are blocked here.** Unlike the standard course/chapter/activity endpoints, the migration endpoints reject requests authenticated with an `lh_*` API token (`HTTP 403: API tokens cannot access this resource. Only user authentication is allowed.`). If you only have an API token, use the **admin token-swap** to mint a JWT first:
 
+The authenticated examples use the `ACCESS_TOKEN` shell variable; set it to a valid local token before running them. Keep tokens out of tracked files and logs.
+
 ```bash
 JWT=$(curl -s -X POST 'http://localhost:1338/api/v1/admin/{org_slug}/auth/token' \
-  -H 'Authorization: Bearer lh_your_api_token' \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{"user_id": 2}' | jq -r .access_token)
 
 # Now use $JWT for the migrate/* calls
 curl -X POST "http://localhost:1338/api/v1/courses/migrate/upload?org_id=1" \
-  -H "Authorization: Bearer $JWT" -F 'files=@./video.mp4'
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" -F 'files=@./video.mp4'
 ```
 
 The API token needs the **Update** right on **Users (Admin API)**. The target must be a member of your organization only, with a role that can create courses but is not Admin or Maintainer (for example Instructor). The JWT lasts 1 hour. See [the swap rules](/developers/migration#authentication).
@@ -71,7 +73,7 @@ Upload up to 20 GB of files in one or more requests. Pass `temp_id` on subsequen
 ```bash
 # First batch: creates a new temp_id
 curl -X POST "http://localhost:1338/api/v1/courses/migrate/upload?org_id=1" \
-  -H "Authorization: Bearer $JWT" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'files=@./lectures/lesson-01.mp4' \
   -F 'files=@./lectures/lesson-02.mp4' \
   -F 'files=@./handouts/syllabus.pdf'
@@ -100,7 +102,7 @@ Append more files to the same `temp_id`:
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/courses/migrate/upload?org_id=1&temp_id=9c4e3...-d8f1-4..." \
-  -H "Authorization: Bearer $JWT" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -F 'files=@./images/diagram-01.png'
 ```
 
@@ -116,7 +118,7 @@ Send the `temp_id` and a course name; the AI model groups the files into chapter
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/courses/migrate/suggest?org_id=1" \
-  -H "Authorization: Bearer $JWT" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "temp_id": "9c4e3...-d8f1-4...",
@@ -179,7 +181,7 @@ Post the (possibly edited) structure back with the same `temp_id`. The server cr
 
 ```bash
 curl -X POST "http://localhost:1338/api/v1/courses/migrate/create?org_id=1" \
-  -H "Authorization: Bearer $JWT" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "temp_id": "9c4e3...-d8f1-4...",
@@ -235,19 +237,19 @@ COURSE_NAME="Migrated content"
 
 # 0. Swap the API token for a user JWT (migrate/* endpoints reject API tokens)
 TOKEN=$(curl -fsS -X POST "$API/admin/$ORG_SLUG/auth/token" \
-  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"user_id\":$USER_ID}" | jq -r .access_token)
 
 # 1. Upload everything in ./content/
 UPLOAD_RESP=$(curl -fsS -X POST "$API/courses/migrate/upload?org_id=$ORG_ID" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   $(for f in ./content/*; do echo -n "-F files=@$f "; done))
 TEMP_ID=$(echo "$UPLOAD_RESP" | jq -r '.temp_id')
 
 # 2. Suggest structure
 STRUCTURE=$(curl -fsS -X POST "$API/courses/migrate/suggest?org_id=$ORG_ID" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"temp_id\":\"$TEMP_ID\",\"course_name\":\"$COURSE_NAME\"}")
 
@@ -255,7 +257,7 @@ STRUCTURE=$(curl -fsS -X POST "$API/courses/migrate/suggest?org_id=$ORG_ID" \
 
 # 4. Create the course
 curl -fsS -X POST "$API/courses/migrate/create?org_id=$ORG_ID" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"temp_id\":\"$TEMP_ID\",\"structure\":$STRUCTURE}"
 ```
