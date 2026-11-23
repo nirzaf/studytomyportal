@@ -6,7 +6,7 @@ Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read 
 
 Studytomy Portal is an educator-led learning platform under active development, combining structured courses, tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The intended learner offering is the Sri Lankan National School Syllabus (National Institute of Education / Ministry of Education, Grades 6–13, English instruction) for students and their parents/guardians; see the [Sri Lankan decision baseline](docs/studytomy/SRI-LANKA-DECISION-BASELINE.md). That scope is an engineering alignment only: the programme, market and cohort decisions behind it (`D-01`, `D-02`) remain unapproved.
 
-**Current operation: local development only.** Repository security checks run in GitHub Actions; no application deployment workflow is configured. See [LOCAL-ONLY.md](LOCAL-ONLY.md) for local verification commands and the external-integration boundary, and [SECURITY.md](SECURITY.md) for vulnerability reporting and release gates.
+**Studytomy Portal is an open-source project published under the [GNU Affero General Public License v3.0](LICENSE).** The application is in local development. For setup, contributions, and private vulnerability reports, see [LOCAL-ONLY.md](LOCAL-ONLY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md).
 
 ## Contents
 

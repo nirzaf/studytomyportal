@@ -21,7 +21,7 @@ Read only the documents needed for the task. Source, mounted routes and tests ar
 | Access-path or entitlement work | [Managed-course access inventory](../../STUDYTOMY-ACCESS-PATH-INVENTORY.md) | `services/studytomy/access_policy.py`, `entitlements.py`, route-level tests |
 | Migration, rollback or database version | [Migration and rollback notes](MIGRATION-AND-ROLLBACK.md), [PostgreSQL 19 upgrade note](POSTGRESQL-19-UPGRADE.md) | Actual Alembic graph and schema/bootstrap code; no implied production authorization |
 | Operations or incident response | [Operations record](OPERATIONS.md) | Configured schedulers, workers, retention jobs and their enablement flags |
-| Upstream security or feature review | [PR #1192 security review](UPSTREAM-PR-1192-SECURITY-REVIEW.md) | Upstream source at the named commit, then this fork's equivalent path |
+| Upstream security or feature review | [LearnHouse monitoring runbook](UPSTREAM-MONITORING.md) | Stable upstream source at the named commit and this fork's equivalent path. The [PR #1192 review](UPSTREAM-PR-1192-SECURITY-REVIEW.md) is a dated example. |
 | Learner login design | [Credential ADR](ADR-LEARNER-CREDENTIALS.md) | Existing identity/auth contracts and explicit decisions |
 | SDK or embedded renderer | `packages/sdk/README.md`, `packages/react/README.md`, `packages/vue/README.md` | Local manifests/generated contracts; published upstream packages are not unpublished fork code. Build each package before running its tests |
 | Native CLI or E2E | [CLI guide](../../apps/cli/README.md), [E2E guide](../../apps/e2e/README.md) | Verify whether tests use the current local build or a published upstream image |
