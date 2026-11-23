@@ -34,7 +34,7 @@ bun install --frozen-lockfile
 bun dev
 ```
 
-The site will be available at `http://localhost:3000`.
+The site will be available at `http://localhost:3000` if the port is free. Run `bun run test:snippets` to check the tutorial and `bun run build` to verify the complete MDX site. For offline builds, the API reference can use the committed OpenAPI snapshot.
 
 ## Project Structure
 

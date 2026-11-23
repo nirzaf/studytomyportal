@@ -23,7 +23,7 @@ Studytomy Portal is an educator-led learning platform under active development, 
 - [Engineering standards](#engineering-standards)
 - [Roadmap and acceptance gates](#roadmap-and-acceptance-gates)
 - [Decisions still required](#decisions-still-required)
-- [Licensing and acknowledgments](#licensing-and-acknowledgments)
+- [Licensing](#licensing)
 
 ## Product vision
 
@@ -74,7 +74,7 @@ Use these terms consistently:
 
 ### Studytomy code currently present
 
-**Source status, 23 November 2026:** the modules listed below are present in tracked `main` at `55d0ac90899736013b4cbb69ad80bd7617ca5092`. Their presence is source evidence only; it does not establish educator approval, complete acceptance, production readiness, or deployment. See the [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) for scope and limitations.
+**Source status, 23 November 2026:** the modules listed below are present in `main` at `dd12ed6362a392924d65edaaf56aa1f46c9f14bc`. Their presence is source evidence only; it does not establish educator approval, complete acceptance, production readiness, or deployment. See the [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) for scope and limitations.
 
 The working source contains additive Studytomy modules, rather than only a proposed fork. The following are **source-present / acceptance pending**; file presence and targeted tests are not production certification or completion of the 73-task specification.
 
@@ -84,8 +84,10 @@ The working source contains additive Studytomy modules, rather than only a propo
 | Learner profiles, family-authority requests/review, sharing grants and withdrawal | `apps/api/src/routers/studytomy/family.py`, `apps/api/src/services/studytomy/authority.py`, `sharing.py` | Browser, relationship-isolation and full workflow acceptance are separate checks. |
 | Evidence-file access, privacy, offers, idempotency and outbox processing | `apps/api/src/routers/studytomy/`, `apps/api/src/services/studytomy/` | Validate storage, worker configuration, concurrency and real PostgreSQL behavior before release. |
 | Family workspace, learner context, privacy settings and readiness UI | `apps/web/components/Studytomy/` | Connected UI does not establish educational correctness or production deployment. |
-| Adaptive learning and evidence | `apps/api/src/services/studytomy/adaptive_attempts.py`, `adaptive_evidence.py`, `adaptive_mastery.py` | Local, uncommitted paths; server-owned scoring and derived mastery do not establish approved curriculum validity. |
+| Adaptive learning and evidence | `apps/api/src/services/studytomy/adaptive_attempts.py`, `adaptive_evidence.py`, `adaptive_mastery.py` | Server-owned scoring and derived mastery are implemented. Real learner activation requires approved curriculum, eligibility, consent, and safeguarding policies. |
 | Guided teaching and reviewed reports | `apps/api/src/services/studytomy/adaptive_teaching.py`, `adaptive_reports.py`, `apps/web/components/Objects/Account/subpages/AccountReports.tsx` | Current authority, content/policy approvals and full browser verification remain required. |
+
+Reviewed lesson practice uses authorized examples, keeps scored visuals read-only, and tracks ungraded attempts separately from mastery evidence. Browse approved reference material through Explore Topics. See the [current implementation summary](docs/studytomy/IMPLEMENTATION-STATUS.md).
 
 The remaining product ambitions below are a roadmap, not a claim that all custom functionality is absent or complete. See source, migrations and focused tests for each implementation slice; no live deployment or complete acceptance run is asserted by this README.
 
@@ -157,19 +159,19 @@ flowchart TD
 
 ### Current source stack
 
-This inventory describes the checked-out source and committed dependency declarations, not a live deployment attestation. Versions below come from manifests, lockfiles and Dockerfiles, not registry latest-version claims. Snapshot: 16 November 2026.
+This inventory describes the checked-out source and committed dependency declarations, not a live deployment attestation. Versions below come from manifests, lockfiles and Dockerfiles, not registry latest-version claims. Snapshot: 23 November 2026.
 
 | Layer | Technology and version | Evidence |
 |---|---|---|
-| Portal | Next.js 16.4.5, React / React DOM 19.3.1, TypeScript 6.0.3 | `apps/web/package.json`, `apps/web/bun.lock` |
-| Styling and UI | Tailwind CSS 4.3.4, Radix UI components, Tiptap 3.32.3, CodeMirror 6 packages | Web inventory below |
+| Portal | Next.js 16.4.6, React / React DOM 19.3.1, TypeScript 6.0.3 | `apps/web/package.json`, `apps/web/bun.lock` |
+| Styling and UI | Tailwind CSS 4.3.5, Radix UI components, Tiptap 3.32.3, CodeMirror 6 packages | Web inventory below |
 | API | Python 3.14.7, FastAPI 0.162.0, Pydantic 2.14.3, SQLModel 0.0.44, Alembic 1.20.1 | `apps/api/pyproject.toml`, `apps/api/uv.lock` |
-| Collaboration | Hocuspocus 4.8.0, Yjs 13.6.33, ioredis 6.0.0 | `apps/collab/package.json`, `apps/collab/bun.lock` |
+| Collaboration | Hocuspocus 4.9.0, Yjs 13.6.33, ioredis 6.1.0 | `apps/collab/package.json`, `apps/collab/bun.lock` |
 | AI adapters | Pydantic AI Slim 2.66.0 (OpenAI, Anthropic, Google, Mistral extras), Google GenAI 2.34.0 | API inventory; provider configuration and approval still required |
-| Package/build tooling | Bun 1.4.4, uv 0.10.7; Node 26.13.0 in combined container; PM2 7.1.0 | `.bun-version`, root `Dockerfile` |
+| Package/build tooling | Bun 1.4.5 in CI and component images. The combined Dockerfile still pins Bun 1.4.4. It uses Node 26.13.0 and PM2 7.1.0. | `.bun-version`, `.github/workflows/ci-build.yml`, root and component Dockerfiles |
 | Database and cache templates | Fresh CLI-managed local databases use `pgvector/pgvector:0.8.7-pg19` pinned by multi-architecture digest; local development uses an isolated PG19 profile | `apps/cli/src/constants.ts`, `apps/cli/src/commands/dev.ts`; existing installs retain their selected database image and mount until explicitly migrated |
 | Proxy templates | `nginx:1.30-alpine`, `caddy:2.11-alpine`, `alpine/socat:1.8.1.3` | `apps/cli/src/constants.ts`; OS packages installed by `apk` are not exactly pinned |
-| Tests | Bun test, pytest 9.2.0, Playwright 1.64.1, Vitest 5.1.0 | Per-component manifests below |
+| Tests | Bun test, pytest 9.2.0, Playwright 1.65.1, CLI Vitest 5.1.1 | Per-component manifests below |
 | Documentation | Next.js 16.4.5, Fumadocs Core 16.18.1 / MDX 15.5.0 | `docs/package.json`, `docs/bun.lock` |
 | Headless clients | `@learnhouse/sdk`, `@learnhouse/react`, `@learnhouse/vue` 1.4.4 | `packages/*/package.json`; separate from portal runtime |
 
@@ -200,15 +202,15 @@ Source: [apps/web/package.json](apps/web/package.json); lock: [apps/web/bun.lock
 | `@codemirror/lang-wast` | dependencies | `^6.0.2` | `6.0.2` |
 | `@codemirror/lang-xml` | dependencies | `^6.1.0` | `6.1.0` |
 | `@codemirror/legacy-modes` | dependencies | `^6.5.5` | `6.5.5` |
-| `@codemirror/lint` | dependencies | `^6.9.7` | `6.9.7` |
+| `@codemirror/lint` | dependencies | `^6.9.8` | `6.9.8` |
 | `@codemirror/state` | dependencies | `^6.7.6` | `6.7.6` |
 | `@codemirror/view` | dependencies | `^6.43.15` | `6.43.15` |
 | `@emoji-mart/data` | dependencies | `^1.2.1` | `1.2.1` |
 | `@emoji-mart/react` | dependencies | `^1.1.1` | `1.1.1` |
 | `@hello-pangea/dnd` | dependencies | `^18.0.1` | `18.0.1` |
-| `@hocuspocus/provider` | dependencies | `^4.8.0` | `4.8.0` |
-| `@icons-pack/react-simple-icons` | dependencies | `^13.15.1` | `13.15.1` |
-| `@livekit/components-react` | dependencies | `^2.9.25` | `2.9.25` |
+| `@hocuspocus/provider` | dependencies | `^4.9.0` | `4.9.0` |
+| `@icons-pack/react-simple-icons` | dependencies | `^13.16.0` | `13.16.0` |
+| `@livekit/components-react` | dependencies | `^2.9.26` | `2.9.26` |
 | `@marsidev/react-turnstile` | dependencies | `^1.6.3` | `1.6.3` |
 | `@phosphor-icons/react` | dependencies | `^2.1.10` | `2.1.10` |
 | `@radix-ui/react-aspect-ratio` | dependencies | `^1.2.0` | `1.2.0` |
@@ -231,9 +233,9 @@ Source: [apps/web/package.json](apps/web/package.json); lock: [apps/web/bun.lock
 | `@radix-ui/react-toggle-group` | dependencies | `^1.2.1` | `1.2.1` |
 | `@radix-ui/react-tooltip` | dependencies | `^1.4.1` | `1.4.1` |
 | `@react-email/components` | dependencies | `1.0.12` | `1.0.12` |
-| `@sentry/nextjs` | dependencies | `^11.11.0` | `11.11.0` |
-| `@tanstack/react-query` | dependencies | `^5.106.1` | `5.107.1` |
-| `@tanstack/react-query-devtools` | dependencies | `^5.106.1` | `5.107.1` |
+| `@sentry/nextjs` | dependencies | `^11.16.0` | `11.16.0` |
+| `@tanstack/react-query` | dependencies | `^5.108.4` | `5.108.4` |
+| `@tanstack/react-query-devtools` | dependencies | `^5.108.4` | `5.108.4` |
 | `@tiptap/core` | dependencies | `3.32.3` | `3.32.3` |
 | `@tiptap/extension-bullet-list` | dependencies | `3.32.3` | `3.32.3` |
 | `@tiptap/extension-code-block-lowlight` | dependencies | `3.32.3` | `3.32.3` |
@@ -257,8 +259,8 @@ Source: [apps/web/package.json](apps/web/package.json); lock: [apps/web/bun.lock
 | `@tiptap/suggestion` | dependencies | `3.32.3` | `3.32.3` |
 | `@uiw/codemirror-theme-tokyo-night` | dependencies | `^4.25.12` | `4.25.12` |
 | `@uiw/react-codemirror` | dependencies | `^4.25.12` | `4.25.12` |
-| `@videojs/hlsjs-video` | dependencies | `^10.3.0` | `10.3.0` |
-| `@videojs/react` | dependencies | `^10.3.0` | `10.3.0` |
+| `@videojs/hlsjs-video` | dependencies | `^10.6.0` | `10.6.0` |
+| `@videojs/react` | dependencies | `^10.6.0` | `10.6.0` |
 | `avvvatars-react` | dependencies | `^0.4.2` | `0.4.2` |
 | `class-variance-authority` | dependencies | `^0.7.1` | `0.7.1` |
 | `clsx` | dependencies | `^2.1.1` | `2.1.1` |
@@ -266,29 +268,29 @@ Source: [apps/web/package.json](apps/web/package.json); lock: [apps/web/bun.lock
 | `cobe` | dependencies | `^2.0.1` | `2.0.1` |
 | `currency-codes` | dependencies | `^2.2.0` | `2.2.0` |
 | `dayjs` | dependencies | `^1.11.23` | `1.11.23` |
-| `dompurify` | dependencies | `^3.4.17` | `3.4.17` |
+| `dompurify` | dependencies | `^3.5.0` | `3.5.0` |
 | `emblor` | dependencies | `^1.4.8` | `1.4.8` |
 | `formik` | dependencies | `^2.4.9` | `2.4.9` |
 | `get-youtube-id` | dependencies | `^1.0.1` | `1.0.1` |
 | `github-markdown-css` | dependencies | `^5.9.0` | `5.9.0` |
 | `highlight.js` | dependencies | `^11.12.0` | `11.12.0` |
 | `html2canvas` | dependencies | `^1.4.1` | `1.4.1` |
-| `html2canvas-pro` | dependencies | `^2.6.3` | `2.6.3` |
+| `html2canvas-pro` | dependencies | `^2.6.4` | `2.6.4` |
 | `i18next` | dependencies | `^26.7.2` | `26.7.2` |
-| `i18next-browser-languagedetector` | dependencies | `^8.3.0` | `8.3.0` |
+| `i18next-browser-languagedetector` | dependencies | `^8.3.1` | `8.3.1` |
 | `jspdf` | dependencies | `^4.2.1` | `4.2.1` |
 | `jspdf-html2canvas` | dependencies | `^1.7.0` | `1.7.0` |
-| `katex` | dependencies | `^0.19.0` | `0.19.0` |
-| `livekit-client` | dependencies | `^2.23.0` | `2.23.0` |
-| `loops` | dependencies | `^7.4.0` | `7.4.0` |
+| `katex` | dependencies | `^0.19.1` | `0.19.1` |
+| `livekit-client` | dependencies | `^2.25.0` | `2.25.0` |
+| `loops` | dependencies | `^7.5.0` | `7.5.0` |
 | `lowlight` | dependencies | `^3.3.0` | `3.3.0` |
-| `lucide-react` | dependencies | `^1.69.0` | `1.70.0` |
+| `lucide-react` | dependencies | `^1.78.0` | `1.78.0` |
 | `mailchecker` | dependencies | `^6.0.21` | `6.0.21` |
-| `motion` | dependencies | `^14.9.1` | `14.10.1` |
-| `next` | dependencies | `^16.4.5` | `16.4.5` |
+| `motion` | dependencies | `^14.14.0` | `14.14.0` |
+| `next` | dependencies | `^16.4.6` | `16.4.6` |
 | `nextjs-toploader` | dependencies | `^3.9.17` | `3.9.17` |
 | `pdfjs-dist` | dependencies | `^6.5.438` | `6.5.438` |
-| `posthog-js` | dependencies | `^1.446.3` | `1.447.3` |
+| `posthog-js` | dependencies | `^1.454.1` | `1.454.1` |
 | `prosemirror-state` | dependencies | `^1.4.4` | `1.4.4` |
 | `qrcode` | dependencies | `^1.5.4` | `1.5.4` |
 | `re-resizable` | dependencies | `^6.11.2` | `6.11.2` |
@@ -301,29 +303,29 @@ Source: [apps/web/package.json](apps/web/package.json); lock: [apps/web/bun.lock
 | `react-markdown` | dependencies | `^10.1.0` | `10.1.0` |
 | `react-spinners` | dependencies | `^0.17.1` | `0.17.1` |
 | `react-youtube` | dependencies | `^10.1.0` | `10.1.0` |
-| `recharts` | dependencies | `^3.10.1` | `3.10.1` |
+| `recharts` | dependencies | `^3.11.0` | `3.11.0` |
 | `rehype-highlight` | dependencies | `^7.0.2` | `7.0.2` |
 | `rehype-katex` | dependencies | `^7.0.1` | `7.0.1` |
 | `rehype-raw` | dependencies | `^7.0.0` | `7.0.0` |
 | `remark-gfm` | dependencies | `^4.0.1` | `4.0.1` |
 | `remark-math` | dependencies | `^6.0.0` | `6.0.0` |
 | `require-in-the-middle` | dependencies | `^8.0.1` | `8.0.1` |
-| `resend` | dependencies | `^6.37.0` | `6.37.0` |
+| `resend` | dependencies | `^6.39.0` | `6.39.0` |
 | `screenfull` | dependencies | `^6.0.2` | `6.0.2` |
 | `sharp` | dependencies | `^0.35.5` | `0.35.5` |
-| `stripe` | dependencies | `^23.1.0` | `23.1.0` |
+| `stripe` | dependencies | `^23.2.0` | `23.2.0` |
 | `swr` | dependencies | `^2.5.1` | `2.5.1` |
-| `tailwind-merge` | dependencies | `^3.7.0` | `3.7.0` |
+| `tailwind-merge` | dependencies | `^3.7.1` | `3.7.1` |
 | `tailwindcss-animate` | dependencies | `^1.0.7` | `1.0.7` |
 | `tippy.js` | dependencies | `^6.3.7` | `6.3.7` |
 | `usehooks-ts` | dependencies | `^3.1.1` | `3.1.1` |
 | `uuid` | dependencies | `^14.0.3` | `14.0.3` |
-| `wavesurfer.js` | dependencies | `^8.0.5` | `8.0.5` |
+| `wavesurfer.js` | dependencies | `^8.1.0` | `8.1.0` |
 | `y-prosemirror` | dependencies | `^1.3.7` | `1.3.7` |
 | `yjs` | dependencies | `^13.6.33` | `13.6.33` |
 | `yup` | dependencies | `^1.7.1` | `1.7.1` |
 | `@eslint/js` | devDependencies | `^9.39.5` | `9.39.5` |
-| `@tailwindcss/postcss` | devDependencies | `^4.3.4` | `4.3.5` |
+| `@tailwindcss/postcss` | devDependencies | `^4.3.5` | `4.3.5` |
 | `@types/node` | devDependencies | `26.6.6` | `26.6.6` |
 | `@types/qrcode` | devDependencies | `^1.5.6` | `1.5.6` |
 | `@types/react` | devDependencies | `19.3.0` | `19.3.0` |
@@ -332,8 +334,8 @@ Source: [apps/web/package.json](apps/web/package.json); lock: [apps/web/bun.lock
 | `eslint` | devDependencies | `^9.39.5` | `9.39.5` |
 | `eslint-config-next` | devDependencies | `16.4.5` | `16.4.5` |
 | `eslint-plugin-unused-imports` | devDependencies | `^4.4.1` | `4.4.1` |
-| `postcss` | devDependencies | `^8.5.32` | `8.5.32` |
-| `tailwindcss` | devDependencies | `^4.3.4` | `4.3.5` |
+| `postcss` | devDependencies | `^8.5.33` | `8.5.33` |
+| `tailwindcss` | devDependencies | `^4.3.5` | `4.3.5` |
 | `typescript` | devDependencies | `6.0.3` | `6.0.3` |
 
 </details>
@@ -345,10 +347,10 @@ Source: [apps/collab/package.json](apps/collab/package.json); lock: [apps/collab
 
 | Library | Manifest group | Declared | Locked |
 |---|---|---|---|
-| `@hocuspocus/extension-database` | dependencies | `^4.8.0` | `4.8.0` |
-| `@hocuspocus/server` | dependencies | `^4.8.0` | `4.8.0` |
-| `dotenv` | dependencies | `^18.0.9` | `18.0.9` |
-| `ioredis` | dependencies | `^6.0.0` | `6.0.0` |
+| `@hocuspocus/extension-database` | dependencies | `^4.9.0` | `4.9.0` |
+| `@hocuspocus/server` | dependencies | `^4.9.0` | `4.9.0` |
+| `dotenv` | dependencies | `^18.0.10` | `18.0.10` |
+| `ioredis` | dependencies | `^6.1.0` | `6.1.0` |
 | `jsonwebtoken` | dependencies | `^9.0.3` | `9.0.3` |
 | `yjs` | dependencies | `^13.6.33` | `13.6.33` |
 | `@types/jsonwebtoken` | devDependencies | `^9.0.10` | `9.0.10` |
@@ -365,15 +367,15 @@ Source: [apps/cli/package.json](apps/cli/package.json); lock: [apps/cli/bun.lock
 
 | Library | Manifest group | Declared | Locked |
 |---|---|---|---|
-| `@clack/core` | devDependencies | `^1.5.1` | `1.5.1` |
-| `@clack/prompts` | devDependencies | `^1.8.1` | `1.8.1` |
+| `@clack/core` | devDependencies | `^1.6.0` | `1.6.0` |
+| `@clack/prompts` | devDependencies | `^1.9.0` | `1.9.0` |
 | `@types/node` | devDependencies | `^26.6.6` | `26.6.6` |
-| `@vitest/coverage-v8` | devDependencies | `^5.1.0` | `5.1.0` |
-| `commander` | devDependencies | `^15.0.0` | `15.0.0` |
+| `@vitest/coverage-v8` | devDependencies | `^5.1.1` | `5.1.1` |
+| `commander` | devDependencies | `^15.1.0` | `15.1.0` |
 | `picocolors` | devDependencies | `^1.1.1` | `1.1.1` |
 | `tsup` | devDependencies | `^9.0.0` | `9.0.0` |
 | `typescript` | devDependencies | `^7.0.2` | `7.0.2` |
-| `vitest` | devDependencies | `^5.1.0` | `5.1.0` |
+| `vitest` | devDependencies | `^5.1.1` | `5.1.1` |
 
 </details>
 
@@ -384,7 +386,7 @@ Source: [apps/e2e/package.json](apps/e2e/package.json); lock: [apps/e2e/bun.lock
 
 | Library | Manifest group | Declared | Locked |
 |---|---|---|---|
-| `@playwright/test` | devDependencies | `^1.64.1` | `1.64.1` |
+| `@playwright/test` | devDependencies | `^1.65.1` | `1.65.1` |
 | `@types/node` | devDependencies | `^26.6.6` | `26.6.6` |
 | `typescript` | devDependencies | `^6.0.3` | `6.0.3` |
 
@@ -397,7 +399,7 @@ Source: [docs/package.json](docs/package.json); lock: [docs/bun.lock](docs/bun.l
 
 | Library | Manifest group | Declared | Locked |
 |---|---|---|---|
-| `@icons-pack/react-simple-icons` | dependencies | `^13.15.1` | `13.15.1` |
+| `@icons-pack/react-simple-icons` | dependencies | `^13.16.0` | `13.16.0` |
 | `@phosphor-icons/react` | dependencies | `^2.1.10` | `2.1.10` |
 | `@types/mdx` | dependencies | `^2.0.14` | `2.0.14` |
 | `@xyflow/react` | dependencies | `^12.12.1` | `12.12.1` |
@@ -405,16 +407,16 @@ Source: [docs/package.json](docs/package.json); lock: [docs/bun.lock](docs/bun.l
 | `fumadocs-mdx` | dependencies | `15.5.0` | `15.5.0` |
 | `next` | dependencies | `16.4.5` | `16.4.5` |
 | `next-sitemap` | dependencies | `^4.2.3` | `4.2.3` |
-| `posthog-js` | dependencies | `^1.446.3` | `1.447.3` |
+| `posthog-js` | dependencies | `^1.454.1` | `1.454.1` |
 | `react` | dependencies | `^19.3.1` | `19.3.1` |
 | `react-dom` | dependencies | `^19.3.1` | `19.3.1` |
 | `shiki` | dependencies | `^4.6.0` | `4.6.0` |
-| `zod` | dependencies | `^4` | `4.6.7` |
-| `@tailwindcss/postcss` | devDependencies | `^4.3.4` | `4.3.5` |
+| `zod` | dependencies | `^4.6.7` | `4.6.7` |
+| `@tailwindcss/postcss` | devDependencies | `^4.3.5` | `4.3.5` |
 | `@types/node` | devDependencies | `26.6.6` | `26.6.6` |
 | `@types/react` | devDependencies | `19.3.0` | `19.3.0` |
 | `pagefind` | devDependencies | `^1.6.0` | `1.6.0` |
-| `tailwindcss` | devDependencies | `^4.3.4` | `4.3.5` |
+| `tailwindcss` | devDependencies | `^4.3.5` | `4.3.5` |
 | `typescript` | devDependencies | `6.0.3` | `6.0.3` |
 
 </details>
@@ -464,7 +466,7 @@ Source: [packages/react/package.json](packages/react/package.json); lock: [packa
 | `@codemirror/lang-xml` | dependencies | `^6.1.0` | `6.1.0` |
 | `@codemirror/language` | dependencies | `^6.13.1` | `6.13.1` |
 | `@codemirror/legacy-modes` | dependencies | `^6.5.5` | `6.5.5` |
-| `@codemirror/lint` | dependencies | `^6.9.7` | `6.9.7` |
+| `@codemirror/lint` | dependencies | `^6.9.7` | `6.9.8` |
 | `@codemirror/state` | dependencies | `^6.7.6` | `6.7.6` |
 | `@codemirror/view` | dependencies | `^6.43.15` | `6.43.15` |
 | `@emoji-mart/react` | dependencies | `^1.1.1` | `1.1.1` |
@@ -533,7 +535,7 @@ Source: [packages/react/package.json](packages/react/package.json); lock: [packa
 | `@vitejs/plugin-react` | devDependencies | `^6.2.1` | `6.2.1` |
 | `esbuild` | devDependencies | `^0.28.2` | `0.28.2` |
 | `jsdom` | devDependencies | `^30.1.3` | `30.1.3` |
-| `postcss` | devDependencies | `^8.5.32` | `8.5.32` |
+| `postcss` | devDependencies | `^8.5.32` | `8.5.33` |
 | `postcss-prefix-selector` | devDependencies | `^2.2.1` | `2.2.1` |
 | `tailwindcss` | devDependencies | `^4.3.3` | `4.3.4` |
 | `tailwindcss-animate` | devDependencies | `^1.0.7` | `1.0.7` |
@@ -799,8 +801,8 @@ The platform involves minors and potentially sensitive educational information. 
 - **AI governance**: Approved providers, human oversight, versioned prompts/rubrics, safe errors, transparent limitations, and no secret exposure.
 - **Children's safeguards**: Obtain legal/privacy review for Sri Lankan operations, guardian consent rules, cross-border data access, and applicable retention requirements.
 - **Operations**: Centralized error logs without leaking learner content; rate limiting; restore drills; dependency updates; alert ownership.
-- **Repository release checks**: Secret and dependency scanners run in GitHub Actions. Their checks must be made required by repository branch rules before merging or public release; see [Security](SECURITY.md). A workflow result alone does not enforce branch protection.
-- **Irreversible changes**: Require an explicit user instruction naming the action before merges, destructive production operations, critical deletions, or history rewrites. No codeword is required.
+- **Repository security checks.** The `main` ruleset requires Gitleaks and OSV checks from GitHub Actions. See the [security policy](SECURITY.md) for private reporting and the scope of each check.
+- **Change approvals.** Obtain maintainer authorization for merges, destructive production operations, critical deletions, and Git history rewrites.
 
 ## Engineering standards
 
@@ -868,4 +870,4 @@ Studytomy branding, content, and development responsibilities are subject to the
 - [AI configuration](docs/content/self-hosting/configuration/ai-setup.mdx)
 - [Previous Studytomy website repository](https://github.com/nirzaf/studytomy-react) (access controlled)
 
-**Current delivery state**: Studytomy Portal is under local development. Run application tests locally; GitHub Actions currently provides repository security checks only. There is no application deployment workflow. Any future release requires separate approval and verified business, educational, privacy, security, and operational gates; this document is not a deployment receipt.
+**Current delivery state.** GitHub Actions checks builds and repository security. Run the application and its tests locally. Any application release requires separate approval and verified business, educational, privacy, security, and operational gates.

@@ -1,6 +1,6 @@
 # Studytomy Portal E2E: UI acceptance tests
 
-**Studytomy working-tree acceptance:** the default CLI runtime image is the existing upstream LearnHouse image, not a verified Studytomy build. Point `E2E_BASE_URL` and `E2E_API_URL` at the intended local build; `core/instance.ts` supports an existing instance and `E2E_SKIP_BOOT`. Record the tested revision. Local `features/studytomy/` test files are not evidence of a passing browser run. See [documentation review](../../docs/studytomy/DOCUMENTATION-REVIEW.md). This does not enable repository CI/CD.
+**Studytomy working-tree acceptance:** the default CLI runtime image is the existing upstream LearnHouse image, not a verified Studytomy build. Point `E2E_BASE_URL` and `E2E_API_URL` at the intended local build; `core/instance.ts` supports an existing instance and `E2E_SKIP_BOOT`. Record the tested revision. Local `features/studytomy/` test files are not evidence of a passing browser run. See the [dated local verification record](../../docs/studytomy/LOCAL-VERIFICATION.md). CI Build does not execute these browser suites.
 
 Browser-driven acceptance tests for Studytomy Portal. Generic upstream tests may
 boot a CLI-managed self-host; Studytomy tests run against the local web and API

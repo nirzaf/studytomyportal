@@ -136,7 +136,7 @@ The §1 and §4 records above are the frozen pre-modification baseline. Each Stu
 
 - **Business decisions `D-01` through `D-20`:** All 20 decisions remain `UNAPPROVED`. No default age threshold, market jurisdiction, price, currency, pass mark, retry rule, AI provider policy, or retention duration may be silently activated in production.
 - **Child credential gate (`TASK-010`):** `User.email` is required by the current schema and auth router. Until an approved credential ADR and verification flow are established, learners without an approved individual login model cannot be activated via fabricated emails or shared adult sessions.
-- **Confirmation gate (`AGENTS.md` §4 Stage D):** No codeword is required; explicit user instruction is sufficient for merges and releases.
+- **Approval (`AGENTS.md` §4 Stage D):** Merges and releases require explicit user authorization.
 
 ---
 

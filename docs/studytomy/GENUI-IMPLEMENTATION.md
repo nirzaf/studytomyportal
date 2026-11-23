@@ -2,6 +2,8 @@
 
 **Reading order:** chronological evidence ledger, not a current feature matrix. Initial missing routes/practice statements describe that checkpoint; inspect current routes and services. Practice remains policy-gated, and intercepted browser responses are not end-to-end backend acceptance.
 
+The current service resolves reviewed examples and approved modes from server-side records. Recovery and actions recheck the saved mode. Scored visuals follow the server-issued item, and exploration stays interactive. Learning surface records remain separate from grades and mastery. See the [current implementation summary](IMPLEMENTATION-STATUS.md) for approval and verification gates.
+
 ## GENUI-01 — Checkout reconciliation
 
 Inspected `main` at `a8afa133bdfc949d73e64246fb4d92059f0e42c1` against the matching GitHub `origin/main`. The worktree already contained staged Studytomy policy, identity, consent, privacy, evidence, and offer work, as well as unrelated API fixes. This inventory includes that local source, so it does not describe the published revision or a live environment.
