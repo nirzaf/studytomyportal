@@ -56,10 +56,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
-          version: "0.10.7"
-
-      - name: Install Python 3.14.7
-        run: uv python install 3.14.7
+          python-version: "3.14.7"
 
       - name: Sync dependencies
         run: uv sync --frozen --no-dev
@@ -107,7 +104,11 @@ jobs:
         with:
           bun-version-file: .bun-version
 
-      - name: Install dependencies
+      - name: Install web dependencies (required by @learnhouse/react build)
+        working-directory: apps/web
+        run: bun install --frozen-lockfile
+
+      - name: Install package dependencies
         run: bun install --frozen-lockfile
 
       - name: Build packages
