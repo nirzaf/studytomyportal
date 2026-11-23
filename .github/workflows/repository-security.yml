@@ -1,0 +1,104 @@
+name: Repository security checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret history and source scan
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+      GITLEAKS_RUN: |
+        scan_status=0
+        gitleaks "$@" >/tmp/scan-errors.log 2>&1 || scan_status=$?
+        # Gitleaks can exit zero after logging a Git subprocess error.
+        if [ -s /tmp/scan-errors.log ]; then
+          echo 'Gitleaks emitted error diagnostics. Reproduce the scan privately.'
+          exit 1
+        fi
+        exit "$scan_status"
+    steps:
+      - name: Check out complete history
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan reachable Git history
+        shell: bash
+        run: |
+          history_status=0
+          # Reset the image's wildcard trust and allow only this checkout.
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo:ro" \
+            -w /repo \
+            -e GIT_CONFIG_COUNT=2 \
+            -e GIT_CONFIG_KEY_0=safe.directory \
+            -e GIT_CONFIG_VALUE_0= \
+            -e GIT_CONFIG_KEY_1=safe.directory \
+            -e GIT_CONFIG_VALUE_1=/repo \
+            --entrypoint /bin/sh "$GITLEAKS_IMAGE" -c "$GITLEAKS_RUN" gitleaks \
+            git --log-opts='--all --reflog' \
+              --redact=100 --report-format=json --report-path=/tmp/history.json \
+              --exit-code=42 --log-level=error --no-banner || history_status=$?
+
+          case "$history_status" in
+            0) echo 'History scan passed.' ;;
+            42) echo '::error::History scan detected secret findings.'; exit 1 ;;
+            *) echo "::error::History scan could not complete (exit $history_status)."; exit 1 ;;
+          esac
+
+      - name: Scan tracked source
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        shell: bash
+        run: |
+          source_dir=$(mktemp -d "$RUNNER_TEMP/studytomy-tracked-source.XXXXXX")
+          git archive HEAD | tar -x -C "$source_dir"
+
+          tree_status=0
+          docker run --rm \
+            -v "$source_dir:/source:ro" \
+            -w /source \
+            --entrypoint /bin/sh "$GITLEAKS_IMAGE" -c "$GITLEAKS_RUN" gitleaks \
+            dir /source --redact=100 --report-format=json --report-path=/tmp/source.json \
+              --exit-code=42 --log-level=error --no-banner || tree_status=$?
+
+          case "$tree_status" in
+            0) echo 'Tracked source scan passed.' ;;
+            42) echo '::error::Tracked source scan detected secret findings.'; exit 1 ;;
+            *) echo "::error::Tracked source scan could not complete (exit $tree_status)."; exit 1 ;;
+          esac
+
+  dependencies:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out lockfiles
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Scan lockfiles with OSV-Scanner
+        env:
+          OSV_SCANNER_IMAGE: ghcr.io/google/osv-scanner@sha256:a70ffffc2bfd33482953e5d6b64c6fcdb30239717a07b0f0d3ab2859ce3e4cde
+        run: >-
+          docker run --rm
+          -v "$GITHUB_WORKSPACE:/src:ro"
+          -w /src
+          "$OSV_SCANNER_IMAGE"
+          scan source -r /src --format table

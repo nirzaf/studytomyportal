@@ -1,0 +1,615 @@
+import { getAPIUrl } from '@services/config/config'
+import { RequestBodyWithAuthHeader, detailMessage } from '@services/utils/ts/requests'
+import type { CopilotSource } from '@/lib/copilot/sources'
+import {
+  isLearningSurface, readLearningSurface, type LearningActionRequest, type LearningSurface,
+  type LearningSurfaceRequest,
+} from './learningSurface'
+
+export class LearningRequestError extends Error {
+  constructor(readonly status: number, readonly code?: string) {
+    super('Lesson practice request failed')
+  }
+}
+
+export type ActivityLearningAvailability = {
+  available: boolean
+  surface: LearningSurface | null
+  allow_explore: boolean
+  allow_practice: boolean
+}
+
+function learningRequestError(response: Response, result: unknown): LearningRequestError {
+  const detail = result && typeof result === 'object' && 'detail' in result ? result.detail : null
+  const code = detail && typeof detail === 'object' && 'code' in detail && typeof detail.code === 'string'
+    ? detail.code : undefined
+  return new LearningRequestError(response.status, code)
+}
+
+export async function getActivityLearningAvailability(
+  activityUuid: string, accessToken: string, signal: AbortSignal,
+): Promise<ActivityLearningAvailability> {
+  const response = await fetch(
+    `${getAPIUrl()}ai/activity/${encodeURIComponent(activityUuid)}/learning_surface`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+      cache: 'no-store',
+    },
+  )
+  const result: unknown = await response.json().catch(() => null)
+  if (!response.ok) throw learningRequestError(response, result)
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('Invalid lesson practice availability')
+  }
+  const payload = result as Record<string, unknown>
+  if (typeof payload.available !== 'boolean' || !('surface' in payload)) {
+    throw new Error('Invalid lesson practice availability')
+  }
+  const keys = Object.keys(payload)
+  const legacy = keys.length === 2 && keys.every((key) => ['available', 'surface'].includes(key))
+  const extended = keys.length === 4 && keys.every((key) =>
+    ['available', 'surface', 'allow_explore', 'allow_practice'].includes(key))
+  if (!legacy && (!extended || typeof payload.allow_explore !== 'boolean' || typeof payload.allow_practice !== 'boolean')) {
+    throw new Error('Invalid lesson practice availability')
+  }
+  const allow_explore = legacy ? false : payload.allow_explore as boolean
+  const allow_practice = legacy ? false : payload.allow_practice as boolean
+  if ((!legacy && payload.available !== (allow_explore || allow_practice)) ||
+    (payload.surface !== null && (!payload.available || !isLearningSurface(payload.surface) ||
+      payload.surface.activity_id !== activityUuid ||
+      (!legacy && (payload.surface.mode === 'explore' ? !allow_explore : !allow_practice))))) {
+    throw new Error('Invalid lesson practice availability')
+  }
+  return {
+    available: payload.available,
+    surface: payload.surface as ActivityLearningAvailability['surface'],
+    allow_explore,
+    allow_practice,
+  }
+}
+
+export async function startActivityLearningSurface(
+  request: LearningSurfaceRequest,
+  accessToken: string,
+  signal: AbortSignal,
+) {
+  const response = await fetch(`${getAPIUrl()}ai/stream/start/learning_surface`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(request),
+    signal,
+    cache: 'no-store',
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw learningRequestError(response, error)
+  }
+  return readLearningSurface(response, request)
+}
+
+export async function sendActivityLearningAction(
+  activityUuid: string,
+  request: LearningActionRequest,
+  accessToken: string,
+  signal: AbortSignal,
+) {
+  const response = await fetch(
+    `${getAPIUrl()}ai/activity/${encodeURIComponent(activityUuid)}/learning_surface/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(request),
+      signal,
+      cache: 'no-store',
+    },
+  )
+  const result = await readActivityLearningProjection(response, activityUuid, request.surface_id)
+  if (result.revision !== request.expected_revision + 1) {
+    throw new Error('Practice result did not match this request')
+  }
+  return result
+}
+
+export async function recoverActivityLearningSurface(
+  activityUuid: string,
+  surfaceId: string,
+  accessToken: string,
+  signal: AbortSignal,
+) {
+  const response = await fetch(
+    `${getAPIUrl()}ai/activity/${encodeURIComponent(activityUuid)}/learning_surface/${encodeURIComponent(surfaceId)}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+      cache: 'no-store',
+    },
+  )
+  return readActivityLearningProjection(response, activityUuid, surfaceId)
+}
+
+async function readActivityLearningProjection(response: Response, activityUuid: string, surfaceId: string) {
+  const result: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw learningRequestError(response, result)
+  }
+  if (!isLearningSurface(result) || result.surface_id !== surfaceId || result.activity_id !== activityUuid) {
+    throw new Error('Practice result did not match this lesson')
+  }
+  return result
+}
+
+export async function startActivityAIChatSession(
+  message: string,
+  access_token: string,
+  activity_uuid?: string
+) {
+  const data = {
+    message,
+    activity_uuid,
+  }
+  const result = await fetch(
+    `${getAPIUrl()}ai/start/activity_chat_session`,
+    RequestBodyWithAuthHeader('POST', data, null, access_token)
+  )
+  const json = await result.json()
+  if (result.status === 200) {
+    return {
+      success: true,
+      data: json,
+      status: result.status,
+      HTTPmessage: result.statusText,
+    }
+  } else {
+    return {
+      success: false,
+      data: json,
+      status: result.status,
+      HTTPmessage: result.statusText,
+    }
+  }
+}
+
+export async function sendActivityAIChatMessage(
+  message: string,
+  aichat_uuid: string,
+  activity_uuid: string,
+  access_token: string
+) {
+  const data = {
+    aichat_uuid,
+    message,
+    activity_uuid,
+  }
+  const result = await fetch(
+    `${getAPIUrl()}ai/send/activity_chat_message`,
+    RequestBodyWithAuthHeader('POST', data, null, access_token)
+  )
+
+  const json = await result.json()
+  if (result.status === 200) {
+    return {
+      success: true,
+      data: json,
+      status: result.status,
+      HTTPmessage: result.statusText,
+    }
+  } else {
+    return {
+      success: false,
+      data: json,
+      status: result.status,
+      HTTPmessage: result.statusText,
+    }
+  }
+}
+
+// Streaming response types
+export interface StreamStartData {
+  aichat_uuid: string
+}
+
+export interface StreamDoneData {
+  aichat_uuid: string
+  activity_uuid: string
+}
+
+export interface StreamFollowUpsData {
+  follow_up_suggestions: string[]
+}
+
+interface StreamStartEvent {
+  type: 'start'
+  aichat_uuid: string
+}
+
+interface StreamChunkEvent {
+  type: 'chunk'
+  content: string
+}
+
+interface StreamDoneEvent {
+  type: 'done'
+  aichat_uuid: string
+  activity_uuid: string
+}
+
+interface StreamFollowUpsEvent {
+  type: 'follow_ups'
+  follow_up_suggestions: string[]
+}
+
+interface StreamSourcesEvent {
+  type: 'sources'
+  sources: Array<{
+    activity_uuid?: string
+    activity_name?: string
+    chapter_name?: string
+    course_name?: string
+    course_uuid?: string
+    source_type?: string
+    chunk_text?: string
+    similarity?: number
+  }>
+}
+
+interface StreamSessionTitleEvent {
+  type: 'session_title'
+  title: string
+}
+
+interface StreamErrorEvent {
+  type: 'error'
+  message: string
+}
+
+type StreamEvent = StreamStartEvent | StreamChunkEvent | StreamDoneEvent | StreamFollowUpsEvent | StreamSourcesEvent | StreamSessionTitleEvent | StreamErrorEvent
+
+export interface StreamSourceData {
+  sources: CopilotSource[]
+}
+
+export interface StreamCallbacks {
+  onStart?: (data: StreamStartData) => void
+  onChunk: (chunk: string) => void
+  onComplete: (data: StreamDoneData) => void
+  onFollowUps?: (data: StreamFollowUpsData) => void
+  onSources?: (data: StreamSourceData) => void
+  onSessionTitle?: (title: string) => void
+  onError: (error: string) => void
+}
+
+/**
+ * Process SSE stream from response
+ */
+async function processStream(
+  response: Response,
+  callbacks: StreamCallbacks
+): Promise<void> {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    callbacks.onError('Failed to get response reader')
+    return
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      // Process complete SSE events (data: {...}\n\n)
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop() || '' // Keep incomplete data in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const jsonStr = line.slice(6) // Remove 'data: ' prefix
+            const event: StreamEvent = JSON.parse(jsonStr)
+
+            switch (event.type) {
+              case 'start':
+                callbacks.onStart?.({ aichat_uuid: event.aichat_uuid })
+                break
+              case 'chunk':
+                callbacks.onChunk(event.content)
+                break
+              case 'done':
+                callbacks.onComplete({
+                  aichat_uuid: event.aichat_uuid,
+                  activity_uuid: event.activity_uuid,
+                })
+                break
+              case 'follow_ups':
+                callbacks.onFollowUps?.({ follow_up_suggestions: event.follow_up_suggestions })
+                break
+              case 'sources':
+                callbacks.onSources?.({ sources: event.sources })
+                break
+              case 'session_title':
+                callbacks.onSessionTitle?.(event.title)
+                break
+              case 'error':
+                callbacks.onError(event.message)
+                break
+            }
+          } catch {
+            // Failed to parse SSE event, skip
+          }
+        }
+      }
+    }
+  } catch (error) {
+    callbacks.onError(error instanceof Error ? error.message : 'Stream processing failed')
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+/**
+ * Start a new AI chat session with streaming response
+ */
+export async function startActivityAIChatSessionStream(
+  message: string,
+  activity_uuid: string,
+  access_token: string,
+  callbacks: StreamCallbacks
+): Promise<void> {
+  const data = {
+    message,
+    activity_uuid,
+  }
+
+  try {
+    const response = await fetch(
+      `${getAPIUrl()}ai/stream/start/activity_chat_session`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify(data),
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+      callbacks.onError(detailMessage(errorData.detail, `HTTP error ${response.status}`))
+      return
+    }
+
+    await processStream(response, callbacks)
+  } catch (error) {
+    callbacks.onError(error instanceof Error ? error.message : 'Failed to start chat session')
+  }
+}
+
+/**
+ * Send a message to existing AI chat session with streaming response
+ */
+export async function sendActivityAIChatMessageStream(
+  message: string,
+  aichat_uuid: string,
+  activity_uuid: string,
+  access_token: string,
+  callbacks: StreamCallbacks
+): Promise<void> {
+  const data = {
+    aichat_uuid,
+    message,
+    activity_uuid,
+  }
+
+  try {
+    const response = await fetch(
+      `${getAPIUrl()}ai/stream/send/activity_chat_message`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify(data),
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+      callbacks.onError(detailMessage(errorData.detail, `HTTP error ${response.status}`))
+      return
+    }
+
+    await processStream(response, callbacks)
+  } catch (error) {
+    callbacks.onError(error instanceof Error ? error.message : 'Failed to send message')
+  }
+}
+
+// Editor AI Types and Functions
+export interface EditorModifyRequest {
+  message: string
+  activity_uuid: string
+  current_content: any // TipTap JSON
+  selected_text?: string
+  aichat_uuid?: string
+  cursor_position?: number
+}
+
+export interface EditorStreamCallbacks {
+  onStart?: (data: { aichat_uuid: string }) => void
+  onChatChunk?: (chunk: string) => void
+  onContentStart?: () => void
+  onContentChunk?: (chunk: string) => void
+  onContentEnd?: (fullContent: string) => void
+  onComplete: (data: { aichat_uuid: string; activity_uuid: string }) => void
+  onFollowUps?: (suggestions: string[]) => void
+  onError: (error: string) => void
+}
+
+interface EditorStreamEvent {
+  type: 'start' | 'chat_chunk' | 'content_start' | 'content_chunk' | 'content_end' | 'done' | 'follow_ups' | 'error'
+  content?: string
+  full_content?: string
+  aichat_uuid?: string
+  activity_uuid?: string
+  follow_up_suggestions?: string[]
+  message?: string
+}
+
+async function processEditorStream(
+  response: Response,
+  callbacks: EditorStreamCallbacks
+): Promise<void> {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    callbacks.onError('Failed to get response reader')
+    return
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      const lines = buffer.split('\n\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const jsonStr = line.slice(6)
+            const event: EditorStreamEvent = JSON.parse(jsonStr)
+
+            switch (event.type) {
+              case 'start':
+                callbacks.onStart?.({ aichat_uuid: event.aichat_uuid || '' })
+                break
+              case 'chat_chunk':
+                callbacks.onChatChunk?.(event.content || '')
+                break
+              case 'content_start':
+                callbacks.onContentStart?.()
+                break
+              case 'content_chunk':
+                callbacks.onContentChunk?.(event.content || '')
+                break
+              case 'content_end':
+                callbacks.onContentEnd?.(event.full_content || '')
+                break
+              case 'done':
+                callbacks.onComplete({
+                  aichat_uuid: event.aichat_uuid || '',
+                  activity_uuid: event.activity_uuid || '',
+                })
+                break
+              case 'follow_ups':
+                callbacks.onFollowUps?.(event.follow_up_suggestions || [])
+                break
+              case 'error':
+                callbacks.onError(event.message || 'Unknown error')
+                break
+            }
+          } catch {
+            // Failed to parse SSE event, skip
+          }
+        }
+      }
+    }
+  } catch (error) {
+    callbacks.onError(error instanceof Error ? error.message : 'Stream processing failed')
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+/**
+ * Start a new AI Editor chat session with streaming response
+ */
+export async function startEditorAIChatSessionStream(
+  request: EditorModifyRequest,
+  access_token: string,
+  callbacks: EditorStreamCallbacks
+): Promise<void> {
+  const data = {
+    message: request.message,
+    activity_uuid: request.activity_uuid,
+    current_content: request.current_content,
+    selected_text: request.selected_text,
+  }
+
+  try {
+    const response = await fetch(
+      `${getAPIUrl()}ai/stream/editor/start`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify(data),
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+      callbacks.onError(detailMessage(errorData.detail, `HTTP error ${response.status}`))
+      return
+    }
+
+    await processEditorStream(response, callbacks)
+  } catch (error) {
+    callbacks.onError(error instanceof Error ? error.message : 'Failed to start editor chat session')
+  }
+}
+
+/**
+ * Send a message to existing AI Editor chat session with streaming response
+ */
+export async function sendEditorAIChatMessageStream(
+  request: EditorModifyRequest,
+  access_token: string,
+  callbacks: EditorStreamCallbacks
+): Promise<void> {
+  const data = {
+    message: request.message,
+    activity_uuid: request.activity_uuid,
+    current_content: request.current_content,
+    selected_text: request.selected_text,
+    aichat_uuid: request.aichat_uuid,
+  }
+
+  try {
+    const response = await fetch(
+      `${getAPIUrl()}ai/stream/editor/message`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${access_token}`,
+        },
+        body: JSON.stringify(data),
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
+      callbacks.onError(detailMessage(errorData.detail, `HTTP error ${response.status}`))
+      return
+    }
+
+    await processEditorStream(response, callbacks)
+  } catch (error) {
+    callbacks.onError(error instanceof Error ? error.message : 'Failed to send editor message')
+  }
+}

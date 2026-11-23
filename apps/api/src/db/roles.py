@@ -1,0 +1,170 @@
+from enum import Enum
+from typing import Optional, Union
+from pydantic import BaseModel
+from sqlalchemy import JSON, Column, ForeignKey, Index, Integer
+from sqlmodel import Field, SQLModel
+
+
+# Rights
+class Permission(BaseModel):
+    action_create: bool
+    action_read: bool
+    action_update: bool
+    action_delete: bool
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+
+class PermissionsWithOwn(BaseModel):
+    action_create: bool
+    action_read: bool
+    action_read_own: bool
+    action_update: bool
+    action_update_own: bool
+    action_delete: bool
+    action_delete_own: bool
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+
+class DashboardPermission(BaseModel):
+    action_access: bool
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+
+class StudytomyCapabilities(BaseModel):
+    """Explicit default-deny capabilities for Studytomy staff operations.
+
+    Teaching/course administration (`courses`, `activities`, `assignments`) stays in
+    the standard `Rights` buckets. Safeguarding, family authority, learner dossier,
+    financial reconciliation/refunds, and privacy retention default to `False` even
+    for organization administrators unless explicitly granted and paired with an
+    active scope/owner assignment.
+    """
+
+    family_authority_review: bool = False
+    learner_eligibility_review: bool = False
+    learner_dossier_read: bool = False
+    safeguarding_case_review: bool = False
+    financial_reconciliation: bool = False
+    refund_approval: bool = False
+    offer_publication: bool = False
+    adaptive_curriculum_author: bool = False
+    content_release_review: bool = False
+    assessment_moderation: bool = False
+    progress_report_review: bool = False
+    privacy_retention_review: bool = False
+    support_operating_report: bool = False
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+
+class Rights(BaseModel):
+    courses: PermissionsWithOwn
+    users: Permission
+    usergroups : Permission
+    folders: Permission = Permission(
+        action_create=False,
+        action_read=True,
+        action_update=False,
+        action_delete=False,
+    )  # Default: read-only for backward compat with existing roles
+    media: Permission = Permission(
+        action_create=False,
+        action_read=True,
+        action_update=False,
+        action_delete=False,
+    )  # Default: read-only for backward compat with existing roles
+    organizations: Permission
+    coursechapters: Permission
+    activities: Permission
+    assignments: Permission = Permission(
+        action_create=False,
+        action_read=False,
+        action_update=False,
+        action_delete=False,
+    )  # Default: no access. Single bucket covering assignment authoring, tasks,
+    # submissions, and grading (grading = action_update). Lets API tokens drive
+    # headless assignments while existing roles/tokens stay unaffected.
+    roles: Permission
+    dashboard: DashboardPermission
+    communities: Permission
+    discussions: PermissionsWithOwn  # Own = author can edit/delete their own
+    podcasts: PermissionsWithOwn  # Own = author can edit/delete their own podcasts
+    boards: PermissionsWithOwn = PermissionsWithOwn(
+        action_create=False,
+        action_read=True,
+        action_read_own=True,
+        action_update=False,
+        action_update_own=False,
+        action_delete=False,
+        action_delete_own=False,
+    )  # Default: read-only for backward compat with existing roles
+    playgrounds: PermissionsWithOwn = PermissionsWithOwn(
+        action_create=False,
+        action_read=True,
+        action_read_own=True,
+        action_update=False,
+        action_update_own=False,
+        action_delete=False,
+        action_delete_own=False,
+    )  # Default: read-only for backward compat with existing roles
+    studytomy: StudytomyCapabilities = StudytomyCapabilities()
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+
+# Database Models
+
+
+class RoleTypeEnum(str, Enum):
+    TYPE_ORGANIZATION = "TYPE_ORGANIZATION"  # Organization roles are associated with an organization, they are used to define the rights of a user in an organization
+    TYPE_ORGANIZATION_API_TOKEN = "TYPE_ORGANIZATION_API_TOKEN"  # Organization API Token roles are associated with an organization, they are used to define the rights of an API Token in an organization
+    TYPE_GLOBAL = "TYPE_GLOBAL"  # Global roles are not associated with an organization, they are used to define the default rights of a user
+
+
+class RoleBase(SQLModel):
+    name: str
+    description: Optional[str] = None
+    rights: Optional[Union[Rights, dict]] = Field(default_factory=dict, sa_column=Column(JSON))
+
+
+class Role(RoleBase, table=True):
+    __table_args__ = (
+        Index("ix_role_org_type", "org_id", "role_type"),
+    )
+    id: Optional[int] = Field(default=None, primary_key=True)
+    org_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(Integer, ForeignKey("organization.id", ondelete="CASCADE"), index=True)
+    )
+    role_type: RoleTypeEnum = RoleTypeEnum.TYPE_GLOBAL
+    role_uuid: str = ""
+    creation_date: str = ""
+    update_date: str = ""
+
+
+class RoleRead(RoleBase):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    org_id: Optional[int] = Field(default=None, foreign_key="organization.id")
+    role_type: RoleTypeEnum = RoleTypeEnum.TYPE_GLOBAL
+    role_uuid: str
+    creation_date: str
+    update_date: str
+
+
+class RoleCreate(RoleBase):
+    org_id: Optional[int] = Field(default=None, foreign_key="organization.id")
+
+
+class RoleUpdate(SQLModel):
+    role_id: int = Field(default=None, foreign_key="role.id")
+    name: Optional[str] = None
+    description: Optional[str] = None
+    rights: Optional[Union[Rights, dict]] = Field(default_factory=dict, sa_column=Column(JSON))

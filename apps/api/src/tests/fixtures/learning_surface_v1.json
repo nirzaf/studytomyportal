@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "surface_id": "a82bf806-e58d-4399-b72e-1472ee48f248",
+  "turn_id": "dbc90be0-780b-4a4c-b072-eb1c8bb7dc00",
+  "request_id": "bb7c5c41-633e-445d-9cc7-49de57b5c564",
+  "revision": 1,
+  "activity_id": "activity_synthetic_fractions",
+  "source_identity": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "mode": "practice",
+  "components": [
+    {"kind": "explanation", "id": "intro", "text": "Two fractions can name the same amount."},
+    {"kind": "fraction_explorer", "id": "visual", "parts": 4, "selected": 2},
+    {
+      "kind": "question",
+      "id": "exercise",
+      "question": {
+        "kind": "rational",
+        "id": "37bb6762-e184-4262-ba32-8c013d6fca34",
+        "prompt": "Write a fraction equivalent to 2/4."
+      }
+    }
+  ],
+  "actions": ["submit_answer", "request_hint"]
+}

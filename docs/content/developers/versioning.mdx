@@ -1,0 +1,25 @@
+---
+title: Package Names and Compatibility
+description: Understand the existing SDK package identifiers and their compatibility constraints.
+---
+
+# Package Names and Compatibility
+
+The repository contains React, Vue, and TypeScript SDK packages whose published identifiers use the `@learnhouse/*` scope. The CLI package and executable are also named `learnhouse`. These names are retained for compatibility with existing consumers; they are not user-facing Studytomy branding.
+
+This checkout does not establish that a Studytomy-branded package or application image has been published. Before integrating a package, check its manifest, registry availability, and compatibility with the API version you operate.
+
+## Existing package identifiers
+
+```bash
+npm install @learnhouse/sdk @learnhouse/react
+npm install @learnhouse/vue
+```
+
+For self-hosted use, keep the client packages aligned with the API schema and activity types available in that installation. The packages are separate from the Portal runtime.
+
+## Compatibility notes
+
+- Package APIs can differ from the API exposed by an older or modified Portal installation.
+- Activity renderer versions should support the activity types emitted by the target API.
+- Internal package names and CLI identifiers should only be renamed through a backward-compatible release and migration plan.

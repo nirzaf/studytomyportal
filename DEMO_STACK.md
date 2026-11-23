@@ -1,0 +1,145 @@
+# Running the demo stack locally
+
+**Scope:** optional upstream demo fixture, not the Studytomy learner pilot. Use only disposable local data. The seed refresh intentionally resets demo content. Do not copy its SaaS flag, direct account-verification workaround, or fixture credentials into a real-user environment. This guide describes scripts, not a currently running stack.
+
+The commands below are for local execution only; they do not establish that any service is already running or deployed.
+
+## URLs
+
+| | |
+|---|---|
+| Sign in | http://lvh.me:3010/login |
+| The demo organization | http://demo.lvh.me:3010/dash |
+| Org picker (has the "Explore a live demo" card) | http://lvh.me:3010/home |
+| Onboarding (also has the card) | http://lvh.me:3010/new |
+| API | http://lvh.me:1348/api/v1 |
+
+Credentials: `admin@school.dev`. The password is generated on the API's
+first run and printed to its console; it is also in `.demo-secrets` at the repo
+root, which is gitignored.
+
+`lvh.me` and every subdomain of it resolve to 127.0.0.1, so no hosts-file
+editing is needed.
+
+**The demo refreshes every 10 minutes**, which is also the shipped default.
+Drop `LEARNHOUSE_DEMO_REFRESH_MINUTES` lower in `run_demo_api.sh` if you want to
+watch a refresh land without waiting.
+
+## Start it
+
+```bash
+# 1. Provision disposable PostgreSQL + Redis using the root local setup guide.
+# .learnhouse/docker-compose.dev.yml is generated/local, not a tracked file.
+# Only run this if you have generated and reviewed that local Compose file:
+docker compose -f .learnhouse/docker-compose.dev.yml up -d
+
+# Each following service uses a SEPARATE terminal from the repository root.
+# The scripts assume PostgreSQL localhost:5432 and Redis localhost:6379/0.
+# Check port conflicts and database ownership before starting.
+
+# 2. API (exports its own env; see the file for why)
+cd apps/api && bash run_demo_api.sh
+
+# 3. Collaboration server (REQUIRED for boards)
+#    Without it every board sits on "connecting" forever, which reads as a
+#    broken feature rather than a service nobody started.
+cd apps/collab && bash run_demo_collab.sh
+
+# 4. Web: point this build at the demo API, not the default backend.
+cd apps/web
+export NEXT_PUBLIC_LEARNHOUSE_BACKEND_URL=http://lvh.me:1348/
+export NEXT_PUBLIC_LEARNHOUSE_API_URL=http://lvh.me:1348/api/v1/
+bun x next build && bun x next start -p 3010
+```
+
+The demo builds itself on API startup and refreshes every 10 minutes after that.
+
+## Why multi tenancy
+
+The demo is a **second** organization. In single tenancy every path resolves to
+the one default org, so the demo is unreachable: clicking into it lands you on
+the default org's dashboard. `run_demo_api.sh` therefore sets
+`LEARNHOUSE_TENANCY=multi` with `LEARNHOUSE_DOMAIN=lvh.me:3010`, which is how
+`demo.<domain>` would work in production too.
+
+Multi tenancy is gated on "EE available OR SaaS mode". The script sets
+`LEARNHOUSE_SAAS=true` for this synthetic upstream demo. That flag is not
+a license grant or an approved Studytomy operating mode. An EE symlink is not
+required by this guide, and its availability must be checked rather than assumed.
+
+## Watching it work
+
+```bash
+cd apps/api
+
+uv run python cli.py demo-status     # state, epoch, registered row counts
+uv run python cli.py demo-sync       # force a refresh now
+uv run python cli.py demo-teardown   # remove it entirely
+```
+
+Break it on purpose and watch the next tick put it back. Rename a course,
+unpublish a chapter, delete a course, change a grade. By the next tick it is
+all restored, and anything you *created* is removed as drift. `demo-sync` forces
+it immediately rather than waiting.
+
+Run `demo-sync` twice in a row: the second run reports "nothing to do". That is
+the design working: rows are matched to bundle entries through the `DemoEntity`
+registry and compared before assignment (`_apply`), so an unchanged row emits no
+`UPDATE` at all rather than one that rewrites the same values
+(`src/services/demo/sync.py:12-16,161-170`). There is no separate sync-state or
+bookkeeping row to write.
+
+## What is in it
+
+Riverbend Academy, on the **pro** plan so every feature is visible:
+
+- 6 courses in 3 sections, 18 chapters, 54 activities, 6 assignments
+- 40 students with progress, submissions, grades and certificates
+- A community with 5 discussions, comments and votes
+- 3 boards with members, 2 working interactive playgrounds
+
+- 3 podcasts, 10 episodes with real audio
+- A store: 5 offers (a subscription, two single courses, a bundle, one
+  pay-what-you-want) and 18 enrolments
+
+**Analytics will look sparse.** Analytics is not an Enterprise Edition gate:
+`analytics` is a plan-tier feature at `standard`
+(`src/security/features_utils/plans.py:23`), it is absent from
+`EE_ONLY_FEATURES` (`src/core/deployment_mode.py:25-27`, which lists
+`analytics_advanced`, not `analytics`), and its tables come from a community
+migration. The seed writes no analytics events, so the charts only fill in with
+what visitors actually do in the demo. This is a known limitation rather than
+something seeding should fake.
+
+**The store needs the Enterprise Edition.** The payments *tables* are created by
+community migrations (`migrations/versions/0314ec7791e1_payments.py:24` adds
+`paymentsconfig`, `paymentsproduct` and `paymentscourse`, and
+`f2a3b4c5d6e7_payments_sell_anything.py` adds the later ones), but the models and
+the `/payments/*` routers live in the private `ee/` tree, which this checkout
+does not carry — `git ls-files apps/api/ee` returns nothing. The seeding step
+imports `ee.db.payments.payments` and, on failure, logs the reason and skips
+itself cleanly (`src/services/demo/sync.py:2241,2270`), so a community install
+is a stated outcome rather than a fault. It also needs the EE routers to mount.
+If `apps/api/ee` points at an EE branch that expects main-repo code this branch
+does not have, `/payments/*` returns 404 and the store page renders empty even
+though the offers are in the database.
+
+On a self-hosted **OSS** install, `sso`, `audit_logs`, `payments`,
+`analytics_advanced` and `scorm` stay hidden however the demo is configured.
+`resolve_feature` refuses them by deployment mode, which the demo neither can
+nor should override.
+
+## Things to know
+
+- Keep demo/tenancy settings out of shared test configuration. The original fixture
+  kept `apps/api/.env` limited to credentials. `config.py` calls
+  `load_dotenv()` while parsing, so anything in it also reaches the test
+  process. Tenancy and demo flags there made four unrelated tests fail on this
+  machine and nowhere else.
+- `/instance/info` caches organization/tenancy metadata for 600 seconds, while
+  deployment mode and feature availability are recomputed live (`apps/api/src/routers/instance.py`). Do not use `FLUSHALL`
+  to troubleshoot tenancy: it deletes unrelated Redis state. Inspect the response
+  and effective config first; use the existing targeted org-cache invalidation if needed.
+- The admin account must be marked email-verified directly in the database;
+  SaaS mode requires verification and there is no mail provider configured here:
+  `UPDATE "user" SET email_verified = true WHERE email = 'admin@school.dev';`

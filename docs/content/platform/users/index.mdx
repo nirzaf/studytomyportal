@@ -1,0 +1,41 @@
+---
+description: "Manage people in your Studytomy Portal organization: the Users dashboard tabs, roles, authentication, and access controls."
+---
+
+import { Callout } from '@/components/mdx'
+
+# Users and Access
+
+Every person in Studytomy Portal has one account and can belong to several organizations. Inside each organization they hold one role, which decides what they can see and do there.
+You manage people from **Users** in the dashboard sidebar. The page has these tabs:
+
+| Tab | What you do there |
+| --- | --- |
+| **Users** | Search, filter and export members, change roles, remove people, open learner analytics |
+| **UserGroups** | Group members and give the group access to courses and other content |
+| **Roles** | Review default roles and, when enabled, create custom roles with their own permissions |
+| **Signups & Invite Codes** | Choose open or invite-only signup, create invite codes, add custom signup fields |
+| **Invite Members** | Invite people by email |
+| **Sign-in** | Choose which sign-in methods members may use |
+| **Two-factor** | Require two-factor authentication for members |
+| **Audit Logs** | See who did what in the organization (Enterprise Edition) |
+
+Self-hosted instances have no plan limits. Audit logs need the [Enterprise Edition](/enterprise).
+
+## Feature availability
+
+Available controls depend on the installed edition and server configuration. This repository does not document hosted subscription tiers or member limits. See [Plans and Feature Availability](/platform/organizations/plans) for the scope of those docs.
+
+## In this section
+
+- [Members & Invites](/platform/users/members-and-invites): the Users list, inviting people, invite codes and signup settings.
+- [User Groups](/platform/users/user-groups): grant access to content by group.
+- [Roles & Permissions](/platform/users/roles-and-permissions): the default roles and custom roles.
+- [Authentication](/platform/users/authentication): sign-in methods, magic links, sessions and security limits.
+- [Two-Factor Authentication](/platform/users/two-factor): set up 2FA on your account and require it for your organization.
+- [Learner Analytics](/platform/users/learner-analytics): one learner's full record.
+- [Emails](/platform/users/emails): the emails Studytomy Portal sends and how unsubscribing works.
+
+<Callout type="info">
+Enterprise Edition can also sign members in through an identity provider. See [Single Sign-On](/enterprise/sso).
+</Callout>

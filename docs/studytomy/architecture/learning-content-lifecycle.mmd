@@ -1,0 +1,51 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","lineColor":"#47627c","primaryTextColor":"#172b45","clusterBkg":"#f4f8fc","clusterBorder":"#9bb2c8"},"flowchart":{"curve":"linear","nodeSpacing":26,"rankSpacing":30,"wrappingWidth":240}}}%%
+flowchart TB
+  accTitle: Studytomy learning and content lifecycle
+  accDescr: Curriculum and authorized sources feed human content review. An exact release grant permits diagnostic, teaching, practice and assessment. Server evidence feeds mastery and reviewed reporting under current recipient authority.
+  subgraph Authoring["Educator authoring and approval"]
+    CUR["Curriculum<br/>Versioned objectives and mappings"]
+    SRC["Authorized source revisions and locators"]
+    DRAFT["Source-grounded editable draft<br/>Exact retrieval and citations planned"]
+    REV["Human review<br/>Rights · factual support · curriculum alignment"]
+    CONTENT["Approved Content<br/>Immutable course / lesson release"]
+    CUR --> REV
+    SRC --> DRAFT --> REV --> CONTENT
+  end
+  ACCESS["Learner gate<br/>Current eligibility, consent and exact release grant"]
+  subgraph Learning["Learner activity · server owns assessment and mastery"]
+    DIAG["Diagnostic<br/>Server issues reviewed items"]
+    TUTOR["Personalised Teaching<br/>Guidance based on objectives and evidence"]
+    PRACTICE["Practice<br/>Reviewed deterministic activities"]
+    ASSESS["Assessment<br/>Frozen items and scoring rules<br/>Server grades objective work; staff review where required"]
+    EV[("Append-only learning evidence<br/>Attempts · grades · provenance")]
+    MASTERY["Mastery<br/>Versioned server projection"]
+    DIAG --> TUTOR --> PRACTICE --> ASSESS
+    DIAG & PRACTICE & ASSESS --> EV
+    EV --> MASTERY
+    MASTERY -. "next objective or practice" .-> TUTOR
+  end
+  subgraph Reporting["Report release and recipient boundary"]
+    REPORT["Progress Reporting<br/>Human review of exact report version"]
+    GUARD["Current guardian relationship<br/>Purpose · scope · exact reviewed version"]
+    VIEW["Authorized report projection"]
+    REPORT --> GUARD --> VIEW
+  end
+  CONTENT --> ACCESS --> DIAG
+  MASTERY --> REPORT
+  classDef implemented fill:#dceee8,stroke:#267560,color:#163b32;
+  classDef partial fill:#dfedfa,stroke:#416f9a,color:#193b5e;
+  classDef planned fill:#ede4f8,stroke:#745591,color:#392756;
+  classDef gated fill:#fff1d6,stroke:#916518,color:#593c0b;
+  class ASSESS,EV implemented;
+  class CUR,SRC,REV,CONTENT,DIAG,TUTOR,PRACTICE,MASTERY,REPORT partial;
+  class DRAFT planned;
+  class ACCESS,GUARD,VIEW gated;
+  subgraph LEGEND["Status in inspected checkout"]
+    direction LR
+    I["Implemented"] ~~~ P["Partially Implemented"] ~~~ N["Planned"] ~~~ G["Approval-Gated"]
+  end
+  VIEW ~~~ LEGEND
+  class I implemented;
+  class P partial;
+  class N planned;
+  class G gated;

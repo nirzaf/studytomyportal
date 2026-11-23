@@ -1,0 +1,13 @@
+{
+  "name": "@studytomy/lab-conservation-momentum",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Curated student build of the Conservation of Linear Momentum 2D virtual lab derived from MIT-licensed danielw-sudo/agentuto@697025a14aabbd391072fbedc522d1d68bebcbc4.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "verify": "node scripts/verify-build.mjs",
+    "test": "node --test --experimental-strip-types tests/momentum-pilot.test.ts"
+  }
+}

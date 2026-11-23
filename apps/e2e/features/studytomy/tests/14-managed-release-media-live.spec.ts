@@ -1,0 +1,189 @@
+import { test, expect } from '../../../core/fixtures'
+import { API_URL, BASE_URL } from '../../../core/instance'
+
+const learnerState = process.env.E2E_MANAGED_MEDIA_LEARNER_STATE
+const releaseName = process.env.E2E_MANAGED_MEDIA_RELEASE_NAME
+const captionCode = process.env.E2E_MANAGED_MEDIA_CAPTION_CODE
+const expiredPdf = process.env.E2E_MANAGED_MEDIA_EXPIRED_PDF_ACTIVITY
+const expiredVideo = process.env.E2E_MANAGED_MEDIA_EXPIRED_VIDEO_ACTIVITY
+
+test.use({ storageState: learnerState, viewport: { width: 390, height: 844 } })
+test.skip(
+  !learnerState || !releaseName ||
+    ![BASE_URL, API_URL].every(url => ['localhost', '127.0.0.1', '[::1]'].includes(new URL(url).hostname)),
+  'Requires a loopback stack and a fresh, synthetic managed release with a pending first-use grant.',
+)
+
+test('activates and opens a reviewed PDF through the real managed release API', async ({ page }) => {
+  const learningUrl = new URL(API_URL)
+  const learningRoot = learningUrl.pathname.replace(/\/$/, '') + '/studytomy/orgs/'
+  const isLearningResponse = (url: string) => {
+    const received = new URL(url)
+    return received.origin === learningUrl.origin && received.pathname.startsWith(learningRoot)
+  }
+
+  await page.goto('/account/learning', { waitUntil: 'domcontentloaded' })
+  const course = page.getByRole('button', { name: releaseName, exact: true })
+  await expect(course).toBeVisible()
+  const indexResponse = page.waitForResponse(response =>
+    isLearningResponse(response.url()) && response.request().method() === 'GET' &&
+    new URL(response.url()).pathname.endsWith('/lessons'),
+  )
+  await course.click()
+  const index = await indexResponse
+  expect(index.status()).toBe(200)
+  expect(await index.json()).toMatchObject({ requires_first_use: true })
+
+  await expect(page.getByText('Opening a lesson starts your access period.')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Reviewed lesson Text/ })).toBeEnabled()
+  const videoLesson = page.getByRole('button', { name: /Reviewed video Video/ })
+  if (captionCode) await expect(videoLesson).toBeEnabled()
+  else await expect(videoLesson).toBeDisabled()
+  await expect(page.getByRole('button', { name: /Unsupported audio Unsupported/ })).toBeDisabled()
+  const openPdf = page.getByRole('button', { name: /Open Reviewed PDF PDF/ })
+  await expect(openPdf).toBeEnabled()
+
+  const mediaResponse = page.waitForResponse(response =>
+    isLearningResponse(response.url()) && response.request().method() === 'GET' &&
+    new URL(response.url()).pathname.endsWith('/media'),
+  )
+  const activationResponse = page.waitForResponse(response =>
+    isLearningResponse(response.url()) && response.request().method() === 'POST' &&
+    new URL(response.url()).pathname.endsWith('/media/open'),
+  )
+  await openPdf.click()
+  const activation = await activationResponse
+  expect(activation.status()).toBe(206)
+  expect(activation.headers()['content-range']).toMatch(/^bytes 0-0\/\d+$/)
+
+  const pdf = await mediaResponse
+  expect([200, 206]).toContain(pdf.status())
+  expect(pdf.headers()['content-type']).toContain('application/pdf')
+  expect(new URL(pdf.url()).pathname).toBe(new URL(activation.url()).pathname.replace(/\/open$/, ''))
+  const frame = page.getByTitle('Reviewed PDF')
+  await expect(frame).toBeVisible()
+  await expect(frame).toHaveAttribute('src', pdf.url())
+
+  const back = page.getByRole('button', { name: 'Back to lessons' })
+  await expect(back).toBeEnabled()
+  await back.click()
+  await expect(page.getByRole('button', { name: 'Reviewed PDF PDF', exact: true })).toBeEnabled()
+  await expect(page.getByText('Opening a lesson starts your access period.')).toHaveCount(0)
+
+  if (captionCode) {
+    const videoResponse = page.waitForResponse(response =>
+      isLearningResponse(response.url()) && response.request().method() === 'GET' &&
+      new URL(response.url()).pathname.endsWith('/media') &&
+      Boolean(response.headers()['content-type']?.startsWith('video/')),
+    )
+    const trackResponse = page.waitForResponse(response =>
+      isLearningResponse(response.url()) &&
+      new URL(response.url()).pathname.endsWith(`/media/captions/${encodeURIComponent(captionCode)}`),
+    )
+    await videoLesson.click()
+    const captions = await trackResponse
+    expect(captions.status()).toBe(200)
+    expect(captions.headers()['content-type']).toContain('text/vtt')
+    expect([200, 206]).toContain((await videoResponse).status())
+
+    const player = page.locator('video')
+    await expect(player).toBeVisible()
+    await expect.poll(() => player.evaluate((video: HTMLVideoElement) =>
+      Array.from(video.textTracks).some(track => track.mode === 'showing' && Boolean(track.cues?.length)),
+    )).toBe(true)
+    await expect.poll(() => player.evaluate((video: HTMLVideoElement) => video.readyState)).toBeGreaterThan(0)
+    await player.evaluate(async (video: HTMLVideoElement) => {
+      video.muted = true
+      await video.play()
+    })
+    await expect.poll(() => player.evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0.1)
+    await player.evaluate((video: HTMLVideoElement) => video.pause())
+    await player.evaluate((video: HTMLVideoElement) => { video.currentTime = video.duration / 2 })
+    await expect.poll(() => player.evaluate((video: HTMLVideoElement) =>
+      !video.seeking && video.currentTime > 0,
+    )).toBe(true)
+  }
+})
+
+test('denies saved managed media URLs after clearing the learner session', async ({ page, context }) => {
+  await page.goto('/account/learning', { waitUntil: 'domcontentloaded' })
+  const course = page.getByRole('button', { name: releaseName, exact: true })
+  await expect(course).toBeVisible()
+  const indexResponse = page.waitForResponse(response =>
+    response.request().method() === 'GET' && new URL(response.url()).pathname.endsWith('/lessons'),
+  )
+  await course.click()
+  const index = await indexResponse
+  expect(index.status()).toBe(200)
+  const lessons = (await index.json()).lessons as {
+    activity_uuid: string
+    format: string
+    available: boolean
+    caption_codes?: string[]
+  }[]
+  const pdf = page.getByRole('button', { name: 'Reviewed PDF PDF', exact: true })
+  await expect(pdf).toBeEnabled()
+  await pdf.click()
+  const frame = page.getByTitle('Reviewed PDF')
+  await expect(frame).toBeVisible()
+  const pdfUrl = await frame.getAttribute('src')
+  expect(pdfUrl).toBeTruthy()
+  const protectedUrls = [pdfUrl!]
+
+  if (captionCode) {
+    const video = lessons.find(lesson => lesson.format === 'video' && lesson.available)
+    expect(video?.caption_codes).toContain(captionCode)
+    const root = index.url().replace(/\/lessons$/, '')
+    const videoUrl = `${root}/activities/${encodeURIComponent(video!.activity_uuid)}/media`
+    protectedUrls.push(videoUrl, `${videoUrl}/captions/${encodeURIComponent(captionCode)}`)
+  }
+
+  for (const url of protectedUrls) {
+    const authenticated = await context.request.get(url, { headers: { Range: 'bytes=0-0' } })
+    expect(authenticated.status()).toBe(206)
+  }
+
+  await context.clearCookies()
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(frame).toHaveCount(0)
+  await expect(course).toHaveCount(0)
+  for (const url of protectedUrls) {
+    const signedOut = await context.request.get(url, { headers: { Range: 'bytes=0-0' } })
+    expect(signedOut.status()).toBe(401)
+  }
+})
+
+test('keeps expired access history while denying saved media URLs', async ({ page, context }) => {
+  test.skip(!expiredPdf || (Boolean(captionCode) && !expiredVideo), 'Requires an expired synthetic grant and its saved activity IDs.')
+  await page.goto('/account/learning', { waitUntil: 'domcontentloaded' })
+  const historyButton = page.getByRole('button', { name: 'Access history', exact: true })
+  await expect(historyButton).toBeVisible()
+  const course = page.getByRole('button', { name: releaseName, exact: true })
+  await expect(course).toHaveCount(0)
+  await historyButton.click()
+  await expect(course).toBeVisible()
+  const historyResponse = page.waitForResponse(response =>
+    response.request().method() === 'GET' &&
+    new URL(response.url()).origin === new URL(API_URL).origin &&
+    /\/releases\/[^/]+\/access-history$/.test(new URL(response.url()).pathname),
+  )
+  await course.click()
+  const history = await historyResponse
+  expect(history.status()).toBe(200)
+  expect(await history.json()).toMatchObject({ status: 'expired' })
+  await expect(page.getByText('Expired', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Reviewed PDF|Reviewed video/ })).toHaveCount(0)
+
+  const releaseUrl = history.url().replace(/\/access-history$/, '')
+  expect((await context.request.get(`${releaseUrl}/lessons`)).status()).toBe(404)
+  for (const activity of [expiredPdf, expiredVideo]) {
+    if (!activity) continue
+    const mediaUrl = `${releaseUrl}/activities/${encodeURIComponent(activity)}/media`
+    expect((await context.request.get(mediaUrl, { headers: { Range: 'bytes=0-0' } })).status()).toBe(404)
+  }
+  if (captionCode && expiredVideo) {
+    const videoId = encodeURIComponent(expiredVideo)
+    const captionUrl = `${releaseUrl}/activities/${videoId}/media/captions/${encodeURIComponent(captionCode)}`
+    expect((await context.request.get(captionUrl)).status()).toBe(404)
+  }
+})

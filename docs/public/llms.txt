@@ -1,0 +1,163 @@
+# Studytomy Portal Documentation
+
+> Studytomy Portal documentation for using the learning platform, self-hosting this codebase, and integrating with its API and activity components.
+
+Every page below is plain Markdown at its URL. The complete text of all pages is at /llms-full.txt.
+
+## Get started
+
+- [Introduction](/getting-started.md): Learn the repository's local development workflow and how the Studytomy Portal documentation is organized.
+- [Local Development and Self-hosting](/getting-started/cloud-vs-self-hosting.md): Start Studytomy Portal from this checkout and review the repository's self-hosting documentation.
+- [Key Concepts](/getting-started/key-concepts.md): Learn the core Studytomy Portal concepts: organizations, courses, chapters, activities, the Library, learning paths, trails and the block editor.
+- [Quickstart](/getting-started/quickstart.md): Start Studytomy Portal locally from this source checkout, then create your first course and lesson.
+- [Guides](/guides.md): Follow end-to-end guides for building on Studytomy Portal: a headless learning platform with Next.js, scripted content through the API, and webhooks.
+- [Build a Learning Platform](/guides/build-learning-platform.md): Build a headless learning platform with Next.js and the Studytomy Portal API: a public course catalogue first, then sign-in, enrollment and progress.
+- [Agent Spec](/guides/build-learning-platform/agent-spec.md): Copy a self-contained spec that lets a coding agent build a headless Studytomy Portal platform with Next.js, with the real API contract and acceptance criteria.
+- [Build It Yourself](/guides/build-learning-platform/do-it-yourself.md): Build a headless learning platform step by step with Next.js and the Studytomy Portal API, from a public catalogue to sign-in, enrollment and progress.
+- [Let an Agent Build It](/guides/build-learning-platform/with-an-agent.md): Have a coding agent like Claude Code or Cursor build your headless Studytomy Portal learning platform for you from a ready-made, self-contained spec.
+- [Custom Features with the API](/guides/custom-features.md): Drive Studytomy Portal from your own scripts with an API token: create courses and chapters, search content and find every endpoint in the API Reference.
+
+## Platform
+
+- [Enterprise Edition](/enterprise.md): Review Enterprise Edition licensing boundaries and configuration points documented in this repository.
+- [Audit Logs](/enterprise/audit-logs.md): Review who changed what in your Studytomy Portal organization with audit logs: what is recorded, how payloads are redacted, filters, CSV export and the API.
+- [Live Sessions](/enterprise/live-sessions.md): Schedule Studytomy Portal live sessions in Studytomy Portal Meet, Google Meet, Zoom or any link, with chat, Q&A, polls, attendance, recordings and self-hosted setup.
+- [LTI 1.3](/enterprise/lti.md): Add Studytomy Portal courses and content to Moodle, Canvas, Open edX and other LMSs with LTI 1.3, including deep linking, grade sync and class lists.
+- [LMS setup guides](/enterprise/lti/lms-setup.md): Connect Studytomy Portal to Moodle, Canvas, Open edX, Sakai, ILIAS, Chamilo or OpenOLAT over LTI 1.3 with step-by-step setup for each LMS.
+- [SCORM](/enterprise/scorm.md): Import SCORM 1.2 and 2004 packages into Studytomy Portal courses, check package size limits, and see how completion, scores and results are tracked.
+- [Single Sign-On (SSO)](/enterprise/sso.md): Set up single sign-on for your Studytomy Portal organization: pick a provider, limit email domains, auto-provision accounts and set the callback URL.
+- [Custom OIDC](/enterprise/sso/custom-oidc.md): Connect Studytomy Portal SSO directly to any OpenID Connect provider such as Entra ID, Okta, Google Workspace, Keycloak or Auth0 with a client ID and secret.
+- [WorkOS](/enterprise/sso/workos.md): Connect Studytomy Portal SSO through WorkOS for SAML or OIDC: set the instance credentials, then let your IT team finish setup in the WorkOS portal.
+- [Platform Overview](/platform.md): Find your way around Studytomy Portal features for learners, teachers and admins, from courses and assignments to communities and payments.
+- [AI](/platform/ai.md): Turn on Studytomy Portal AI for your organization, index courses for Copilot and see how many AI credits each plan includes and what each AI action costs.
+- [Connect AI Apps (MCP)](/platform/ai/connect-ai-apps.md): Connect Claude, ChatGPT, Cursor, VS Code and other MCP apps to Studytomy Portal so they can build courses, edit pages and report on learners for you.
+- [AI for Students](/platform/ai/for-students.md): See how learners use Ask AI on an activity and Copilot or custom agents in Messages to get answers, summaries and flashcards from your Studytomy Portal courses.
+- [AI for Teachers](/platform/ai/for-teachers.md): Use Studytomy Portal AI tools to build courses: the AI Course Creator, AI Editor, Magic Blocks, quiz and task generation, images, narrated audio and captions.
+- [Analytics](/platform/analytics.md): Learn how Studytomy Portal analytics collects and stores learner activity, who can see it, and how to set retention and privacy for your organization.
+- [Course Analytics](/platform/analytics/course-analytics.md): See how learners find, enroll in, move through and finish one Studytomy Portal course with the course analytics tab, its widgets and its exports.
+- [Analytics Dashboard](/platform/analytics/dashboard.md): Read the Studytomy Portal analytics dashboard, from live users and enrollment funnels to feature adoption and advanced retention widgets, and export the data.
+- [Assignments](/platform/assignments.md): Create assignments in a Studytomy Portal course, set grading, retries, deadlines and copy-paste blocking, and see what learners get when they hand in work.
+- [Assignment Analytics](/platform/assignments/analytics.md): Read an assignment's Analytics tab: class average, median, pass rate, on-time rate, grade distribution, task performance and learners who need support.
+- [Formative Assessment](/platform/assignments/formative.md): Run a formative assignment that is handed in but never graded, and unlock a model answer for learners when they submit or after their work is marked.
+- [Grading & Submissions](/platform/assignments/grading.md): Learn how assignment grades are calculated, choose a grading type, use automatic grading, review submissions, give feedback and finalize learner grades.
+- [Task Types](/platform/assignments/task-types.md): Add quiz, file submission, form, code, short answer and number answer tasks to an assignment, set their grading options and generate tasks with AI.
+- [Automations](/platform/automations.md): Push Studytomy Portal events to your own systems with webhooks or Zapier, and choose the right option for CRMs, Slack alerts and other automations.
+- [Event Catalogue](/platform/automations/events.md): Browse every Studytomy Portal webhook event, from course completions and sign-ups to payments and community posts, with the data payload each one sends.
+- [Webhooks](/platform/automations/webhooks.md): Send signed Studytomy Portal webhook events to your own server, verify HMAC-SHA256 signatures, handle retries and manage endpoints from the dashboard or API.
+- [Zapier](/platform/automations/zapier.md): Build a Zapier integration on the Studytomy Portal REST Hook endpoints: API token auth, trigger catalogue, dropdown sources and event subscriptions.
+- [Boards](/platform/boards.md): Use boards, shared real-time canvases for live classes and group work: add members and roles, notes, frames, AI playgrounds and timers, and work live.
+- [Calendar](/platform/calendar.md): Use the personal Studytomy Portal calendar to see assignment deadlines, chapter releases, course starts, podcast episodes and live sessions by month or agenda.
+- [Certifications](/platform/certifications.md): Award certificates for completing a course or learning path, design them with the certificate designer, and verify or revoke them on their public pages.
+- [Code Execution](/platform/code-execution.md): Set up Code Playground challenges that run learner code in 30 languages with test cases, hints, locked lines and solutions, plus the execution limits.
+- [Courses](/platform/courses.md): Create a course in Studytomy Portal from scratch, with AI or from existing files, then manage, clone, export and open its settings from the dashboard.
+- [AI Course Creator](/platform/courses/ai-course-creator.md): Use the AI Course Creator to plan a course in a chat, attach source material, create the chapters and generate every activity, and see its AI credit cost.
+- [Chapters and Activities](/platform/courses/chapters-and-activities.md): Organize a course into chapters and activities, pick an activity type, publish or unpublish content and lock chapters to signed-in users or user groups.
+- [Drip Content](/platform/courses/drip-content.md): Release course chapters over time with drip content: schedule by enrollment or cohort date, add completion conditions, email learners and preview the plan.
+- [Import & Export](/platform/courses/import-export.md): Export, clone and import Studytomy Portal courses, bring in courses from Moodle, Canvas and other LMSs, or build a course from a folder of videos and documents.
+- [Library](/platform/courses/library.md): Organize courses, podcasts, communities, boards, playgrounds and media into Library folders, control who sees them and reuse media in course pages.
+- [Course Settings](/platform/courses/settings.md): Configure a course's general info, access, contributors, SEO and certification tabs, and post course updates that learners can follow by RSS.
+- [Taking a Course](/platform/courses/taking-a-course.md): See what learners get when they take a course: the course page, activity navigation, focus mode, Ask AI, the video player and the end of the course.
+- [Trails](/platform/courses/trails.md): Learn how a learner's Trail records course progress and completions, what the Progress page shows, and what happens when a learner quits a course.
+- [AI Video Captions](/platform/courses/video-captions.md): Generate AI closed captions for uploaded videos, translate them into up to 15 languages, create video chapters and see how many AI credits captions use.
+- [Communities](/platform/discussions.md): Create communities in Studytomy Portal where members start discussions, reply, upvote and react, and link a community to a course to show its threads there.
+- [Discussions & Replies](/platform/discussions/comments.md): Start a discussion in a community, pick a label, reply, upvote and react, and use moderator actions to pin, lock or delete discussions and replies.
+- [Managing Communities](/platform/discussions/managing.md): Manage a community's settings: name, thumbnail, access, linked course and moderation rules such as blocked words, length limits, slow mode and auto-lock.
+- [Editor](/platform/editor.md): Write Dynamic Page lessons in the Studytomy Portal block editor: use the slash menu and toolbar, keep version history, resolve edit conflicts and edit with AI.
+- [Blocks](/platform/editor/blocks.md): Browse every block in the Studytomy Portal editor, from text and media to quizzes, flipcards, code challenges, embeds and tables, with the options each one has.
+- [Dynamic Content and Templates](/platform/editor/dynamic-content.md): Personalize lessons with variables, conditional blocks and community tags, preview a page as any learner, and save blocks or pages as reusable templates.
+- [H5P Interactive Content](/platform/editor/h5p.md): Embed H5P interactive content in a course page from H5P.com, Lumi, Moodle, Drupal or WordPress, size the frame and fix blank or cut-off H5P embeds.
+- [Messages](/platform/messages.md): Chat in Studytomy Portal Messages with direct messages, group chats and course announcements, build AI agents that answer from your courses and set reminders.
+- [Organizations](/platform/organizations.md): Understand what a Studytomy Portal organization holds, where to manage its settings, users and developer tools, and how the getting started checklist works.
+- [Admin Dashboard](/platform/organizations/admin-dashboard.md): Use the Studytomy Portal admin dashboard at /admin to manage every organization and user on your instance, toggle features and create superadmin API tokens.
+- [Custom Domains](/platform/organizations/custom-domains.md): Serve your Studytomy Portal organization from your own domain: add it, create the TXT and CNAME DNS records, verify it and check that HTTPS is active.
+- [Landing Page](/platform/organizations/landing-page.md): Build a custom Studytomy Portal home page from sections like hero, courses, pricing and FAQ, start from a template, and control who sees each section and when.
+- [Multi-Tenancy](/platform/organizations/multi-tenancy.md): Run several organizations on one Studytomy Portal instance: which editions allow it, how to turn on multi-organization mode and how data stays isolated.
+- [Plans and Feature Availability](/platform/organizations/plans.md): Understand how edition and deployment configuration affect feature availability in this repository.
+- [SEO](/platform/organizations/seo.md): Set SEO defaults for your Studytomy Portal organization: sitemap and robots.txt, title suffix, meta description, Open Graph image and Google Search Console.
+- [Organization Settings](/platform/organizations/settings.md): Configure your Studytomy Portal organization settings, from name, branding and public menu to optional features, AI, analytics retention and the danger zone.
+- [Learning Paths](/platform/paths.md): Build a learning path from your courses with required and elective courses, guided order and a path certificate, then follow learners' progress through it.
+- [Payments](/platform/payments.md): Sell courses, communities, podcasts, boards and playgrounds in Studytomy Portal with Stripe Checkout, your own checkout, free claims or invite-only access.
+- [Sell with Any Tool](/platform/payments/api.md): Sell Studytomy Portal content through Gumroad, Paddle, Shopify or invoices, then grant, revoke or check buyer access from Zapier, Make or your backend.
+- [Promotion Codes](/platform/payments/discounts.md): Create Stripe promotion codes in Studytomy Portal payments, set percent or amount discounts, usage limits and expiry, and turn codes on for specific products.
+- [Customers & Access](/platform/payments/enrollments.md): Manage who has access to your paid Studytomy Portal products: customer statuses, granting access by email or user group, revoking access and exporting customers.
+- [Payment Groups (Legacy)](/platform/payments/groups.md): Understand legacy Studytomy Portal payment groups, what happened to existing groups when products started holding content directly, and how to change them now.
+- [Products & Pricing](/platform/payments/offers.md): Create Studytomy Portal payment products: pick the content they unlock, sell single chapters or lessons, set one-time or subscription prices and a checkout.
+- [Playgrounds](/platform/playgrounds.md): Create AI-generated playgrounds, interactive pages built from your description or a course, then set their access, publish them and embed them in lessons.
+- [Podcasts](/platform/podcasts.md): Publish a podcast in Studytomy Portal: upload and order episodes, let learners listen in the site player, submit the RSS feed and use episodes in lessons.
+- [Search](/platform/search.md): Search courses, lessons, folders, communities, discussions, playgrounds, podcasts and members across your organization, with visibility rules and limits.
+- [Command Palette and Keyboard Shortcuts](/platform/search/keyboard-shortcuts.md): Use the Studytomy Portal command palette and keyboard shortcuts to search, jump between pages with g chords and move through courses and lessons without a mouse.
+- [Users and Access](/platform/users.md): Manage people in your Studytomy Portal organization: the Users dashboard tabs, roles, authentication, and access controls.
+- [Authentication](/platform/users/authentication.md): Choose which sign-in methods your Studytomy Portal organization allows, and learn about email verification, password resets, session lifetimes and login limits.
+- [Emails](/platform/users/emails.md): See every email Studytomy Portal sends for accounts, invitations, drip chapters, unread messages and live sessions, how it is branded and how to unsubscribe.
+- [Learner Analytics](/platform/users/learner-analytics.md): Open one learner's analytics record in Studytomy Portal to review their courses, assignments, sign-ins and certificates, then compare or export records.
+- [Members & Invites](/platform/users/members-and-invites.md): Manage Studytomy Portal members: search and export the Users list, set open or closed signup, create invite codes, add signup fields and invite people by email.
+- [Roles and Permissions](/platform/users/roles-and-permissions.md): Learn what the Admin, Maintainer, Instructor and User roles can do in Studytomy Portal, and review custom role permissions where enabled.
+- [Two-Factor Authentication](/platform/users/two-factor.md): Turn on two-factor authentication for your Studytomy Portal account with an authenticator app, save backup codes and require 2FA across your organization.
+- [User Groups](/platform/users/user-groups.md): Create Studytomy Portal user groups to give a set of members access to courses, communities, folders, boards and podcasts in one step, and see how members join.
+
+## Self-hosting
+
+- [CLI](/cli.md): Use the compatibility-named CLI to configure an upstream runtime image, maintain a self-hosted installation, or run this repository's local development stack.
+- [Commands](/cli/commands.md): Reference for the compatibility-named CLI commands, including setup, runtime image updates, backup, restore, doctor, env, scale and local development.
+- [Dev Mode](/cli/dev-mode.md): Run Studytomy Portal locally with npx learnhouse dev. PostgreSQL and Redis run in Docker, and the API, web and collab servers run with hot reload.
+- [CLI Environment Variables](/cli/environment-variables.md): Environment variables the Studytomy Portal CLI reads, such as LEARNHOUSE_DIR and LEARNHOUSE_ADMIN_PASSWORD, and how its generated .env file is laid out.
+- [Setup Wizard](/cli/setup-wizard.md): Walk through the Studytomy Portal setup wizard step by step, from edition, domain and HTTPS to database, Redis, organization, admin and features.
+- [Self-Hosting Studytomy Portal](/self-hosting.md): Self-host Studytomy Portal on your own server with the Studytomy Portal CLI. Install it with one command, then configure, update, back up and monitor it.
+- [Configuration Overview](/self-hosting/configuration.md): Configure a self-hosted Studytomy Portal instance with environment variables, edit the generated .env file and apply changes with the Studytomy Portal CLI.
+- [AI Setup](/self-hosting/configuration/ai-setup.md): Turn on AI features in self-hosted Studytomy Portal with Gemini, OpenAI, Anthropic, Bedrock, Ollama or another provider, and set models and RAG embeddings.
+- [Email Configuration](/self-hosting/configuration/email.md): Set up email for a self-hosted Studytomy Portal instance with Resend or any SMTP server, and set the sender address and display name for outgoing mail.
+- [Environment Variables](/self-hosting/configuration/environment-variables.md): Reference for every environment variable a self-hosted Studytomy Portal instance reads, with types, defaults and the service that uses each one.
+- [SSL and Domain Setup](/self-hosting/configuration/ssl.md): Set up a domain and SSL for self-hosted Studytomy Portal with automatic Let's Encrypt certificates or your own reverse proxy, and set the cookie domain.
+- [Content Storage](/self-hosting/configuration/storage.md): Choose where a self-hosted Studytomy Portal instance stores uploaded content, either a local Docker volume or S3-compatible storage such as AWS S3, R2 or MinIO.
+- [Installation Overview](/self-hosting/installation.md): Configure and maintain a self-hosted runtime installation with the compatibility-named CLI.
+- [Quick Install](/self-hosting/installation/quick-install.md): Configure a self-hosted runtime installation with the compatibility-named CLI, start the stack and log in.
+- [System Requirements](/self-hosting/installation/requirements.md): Check the system requirements for self-hosting Studytomy Portal, including Docker with Compose v2, Node.js 22+, at least 2 GB of RAM and free ports.
+- [Maintenance Overview](/self-hosting/maintenance.md): Keep a self-hosted Studytomy Portal instance healthy with the CLI. Update it, back up and restore data, monitor services and fix common problems.
+- [Backups](/self-hosting/maintenance/backups.md): Back up and restore a self-hosted Studytomy Portal instance with the CLI, covering the database, .env file and uploaded content, plus cron automation.
+- [Monitoring](/self-hosting/maintenance/monitoring.md): Monitor a self-hosted Studytomy Portal instance with CLI health checks, the /api/v1/health endpoint, logs, Sentry error tracking and resource limits.
+- [Troubleshooting](/self-hosting/maintenance/troubleshooting.md): Fix common problems on a self-hosted Studytomy Portal instance, such as services not starting, database errors, port conflicts and sign-in issues.
+- [Runtime Image Updates](/self-hosting/maintenance/updates.md): Update the configured upstream runtime image with npx learnhouse update, understand database migrations, and roll back safely.
+
+## Developers
+
+- [Studytomy Portal Headless](/developers.md): Build your own learning platform on Studytomy Portal: embed lessons, render them in React or Vue, or drive everything from the SDK and REST API.
+- [REST API](/developers/api.md): Find your way around the Studytomy Portal REST API: base URLs, where the full endpoint reference lives, and the guides for tokens and headless grading.
+- [API Tokens and Sessions](/developers/api/authentication.md): Create and manage Studytomy Portal API tokens, choose their permissions, and sign in with user sessions, refresh cookies and two-factor codes.
+- [Headless Assignments](/developers/api/headless-assignments.md): Run Studytomy Portal assignments from your own frontend with an API token: create tasks with custom data, submit answers for learners and grade them.
+- [Architecture Overview](/developers/architecture.md): See how Studytomy Portal fits together: the Next.js web app, FastAPI backend, collaboration server, CLI, PostgreSQL, Redis and the single app image.
+- [Backend Architecture](/developers/architecture/backend.md): Learn how the Studytomy Portal FastAPI backend is built: Python 3.14, SQLModel, Alembic, PostgreSQL with pgvector, Redis, background jobs and CLI tasks.
+- [Frontend Architecture](/developers/architecture/frontend.md): Learn how the Studytomy Portal Next.js 16 frontend is built: React 19, the App Router, Tiptap editor, runtime config and how it talks to the API.
+- [Supporting Services](/developers/architecture/services.md): Configure the services Studytomy Portal runs alongside its apps: PostgreSQL with pgvector, Redis, the Hocuspocus collaboration server and the reverse proxy.
+- [Contributing to Studytomy Portal](/developers/contributing.md): Start contributing to Studytomy Portal: set up the dev environment, read the guidelines, and find good first issues or propose a feature on GitHub.
+- [Development Environment Setup](/developers/contributing/dev-environment.md): Set up a local Studytomy Portal development environment with one CLI command that starts PostgreSQL, Redis, the API, the web app and the collab server.
+- [Contribution Guidelines](/developers/contributing/guidelines.md): Follow the local contribution workflow: branch naming, lockfiles, code style and checks to run before committing.
+- [Embed Studytomy Portal Activities](/developers/embed.md): Put a Studytomy Portal activity on any website with an iframe: fit it to its content, set colours and language, and react when learners finish.
+- [Migrating Content into Studytomy Portal](/developers/migration.md): Choose how to bring existing courses into Studytomy Portal: import another LMS export, script every call through the API, or let AI propose the structure.
+- [Activity Types Reference](/developers/migration/activity-types.md): Look up the content JSON each Studytomy Portal activity type expects, from Tiptap dynamic pages and media uploads to assignments, custom and SCORM.
+- [AI-Assisted Migration](/developers/migration/assisted.md): Upload a folder of videos, PDFs, images and audio, let Studytomy Portal AI propose chapters and activities, then create the whole course in one API call.
+- [Import from Another LMS](/developers/migration/from-another-lms.md): Import a Moodle, Canvas, Blackboard, Brightspace, Open edX or Common Cartridge export into Studytomy Portal from the dashboard, the CLI or the API.
+- [Programmatic Migration](/developers/migration/programmatic.md): Script a full course migration through the Studytomy Portal API: create the course, chapters and every activity type, upload media, reorder and publish.
+- [Studytomy Portal React Component](/developers/react.md): Render Studytomy Portal activities inside any React app with @learnhouse/react — the same blocks and styles as Studytomy Portal, themed to match your product.
+- [Customize the React Component](/developers/react/customization.md): Theme LearnHouseActivity, replace or wrap any block, hide blocks, rewrite content, and add your own header and footer.
+- [React Component Events](/developers/react/events.md): Listen to what learners do in a LearnHouseActivity — loading, links, media playback, size changes, visibility and completion.
+- [React Component in Next.js & Vite](/developers/react/frameworks.md): Use LearnHouseActivity in the Next.js App Router (including server rendering and fetching on the server) and in Vite apps.
+- [How the React Component Works](/developers/react/how-it-works.md): How @learnhouse/react renders activities without an editor, and how it is built from Studytomy Portal's own source at every release.
+- [Localize the React Component](/developers/react/localization.md): Show LearnHouseActivity's interface in 22 languages, override any string, and render right-to-left.
+- [React Component Props Reference](/developers/react/reference.md): Every prop of LearnHouseActivity and LearnHouseProvider, and everything @learnhouse/react exports.
+- [Studytomy Portal JavaScript SDK](/developers/sdk.md): @learnhouse/sdk: a typed JavaScript and TypeScript client for the Studytomy Portal API with no dependencies, for browsers, Node, Bun, Deno and React Native.
+- [SDK Authentication](/developers/sdk/authentication.md): Authenticate @learnhouse/sdk with an org API token on servers, or as a signed-in learner in browsers and apps.
+- [Studytomy Portal SDK for React Native](/developers/sdk/react-native.md): Use @learnhouse/sdk in React Native and Expo apps — sign learners in, keep their tokens in secure storage, and refresh them.
+- [SDK Typed Requests & Errors](/developers/sdk/requests.md): Call any Studytomy Portal API endpoint with full types, handle errors, and control timeouts, retries, rate limits, pagination, cancellation and hooks in @learnhouse/sdk.
+- [SDK Resources](/developers/sdk/resources.md): The @learnhouse/sdk resources (organizations, courses, chapters, activities, search, progress, users, auth and media URLs) and the endpoint each method calls.
+- [SDK Webhooks](/developers/sdk/webhooks.md): Verify Studytomy Portal webhook signatures with @learnhouse/sdk, turn deliveries into typed events, and skip duplicate or replayed deliveries.
+- [Package Names and Compatibility](/developers/versioning.md): Understand the existing SDK package identifiers and their compatibility constraints.
+- [Studytomy Portal Vue Component](/developers/vue.md): Render Studytomy Portal activities in Vue 3 and Nuxt with @learnhouse/vue, using the same renderer and blocks as Studytomy Portal and @learnhouse/react.
+
+## API Reference
+
+- [API Reference index](/reference/llms.txt): every endpoint group as Markdown, with parameters, schemas and examples
+- [Operations JSON](/reference/operations.json): machine-readable list of every operation
+
+## Optional
+
+- [Studytomy Portal Docs](/index.md): Documentation for the Studytomy Portal source code, including local development, configuration, and API integrations.
