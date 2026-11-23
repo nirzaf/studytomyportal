@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from src.routers import admin as admin_router_module
 from src.routers import code_execution
 from src.routers import code_submissions
@@ -147,11 +147,23 @@ async def get_non_api_token_user(user = Depends(get_current_user)):
 require_authenticated_user = get_authenticated_non_api_token_user
 
 
+_REVIEWED_LEARNING_SURFACE_ROUTES = frozenset({
+    "api_start_learning_surface",
+    "api_learning_availability",
+    "api_recover_learning_surface",
+    "api_apply_learning_action",
+})
+
+
 async def _require_studytomy_ai_policy(
+    request: Request,
     current_user=Depends(get_current_user),
     db_session=Depends(get_db_session),
 ):
-    """Require the dedicated guidance contract for managed learners."""
+    """Keep legacy AI gated while reviewed practice uses its own exact policy."""
+    route = request.scope.get("route")
+    if getattr(route, "name", None) in _REVIEWED_LEARNING_SURFACE_ROUTES:
+        return
     await require_studytomy_learner_ai_policy(db_session, current_user)
 
 # API Routes

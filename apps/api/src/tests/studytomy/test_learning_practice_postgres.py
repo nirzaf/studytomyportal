@@ -1,7 +1,8 @@
 import asyncio
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request
@@ -18,6 +19,15 @@ from src.db.organization_config import OrganizationConfig
 from src.db.organizations import Organization
 from src.db.roles import Role, RoleTypeEnum
 from src.db.studytomy.practice import StudyLearningAction, StudyLearningSurface
+from src.db.studytomy.governance import (
+    StudyBusinessEvent,
+    StudyOwnerAssignment,
+    StudyOwnerFunction,
+    StudyPolicyApproval,
+    StudyPolicyKey,
+    StudyPolicyStatus,
+    StudyPolicyVersion,
+)
 from src.db.user_organizations import UserOrganization
 from src.db.users import PublicUser, User
 from src.routers.ai.ai import router as ai_router
@@ -26,6 +36,7 @@ from src.services.ai import learning_actions as actions
 from src.services.ai import learning_generation as generation
 from src.services.ai import learning_practice as practice
 from src.services.ai.schemas.learning_surface import LearningSurface, PracticeAction, SubmitAnswer
+from src.tests.studytomy.test_studytomy_access import _synthetic_policy_body
 
 
 @pytest.mark.studytomy_postgres
@@ -35,9 +46,20 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
     stamp = "2026-11-16T00:00:00Z"
     other_id = None
     other_org_id = None
+    retention_policy_id = None
     try:
         async with rows.session_factory() as db, db.begin():
             owner = PublicUser.model_validate(await db.get(User, rows.user_id))
+            organization = await db.get(Organization, rows.org_id)
+            retention_policy = StudyPolicyVersion(
+                org_id=rows.org_id, policy_key="D-13", scope_kind="organization",
+                scope_uuid=organization.org_uuid, version=1, status="draft", body={},
+                evidence_reference="synthetic policy foreign-key fixture",
+                effective_from=datetime(2026, 11, 1, tzinfo=UTC), created_by_user_id=owner.id,
+            )
+            db.add(retention_policy)
+            await db.flush()
+            retention_policy_id = retention_policy.id
             other_user = User(
                 username=f"peer_{rows.token}", first_name="Synthetic", last_name="Peer",
                 email=f"peer-{rows.token}@example.com", user_uuid=f"user_{uuid4()}",
@@ -110,11 +132,21 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
         async with rows.session_factory() as db:
             with pytest.raises(HTTPException) as blocked:
                 await practice._authorize_source(request, db, owner, activity_uuid)
-            assert blocked.value.detail["code"] == "POLICY_NOT_APPROVED"
+            assert blocked.value.status_code in (403, 404, 409)
 
         async def allow_only_synthetic_orgs(db, viewer, source):
             assert source.org_id in {rows.org_id, other_org_id}
-            return practice.PracticePermission(frozenset({"fraction_explorer"}), allow_hints=True)
+            example = practice.ReviewedFractionExample(
+                example_id="fraction_half", visual="fraction_explorer", parts=4, selected=2,
+                numerator=1, denominator=2, prompt="What fraction of the whole is selected?",
+                explanation="Two of four equal parts are selected.", hint="Count selected and total parts.",
+                correct_feedback="Two of four is one half.", incorrect_feedback="Compare selected and total parts.",
+            )
+            return practice.PracticePermission(
+                frozenset({"fraction_explorer"}), allow_hints=True, approved_examples=(example,),
+                allow_practice=True, approved_model="fake", retention_policy_id=retention_policy_id,
+                retention_category="lesson_visual_practice", retention_hours=1,
+            )
 
         monkeypatch.setattr(practice, "require_learning_practice_policy", allow_only_synthetic_orgs)
 
@@ -125,10 +157,20 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
 
         fixture = Path(__file__).resolve().parents[1] / "fixtures" / "learning_surface_v1.json"
         sample = json.loads(fixture.read_text(encoding="utf-8"))
-        basis = practice.FractionEvaluationBasis(template="equivalent_fractions_v1", numerator=1, denominator=2)
+        sample["components"][0]["text"] = "Two of four equal parts are selected."
+        sample["components"][2]["question"]["prompt"] = "What fraction of the whole is selected?"
+        basis = practice.FractionEvaluationBasis(
+            template="equivalent_fractions_v1", numerator=1, denominator=2, reviewed_example_id="fraction_half",
+        )
         async with rows.session_factory() as db, db.begin():
             source = await practice._authorize_source(request, db, owner, activity_uuid)
             sample.update(activity_id=activity_uuid, source_identity=source.identity, surface_id=str(uuid4()))
+            invalid_sample = json.loads(json.dumps(sample))
+            invalid_sample["components"][0]["text"] = "An unreviewed explanation must not be persisted."
+            invalid_surface = LearningSurface.model_validate(invalid_sample)
+            with pytest.raises(HTTPException) as unreviewed:
+                await practice.save_learning_surface(request, db, owner, invalid_surface, basis)
+            assert unreviewed.value.detail["code"] == "POLICY_NOT_APPROVED"
             surface = LearningSurface.model_validate(sample)
             await practice.save_learning_surface(request, db, owner, surface, basis)
 
@@ -137,6 +179,8 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
             assert stored.model_dump(mode="json") == sample
             row = await db.get(StudyLearningSurface, str(surface.surface_id))
             assert row.evaluation_basis == basis.model_dump()
+            assert row.retention_policy_id == retention_policy_id
+            assert row.retention_expires_at is not None
             with pytest.raises(HTTPException) as hidden:
                 await practice.recover_learning_surface(request, db, other, activity_uuid, surface.surface_id)
             assert hidden.value.status_code == 404
@@ -147,6 +191,30 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
             assert (await db.execute(select(AssignmentUserSubmission).where(
                 AssignmentUserSubmission.user_id == owner.id,
             ))).scalars().all() == []
+
+        expired_surface_uuid = str(uuid4())
+        expired_at = datetime.now(UTC) - timedelta(days=1)
+        async with rows.session_factory() as db, db.begin():
+            db.add(StudyLearningSurface(
+                surface_uuid=expired_surface_uuid,
+                org_id=rows.org_id,
+                user_id=owner.id,
+                request_uuid=str(uuid4()),
+                course_uuid=course.course_uuid,
+                activity_uuid=activity_uuid,
+                source_identity=surface.source_identity,
+                presentation=sample,
+                evaluation_basis=basis.model_dump(),
+                retention_policy_id=retention_policy_id,
+                retention_category="lesson_visual_practice",
+                retention_expires_at=expired_at,
+                created_at=expired_at - timedelta(days=1),
+            ))
+        async with rows.session_factory() as db:
+            with pytest.raises(HTTPException) as expired:
+                await practice.recover_learning_surface(request, db, owner, activity_uuid, UUID(expired_surface_uuid))
+            assert expired.value.status_code == 410
+            assert expired.value.detail["code"] == "PRACTICE_RECORD_EXPIRED"
 
         committed_answer = SubmitAnswer(
             action="submit_answer", surface_id=surface.surface_id, request_id=uuid4(),
@@ -212,6 +280,8 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
                 select(StudyLearningSurface.surface_uuid).where(StudyLearningSurface.org_id == rows.org_id)
             )))
             await db.execute(delete(StudyLearningSurface).where(StudyLearningSurface.org_id == rows.org_id))
+            if retention_policy_id is not None:
+                await db.execute(delete(StudyPolicyVersion).where(StudyPolicyVersion.id == retention_policy_id))
             if other_id is not None:
                 await db.execute(delete(User).where(User.id == other_id))
             if other_org_id is not None:
@@ -221,10 +291,38 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
 @pytest.mark.studytomy_postgres
 async def test_fake_provider_stream_and_replay(postgres_test_rows, monkeypatch):
     rows = postgres_test_rows
+    async with rows.session_factory() as db, db.begin():
+        org = await db.get(Organization, rows.org_id)
+        policy = StudyPolicyVersion(
+            org_id=rows.org_id, policy_key="D-13", scope_kind="organization", scope_uuid=org.org_uuid,
+            version=1, status="draft", body={}, evidence_reference="synthetic policy foreign-key fixture",
+            effective_from=datetime(2026, 11, 1, tzinfo=UTC), created_by_user_id=rows.user_id,
+        )
+        db.add(policy)
+        await db.flush()
+        retention_policy_id = policy.id
+    examples = (
+        practice.ReviewedFractionExample(
+            example_id="fraction_half", visual="fraction_explorer", parts=4, selected=2,
+            numerator=1, denominator=2, prompt="What fraction of the whole is selected?",
+            explanation="Two of four equal parts are selected.", hint="Count selected and total parts.",
+            correct_feedback="Two of four is one half.", incorrect_feedback="Compare selected and total parts.",
+        ),
+        practice.ReviewedNumberLineExample(
+            example_id="line_half", visual="number_line", first_mark=0, last_mark=1,
+            divisions_per_unit=2, numerator=1, denominator=2,
+            prompt="What fraction is the first mark after zero?",
+            explanation="The interval is split into two equal parts.", hint="Count equal intervals.",
+            correct_feedback="The first interval is one of two equal intervals.",
+            incorrect_feedback="Compare the first interval with the whole unit.",
+        ),
+    )
     source = practice.PracticeSource(
         activity_uuid=f"activity_{uuid4()}", course_uuid=f"course_{uuid4()}", org_id=rows.org_id,
         identity="a" * 64, approved_visuals=frozenset({"fraction_explorer", "number_line"}),
-        allow_hints=True,
+        allow_hints=True, approved_examples=examples, allow_practice=True, allow_explore=True,
+        approved_model="fake", retention_policy_id=retention_policy_id,
+        retention_category="lesson_visual_practice", retention_hours=1,
     )
     async with rows.session_factory() as db:
         viewer = PublicUser.model_validate(await db.get(User, rows.user_id))
@@ -249,7 +347,6 @@ async def test_fake_provider_stream_and_replay(postgres_test_rows, monkeypatch):
     monkeypatch.setattr(practice, "_authorize_source", auth)
     monkeypatch.setattr(actions, "_authorize_source", auth)
     monkeypatch.setattr(generation, "generate", fake_generate)
-    monkeypatch.setattr(generation, "model_for_tier", lambda tier: "fake")
     monkeypatch.setattr(generation, "enforce_ai_rate_limit", lambda user_id, org_id: None)
     monkeypatch.setattr(generation, "reserve_ai_credit", fake_reserve)
     monkeypatch.setattr(generation, "refund_ai_credit", refunds.append)
@@ -390,3 +487,205 @@ async def test_fake_provider_stream_and_replay(postgres_test_rows, monkeypatch):
                 select(StudyLearningSurface.surface_uuid).where(StudyLearningSurface.org_id == rows.org_id)
             )))
             await db.execute(delete(StudyLearningSurface).where(StudyLearningSurface.org_id == rows.org_id))
+            await db.execute(delete(StudyPolicyVersion).where(StudyPolicyVersion.id == retention_policy_id))
+
+
+@pytest.mark.studytomy_postgres
+async def test_practice_retention_worker_honors_approved_expiry_and_holds(postgres_test_rows):
+    rows = postgres_test_rows
+    from src.services.studytomy.learning_practice_retention import (
+        expire_practice_batch,
+        remove_expired_practice_surface,
+    )
+
+    now = datetime.now(UTC)
+    expired_uuid = str(uuid4())
+    unheld_expired_uuid = str(uuid4())
+    future_uuid = str(uuid4())
+    hold_uuid = str(uuid4())
+    action_uuid = str(uuid4())
+    async with rows.session_factory() as db, db.begin():
+        org = await db.get(Organization, rows.org_id)
+        role = Role(
+            name=f"Retention policy approver {rows.token}",
+            org_id=rows.org_id,
+            role_type=RoleTypeEnum.TYPE_ORGANIZATION,
+            role_uuid=f"retention-role-{rows.token}",
+        )
+        db.add(role)
+        await db.flush()
+        db.add(UserOrganization(
+            org_id=rows.org_id,
+            user_id=rows.user_id,
+            role_id=role.id,
+            creation_date=now.isoformat(),
+            update_date=now.isoformat(),
+        ))
+        owner = StudyOwnerAssignment(
+            org_id=rows.org_id,
+            user_id=rows.user_id,
+            responsibility=StudyOwnerFunction.BUSINESS.value,
+            scope_kind="organization",
+            scope_uuid=org.org_uuid,
+            status="active",
+            evidence_reference="synthetic D-13 owner fixture",
+            effective_from=now - timedelta(days=1),
+            assigned_by_user_id=rows.user_id,
+        )
+        db.add(owner)
+        await db.flush()
+        specified = {
+            "retention": {
+                "lesson_visual_practice": {
+                    "retention_hours": 24,
+                    "retention_category": "lesson_visual_practice",
+                    "hold_reason_codes": ["LEGAL_HOLD"],
+                    "hold_release_reason_codes": ["REVIEW_COMPLETE"],
+                    "removal_reason_codes": ["AUTHORIZED_REMOVAL"],
+                    "max_hold_review_days": 30,
+                }
+            },
+            "removal": {
+                "lesson_visual_practice": {
+                    "automatic_expiry_enabled": True,
+                    "authorized_removal_enabled": True,
+                }
+            },
+        }
+        policy = StudyPolicyVersion(
+            org_id=rows.org_id,
+            policy_key="D-13",
+            scope_kind="organization",
+            scope_uuid=org.org_uuid,
+            version=1,
+            status=StudyPolicyStatus.APPROVED.value,
+            body=_synthetic_policy_body(
+                StudyPolicyKey.D_13,
+                specified,
+            ).model_dump(mode="json"),
+            evidence_reference="synthetic approved D-13 fixture",
+            effective_from=now - timedelta(days=1),
+            effective_to=now + timedelta(days=30),
+            created_by_user_id=rows.user_id,
+            approved_by_user_id=rows.user_id,
+            approved_at=now,
+        )
+        db.add(policy)
+        await db.flush()
+        db.add(StudyPolicyApproval(
+            org_id=rows.org_id,
+            policy_version_id=policy.id,
+            owner_assignment_id=owner.id,
+            responsibility=StudyOwnerFunction.BUSINESS.value,
+            approver_user_id=rows.user_id,
+            evidence_reference="synthetic named D-13 approval",
+            rationale="Isolated test fixture only.",
+            approved_at=now,
+        ))
+        db.add(StudyLearningSurface(
+            surface_uuid=expired_uuid,
+            org_id=rows.org_id,
+            user_id=rows.user_id,
+            request_uuid=str(uuid4()),
+            course_uuid=f"course_{rows.token}",
+            activity_uuid=f"activity_{rows.token}",
+            source_identity="a" * 64,
+            presentation={"schema_version": 1, "components": []},
+            retention_policy_id=policy.id,
+            retention_category="lesson_visual_practice",
+            created_at=now - timedelta(days=3),
+            retention_expires_at=now - timedelta(days=2),
+        ))
+        db.add(StudyLearningSurface(
+            surface_uuid=unheld_expired_uuid,
+            org_id=rows.org_id,
+            user_id=rows.user_id,
+            request_uuid=str(uuid4()),
+            course_uuid=f"course_{rows.token}",
+            activity_uuid=f"activity_{rows.token}",
+            source_identity="d" * 64,
+            presentation={"schema_version": 1, "components": []},
+            retention_policy_id=policy.id,
+            retention_category="lesson_visual_practice",
+            created_at=now - timedelta(days=3),
+            retention_expires_at=now - timedelta(days=2),
+        ))
+        await db.flush()
+        future_surface = StudyLearningSurface(
+            surface_uuid=future_uuid,
+            org_id=rows.org_id,
+            user_id=rows.user_id,
+            request_uuid=str(uuid4()),
+            course_uuid=f"course_{rows.token}",
+            activity_uuid=f"activity_{rows.token}",
+            source_identity="c" * 64,
+            presentation={"schema_version": 1, "components": []},
+            retention_policy_id=policy.id,
+            retention_category="lesson_visual_practice",
+            created_at=now,
+            retention_expires_at=now + timedelta(days=1),
+        )
+        db.add(future_surface)
+        await db.flush()
+        db.add(StudyLearningAction(
+            surface_uuid=expired_uuid,
+            request_uuid=action_uuid,
+            request_hash="b" * 64,
+            revision=2,
+            action="request_hint",
+            presentation={"schema_version": 1, "components": []},
+            retention_policy_id=policy.id,
+            retention_category="lesson_visual_practice",
+            retention_expires_at=now - timedelta(days=2),
+        ))
+        db.add(StudyBusinessEvent(
+            org_id=rows.org_id,
+            event_uuid=hold_uuid,
+            subject_uuid=f"user_{rows.token}",
+            resource_kind="learning_practice_surface",
+            resource_uuid=expired_uuid,
+            action="studytomy.learning_practice.retention_hold_placed",
+            operation_uuid=hold_uuid,
+            dedupe_key=f"synthetic-hold-{rows.token}",
+            reason="LEGAL_HOLD",
+            policy_refs=[policy.id],
+        ))
+        await db.flush()
+
+        with pytest.raises(HTTPException) as premature:
+            await remove_expired_practice_surface(db, org, future_surface, now=now)
+        assert premature.value.status_code == 409
+        assert premature.value.detail["code"] == "PRACTICE_RETENTION_NOT_EXPIRED"
+
+        # A held record survives, while later eligible records are not starved by it.
+        assert await expire_practice_batch(db, org) == 1
+        assert await db.get(StudyLearningSurface, expired_uuid) is not None
+        assert await db.get(StudyLearningSurface, unheld_expired_uuid) is None
+
+        db.add(StudyBusinessEvent(
+            org_id=rows.org_id,
+            subject_uuid=f"user_{rows.token}",
+            resource_kind="learning_practice_surface",
+            resource_uuid=expired_uuid,
+            action="studytomy.learning_practice.retention_hold_released",
+            operation_uuid=hold_uuid,
+            dedupe_key=f"synthetic-release-{rows.token}",
+            reason="REVIEW_COMPLETE",
+            policy_refs=[policy.id],
+        ))
+        await db.flush()
+        assert await expire_practice_batch(db, org) == 1
+        await db.flush()
+        assert await db.get(StudyLearningSurface, expired_uuid) is None
+        actions = (await db.execute(select(StudyLearningAction).where(
+            StudyLearningAction.surface_uuid == expired_uuid,
+        ))).scalars().all()
+        assert actions == []
+        assert await db.get(StudyLearningSurface, future_uuid) is not None
+        receipt = await db.scalar(select(StudyBusinessEvent).where(
+            StudyBusinessEvent.org_id == rows.org_id,
+            StudyBusinessEvent.resource_uuid == expired_uuid,
+            StudyBusinessEvent.action == "studytomy.learning_practice.retention_removed",
+        ))
+        assert receipt is not None
+        await db.rollback()

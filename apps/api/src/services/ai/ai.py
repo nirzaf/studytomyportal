@@ -71,20 +71,24 @@ async def track_ai_message(
     )
 
 
-async def _authorize_activity_ai_access(
+async def _authorize_activity_reader_access(
     request: Request,
     course: Course | CourseRead,
     activity: Activity | ActivityRead,
     org_id: int,
     current_user: PublicUser,
     db_session: AsyncSession,
+    *,
+    require_learner_ai_policy: bool = False,
 ) -> None:
-    """Gate activity AI chat on the owning organization and course.
+    """Authorize reading activity content before any AI operation.
 
     ``activity_uuid`` is client-supplied, so without this any authenticated
     user could stream another org's activity content back through the model,
     and have that org billed for the credit. Must run before rate limiting and
     credit reservation so an unauthorized caller never spends the victim's quota.
+    Legacy activity chat opts into its established learner AI policy; reviewed
+    lesson practice applies its narrower source-bound policy separately.
     """
     acting_user_id = resolve_acting_user_id(current_user)
     if not await is_org_member(acting_user_id, org_id, db_session):
@@ -93,7 +97,8 @@ async def _authorize_activity_ai_access(
             detail="You are not a member of this organization",
         )
     await enforce_org_mfa(acting_user_id, org_id, db_session)
-    await require_studytomy_learner_ai_policy(db_session, current_user)
+    if require_learner_ai_policy:
+        await require_studytomy_learner_ai_policy(db_session, current_user)
     # Course READ alone is not enough: the activity's content goes into the
     # model context, so drafts, chapter/activity locks and paid access apply
     # exactly as they do when the activity is opened directly.
@@ -104,6 +109,26 @@ async def _authorize_activity_ai_access(
             status_code=403,
             detail="You do not have access to this activity",
         )
+
+
+async def _authorize_activity_ai_access(
+    request: Request,
+    course: Course | CourseRead,
+    activity: Activity | ActivityRead,
+    org_id: int,
+    current_user: PublicUser,
+    db_session: AsyncSession,
+) -> None:
+    """Keep unrestricted activity chat behind the established learner AI gate."""
+    await _authorize_activity_reader_access(
+        request,
+        course,
+        activity,
+        org_id,
+        current_user,
+        db_session,
+        require_learner_ai_policy=True,
+    )
 
 
 def _require_own_chat_session(aichat_uuid: str, current_user: PublicUser) -> None:

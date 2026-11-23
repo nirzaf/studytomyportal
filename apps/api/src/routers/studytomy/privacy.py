@@ -57,6 +57,15 @@ from src.services.studytomy.retention_execution import (
     remove_approved_case_evidence,
     replay_case_evidence_removal,
 )
+from src.services.studytomy.learning_practice_retention import (
+    PracticeRetentionHoldCommand,
+    PracticeRetentionReceipt,
+    PracticeRetentionReleaseCommand,
+    PracticeRetentionRemovalCommand,
+    place_practice_retention_hold,
+    release_practice_retention_hold,
+    remove_practice_surface_manually,
+)
 
 router = APIRouter()
 Actor = Annotated[PublicUser, Depends(get_authenticated_non_api_token_user)]
@@ -68,6 +77,39 @@ async def _record_request_org(db: AsyncSession, org_uuid: str) -> Organization:
     if org is None:
         raise studytomy_http_error(404, "RECORD_REQUEST_UNAVAILABLE", "Record request unavailable.")
     return org
+
+
+@router.put("/orgs/{org_uuid}/learning-practice/surfaces/{surface_uuid}/retention-hold")
+async def api_hold_learning_practice(
+    org_uuid: str, surface_uuid: UUID, command: PracticeRetentionHoldCommand, response: Response,
+    current_user: Actor, db_session: Session,
+) -> PracticeRetentionReceipt:
+    org = await _record_request_org(db_session, org_uuid)
+    receipt = await place_practice_retention_hold(db_session, org, current_user, str(surface_uuid), command)
+    response.headers["Cache-Control"] = "private, no-store"
+    return receipt
+
+
+@router.put("/orgs/{org_uuid}/learning-practice/surfaces/{surface_uuid}/retention-hold/release")
+async def api_release_learning_practice_hold(
+    org_uuid: str, surface_uuid: UUID, command: PracticeRetentionReleaseCommand, response: Response,
+    current_user: Actor, db_session: Session,
+) -> PracticeRetentionReceipt:
+    org = await _record_request_org(db_session, org_uuid)
+    receipt = await release_practice_retention_hold(db_session, org, current_user, str(surface_uuid), command)
+    response.headers["Cache-Control"] = "private, no-store"
+    return receipt
+
+
+@router.post("/orgs/{org_uuid}/learning-practice/surfaces/{surface_uuid}/remove")
+async def api_remove_expired_learning_practice(
+    org_uuid: str, surface_uuid: UUID, command: PracticeRetentionRemovalCommand, response: Response,
+    current_user: Actor, db_session: Session,
+) -> PracticeRetentionReceipt:
+    org = await _record_request_org(db_session, org_uuid)
+    receipt = await remove_practice_surface_manually(db_session, org, current_user, str(surface_uuid), command)
+    response.headers["Cache-Control"] = "private, no-store"
+    return receipt
 
 
 @router.get("/orgs/{org_uuid}/learners/me/record-requests/availability", status_code=204)

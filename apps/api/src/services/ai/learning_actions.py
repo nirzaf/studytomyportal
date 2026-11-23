@@ -13,6 +13,7 @@ from src.db.users import PublicUser
 from src.services.ai.learning_practice import (
     FractionEvaluationBasis,
     _authorize_source,
+    ReviewedNumberLineExample,
     _latest_action,
     _owned_surface,
     _project_surface,
@@ -30,12 +31,6 @@ from src.services.studytomy.errors import (
 from src.services.studytomy.idempotency import canonical_request_hash
 
 _ANSWER = re.compile(r"([+-]?[0-9]{1,5})(?: */ *([0-9]{1,5}))?")
-_HINTS = {
-    "equivalent_fractions_v1": "Try dividing the top and bottom numbers by the same number.",
-    "number_line_fraction_v1": "Count the equal spaces from zero to one. Then count the spaces from zero to the mark.",
-}
-
-
 def evaluate_fraction(answer: str, basis: FractionEvaluationBasis) -> bool:
     match = _ANSWER.fullmatch(answer.strip())
     if match is None:
@@ -55,26 +50,52 @@ def _invalid_answer():
 
 
 def _next_question(
-    surface: LearningSurface, basis: FractionEvaluationBasis, retry: bool,
-) -> tuple[list[dict], FractionEvaluationBasis]:
-    components = [item.model_dump() for item in surface.components if item.kind not in {"hint", "feedback"}]
-    visual = next(item for item in components if item["kind"] in {"fraction_explorer", "number_line"})
-    question = next(item for item in components if item["kind"] == "question")
-    previous = Fraction(basis.numerator, basis.denominator)
-    preferred = [Fraction(1, 2), Fraction(1, 3)] if retry else [Fraction(3, 4), Fraction(2, 3)]
-    value = next(candidate for candidate in preferred if candidate != previous)
-    if visual["kind"] == "fraction_explorer":
-        selected, parts = value.numerator * 2, value.denominator * 2
-        visual.update(parts=parts, selected=selected)
-        prompt = f"Write a fraction equivalent to {selected}/{parts}."
+    surface: LearningSurface,
+    basis: FractionEvaluationBasis,
+    source,
+    *,
+    retry: bool,
+) -> tuple[list[dict], FractionEvaluationBasis | None, bool]:
+    """Retry the same reviewed example or advance to the next approved example."""
+    examples = list(source.approved_examples)
+    index = next((i for i, item in enumerate(examples) if item.example_id == basis.reviewed_example_id), None)
+    if index is None:
+        raise studytomy_http_error(409, STALE_VERSION, "The reviewed practice example is no longer approved.")
+    next_index = index if retry else index + 1
+    if next_index >= len(examples):
+        return [
+            item.model_dump()
+            for item in surface.components
+            if item.kind not in {"hint", "feedback"}
+        ], None, False
+
+    example = examples[next_index]
+    if example.visual == "fraction_explorer":
+        visual = {
+            "kind": example.visual, "id": "visual",
+            "parts": example.parts, "selected": example.selected,
+        }
+        template = "equivalent_fractions_v1"
+    elif isinstance(example, ReviewedNumberLineExample):
+        visual = {
+            "kind": example.visual, "id": "visual", "first_mark": example.first_mark,
+            "last_mark": example.last_mark, "divisions_per_unit": example.divisions_per_unit,
+        }
+        template = "number_line_fraction_v1"
     else:
-        visual.update(first_mark=0, last_mark=1, divisions_per_unit=value.denominator)
-        positions = {1: "first", 2: "second", 3: "third"}
-        prompt = f"What fraction is the {positions[value.numerator]} mark to the right of zero?"
-    question["question"] = {"kind": "rational", "id": uuid4(), "prompt": prompt}
-    return components, FractionEvaluationBasis(
-        template=basis.template, numerator=value.numerator, denominator=value.denominator,
+        raise studytomy_http_error(409, STALE_VERSION, "The reviewed practice example is invalid.")
+    components = [
+        {"kind": "explanation", "id": "explanation", "text": example.explanation},
+        visual,
+        {"kind": "question", "id": "question", "question": {
+            "kind": "rational", "id": uuid4(), "prompt": example.prompt,
+        }},
+    ]
+    next_basis = FractionEvaluationBasis(
+        template=template, numerator=example.numerator, denominator=example.denominator,
+        reviewed_example_id=example.example_id,
     )
+    return components, next_basis, next_index + 1 < len(examples)
 
 
 async def apply_learning_action(
@@ -110,6 +131,9 @@ async def apply_learning_action(
         .order_by(StudyLearningAction.revision.desc()).limit(1)
     )).scalar_one_or_none()
     basis = FractionEvaluationBasis.model_validate(saved_basis or record.evaluation_basis)
+    reviewed = next((item for item in source.approved_examples if item.example_id == basis.reviewed_example_id), None)
+    if reviewed is None or Fraction(reviewed.numerator, reviewed.denominator) != Fraction(basis.numerator, basis.denominator):
+        raise studytomy_http_error(409, STALE_VERSION, "The saved answer key no longer matches approved practice.")
 
     data = surface.model_dump()
     components = data["components"]
@@ -125,15 +149,25 @@ async def apply_learning_action(
             "kind": "feedback", "id": "feedback",
             "outcome": "correct" if correct else "incorrect",
             "attempt_id": uuid4(),
-            "text": "These fractions represent the same value." if correct else "Compare the value of each fraction.",
+            "text": reviewed.correct_feedback if correct else reviewed.incorrect_feedback,
         })
-        data["actions"] = ["next_question"] if correct else ["retry_practice"]
+        current_index = next(i for i, item in enumerate(source.approved_examples) if item.example_id == reviewed.example_id)
+        has_next = current_index + 1 < len(source.approved_examples)
+        data["actions"] = (["next_question"] if correct and has_next else []) if correct else ["retry_practice"]
     elif operation.action == "request_hint":
-        components.append({"kind": "hint", "id": "hint", "text": _HINTS[basis.template]})
+        if not source.allow_hints or not reviewed.hint:
+            raise studytomy_http_error(409, "PRACTICE_ACTION_UNAVAILABLE", "A hint is not approved for this example.")
+        components.append({"kind": "hint", "id": "hint", "text": reviewed.hint})
         data["actions"] = ["submit_answer"]
     else:
-        data["components"], next_basis = _next_question(surface, basis, operation.action == "retry_practice")
-        data["actions"] = ["submit_answer", "request_hint"] if source.allow_hints else ["submit_answer"]
+        data["components"], next_basis, _ = _next_question(
+            surface, basis, source, retry=operation.action == "retry_practice",
+        )
+        next_example_id = next_basis.reviewed_example_id if next_basis else None
+        next_example = next((item for item in source.approved_examples if item.example_id == next_example_id), None)
+        data["actions"] = [] if next_example is None else ["submit_answer"]
+        if next_example is not None and source.allow_hints and next_example.hint:
+            data["actions"].append("request_hint")
 
     data["revision"] = surface.revision + 1
     updated = LearningSurface.model_validate(data)
@@ -142,6 +176,9 @@ async def apply_learning_action(
         revision=updated.revision, action=operation.action, answer=answer, assisted=assisted,
         presentation=updated.model_dump(mode="json"),
         evaluation_basis=None if next_basis is None else next_basis.model_dump(mode="json"),
+        retention_policy_id=record.retention_policy_id,
+        retention_category=record.retention_category,
+        retention_expires_at=record.retention_expires_at,
     ))
     await db.commit()
     return updated

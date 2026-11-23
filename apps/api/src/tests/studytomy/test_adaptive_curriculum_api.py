@@ -1,6 +1,8 @@
 from asyncio import Event, gather, wait_for
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -42,6 +44,7 @@ from src.db.studytomy.adaptive_evidence import (
     StudyLearningAttempt,
     StudyLearningEvidence,
 )
+from src.db.studytomy.practice import StudyLearningAction, StudyLearningSurface
 from src.db.studytomy.adaptive_guidance import StudyTutorSession, StudyTutorTurn
 from src.db.studytomy.adaptive_items import StudyItemRevision
 from src.db.studytomy.adaptive_reports import (
@@ -59,6 +62,7 @@ from src.db.studytomy.family import (
 )
 from src.db.studytomy.governance import (
     StudyBusinessEvent,
+    StudyOwnerAssignment,
     StudyOwnerFunction,
     StudyPolicyApproval,
     StudyPolicyKey,
@@ -97,6 +101,7 @@ from src.services.studytomy.assignment_adapter import (
 )
 from src.services.studytomy.entitlements import resolve_active_course_grants
 from src.services.studytomy.idempotency import canonical_request_hash
+from src.services.studytomy.adaptive_curriculum import curriculum_activity_digest
 from src.services.studytomy.outbox import enqueue_delivery
 from src.services.studytomy.policies import POLICY_REQUIRED_RESPONSIBILITIES
 from src.services.studytomy.releases import (
@@ -2123,17 +2128,109 @@ async def _exercise_publication(
         )
     ).scalar_one()
     assignment = await db.get(Assignment, native_task.assignment_id)
+    reviewer_user = User(
+        username=f"genui-reviewer-{uuid4()}",
+        first_name="Synthetic",
+        last_name="Practice Reviewer",
+        email=f"genui-reviewer-{uuid4()}@example.invalid",
+        user_uuid=f"user_{uuid4()}",
+        creation_date=datetime.now(UTC).isoformat(),
+        update_date=datetime.now(UTC).isoformat(),
+    )
+    reviewer_role = Role(
+        name=f"GenUI reviewer {uuid4()}",
+        org_id=org.id,
+        role_type=RoleTypeEnum.TYPE_ORGANIZATION,
+        role_uuid=f"role_{uuid4()}",
+        rights=USER_RIGHTS.model_dump(),
+    )
+    db.add_all([reviewer_user, reviewer_role])
+    await db.flush()
+    db.add(UserOrganization(
+        user_id=reviewer_user.id,
+        org_id=org.id,
+        role_id=reviewer_role.id,
+        creation_date=datetime.now(UTC).isoformat(),
+        update_date=datetime.now(UTC).isoformat(),
+    ))
+    await db.commit()
+    reviewer_assignment = await _seed_active_owner(
+        db, org, reviewer_user.id, education_owner.user_id, StudyOwnerFunction.EDUCATION,
+    )
+    await _seed_staff_scope(
+        db,
+        org.id,
+        reviewer_assignment.id,
+        StudytomyCapabilityName.CONTENT_RELEASE_REVIEW,
+        "course",
+        snapshot["curriculum"]["owner_course_uuid"],
+        education_owner.user_id,
+    )
+    lesson_visual_review = {
+        "curriculum_revision_uuid": revision_uuid,
+        "curriculum_digest": snapshot["content_digest"],
+        "concept_uuid": originals[0]["item"]["concept_uuid"],
+        "course_uuid": snapshot["curriculum"]["owner_course_uuid"],
+        "activity_uuid": practice_lesson.activity_uuid,
+        "activity_version": practice_lesson.current_version,
+        "activity_digest": curriculum_activity_digest(practice_lesson),
+        "rights_reference": snapshot["rights_reference"],
+        "evidence_reference": "synthetic-reviewed-lesson-visual-evidence",
+        "review_reference": "synthetic-independent-lesson-visual-review",
+        "reviewer_user_uuid": reviewer_user.user_uuid,
+        "examples": [
+            {
+                "example_id": "fraction_half",
+                "visual": "fraction_explorer",
+                "parts": 4,
+                "selected": 2,
+                "numerator": 1,
+                "denominator": 2,
+                "prompt": "What fraction of the whole is selected?",
+                "explanation": "Two of four equal parts are selected.",
+                "hint": "Count selected and total parts.",
+                "correct_feedback": "Two of four is one half.",
+                "incorrect_feedback": "Compare selected and total parts.",
+            },
+            {
+                "example_id": "fraction_quarter",
+                "visual": "fraction_explorer",
+                "parts": 4,
+                "selected": 1,
+                "numerator": 1,
+                "denominator": 4,
+                "prompt": "What fraction of the whole is selected?",
+                "explanation": "One of four equal parts is selected.",
+                "hint": "Count the selected part and all equal parts.",
+                "correct_feedback": "One of four is one quarter.",
+                "incorrect_feedback": "Compare the selected part with all four parts.",
+            },
+        ],
+    }
     fixture_values = {
         StudyPolicyKey.D_10: {
             "learner_eligibility": "synthetic",
             "supervision": "synthetic",
             "materials": "synthetic",
             "usage_limits": {"adaptive_guidance": {"max_turns_per_day": 10}},
-            "review": "synthetic",
+            "review": {
+                "lesson_visual_practice": {
+                    "enabled": True,
+                    "provider": "google",
+                    "model": "synthetic-learning-model",
+                    "base_url": None,
+                },
+            },
         },
         StudyPolicyKey.D_08: {
             "assistance": {
                 "adaptive_guidance": {"enabled": True},
+                "lesson_visual_practice": {
+                    "enabled": True,
+                    "visual_exploration": True,
+                    "supported_practice": True,
+                    "hints": True,
+                },
                 "adaptive_diagnostic": {
                     "allow_help": False,
                     "reveal_modes": ["after_close"],
@@ -2228,6 +2325,7 @@ async def _exercise_publication(
                     }
                     for index, item in enumerate(originals, start=1)
                 ],
+                "lesson_visual_practice_reviews": [lesson_visual_review],
             },
         },
     }
@@ -2459,6 +2557,7 @@ async def _exercise_publication(
         education_owner,
         fixture_values[StudyPolicyKey.D_16],
         lesson.activity_uuid,
+        practice_lesson.activity_uuid,
         learner,
         concurrent_posts,
     )
@@ -3088,6 +3187,7 @@ async def _exercise_blueprint(
     owner,
     d16,
     activity_uuid,
+    practice_activity_uuid,
     learner,
     concurrent_posts,
 ):
@@ -3246,6 +3346,7 @@ async def _exercise_blueprint(
         base,
         blueprint["uuid"],
         activity_uuid,
+        practice_activity_uuid,
         learner,
         owner,
         reviewer,
@@ -3331,6 +3432,298 @@ async def _exercise_forward_only_mastery_reconciliation(
     assert stale_repair.json()["detail"]["code"] == "STALE_VERSION"
 
 
+async def _exercise_live_genui(
+    client, db, org, activity_uuid, headers, learner_id, profile_id, privacy_owner_user_id,
+):
+    """Exercise the real GenUI routes and policy resolver with isolated synthetic approvals."""
+    start_path = "/api/v1/ai/stream/start/learning_surface"
+    availability_path = f"/api/v1/ai/activity/{activity_uuid}/learning_surface"
+    action_path = f"{availability_path}/actions"
+    assert not (
+        await db.execute(
+            select(StudyLearningSurface).where(
+                StudyLearningSurface.org_id == org.id,
+                StudyLearningSurface.user_id == learner_id,
+                StudyLearningSurface.activity_uuid == activity_uuid,
+            )
+        )
+    ).scalars().all()
+    evidence_before = (
+        await db.execute(
+            select(StudyLearningEvidence.id).where(
+                StudyLearningEvidence.org_id == org.id,
+                StudyLearningEvidence.learner_profile_id == profile_id,
+            )
+        )
+    ).scalars().all()
+    mastery_rows = (
+        await db.execute(
+            select(StudyConceptMastery)
+            .where(
+                StudyConceptMastery.org_id == org.id,
+                StudyConceptMastery.learner_profile_id == profile_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+    ).scalars().all()
+    assert len(mastery_rows) == 1
+    mastery_snapshot = (
+        mastery_rows[0].eligible_count,
+        mastery_rows[0].success_count,
+        mastery_rows[0].assisted_count,
+        mastery_rows[0].unknown_count,
+        mastery_rows[0].evidence_watermark,
+        mastery_rows[0].version,
+        mastery_rows[0].state,
+        mastery_rows[0].score,
+    )
+    provider = AsyncMock(return_value={"visual": "fraction_explorer"})
+    reserve_credit = AsyncMock(return_value=1)
+    fake_config = SimpleNamespace(ai_config=SimpleNamespace(provider="google", base_url=None))
+    with (
+        patch("src.services.ai.learning_generation.generate", new=provider),
+        patch("src.services.ai.learning_generation.enforce_ai_rate_limit"),
+        patch("src.services.ai.learning_generation.reserve_ai_credit", new=reserve_credit),
+        patch("src.services.ai.learning_generation.refund_ai_credit"),
+        patch("src.services.ai.learning_practice.model_for_tier", return_value="synthetic-learning-model"),
+        patch("config.config.get_learnhouse_config", return_value=fake_config),
+    ):
+        start = {
+            "schema_version": 1,
+            "request_id": str(uuid4()),
+            "activity_uuid": activity_uuid,
+            "mode": "practice",
+        }
+
+        # A current D-16 decision without this exact lesson approval fails before
+        # model invocation, credit reservation, or durable practice writes.
+        savepoint = await db.begin_nested()
+        current_d16 = (await db.execute(select(StudyPolicyVersion).where(
+            StudyPolicyVersion.org_id == org.id,
+            StudyPolicyVersion.policy_key == StudyPolicyKey.D_16.value,
+            StudyPolicyVersion.status == StudyPolicyStatus.APPROVED.value,
+        ))).scalar_one()
+        invalid_body = json.loads(json.dumps(current_d16.body))
+        invalid_body["decision_items"]["review_approvals"]["value"].pop("lesson_visual_practice_reviews")
+        education_owner = (await db.execute(select(StudyOwnerAssignment).where(
+            StudyOwnerAssignment.org_id == org.id,
+            StudyOwnerAssignment.user_id == privacy_owner_user_id,
+            StudyOwnerAssignment.responsibility == StudyOwnerFunction.EDUCATION.value,
+            StudyOwnerAssignment.status == "active",
+        ).order_by(StudyOwnerAssignment.id.desc()).limit(1))).scalar_one()
+        now = datetime.now(UTC)
+        current_d16.status = StudyPolicyStatus.SUPERSEDED.value
+        current_d16.superseded_at = now
+        current_d16.supersession_evidence_reference = "synthetic test replacement"
+        replacement = StudyPolicyVersion(
+            org_id=org.id,
+            policy_key=StudyPolicyKey.D_16.value,
+            scope_kind="organization",
+            scope_uuid=org.org_uuid,
+            version=current_d16.version + 1,
+            status=StudyPolicyStatus.APPROVED.value,
+            body=invalid_body,
+            evidence_reference="synthetic D-16 without visual approval",
+            effective_from=now,
+            effective_to=now + timedelta(days=30),
+            created_by_user_id=privacy_owner_user_id,
+            approved_by_user_id=privacy_owner_user_id,
+            approved_at=now,
+            supersedes_id=current_d16.id,
+        )
+        db.add(replacement)
+        await db.flush()
+        db.add(StudyPolicyApproval(
+            org_id=org.id,
+            policy_version_id=replacement.id,
+            responsibility=StudyOwnerFunction.EDUCATION.value,
+            owner_assignment_id=education_owner.id,
+            approver_user_id=privacy_owner_user_id,
+            evidence_reference="synthetic independent policy approval",
+            rationale="Isolated test fixture only.",
+            approved_at=now,
+        ))
+        await db.flush()
+        missing_approval = await client.post(start_path, json=start, headers=headers)
+        assert missing_approval.status_code == 409, missing_approval.text
+        assert missing_approval.json()["detail"]["code"] == "POLICY_NOT_APPROVED"
+        provider.assert_not_awaited()
+        reserve_credit.assert_not_awaited()
+        await savepoint.rollback()
+
+        # Consent withdrawal and an organization AI disable are rechecked on each
+        # start, and neither denial consumes credits or creates a saved surface.
+        consent = (await db.execute(select(StudyConsentEvent).where(
+            StudyConsentEvent.org_id == org.id,
+            StudyConsentEvent.learner_profile_id == profile_id,
+            StudyConsentEvent.purpose_code == "ai_assistance",
+            StudyConsentEvent.choice == "accept",
+        ))).scalar_one()
+        savepoint = await db.begin_nested()
+        db.add(StudyConsentEvent(
+            org_id=org.id,
+            learner_profile_id=profile_id,
+            actor_user_id=learner_id,
+            subject_user_id=learner_id,
+            purpose_code="ai_assistance",
+            choice="withdraw",
+            withdraws_event_uuid=consent.event_uuid,
+            notice_version=consent.notice_version,
+            scope_codes=["lesson_visual_practice"],
+            policy_version_ids=consent.policy_version_ids,
+            effective_at=datetime.now(UTC),
+        ))
+        await db.flush()
+        withdrawn = await client.post(start_path, json=start | {"request_id": str(uuid4())}, headers=headers)
+        assert withdrawn.status_code == 403, withdrawn.text
+        provider.assert_not_awaited()
+        reserve_credit.assert_not_awaited()
+        await savepoint.rollback()
+
+        config = (await db.execute(select(OrganizationConfig).where(
+            OrganizationConfig.org_id == org.id,
+        ))).scalar_one()
+        original_config = config.config
+        savepoint = await db.begin_nested()
+        config.config = (original_config or {}) | {
+            "features": (original_config or {}).get("features", {}) | {"ai": {"enabled": False}},
+        }
+        await db.flush()
+        disabled = await client.post(start_path, json=start | {"request_id": str(uuid4())}, headers=headers)
+        assert disabled.status_code == 403, disabled.text
+        assert disabled.json()["detail"]["code"] == "PRACTICE_AI_DISABLED"
+        provider.assert_not_awaited()
+        reserve_credit.assert_not_awaited()
+        await savepoint.rollback()
+
+        available = await client.get(availability_path, headers=headers)
+        assert available.status_code == 200, available.text
+        assert available.headers["cache-control"] == "no-store"
+        assert available.json() == {"available": True, "surface": None}
+
+        started = await client.post(start_path, json=start, headers=headers)
+        assert started.status_code == 200, started.text
+        assert started.headers["cache-control"] == "no-store"
+        event = json.loads(started.text.removeprefix("data: ").strip())
+        assert event["type"] == "learning_surface"
+        surface = event["surface"]
+        assert surface["mode"] == "practice"
+        assert surface["components"][1] == {
+            "kind": "fraction_explorer", "id": "visual", "parts": 4, "selected": 2,
+        }
+        assert surface["components"][2]["question"]["prompt"] == "What fraction of the whole is selected?"
+        assert "evaluation_basis" not in started.text
+        provider.assert_awaited_once()
+        reserve_credit.assert_awaited_once()
+
+        async def post_action(kind, revision, **extra):
+            return await client.post(
+                action_path,
+                headers=headers,
+                json={
+                    "action": kind,
+                    "surface_id": surface["surface_id"],
+                    "request_id": str(uuid4()),
+                    "expected_revision": revision,
+                    **extra,
+                },
+            )
+
+        hinted = await post_action("request_hint", 1)
+        assert hinted.status_code == 200, hinted.text
+        assert any(
+            item.get("text") == "Count selected and total parts."
+            for item in hinted.json()["components"]
+        )
+        answer_request = {
+            "action": "submit_answer",
+            "surface_id": surface["surface_id"],
+            "request_id": str(uuid4()),
+            "expected_revision": 2,
+            "answer": "2/4",
+        }
+        answered = await client.post(action_path, json=answer_request, headers=headers)
+        assert answered.status_code == 200, answered.text
+        feedback = next(item for item in answered.json()["components"] if item["kind"] == "feedback")
+        assert (feedback["outcome"], feedback["text"]) == ("correct", "Two of four is one half.")
+        replay = await client.post(action_path, json=answer_request, headers=headers)
+        assert replay.status_code == 200 and replay.json() == answered.json()
+        changed_replay = await client.post(
+            action_path, json=answer_request | {"answer": "3/4"}, headers=headers,
+        )
+        assert changed_replay.status_code == 409
+        assert changed_replay.json()["detail"]["code"] == "IDEMPOTENCY_CONFLICT"
+
+        advanced = await post_action("next_question", 3)
+        assert advanced.status_code == 200, advanced.text
+        assert any(
+            item.get("text") == "One of four equal parts is selected."
+            for item in advanced.json()["components"]
+        )
+        recovered = await client.get(
+            f"{availability_path}/{surface['surface_id']}", headers=headers,
+        )
+        assert recovered.status_code == 200 and recovered.json() == advanced.json()
+        reopened = await client.get(availability_path, headers=headers)
+        assert reopened.json() == {"available": True, "surface": advanced.json()}
+
+    stored_surfaces = (
+        await db.execute(
+            select(StudyLearningSurface).where(
+                StudyLearningSurface.org_id == org.id,
+                StudyLearningSurface.user_id == learner_id,
+                StudyLearningSurface.activity_uuid == activity_uuid,
+            )
+        )
+    ).scalars().all()
+    assert len(stored_surfaces) == 1
+    stored = stored_surfaces[0]
+    assert stored.retention_policy_id is not None
+    assert stored.retention_category == "lesson_visual_practice"
+    assert stored.retention_expires_at is not None
+    actions = (
+        await db.execute(
+            select(StudyLearningAction).where(
+                StudyLearningAction.surface_uuid == stored.surface_uuid,
+            )
+        )
+    ).scalars().all()
+    assert {item.action for item in actions} == {"request_hint", "submit_answer", "next_question"}
+    assert len(actions) == 3
+    assert all(item.retention_policy_id == stored.retention_policy_id for item in actions)
+    evidence_after = (
+        await db.execute(
+            select(StudyLearningEvidence.id).where(
+                StudyLearningEvidence.org_id == org.id,
+                StudyLearningEvidence.learner_profile_id == profile_id,
+            )
+        )
+    ).scalars().all()
+    assert evidence_after == evidence_before
+    mastery_after = (
+        await db.execute(
+            select(StudyConceptMastery)
+            .where(
+                StudyConceptMastery.org_id == org.id,
+                StudyConceptMastery.learner_profile_id == profile_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+    ).scalars().all()
+    assert len(mastery_after) == 1
+    assert (
+        mastery_after[0].eligible_count,
+        mastery_after[0].success_count,
+        mastery_after[0].assisted_count,
+        mastery_after[0].unknown_count,
+        mastery_after[0].evidence_watermark,
+        mastery_after[0].version,
+        mastery_after[0].state,
+        mastery_after[0].score,
+    ) == mastery_snapshot
+
+
+
 async def _exercise_learner_attempt(
     client,
     db,
@@ -3338,6 +3731,7 @@ async def _exercise_learner_attempt(
     base,
     diagnostic_uuid,
     activity_uuid,
+    practice_activity_uuid,
     learner,
     owner,
     headers,
@@ -3364,8 +3758,10 @@ async def _exercise_learner_attempt(
     ).scalar_one_or_none()
     if config is None:
         config = OrganizationConfig(org_id=org.id)
-    config.config = config.config | {
-        "admin_toggles": {"studytomy_adaptive_enabled": True}
+    config_values = config.config or {}
+    config.config = config_values | {
+        "admin_toggles": {"studytomy_adaptive_enabled": True},
+        "features": (config_values.get("features") or {}) | {"ai": {"enabled": True}},
     }
     profile = StudyLearnerProfile(
         org_id=org.id,
@@ -3395,7 +3791,7 @@ async def _exercise_learner_attempt(
             "parent_report_scope": ["adaptive_report_summary", "adaptive_report_email"],
             "information_uses": {
                 "progress_report_notifications": ["email"],
-                "ai_assistance": ["adaptive_guidance"],
+                "ai_assistance": ["adaptive_guidance", "lesson_visual_practice"],
                 "learning_terms": [
                     "course_release",
                     "adaptive_diagnostics",
@@ -3423,7 +3819,21 @@ async def _exercise_learner_attempt(
                 "progress_report_notifications": "authenticated_link_only"
             },
             "retention": {
-                "adaptive_guidance": {"result_hours": 2, "feedback_notes": True}
+                "adaptive_guidance": {"result_hours": 2, "feedback_notes": True},
+                "lesson_visual_practice": {
+                    "retention_hours": 24,
+                    "retention_category": "lesson_visual_practice",
+                    "hold_reason_codes": ["LEGAL_HOLD"],
+                    "hold_release_reason_codes": ["REVIEW_COMPLETE"],
+                    "removal_reason_codes": ["LEARNER_REQUEST"],
+                    "max_hold_review_days": 30,
+                },
+            },
+            "removal": {
+                "lesson_visual_practice": {
+                    "automatic_expiry_enabled": True,
+                    "authorized_removal_enabled": True,
+                },
             },
         },
         StudyPolicyKey.D_18: {
@@ -3535,7 +3945,7 @@ async def _exercise_learner_attempt(
             purpose_code="ai_assistance",
             choice="accept",
             notice_version="fixture-ai-v1",
-            scope_codes=["adaptive_guidance"],
+            scope_codes=["adaptive_guidance", "lesson_visual_practice"],
             policy_version_ids=[
                 policies[key] for key in ("D-01", "D-03", "D-12", "D-10")
             ],
@@ -4005,6 +4415,17 @@ async def _exercise_learner_attempt(
     assert page.json()["evidence_watermark"] == 1
     assert page.json()["concepts"][0]["independent_family_count"] == 1
     assert "private_answer" not in page.text and "37.42" not in page.text
+    refreshed_recommendations = await client.get(
+        f"{base}/me/recommendations",
+        params={"activity_uuid": activity_uuid},
+        headers=headers,
+    )
+    assert refreshed_recommendations.status_code == 200, refreshed_recommendations.text
+    assert refreshed_recommendations.json(), refreshed_recommendations.text
+    await _exercise_live_genui(
+        client, db, org, practice_activity_uuid, headers, learner.id, profile.id,
+        owner.user_id,
+    )
     filtered = await client.get(
         mastery_path,
         params=mastery_params | {"learner_uuid": str(uuid4())},

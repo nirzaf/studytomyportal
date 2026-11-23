@@ -116,6 +116,9 @@ def startup_app(app: FastAPI) -> Callable:
         )
 
         start_report_delivery()
+        from src.services.studytomy.learning_practice_retention import start_scheduler as start_practice_retention
+
+        start_practice_retention()
         # Every two days, re-run every content backfill (HLS, search index,
         # video chapters) for whatever slipped through.
         from src.services.backfill.scheduler import start_scheduler as start_backfill
@@ -152,6 +155,9 @@ def shutdown_app(app: FastAPI) -> Callable:
         )
 
         await stop_report_delivery()
+        from src.services.studytomy.learning_practice_retention import stop_scheduler as stop_practice_retention
+
+        await stop_practice_retention()
         # Stop the in-app HLS consumer and wait for in-flight transcodes.
         from src.services.utils.hls_jobs import stop_consumer
         await stop_consumer()
