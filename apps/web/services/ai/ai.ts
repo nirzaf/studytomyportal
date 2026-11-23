@@ -2,13 +2,21 @@ import { getAPIUrl } from '@services/config/config'
 import { RequestBodyWithAuthHeader, detailMessage } from '@services/utils/ts/requests'
 import type { CopilotSource } from '@/lib/copilot/sources'
 import {
-  isLearningSurface, readLearningSurface, type LearningActionRequest, type LearningSurfaceRequest,
+  isLearningSurface, readLearningSurface, type LearningActionRequest, type LearningSurface,
+  type LearningSurfaceRequest,
 } from './learningSurface'
 
 export class LearningRequestError extends Error {
   constructor(readonly status: number, readonly code?: string) {
     super('Lesson practice request failed')
   }
+}
+
+export type ActivityLearningAvailability = {
+  available: boolean
+  surface: LearningSurface | null
+  allow_explore: boolean
+  allow_practice: boolean
 }
 
 function learningRequestError(response: Response, result: unknown): LearningRequestError {
@@ -20,7 +28,7 @@ function learningRequestError(response: Response, result: unknown): LearningRequ
 
 export async function getActivityLearningAvailability(
   activityUuid: string, accessToken: string, signal: AbortSignal,
-) {
+): Promise<ActivityLearningAvailability> {
   const response = await fetch(
     `${getAPIUrl()}ai/activity/${encodeURIComponent(activityUuid)}/learning_surface`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -30,13 +38,34 @@ export async function getActivityLearningAvailability(
   )
   const result: unknown = await response.json().catch(() => null)
   if (!response.ok) throw learningRequestError(response, result)
-  if (!result || typeof result !== 'object' || !('available' in result) || typeof result.available !== 'boolean' ||
-    !('surface' in result) || Object.keys(result).length !== 2 ||
-    (result.surface !== null && (!result.available || !isLearningSurface(result.surface) ||
-      result.surface.activity_id !== activityUuid))) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
     throw new Error('Invalid lesson practice availability')
   }
-  return { available: result.available, surface: result.surface }
+  const payload = result as Record<string, unknown>
+  if (typeof payload.available !== 'boolean' || !('surface' in payload)) {
+    throw new Error('Invalid lesson practice availability')
+  }
+  const keys = Object.keys(payload)
+  const legacy = keys.length === 2 && keys.every((key) => ['available', 'surface'].includes(key))
+  const extended = keys.length === 4 && keys.every((key) =>
+    ['available', 'surface', 'allow_explore', 'allow_practice'].includes(key))
+  if (!legacy && (!extended || typeof payload.allow_explore !== 'boolean' || typeof payload.allow_practice !== 'boolean')) {
+    throw new Error('Invalid lesson practice availability')
+  }
+  const allow_explore = legacy ? false : payload.allow_explore as boolean
+  const allow_practice = legacy ? false : payload.allow_practice as boolean
+  if ((!legacy && payload.available !== (allow_explore || allow_practice)) ||
+    (payload.surface !== null && (!payload.available || !isLearningSurface(payload.surface) ||
+      payload.surface.activity_id !== activityUuid ||
+      (!legacy && (payload.surface.mode === 'explore' ? !allow_explore : !allow_practice))))) {
+    throw new Error('Invalid lesson practice availability')
+  }
+  return {
+    available: payload.available,
+    surface: payload.surface as ActivityLearningAvailability['surface'],
+    allow_explore,
+    allow_practice,
+  }
 }
 
 export async function startActivityLearningSurface(

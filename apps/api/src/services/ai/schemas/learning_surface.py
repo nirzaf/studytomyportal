@@ -166,6 +166,8 @@ class LearningSurface(_Contract):
 class LearningAvailability(_Contract):
     available: bool
     surface: LearningSurface | None = None
+    allow_explore: bool = False
+    allow_practice: bool = False
 
 
 class _ActionRequest(_Contract):

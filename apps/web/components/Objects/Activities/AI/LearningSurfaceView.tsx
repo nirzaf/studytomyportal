@@ -18,14 +18,16 @@ function reducedFraction(numerator: number, denominator: number) {
 type FractionVisual = Extract<LearningComponent, { kind: 'fraction_explorer' }>
 type LineVisual = Extract<LearningComponent, { kind: 'number_line' }>
 
-function FractionExplorer({ visual }: { visual: FractionVisual }) {
+function FractionExplorer({ visual, interactive }: { visual: FractionVisual; interactive: boolean }) {
   const { t } = useTranslation()
   const [parts, setParts] = useState(visual.parts)
   const [selected, setSelected] = useState(visual.selected)
-  const [num, denom] = reducedFraction(selected, parts)
-  const alreadySimplest = denom === parts
+  const shownParts = interactive ? parts : visual.parts
+  const shownSelected = interactive ? selected : visual.selected
+  const [num, denom] = reducedFraction(shownSelected, shownParts)
+  const alreadySimplest = denom === shownParts
   const equivalent = alreadySimplest ? `${num * 2}/${denom * 2}` : `${num}/${denom}`
-  const fraction = `${selected}/${parts}`
+  const fraction = `${shownSelected}/${shownParts}`
   function reset() {
     setParts(visual.parts)
     setSelected(visual.selected)
@@ -35,10 +37,10 @@ function FractionExplorer({ visual }: { visual: FractionVisual }) {
     <fieldset className="min-w-0 space-y-3">
       <legend className="font-semibold text-white">{t('ai.learning_surface.fraction_explorer')}</legend>
       <div aria-hidden="true" className="flex h-9 overflow-hidden rounded-md border border-white/40 bg-gray-950">
-        {Array.from({ length: parts }, (_, index) => (
+        {Array.from({ length: shownParts }, (_, index) => (
           <div
             key={index}
-            className={`min-w-0 flex-1 border-e border-white/50 last:border-e-0 ${index < selected ? 'bg-violet-300' : ''}`}
+            className={`min-w-0 flex-1 border-e border-white/50 last:border-e-0 ${index < shownSelected ? 'bg-violet-300' : ''}`}
           />
         ))}
       </div>
@@ -47,7 +49,7 @@ function FractionExplorer({ visual }: { visual: FractionVisual }) {
           fraction, equivalent, selected, parts, interpolation: { escapeValue: false },
         })}
       </p>
-      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+      {interactive && <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="grid gap-1 text-white">
           {t('ai.learning_surface.parts')}
           <select
@@ -68,15 +70,15 @@ function FractionExplorer({ visual }: { visual: FractionVisual }) {
             {Array.from({ length: parts + 1 }, (_, index) => <option key={index}>{index}</option>)}
           </select>
         </label>
-      </div>
-      <button type="button" className={button} onClick={reset}>
+      </div>}
+      {interactive && <button type="button" className={button} onClick={reset}>
         {t('ai.learning_surface.reset_visual')}
-      </button>
+      </button>}
     </fieldset>
   )
 }
 
-function NumberLine({ visual }: { visual: LineVisual }) {
+function NumberLine({ visual, interactive }: { visual: LineVisual; interactive: boolean }) {
   const { t } = useTranslation()
   const id = useId()
   const steps = (visual.last_mark - visual.first_mark) * visual.divisions_per_unit
@@ -96,18 +98,18 @@ function NumberLine({ visual }: { visual: LineVisual }) {
               className={`absolute top-0 border-s border-white/55 ${index % visual.divisions_per_unit === 0 ? 'h-3' : 'h-1.5'}`}
             />
           ))}
-          <span
+          {interactive && <span
             style={{ left: `${position * 100 / steps}%` }}
             className="absolute top-0 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-gray-950 bg-violet-300"
-          />
+          />}
         </div>
         <div className="flex justify-between pt-3 text-white">
           <span>{visual.first_mark}</span>
           <span>{visual.last_mark}</span>
         </div>
       </div>
-      <label htmlFor={id} className="block text-white">{t('ai.learning_surface.move_marker')}</label>
-      <input
+      {interactive && <label htmlFor={id} className="block text-white">{t('ai.learning_surface.move_marker')}</label>}
+      {interactive && <input
         dir="ltr"
         id={id}
         type="range"
@@ -118,13 +120,13 @@ function NumberLine({ visual }: { visual: LineVisual }) {
         value={position}
         onChange={(event) => setPosition(event.currentTarget.valueAsNumber)}
         className={`block min-h-11 w-full accent-violet-300 ${focus}`}
-      />
-      <output htmlFor={id} className="block text-white">
+      />}
+      {interactive && <output htmlFor={id} className="block text-white">
         {t('ai.learning_surface.position', { value, interpolation: { escapeValue: false } })}
-      </output>
-      <button type="button" className={button} onClick={() => setPosition(0)}>
+      </output>}
+      {interactive && <button type="button" className={button} onClick={() => setPosition(0)}>
         {t('ai.learning_surface.reset_visual')}
-      </button>
+      </button>}
     </fieldset>
   )
 }
@@ -214,9 +216,9 @@ export default function LearningSurfaceView({
           case 'explanation':
             return <p key={item.id} className="wrap-break-word whitespace-pre-wrap text-white">{item.text}</p>
           case 'fraction_explorer':
-            return <FractionExplorer key={question?.question.id ?? item.id} visual={item} />
+            return <FractionExplorer key={question?.question.id ?? item.id} visual={item} interactive={surface.mode === 'explore'} />
           case 'number_line':
-            return <NumberLine key={question?.question.id ?? item.id} visual={item} />
+            return <NumberLine key={question?.question.id ?? item.id} visual={item} interactive={surface.mode === 'explore'} />
           case 'question':
             return feedback || !actions.includes('submit_answer')
               ? <p key={item.id} className="wrap-break-word font-semibold text-white">{item.question.prompt}</p>

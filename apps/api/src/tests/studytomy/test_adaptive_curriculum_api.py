@@ -3599,7 +3599,9 @@ async def _exercise_live_genui(
         available = await client.get(availability_path, headers=headers)
         assert available.status_code == 200, available.text
         assert available.headers["cache-control"] == "no-store"
-        assert available.json() == {"available": True, "surface": None}
+        assert available.json() == {
+            "available": True, "surface": None, "allow_explore": True, "allow_practice": True,
+        }
 
         started = await client.post(start_path, json=start, headers=headers)
         assert started.status_code == 200, started.text
@@ -3665,7 +3667,9 @@ async def _exercise_live_genui(
         )
         assert recovered.status_code == 200 and recovered.json() == advanced.json()
         reopened = await client.get(availability_path, headers=headers)
-        assert reopened.json() == {"available": True, "surface": advanced.json()}
+        assert reopened.json() == {
+            "available": True, "surface": advanced.json(), "allow_explore": True, "allow_practice": True,
+        }
 
     stored_surfaces = (
         await db.execute(

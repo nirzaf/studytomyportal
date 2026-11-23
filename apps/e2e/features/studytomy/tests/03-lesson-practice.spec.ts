@@ -53,7 +53,7 @@ test('lesson practice preserves a draft, recovers saved feedback, and falls back
     availabilityReads++
     return route.fulfill(policyDenied
       ? { status: 409, json: { detail: { code: 'POLICY_NOT_APPROVED' } } }
-      : { json: { available: true, surface: saved } })
+      : { json: { available: true, surface: saved, allow_explore: false, allow_practice: true } })
   })
   await page.route('**/ai/stream/start/learning_surface', async (route) => {
     generationCalls++
@@ -117,6 +117,7 @@ test('lesson practice preserves a draft, recovers saved feedback, and falls back
   const practice = page.getByRole('region', { name: 'Lesson visuals and practice' })
   const start = practice.getByRole('button', { name: 'Practise this' })
   await expect(start).toBeVisible()
+  await expect(practice.getByRole('button', { name: 'Show me visually' })).toHaveCount(0)
   await start.click()
   await expect.poll(() => generationCalls).toBe(1)
   const cancel = practice.getByRole('button', { name: 'Cancel request' })

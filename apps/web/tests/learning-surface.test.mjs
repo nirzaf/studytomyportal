@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import sample from '../../api/src/tests/fixtures/learning_surface_v1.json'
+import { getActivityLearningAvailability } from '../services/ai/ai'
 import { isLearningSurface, readLearningSurface } from '../services/ai/learningSurface'
 
 test('reads the API fixture and accepts the alternate visual catalogue entry', () => {
@@ -70,5 +71,49 @@ test('rejects unsupported versions, actions, markup, and hidden answer fields', 
     const value = structuredClone(sample)
     Object.assign(value.components[index], changes)
     expect(isLearningSurface(value)).toBe(false)
+  }
+})
+
+test('validates per-mode availability and accepts the legacy response with modes disabled', async () => {
+  const originalFetch = globalThis.fetch
+  let body = { available: true, surface: null, allow_explore: true, allow_practice: false }
+  globalThis.fetch = async () => new Response(JSON.stringify(body), { status: 200 })
+  try {
+    const exploreOnly = await getActivityLearningAvailability(sample.activity_id, 'test-token', new AbortController().signal)
+    expect(exploreOnly.allow_explore).toBe(true)
+    expect(exploreOnly.allow_practice).toBe(false)
+
+    body = { available: true, surface: null, allow_explore: false, allow_practice: true }
+    const practiceOnly = await getActivityLearningAvailability(sample.activity_id, 'test-token', new AbortController().signal)
+    expect(practiceOnly.allow_explore).toBe(false)
+    expect(practiceOnly.allow_practice).toBe(true)
+
+    body = { available: false, surface: null, allow_explore: false, allow_practice: false }
+    const disabled = await getActivityLearningAvailability(sample.activity_id, 'test-token', new AbortController().signal)
+    expect(disabled.available).toBe(false)
+
+    body = { available: true, surface: null }
+    const legacy = await getActivityLearningAvailability(sample.activity_id, 'test-token', new AbortController().signal)
+    expect(legacy.available).toBe(true)
+    expect(legacy.allow_explore).toBe(false)
+    expect(legacy.allow_practice).toBe(false)
+
+    body = { available: true, surface: sample }
+    const legacySurface = await getActivityLearningAvailability(sample.activity_id, 'test-token', new AbortController().signal)
+    expect(legacySurface.surface).toEqual(sample)
+    expect(legacySurface.allow_explore).toBe(false)
+    expect(legacySurface.allow_practice).toBe(false)
+
+    body = { available: true, surface: null, allow_explore: false, allow_practice: false }
+    await expect(getActivityLearningAvailability(sample.activity_id, 'test-token', new AbortController().signal))
+      .rejects.toThrow('Invalid lesson practice availability')
+
+    body = {
+      available: true, surface: sample, allow_explore: true, allow_practice: false,
+    }
+    await expect(getActivityLearningAvailability(sample.activity_id, 'test-token', new AbortController().signal))
+      .rejects.toThrow('Invalid lesson practice availability')
+  } finally {
+    globalThis.fetch = originalFetch
   }
 })

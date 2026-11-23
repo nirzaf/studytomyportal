@@ -47,6 +47,7 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
     other_id = None
     other_org_id = None
     retention_policy_id = None
+    mode_permissions = {"allow_explore": False, "allow_practice": True}
     try:
         async with rows.session_factory() as db, db.begin():
             owner = PublicUser.model_validate(await db.get(User, rows.user_id))
@@ -144,7 +145,9 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
             )
             return practice.PracticePermission(
                 frozenset({"fraction_explorer"}), allow_hints=True, approved_examples=(example,),
-                allow_practice=True, approved_model="fake", retention_policy_id=retention_policy_id,
+                allow_practice=mode_permissions["allow_practice"],
+                allow_explore=mode_permissions["allow_explore"],
+                approved_model="fake", retention_policy_id=retention_policy_id,
                 retention_category="lesson_visual_practice", retention_hours=1,
             )
 
@@ -191,6 +194,27 @@ async def test_practice_recovery_rechecks_source_and_owner(postgres_test_rows, m
             assert (await db.execute(select(AssignmentUserSubmission).where(
                 AssignmentUserSubmission.user_id == owner.id,
             ))).scalars().all() == []
+
+        # A saved mode remains subject to current permission on every read and action.
+        mode_permissions["allow_practice"] = False
+        async with rows.session_factory() as db:
+            with pytest.raises(HTTPException) as revoked_mode:
+                await practice.recover_learning_surface(request, db, owner, activity_uuid, surface.surface_id)
+            assert revoked_mode.value.status_code == 409
+            assert revoked_mode.value.detail["code"] == "PRACTICE_ACTION_UNAVAILABLE"
+            with pytest.raises(HTTPException) as denied_action:
+                await actions.apply_learning_action(request, db, owner, activity_uuid, PracticeAction(
+                    action="request_hint", surface_id=surface.surface_id,
+                    request_id=uuid4(), expected_revision=1,
+                ))
+            assert denied_action.value.detail["code"] == "PRACTICE_ACTION_UNAVAILABLE"
+            assert not (await db.execute(
+                select(StudyLearningAction).where(StudyLearningAction.surface_uuid == str(surface.surface_id))
+            )).scalars().all()
+            unavailable = await practice.get_learning_availability(request, db, owner, activity_uuid)
+            assert unavailable.available is False and unavailable.surface is None
+            assert unavailable.allow_explore is False and unavailable.allow_practice is False
+        mode_permissions["allow_practice"] = True
 
         expired_surface_uuid = str(uuid4())
         expired_at = datetime.now(UTC) - timedelta(days=1)
@@ -367,7 +391,9 @@ async def test_fake_provider_stream_and_replay(postgres_test_rows, monkeypatch):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             availability_path = f"/activity/{source.activity_uuid}/learning_surface"
             empty = await client.get(availability_path)
-            assert empty.json() == {"available": True, "surface": None}
+            assert empty.json() == {
+                "available": True, "surface": None, "allow_explore": True, "allow_practice": True,
+            }
             assert empty.headers["cache-control"] == "no-store"
             response = await client.post(path, json=first)
             assert response.status_code == 200, response.text
@@ -418,7 +444,9 @@ async def test_fake_provider_stream_and_replay(postgres_test_rows, monkeypatch):
             latest = await client.get(f"/activity/{source.activity_uuid}/learning_surface/{surface_id}")
             assert latest.json() == answer.json()
             reopened = await client.get(availability_path)
-            assert reopened.json() == {"available": True, "surface": answer.json()}
+            assert reopened.json() == {
+                "available": True, "surface": answer.json(), "allow_explore": True, "allow_practice": True,
+            }
             replay_start = await client.post(path, json=first)
             assert replay_start.content == response.content
             advanced = await client.post(action_path, json=operation("next_question", surface_id, 3))

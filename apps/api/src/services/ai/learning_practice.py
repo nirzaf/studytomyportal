@@ -636,7 +636,12 @@ async def get_learning_availability(
     request: Request, db: AsyncSession, viewer: PublicUser, activity_uuid: str,
 ) -> LearningAvailability:
     source = await _authorize_source(request, db, viewer, activity_uuid)
-    if not source.approved_visuals.intersection({"fraction_explorer", "number_line"}):
+    allow_explore = source.allow_explore and bool(
+        source.approved_visuals.intersection({"fraction_explorer", "number_line"})
+    )
+    allow_practice = source.allow_practice and bool(source.approved_examples)
+    available = allow_explore or allow_practice
+    if not available:
         return LearningAvailability(available=False)
     records = (await db.execute(
         select(StudyLearningSurface).where(
@@ -652,7 +657,9 @@ async def get_learning_availability(
         .limit(1).with_for_update()
     )).scalar_one_or_none()
     if records is None:
-        return LearningAvailability(available=True)
+        return LearningAvailability(
+            available=available, allow_explore=allow_explore, allow_practice=allow_practice,
+        )
     latest = await _latest_action(db, records.surface_uuid)
     try:
         surface = _project_surface(source, records, latest)
@@ -660,8 +667,13 @@ async def get_learning_availability(
         if exc.status_code != 409:
             raise
         # A previously issued visual can lose approval while another remains available.
-        return LearningAvailability(available=True)
-    return LearningAvailability(available=True, surface=surface)
+        return LearningAvailability(
+            available=available, allow_explore=allow_explore, allow_practice=allow_practice,
+        )
+    return LearningAvailability(
+        available=available, surface=surface,
+        allow_explore=allow_explore, allow_practice=allow_practice,
+    )
 
 
 async def _owned_surface(
@@ -699,9 +711,14 @@ async def _latest_action(db: AsyncSession, surface_uuid: str) -> StudyLearningAc
 def _project_surface(
     source: PracticeSource, record: StudyLearningSurface, action: StudyLearningAction | None,
 ) -> LearningSurface:
+    surface = LearningSurface.model_validate(record.presentation if action is None else action.presentation)
+    mode_allowed = source.allow_explore if surface.mode == "explore" else source.allow_practice
+    if not mode_allowed:
+        raise studytomy_http_error(
+            409, "PRACTICE_ACTION_UNAVAILABLE", "This lesson mode is not currently approved.",
+        )
     if record.source_identity != source.identity:
         raise _stale_practice()
-    surface = LearningSurface.model_validate(record.presentation if action is None else action.presentation)
     if not any(item.kind in source.approved_visuals for item in surface.components):
         raise studytomy_http_error(409, POLICY_NOT_APPROVED, "This lesson visual is not approved.")
     if "request_hint" in surface.actions and not source.allow_hints:

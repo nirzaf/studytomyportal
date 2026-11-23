@@ -25,6 +25,7 @@ from src.services.studytomy.learning_practice_retention import (
 from src.services.ai.schemas.learning_surface import (
     ActionRequest,
     LearningPresentation,
+    LearningAvailability,
     LearningSurface,
     StartLearningSurface,
 )
@@ -266,6 +267,7 @@ def test_recovery_rejects_a_visual_removed_from_the_current_approval():
         org_id=1,
         identity=surface.source_identity,
         approved_visuals=frozenset({"number_line"}),
+        allow_practice=True,
     )
     record = SimpleNamespace(
         source_identity=surface.source_identity,
@@ -291,6 +293,7 @@ def test_recovery_removes_saved_hints_when_current_permission_is_revoked():
         identity=surface.source_identity,
         approved_visuals=frozenset({"fraction_explorer"}),
         allow_hints=False,
+        allow_practice=True,
     )
     record = SimpleNamespace(
         source_identity=surface.source_identity,
@@ -301,6 +304,38 @@ def test_recovery_removes_saved_hints_when_current_permission_is_revoked():
 
     assert "request_hint" not in recovered.actions
     assert all(component.kind != "hint" for component in recovered.components)
+
+
+def test_recovery_denies_a_mode_removed_from_current_authority():
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "learning_surface_v1.json"
+    surface = LearningSurface.model_validate(json.loads(fixture.read_text(encoding="utf-8")))
+    source = PracticeSource(
+        activity_uuid=surface.activity_id,
+        course_uuid="course_synthetic",
+        org_id=1,
+        identity=surface.source_identity,
+        approved_visuals=frozenset({"fraction_explorer"}),
+        allow_practice=False,
+    )
+    record = SimpleNamespace(
+        source_identity=surface.source_identity,
+        presentation=surface.model_dump(mode="json"),
+    )
+
+    with pytest.raises(HTTPException) as denied:
+        _project_surface(source, record, None)
+
+    assert denied.value.status_code == 409
+    assert denied.value.detail["code"] == "PRACTICE_ACTION_UNAVAILABLE"
+
+
+def test_learning_availability_defaults_legacy_modes_to_disabled():
+    assert LearningAvailability.model_validate({"available": False}).model_dump() == {
+        "available": False,
+        "surface": None,
+        "allow_explore": False,
+        "allow_practice": False,
+    }
 
 
 async def test_unapproved_practice_never_calls_provider_or_reserves_credit(monkeypatch):

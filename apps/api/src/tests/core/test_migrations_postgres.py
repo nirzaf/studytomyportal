@@ -73,7 +73,7 @@ def test_empty_schema_bootstrap_serializes_and_installs_integrity_guards():
             reports = list(workers.map(lambda _: ensure_schema(database_url), range(2)))
 
         expected_heads = head_revisions()
-        assert expected_heads == ["f04d9c6a31b8"]
+        assert expected_heads == ["2d6a1b7c9e40"]
         assert all(report.after == expected_heads for report in reports)
         assert {report.state for report in reports} == {"empty", "stamped"}
 
@@ -117,6 +117,11 @@ def test_empty_schema_bootstrap_serializes_and_installs_integrity_guards():
                     "ck_st_course_release_digest",
                     "ck_st_evidence_file_sha256_length",
                 } <= constraints
+
+                retention_columns = {
+                    column["name"] for column in inspect(connection).get_columns("st_learning_surface")
+                }
+                assert {"retention_policy_id", "retention_category", "retention_expires_at"} <= retention_columns
 
                 extension_version = connection.execute(text(
                     "SELECT extversion FROM pg_extension WHERE extname = 'vector'"
@@ -171,6 +176,19 @@ def test_interrupted_upgrade_rolls_back_ddl_and_preserves_revision():
     with _isolated_database() as (database_url, database):
         initial = ensure_schema(database_url)
         assert initial.after == head_revisions()
+        current_head = initial.after[0]
+        immediate_parent = migrations.ScriptDirectory.from_config(
+            migrations.alembic_config()
+        ).get_revision(current_head).down_revision
+        assert immediate_parent == "f04d9c6a31b8"
+
+        engine = create_engine(database_url)
+        try:
+            with engine.begin() as connection:
+                command.downgrade(migrations.alembic_config(connection), immediate_parent)
+                assert migrations.current_revisions(connection) == [immediate_parent]
+        finally:
+            engine.dispose()
 
         def interrupted_upgrade(config, target):
             connection = config.attributes["connection"]
@@ -185,12 +203,14 @@ def test_interrupted_upgrade_rolls_back_ddl_and_preserves_revision():
         engine = create_engine(database_url)
         try:
             with engine.connect() as connection:
-                assert migrations.current_revisions(connection) == head_revisions()
+                assert migrations.current_revisions(connection) == [immediate_parent]
                 probe = connection.execute(
                     text("SELECT to_regclass(:qualified_name)"),
                     {"qualified_name": "aud19_interrupted_migration_probe"},
                 ).scalar_one()
                 assert probe is None, "DDL from the interrupted migration was not rolled back."
+                columns = {column["name"] for column in inspect(connection).get_columns("st_learning_surface")}
+                assert "retention_policy_id" not in columns
         finally:
             engine.dispose()
 
@@ -199,12 +219,12 @@ def test_interrupted_upgrade_rolls_back_ddl_and_preserves_revision():
 def test_supported_prior_revision_upgrades_through_application_bootstrap():
     with _isolated_database() as (database_url, database):
         initial = ensure_schema(database_url)
-        assert initial.after == ["f04d9c6a31b8"]
+        current_head = head_revisions()[0]
+        assert initial.after == [current_head]
 
-        head = migrations.ScriptDirectory.from_config(migrations.alembic_config()).get_revision(
-            initial.after[0]
-        )
-        assert head.down_revision == "e3c4b1d928af"
+        head = migrations.ScriptDirectory.from_config(migrations.alembic_config()).get_revision(current_head)
+        immediate_parent = head.down_revision
+        assert immediate_parent == "f04d9c6a31b8"
 
         token = uuid4().hex
         engine = create_engine(database_url)
@@ -230,16 +250,37 @@ def test_supported_prior_revision_upgrades_through_application_bootstrap():
                 event_uuid = event.event_uuid
 
             with engine.begin() as connection:
+                command.downgrade(migrations.alembic_config(connection), immediate_parent)
+                assert migrations.current_revisions(connection) == [immediate_parent]
+                for table in ("st_learning_surface", "st_learning_action"):
+                    columns = {column["name"] for column in inspect(connection).get_columns(table)}
+                    assert not {"retention_policy_id", "retention_category", "retention_expires_at"} & columns
                 assert connection.execute(
-                    text("SELECT count(*) FROM st_learning_attempt")
-                ).scalar_one() == 0
+                    text("SELECT count(*) FROM st_business_event WHERE event_uuid=:id"),
+                    {"id": event_uuid},
+                ).scalar_one() == 1
+
+            upgraded = ensure_schema(database_url)
+            assert upgraded.before == [immediate_parent]
+            assert upgraded.after == [current_head]
+            with engine.connect() as connection:
+                for table in ("st_learning_surface", "st_learning_action"):
+                    columns = {column["name"] for column in inspect(connection).get_columns(table)}
+                    assert {"retention_policy_id", "retention_category", "retention_expires_at"} <= columns
                 assert connection.execute(
-                    text("SELECT count(*) FROM st_tutor_session")
-                ).scalar_one() == 0
-                command.downgrade(
-                    migrations.alembic_config(connection), head.down_revision
-                )
-                assert migrations.current_revisions(connection) == [head.down_revision]
+                    text("SELECT count(*) FROM st_business_event WHERE event_uuid=:id"),
+                    {"id": event_uuid},
+                ).scalar_one() == 1
+
+            # Keep the older syllabus-revocation downgrade check independent from
+            # the current retention migration round trip above.
+            historical_parent = migrations.ScriptDirectory.from_config(
+                migrations.alembic_config()
+            ).get_revision(immediate_parent).down_revision
+            assert historical_parent == "e3c4b1d928af"
+            with engine.begin() as connection:
+                command.downgrade(migrations.alembic_config(connection), historical_parent)
+                assert migrations.current_revisions(connection) == [historical_parent]
                 inspector = inspect(connection)
                 for table in ("st_syllabus_source_version", "st_syllabus_concept_mapping"):
                     columns = {column["name"] for column in inspector.get_columns(table)}
@@ -249,13 +290,9 @@ def test_supported_prior_revision_upgrades_through_application_bootstrap():
                     {"id": event_uuid},
                 ).scalar_one() == 1
 
-            # The downgrade above constructs only the exact empty parent state
-            # inside this synthetic schema. The application startup contract is
-            # the path under test: it upgrades the prior revision through ensure_schema().
-            upgraded = ensure_schema(database_url)
-            assert upgraded.before == [head.down_revision]
-            assert upgraded.after == ["f04d9c6a31b8"]
-
+            historical_upgrade = ensure_schema(database_url)
+            assert historical_upgrade.before == [historical_parent]
+            assert historical_upgrade.after == [current_head]
             with engine.connect() as connection:
                 inspector = inspect(connection)
                 for table in ("st_syllabus_source_version", "st_syllabus_concept_mapping"):
@@ -308,7 +345,7 @@ def test_lossy_downgrade_of_dependent_and_provenance_revision_is_refused():
 
             # Verify transaction rolled back cleanly and revision + data remain intact
             with engine.connect() as connection:
-                assert migrations.current_revisions(connection) == ["f04d9c6a31b8"]
+                assert migrations.current_revisions(connection) == head_revisions()
                 kept = connection.execute(
                     text("SELECT count(*) FROM st_curriculum_revision WHERE programme_metadata IS NOT NULL")
                 ).scalar_one()

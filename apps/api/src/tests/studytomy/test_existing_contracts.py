@@ -97,7 +97,7 @@ class TestMigrationAndMetadataBaseline:
 
     def test_alembic_head_revision_is_pinned(self):
         heads = head_revisions()
-        assert heads == ["c5d1e8f2a904"]
+        assert heads == ["2d6a1b7c9e40"]
 
     def test_core_models_registered_in_metadata(self):
         metadata = load_models()

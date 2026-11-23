@@ -8,12 +8,13 @@ import {
   sendActivityLearningAction,
   startActivityLearningSurface,
 } from '@services/ai/ai'
+import type { ActivityLearningAvailability } from '@services/ai/ai'
 import type {
   LearningActionRequest, LearningOperation, LearningSurface, LearningSurfaceRequest,
 } from '@services/ai/learningSurface'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
 import { useIsPresent } from 'motion/react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import LearningSurfaceView from './LearningSurfaceView'
 
@@ -47,12 +48,22 @@ export default function ActivityPracticePanel({ activityUuid }: { activityUuid: 
 function PracticePanel({ activityUuid, accessToken }: { activityUuid: string; accessToken: string }) {
   const { t } = useTranslation()
   const [available, setAvailable] = useState(false)
+  const [allowExplore, setAllowExplore] = useState(false)
+  const [allowPractice, setAllowPractice] = useState(false)
   const [surface, setSurface] = useState<LearningSurface | null>(null)
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const active = useRef<AbortController | null>(null)
   const unfinishedStart = useRef<LearningSurfaceRequest | null>(null)
   const unfinishedAction = useRef<{ signature: string; request: LearningActionRequest } | null>(null)
+  const applyAvailability = useCallback((result: ActivityLearningAvailability) => {
+    setAllowExplore(result.allow_explore)
+    setAllowPractice(result.allow_practice)
+    setAvailable(result.allow_explore || result.allow_practice)
+    setSurface(result.surface && (
+      result.surface.mode === 'explore' ? result.allow_explore : result.allow_practice
+    ) ? result.surface : null)
+  }, [])
 
   useEffect(() => {
     function clearView() {
@@ -61,6 +72,8 @@ function PracticePanel({ activityUuid, accessToken }: { activityUuid: string; ac
       setPending(false)
       setNotice(null)
       setAvailable(false)
+      setAllowExplore(false)
+      setAllowPractice(false)
       setSurface(null)
     }
 
@@ -75,11 +88,12 @@ function PracticePanel({ activityUuid, accessToken }: { activityUuid: string; ac
       active.current = controller
       getActivityLearningAvailability(activityUuid, accessToken, controller.signal).then((result) => {
         if (active.current !== controller) return
-        setAvailable(result.available)
-        setSurface(result.surface)
+        applyAvailability(result)
       }).catch(() => {
         if (active.current !== controller) return
         setAvailable(false)
+        setAllowExplore(false)
+        setAllowPractice(false)
         setSurface(null)
       }).finally(() => {
         if (active.current === controller) {
@@ -111,12 +125,14 @@ function PracticePanel({ activityUuid, accessToken }: { activityUuid: string; ac
       window.removeEventListener('pagehide', clear)
       window.removeEventListener('pageshow', restore)
     }
-  }, [activityUuid, accessToken])
+  }, [activityUuid, accessToken, applyAvailability])
 
   function revoke() {
     unfinishedStart.current = null
     unfinishedAction.current = null
     setAvailable(false)
+    setAllowExplore(false)
+    setAllowPractice(false)
     setSurface(null)
     setNotice('access_lost')
   }
@@ -131,6 +147,22 @@ function PracticePanel({ activityUuid, accessToken }: { activityUuid: string; ac
       await work(controller)
     } catch (error) {
       if (active.current !== controller) return
+      if (error instanceof LearningRequestError && error.code === 'PRACTICE_ACTION_UNAVAILABLE') {
+        unfinishedStart.current = null
+        unfinishedAction.current = null
+        setAvailable(false)
+        setAllowExplore(false)
+        setAllowPractice(false)
+        setSurface(null)
+        try {
+          const result = await getActivityLearningAvailability(activityUuid, accessToken, controller.signal)
+          if (active.current === controller) applyAvailability(result)
+        } catch {
+          // The server remains authoritative; a failed recheck leaves the controls hidden.
+        }
+        if (active.current === controller) setNotice('unavailable')
+        return
+      }
       if (lostAccess(error)) revoke()
       else setNotice(feedbackKey(error))
     } finally {
@@ -142,6 +174,7 @@ function PracticePanel({ activityUuid, accessToken }: { activityUuid: string; ac
   }
 
   function start(mode: LearningSurface['mode']) {
+    if (mode === 'explore' ? !allowExplore : !allowPractice) return Promise.resolve()
     return run(async (controller) => {
       const request = unfinishedStart.current?.mode === mode
         ? unfinishedStart.current
@@ -162,8 +195,7 @@ function PracticePanel({ activityUuid, accessToken }: { activityUuid: string; ac
       if (result.surface?.request_id === unfinishedStart.current?.request_id) unfinishedStart.current = null
       if (result.surface && (result.surface.surface_id !== unfinishedAction.current?.request.surface_id ||
         result.surface.revision !== unfinishedAction.current?.request.expected_revision)) unfinishedAction.current = null
-      setAvailable(result.available)
-      setSurface(result.surface)
+      applyAvailability(result)
     })
   }
 
@@ -210,12 +242,12 @@ function PracticePanel({ activityUuid, accessToken }: { activityUuid: string; ac
   return (
     <section aria-label={t('ai.learning_surface.lesson_practice')} className="space-y-3 pb-2">
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={button} disabled={pending} onClick={() => { void start('explore') }}>
+        {allowExplore && <button type="button" className={button} disabled={pending} onClick={() => { void start('explore') }}>
           {t('ai.learning_surface.show_visually')}
-        </button>
-        <button type="button" className={button} disabled={pending} onClick={() => { void start('practice') }}>
+        </button>}
+        {allowPractice && <button type="button" className={button} disabled={pending} onClick={() => { void start('practice') }}>
           {t('ai.learning_surface.start_practice')}
-        </button>
+        </button>}
         {pending && <button type="button" className={button} onClick={cancel}>{t('ai.learning_surface.cancel')}</button>}
         {!pending && notice === 'cancelled' && (
           <button type="button" className={button} onClick={() => { void reload() }}>{t('ai.learning_surface.reload')}</button>
