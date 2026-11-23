@@ -3,7 +3,7 @@
 Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read the relevant source and scoped guidance rather than every historical document.
 
 - **Scope**: Place this file at the root of the new Studytomy modernization fork based on LearnHouse Community Edition. It is not an instruction to rewrite or modify the legacy `nirzaf/studytomy-react` repository.
-- **Project status**: Modernization is in local development only. Repository security checks may run in GitHub Actions; there is no application deployment workflow. Do not represent any proposed Studytomy feature, migration, integration, or deployment as implemented without verifying the actual target repository.
+- **Project status**: Modernization is in local development only. GitHub Actions builds the application components and runs repository security checks. There is no application deployment workflow. Do not represent any proposed Studytomy feature, migration, integration, or deployment as implemented without verifying the actual target repository.
 - **Priority**: Apply this root file together with more specific repository instructions (including upstream `apps/web/AGENTS.md`); the more specific instructions govern their respective paths, except where they conflict with the project's approval, security, or licensing requirements.
 
 ---
@@ -100,7 +100,7 @@ For every substantive change:
 
 ### Check cadence and triggers
 
-- Review upstream at least weekly. This repository has no scheduled workflow; any separate monitoring automation requires its own owner and approval.
+- Review upstream at least weekly. The read-only LearnHouse workflow reports stable branch changes after it reaches the default branch. Follow the [upstream monitoring runbook](docs/studytomy/UPSTREAM-MONITORING.md) for the local equivalent and review procedure.
 - Check on demand when requested, before any planned upgrade, and when relevant upstream changes could solve an approved Studytomy requirement.
 - Prioritize tagged stable releases, security advisories, migrations, and bug fixes. Follow the upstream `dev` branch for discovery only; never merge it directly into production.
 - Compare against the last adopted upstream tag and exact SHA recorded in the Studytomy fork (currently `144c843b`). If this baseline is absent, report `BASELINE UNKNOWN` and establish it read-only before suggesting an upgrade.
@@ -115,19 +115,16 @@ For every substantive change:
 5. Categorize: **Security fix**, **Bug fix**, **Useful feature**, **Performance/reliability**, **Breaking change**, **Enterprise-only**, or **Irrelevant**.
 6. Produce the decision report below. Never automatically upgrade packages, fetch-and-merge, cherry-pick, rebase, alter DB schema, open PRs, deploy, or change production. Read-only fetching of upstream history is allowed.
 
-Useful commands when running in a configured local fork (adapt to the actual remotes):
+With the upstream remote configured as described in the runbook:
 
 ```bash
 git status --short --branch
 git remote -v
-git ls-remote https://github.com/learnhouse/learnhouse.git HEAD refs/heads/dev
-# Using the configured upstream remote (e.g. origin or upstream):
-git fetch origin --tags
-git log --oneline <LAST_ADOPTED_SHA>..origin/dev
-git diff --stat <LAST_ADOPTED_SHA>..origin/dev
+git fetch origin main
+python3 scripts/report_learnhouse_upstream.py --fetch --studytomy-ref origin/main
 ```
 
-`<LAST_ADOPTED_SHA>` is explanatory notation, not a shell command to run unchanged. Do not execute commands requiring it until the real SHA is verified. A newer `dev` commit is not automatically a newer stable release.
+Keep discovery on stable `upstream/main` by default. A separate review of `dev` needs to identify its source branch and release status explicitly.
 
 ### Required upstream benefit report
 
@@ -153,7 +150,7 @@ For each meaningful candidate, include:
 - **Stage A — Discover and report (no approval required)**: Inspect the upstream change, evaluate evidence, produce a proposed minimal integration plan and acceptance tests. No product code changes.
 - **Stage B — Request approval**: Ask the designated Studytomy decision-maker to select the precise candidate tag/commit/PR, agreed scope, and intended release. Approval of a review is not approval to implement.
 - **Stage C — Implement only after explicit implementation approval**: Work in an isolated feature branch; preserve unrelated code; use the smallest viable patch rather than automatically merging upstream wholesale; run focused tests; produce a reviewable diff and PR only if authorized.
-- **Stage D — Merge/release**: Merges, pushes and releases proceed on the user's explicit instruction; no confirmation codeword is required. Production migrations, force pushes, history rewrites and other irreversible actions still require an explicit user request naming the action. No unattended auto-merge or auto-deploy of newly discovered upstream changes.
+- **Stage D — Merge/release**: Merges, pushes, and releases proceed on the user's explicit instruction. For production migrations, force pushes, history rewrites, or other irreversible actions, the user must name the action they authorize. No unattended auto-merge or auto-deploy of newly discovered upstream changes.
 - **Stage E — Record baseline**: After an authorized release and verified acceptance, update the adopted upstream tag/SHA and Studytomy release record. Record any local patches still carried forward, release notes, rollback points and the next evaluation baseline.
 
 ### Change priority
