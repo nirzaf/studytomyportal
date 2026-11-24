@@ -115,7 +115,7 @@ export default function AccountLearning({ orgUuid }: { orgUuid: string }) {
   return (
     <div key={JSON.stringify([orgUuid, identity])} className="space-y-8">
       <AssessmentIntegrityCases orgUuid={orgUuid} token={token} />
-      <LearningView orgUuid={orgUuid} token={token} refreshSession={session.update} />
+      <LearningView orgUuid={orgUuid} token={token} learnerUuid={typeof user?.user_uuid === 'string' && user.user_uuid ? user.user_uuid : undefined} refreshSession={session.update} />
     </div>
   )
 }
@@ -124,7 +124,9 @@ function LearningView({
   orgUuid,
   token,
   refreshSession,
+  learnerUuid,
 }: {
+  learnerUuid?: string
   orgUuid: string
   token: string
   refreshSession?: (_force?: boolean) => Promise<void>
@@ -515,7 +517,7 @@ function LearningView({
           mediaUrl={mediaUrl}
           refreshSession={refreshSession}
         />
-        {view.lesson.format === 'pdf' && <ManagedPdfTopicCheck key={mediaUrl} orgUuid={orgUuid} token={token}
+        {view.lesson.format === 'pdf' && <ManagedPdfTopicCheck key={mediaUrl} orgUuid={orgUuid} token={token} learnerUuid={learnerUuid}
           courseUuid={view.release.course_uuid} releaseUuid={view.release.release_uuid} activityUuid={view.lesson.activity_uuid} />}
       </>
       break

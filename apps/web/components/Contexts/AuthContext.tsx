@@ -27,6 +27,7 @@ import {
   publishAuthSync,
 } from '@/lib/auth/authSync'
 import { clearAdaptiveTutorRecovery } from '@/lib/auth/sessionScope'
+import { clearTopicDrafts } from '@/lib/studytomyTopicDraft'
 
 // Types matching NextAuth's session structure
 export interface Session {
@@ -38,6 +39,15 @@ export interface Session {
     expiry?: number | undefined
   } | undefined
 }
+function clearDraftsForIdentityReplacement(previous: Session | null, next: Session) {
+  const before = previous?.user
+  const after = next.user
+  const changed = before?.user_uuid && after?.user_uuid
+    ? before.user_uuid !== after.user_uuid
+    : before?.id != null && after?.id != null && before.id !== after.id
+  if (changed) void clearTopicDrafts()
+}
+
 
 export type SessionStatus = 'loading' | 'authenticated' | 'unauthenticated'
 
@@ -282,6 +292,7 @@ export function SessionProvider({
 
   const clearAuthState = useCallback((clearMarker: boolean = true, broadcastLogout = false) => {
     authEpochRef.current++
+    void clearTopicDrafts()
     try { clearAdaptiveTutorRecovery(window.sessionStorage) } catch { /* Storage may be unavailable. */ }
     sessionRef.current = null
     setSession(null)
@@ -503,6 +514,7 @@ export function SessionProvider({
       return false
     }
 
+    clearDraftsForIdentityReplacement(sessionRef.current, sessionData)
     sessionRef.current = sessionData
     setSession(sessionData)
     setStatus('authenticated')
@@ -629,6 +641,7 @@ export function SessionProvider({
       // don't resurrect a session that was just invalidated (cross-tab logout).
       if (authEpochRef.current !== epoch) return null
       if (sessionData) {
+        clearDraftsForIdentityReplacement(sessionRef.current, sessionData)
         sessionRef.current = sessionData
         setSession(sessionData)
         setStatus('authenticated')
@@ -729,6 +742,7 @@ export function SessionProvider({
         },
       }
 
+      clearDraftsForIdentityReplacement(sessionRef.current, newSession)
       sessionRef.current = newSession
       setSession(newSession)
       setAccessToken(data.tokens.access_token)
@@ -744,6 +758,7 @@ export function SessionProvider({
         const fullSession = await fetchUserSession(data.tokens.access_token, data.tokens.expiry)
         if (fullSession) {
           fullSession.tokens = newSession.tokens
+          clearDraftsForIdentityReplacement(sessionRef.current, fullSession)
           sessionRef.current = fullSession
           setSession(fullSession)
           sessionCacheRef.current = { data: fullSession, timestamp: Date.now() }
@@ -965,6 +980,7 @@ export function SessionProvider({
               },
             }
             authEpochRef.current++
+            clearDraftsForIdentityReplacement(sessionRef.current, newSession)
             sessionRef.current = newSession
             setSession(newSession)
             setAccessToken(options.sso_access_token)
@@ -988,6 +1004,7 @@ export function SessionProvider({
               const fullSession = await fetchUserSession(options.sso_access_token, expiry)
               if (fullSession) {
                 fullSession.tokens = newSession.tokens
+                clearDraftsForIdentityReplacement(sessionRef.current, fullSession)
                 sessionRef.current = fullSession
                 setSession(fullSession)
                 sessionCacheRef.current = {
@@ -1154,6 +1171,7 @@ export function SessionProvider({
   const handleSignOut = useCallback(async (options: SignOutOptions = {}) => {
     const { callbackUrl = '/', redirect = true } = options
 
+    const clearDrafts = clearTopicDrafts()
     let logoutSuccess = false
     try {
       // Use Next.js API route to ensure cookies are cleared correctly
@@ -1194,6 +1212,7 @@ export function SessionProvider({
     clearSessionMarker()
 
     // Notify other tabs about logout
+    await clearDrafts
     publishAuthSync('LOGOUT', broadcastChannelRef.current)
 
     if (redirect) {
@@ -1490,6 +1509,7 @@ export async function signIn(
 // signOut function - matches NextAuth's API
 export async function signOut(options?: SignOutOptions): Promise<void> {
   const { callbackUrl = '/', redirect = true } = options || {}
+  const clearDrafts = clearTopicDrafts()
 
   try {
     // Use Next.js API route to ensure cookies are cleared correctly
@@ -1518,6 +1538,7 @@ export async function signOut(options?: SignOutOptions): Promise<void> {
   } catch {
     // BroadcastChannel not available
   }
+  await clearDrafts
   publishAuthSync('LOGOUT', channel)
   channel?.close()
 
