@@ -6,6 +6,8 @@ Do not push, open a PR, deploy, configure CI/CD, or use a VPS as part of it.
 
 ## Evidence and limits
 
+For new integration verification, follow the [same-version topic-loop acceptance cases](studytomy/TOPIC-LEARNING-LOOP.md#acceptance-on-the-same-published-version), including wrong answer, cited reteaching, distinct recheck, reload and allowed/denied staff history. Historical receipts below do not establish this full sequence.
+
 Historical verification recorded on 19 November:
 - Supported `python cli.py migrate` on a new disposable PostgreSQL 16 database: `schema empty: none -> 9b7d4c2a1e6f, 0 reconciled`.
 - Current-source Luna/provider unit tests plus PostgreSQL grounded material/retrieval tests: **40 passed, 1 deselected in 3.69 seconds**. Bedrock was excluded because the existing environment lacks its optional `botocore[crt]` dependency.

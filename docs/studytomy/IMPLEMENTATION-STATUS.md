@@ -2,6 +2,8 @@
 
 ## Current source summary
 
+See the [topic learning loop](TOPIC-LEARNING-LOOP.md) for the managed PDF pilot and its verification status.
+
 Reviewed public `main` at `dd12ed6362a392924d65edaaf56aa1f46c9f14bc`. The dated checkpoints below retain their original test results and approval status.
 
 | Area | Current implementation and remaining evidence |

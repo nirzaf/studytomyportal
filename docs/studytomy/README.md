@@ -28,6 +28,8 @@ Read only the documents needed for the task. Source, mounted routes and tests ar
 
 The [PostgreSQL 19 runbook](POSTGRESQL-19-UPGRADE.md) describes the current CLI-managed database image and retains dated migration rehearsals. For hosted build checks, security scans, and required checks on `main`, see the [local development guide](../../LOCAL-ONLY.md) and [security policy](../../SECURITY.md).
 
+For product requirements and testable delivery order across authoring, learner experience and staff history, start with the [topic learning loop](TOPIC-LEARNING-LOOP.md).
+
 ## Working conventions
 
 - Preserve LearnHouse's Next.js/React, FastAPI, PostgreSQL/pgvector and existing authentication/RBAC. No separate LMS, backend or identity store.

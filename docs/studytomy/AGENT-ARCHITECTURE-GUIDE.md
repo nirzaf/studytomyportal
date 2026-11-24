@@ -18,6 +18,8 @@ One educator-led platform connects learner courses, native assignments, adaptive
 
 ## 2. Experience and value
 
+The [topic learning loop](TOPIC-LEARNING-LOOP.md) defines the current product contract: Course → Chapter → Activity (including lesson activities), same-version topics and source scope, and a server-owned check, reteach and recheck history. The dated evidence below remains historical.
+
 ```mermaid
 flowchart TB
   L[Learners] --> U[Unified learning experience]
@@ -102,7 +104,7 @@ Paths establish where to inspect, not completeness. Documents can lag ongoing so
 
 ### Requested extension: explicitly scoped source-to-draft flow
 
-The following is target behavior queued for implementation; do not treat it as available today.
+The diagram describes the target across modalities. The inspected checkout already has a feature-gated PDF lesson/quiz draft flow with exact-source citations; this does not establish the complete learner loop or approved multimodal sources. See the [topic learning loop](TOPIC-LEARNING-LOOP.md) for the current boundary.
 
 ```mermaid
 flowchart LR

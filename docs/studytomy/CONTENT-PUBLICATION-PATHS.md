@@ -1,5 +1,7 @@
 # Studytomy content publication paths
 
+For the first topic-level tutoring slice, see the [topic learning loop](TOPIC-LEARNING-LOOP.md). Authoring media for playback is separate from explicitly authorizing immutable source revisions for the learner tutor.
+
 **Reading order:** this is a chronological implementation ledger. The opening inventory is historical; later checkpoints and current source supersede its missing-feature statements. Inspect `publication.py`, `releases.py` and current authority checks before implementation. No checkpoint grants release approval.
 
 ## Historical initial inventory
