@@ -3,7 +3,9 @@
 import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
-import { formatDateTime } from '@/lib/format'
+import {
+  beginTopicDraft, claimTopicDraft, writeTopicDraft, TOPIC_DRAFT_TTL, TOPIC_ANSWER_LIMIT,
+} from '@/lib/studytomyTopicDraft'
 import { adaptiveRequest, type AdaptiveRequest } from '@services/studytomy/adaptive'
 
 type Scope = { course_uuid: string; course_release_uuid: string; activity_uuid: string }
@@ -35,6 +37,11 @@ type Timeline = {
   complete: boolean
   events: Event[]
 }
+function isUnavailable(error: unknown) {
+  const details = error as { status?: number; code?: string } | null
+  return [401, 403, 404, 410].includes(details?.status ?? 0)
+    || (details?.status === 409 && ['POLICY_NOT_APPROVED', 'ADAPTIVE_DISABLED'].includes(details.code ?? ''))
+}
 type Submission = Scope & { binding_id: string; expected_revision: number; operation_uuid: string; answer: string }
 
 function Parts({ value }: { value: Visual }) {
@@ -47,8 +54,8 @@ function Parts({ value }: { value: Visual }) {
   </span>
 }
 
-export default function ManagedPdfTopicCheck({ orgUuid, token, courseUuid, releaseUuid, activityUuid }: {
-  orgUuid: string; token: string; courseUuid: string; releaseUuid: string; activityUuid: string
+export default function ManagedPdfTopicCheck({ orgUuid, token, learnerUuid, courseUuid, releaseUuid, activityUuid }: {
+  orgUuid: string; token: string; learnerUuid?: string; courseUuid: string; releaseUuid: string; activityUuid: string
 }) {
   const client = useMemo(() => adaptiveRequest(orgUuid, token), [orgUuid, token])
   const scope = useMemo((): Scope => ({
@@ -62,6 +69,35 @@ export default function ManagedPdfTopicCheck({ orgUuid, token, courseUuid, relea
   const currentRequest = useRef<AbortController | null>(null)
   const label = useId()
 
+  const draftKey = learnerUuid ? JSON.stringify([orgUuid, learnerUuid, courseUuid, activityUuid]) : null
+  const draft = useRef<Awaited<ReturnType<typeof claimTopicDraft>>>(undefined)
+  const auth = useRef<Awaited<ReturnType<typeof beginTopicDraft>>>(undefined)
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const refreshDraft = useRef<(() => void) | undefined>(undefined)
+
+  function armExpiry(expires: number) {
+    clearTimeout(draftTimer.current)
+    draftTimer.current = setTimeout(() => {
+      draft.current = undefined
+      setAnswer('')
+      void beginTopicDraft() // purge rather than retaining an expired answer on disk
+      if (!currentRequest.current && navigator.onLine) refreshDraft.current?.()
+    }, Math.max(0, expires - Date.now()))
+  }
+
+  async function reconcile(result: Check | null, controller: AbortController, restore: boolean) {
+    const entry = draftKey ? await claimTopicDraft(auth.current, draftKey,
+      result ? JSON.stringify([releaseUuid, result.binding_id]) : 'unavailable',
+      result?.revision ?? 0, Boolean(result?.question)) : undefined
+    if (controller.signal.aborted) return
+    draft.current = entry
+    clearTimeout(draftTimer.current)
+    if (entry) armExpiry(entry.expires)
+    setAnswer(restore ? entry?.answer ?? '' : '')
+    setCheck(result)
+  }
+
   useEffect(() => {
     const refresh = () => {
       currentRequest.current?.abort()
@@ -69,24 +105,51 @@ export default function ManagedPdfTopicCheck({ orgUuid, token, courseUuid, relea
       setBusy(false)
       setFailed(false)
       setCheck(null)
+      setAnswer('')
+      draft.current = undefined
+      clearTimeout(draftTimer.current)
       if (document.visibilityState !== 'visible') return
       const controller = new AbortController()
       currentRequest.current = controller
-      void client<Check>(`me/topic-check?${new URLSearchParams(scope)}`, 'GET', undefined, undefined, controller.signal)
-        .then(result => { if (!controller.signal.aborted) setCheck(result) })
-        .catch(() => { if (!controller.signal.aborted) setCheck(null) })
-        .finally(() => { if (currentRequest.current === controller) currentRequest.current = null })
+      void (async () => {
+        auth.current = draftKey ? await beginTopicDraft() : undefined
+        if (controller.signal.aborted) return
+        try {
+          const result = await client<Check>(`me/topic-check?${new URLSearchParams(scope)}`, 'GET', undefined, undefined, controller.signal)
+          if (!controller.signal.aborted) await reconcile(result, controller, true)
+        } catch (error) {
+          if (!controller.signal.aborted && isUnavailable(error)) {
+            await reconcile(null, controller, false)
+          }
+        }
+      })().finally(() => { if (currentRequest.current === controller) currentRequest.current = null })
     }
-    setAnswer('')
     pending.current = null
+    refreshDraft.current = refresh
     refresh()
     document.addEventListener('visibilitychange', refresh)
+    // Recovery does not submit. After reconnect only revalidate the checkpoint.
+    window.addEventListener('online', refresh)
     return () => {
+      refreshDraft.current = undefined
       currentRequest.current?.abort()
       currentRequest.current = null
+      clearTimeout(draftTimer.current)
       document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('online', refresh)
     }
-  }, [client, scope])
+  // Reconcile's scope is fully captured by these dependencies.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, scope, draftKey, releaseUuid])
+
+  function typeAnswer(value: string) {
+    setAnswer(value)
+    const current = draft.current
+    if (!current) return
+    const expires = Date.now() + TOPIC_DRAFT_TTL
+    armExpiry(expires)
+    void writeTopicDraft(current.lease, value, expires)
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -101,25 +164,31 @@ export default function ManagedPdfTopicCheck({ orgUuid, token, courseUuid, relea
     setBusy(true)
     setFailed(false)
     try {
+      auth.current = draftKey ? await beginTopicDraft() : undefined
+      if (controller.signal.aborted) return
       const result = await client<Check>('me/topic-check', 'POST', request, undefined, controller.signal)
       if (controller.signal.aborted) return
       pending.current = null
-      setAnswer('')
-      setCheck(result)
+      await reconcile(result, controller, false)
     } catch (error) {
       if (controller.signal.aborted) return
       const status = (error as { status?: number })?.status
-      if (status && [401, 403, 404, 410].includes(status)) {
+      if (isUnavailable(error)) {
         pending.current = null
-        setAnswer('')
-        setCheck(null)
+        await reconcile(null, controller, false)
       } else if (status === 409) {
-        const latest = await client<Check>(`me/topic-check?${new URLSearchParams(scope)}`, 'GET', undefined, undefined, controller.signal)
-          .catch(() => null)
-        if (!controller.signal.aborted) {
-          pending.current = null
-          setAnswer('')
-          setCheck(latest)
+        try {
+          const latest = await client<Check>(`me/topic-check?${new URLSearchParams(scope)}`, 'GET', undefined, undefined, controller.signal)
+          if (!controller.signal.aborted) {
+            pending.current = null
+            await reconcile(latest, controller, true)
+          }
+        } catch (refreshError) {
+          if (controller.signal.aborted) return
+          if (isUnavailable(refreshError)) {
+            pending.current = null
+            await reconcile(null, controller, false)
+          } else setFailed(true)
         }
       } else setFailed(true)
     } finally {
@@ -144,7 +213,7 @@ export default function ManagedPdfTopicCheck({ orgUuid, token, courseUuid, relea
       <Parts value={check.question.visual} />
       <label className="block">
         <span>Your answer</span>
-        <Input value={answer} onChange={event => setAnswer(event.target.value)} maxLength={48} disabled={busy} required />
+        <Input value={answer} onChange={event => typeAnswer(event.target.value)} maxLength={TOPIC_ANSWER_LIMIT} disabled={busy} required />
       </label>
       <Button disabled={busy || !answer.trim()}>{busy ? 'Checking…' : 'Check answer'}</Button>
       {failed && <p role="alert">Could not check the answer. Enter a whole number or a fraction such as 1/2 and try again.</p>}
