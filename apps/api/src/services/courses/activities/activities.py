@@ -4,7 +4,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.core.ee_hooks import notify_ee_course_content_changed
 from src.db.courses.courses import Course
 from src.db.courses.chapters import Chapter
-from src.db.courses.activities import ActivityCreate, Activity, ActivityRead, ActivityUpdate
+from src.db.courses.activities import ActivityCreate, Activity, ActivityRead, ActivitySubTypeEnum, ActivityUpdate
 from src.db.courses.assignments import Assignment
 from src.db.courses.chapter_activities import ChapterActivity
 from src.db.organizations import Organization, OrganizationRead
@@ -104,8 +104,9 @@ async def create_activity(
     activity = Activity(**activity_object.model_dump())
 
     activity.activity_uuid = str(f"activity_{uuid4()}")
-    if activity.extra_metadata:
-        activity.extra_metadata = keep_server_owned_metadata(activity.extra_metadata, None)
+    activity.extra_metadata = initial_activity_metadata(
+        activity.extra_metadata, course, activity.activity_sub_type, current_user,
+    )
     activity.creation_date = str(datetime.now())
     activity.update_date = str(datetime.now())
     activity.org_id = chapter.org_id
@@ -454,13 +455,13 @@ async def get_activityby_id(
     )
 
 
-_SERVER_OWNED_METADATA_KEYS = ("captions", "chapters", "hls")
+_SERVER_OWNED_METADATA_KEYS = ("captions", "chapters", "hls", "studytomy_pdf_creator_uuid")
 
 
 def keep_server_owned_metadata(incoming: dict | None, current: dict | None) -> dict:
     """Client-supplied ``extra_metadata`` with the pipeline-owned keys taken
     from ``current`` (or dropped when it has none), so a write can never
-    forge caption or HLS state."""
+    forge caption, HLS or protected author attribution."""
     merged = dict(incoming or {})
     current = current or {}
     for key in _SERVER_OWNED_METADATA_KEYS:
@@ -469,6 +470,19 @@ def keep_server_owned_metadata(incoming: dict | None, current: dict | None) -> d
         else:
             merged.pop(key, None)
     return merged
+
+
+
+def initial_activity_metadata(
+    incoming: dict | None, course: Course, subtype: ActivitySubTypeEnum, actor: PublicUser | AnonymousUser,
+) -> dict | None:
+    metadata = keep_server_owned_metadata(incoming, None) if incoming else incoming
+    if (
+        course.studytomy_managed and isinstance(actor, PublicUser)
+        and subtype == ActivitySubTypeEnum.SUBTYPE_DOCUMENT_PDF
+    ):
+        return {**(metadata or {}), "studytomy_pdf_creator_uuid": actor.user_uuid}
+    return metadata
 
 
 async def update_activity(

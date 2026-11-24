@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
+import { StaffTopicTimeline } from '@components/Studytomy/ManagedPdfTopicCheck'
 import StaffReportReview from '@components/Studytomy/StaffReportReview'
 import {
   adaptiveRequest, type AdaptiveConfiguration as Catalog, type CurriculumReview, type Definition,
@@ -531,6 +532,7 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
         </form>}
       </div>}
     </section>}
+    <StaffTopicTimeline client={client} courseUuid={courseUuid} />
     <StaffReportReview client={client} courseUuid={courseUuid} curricula={catalog.curricula} />
   </section>
 }

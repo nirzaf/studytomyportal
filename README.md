@@ -27,6 +27,8 @@ Studytomy Portal is an educator-led learning platform under active development, 
 
 ## Product vision
 
+The [topic learning loop](docs/studytomy/TOPIC-LEARNING-LOOP.md) is the first end-to-end product target: an educator publishes a lesson with approved material, the learner answers a short question at a topic boundary, and a wrong answer triggers cited reteaching and a distinct equivalent recheck. Scoped staff history shows where the learner struggled and what helped. One reviewed PDF fractions pilot passed a local synthetic author-to-learner-and-staff check. This does not establish the broader course flow or production readiness.
+
 Studytomy is intended to help students learn, practise, receive feedback, and improve while giving tutors a controlled way to author educational material, guide students, and review learning evidence. AI assists teachers and learners; it is not the authority for curriculum accuracy, final academic decisions, or scientifically valid experiments.
 
 ### Target audiences
@@ -827,6 +829,8 @@ The platform involves minors and potentially sensitive educational information. 
 - AI/provider keys are absent from frontend bundles, logs, and exported assets.
 
 ## Roadmap and acceptance gates
+
+Prioritize one reviewed PDF-backed topic through authoring, learner check, cited reteaching, recheck and scoped staff history before adding broader media grounding or generated widgets. See the [acceptance contract](docs/studytomy/TOPIC-LEARNING-LOOP.md#acceptance-on-the-same-published-version).
 
 | Phase | Deliverable | Exit criterion |
 |---|---|---|

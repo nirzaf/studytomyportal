@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { Button } from '@components/ui/button'
+import ManagedPdfTopicCheck from '@components/Studytomy/ManagedPdfTopicCheck'
 import AssessmentIntegrityCases from '@components/Studytomy/AssessmentIntegrityCases'
 import AdaptiveAttemptPanel from '@components/Objects/Activities/AdaptiveAttemptPanel'
 import type { LessonRecommendation } from '@components/Objects/Activities/AdaptiveLessonProgress'
@@ -514,6 +515,8 @@ function LearningView({
           mediaUrl={mediaUrl}
           refreshSession={refreshSession}
         />
+        {view.lesson.format === 'pdf' && <ManagedPdfTopicCheck key={mediaUrl} orgUuid={orgUuid} token={token}
+          courseUuid={view.release.course_uuid} releaseUuid={view.release.release_uuid} activityUuid={view.lesson.activity_uuid} />}
       </>
       break
     }
