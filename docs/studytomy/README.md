@@ -6,6 +6,7 @@ Read only the documents needed for the task. Source, mounted routes and tests ar
 |---|---|---|
 | Any code change | Root `AGENTS.md` and applicable scoped instructions | Current HEAD, worktree/index, actual callers and tests |
 | Architecture or ownership | [Agent architecture guide](AGENT-ARCHITECTURE-GUIDE.md) | Referenced models, services and contracts |
+| Non-technical client walkthrough | [Client process overview](architecture/client-process-overview.html) | [Implementation status](IMPLEMENTATION-STATUS.md) and [Sri Lankan decision baseline](SRI-LANKA-DECISION-BASELINE.md) |
 | Current vs. planned status | [Implementation status](IMPLEMENTATION-STATUS.md) | [Dated documentation review](DOCUMENTATION-REVIEW.md), [architecture inventory](ARCHITECTURE-IMPLEMENTATION-INVENTORY.md), and current source |
 | Task or acceptance-checklist state | [Atomic implementation checklist](../../STUDYTOMY-FAMILY-LEARNING-ATOMIC-IMPLEMENTATION-SPEC.md) | [Implementation status](IMPLEMENTATION-STATUS.md) for per-task evidence; the checklist is not acceptance proof |
 | Frozen baseline and decision gates | [Baseline record](BASELINE.md) (see its §7 dated addendum) | Current source, migrations and tests |
