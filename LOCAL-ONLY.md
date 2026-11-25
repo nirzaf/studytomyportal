@@ -2,6 +2,8 @@
 
 Studytomy Portal is a public source repository. GitHub Actions builds the web, API, collaboration server, packages, and CLI. The repository also runs secret and dependency scans. Application setup and functional verification use local or isolated test environments. There is no application deployment workflow. See the [security policy](SECURITY.md) for the checks required on `main`.
 
+The latest verified merge checkpoint is `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`: [CI Build](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) passed all nine build/test jobs, and [Repository Security](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) passed both secret-scanning and dependency-scan jobs. These runs do not deploy the application or replace local signed-in acceptance tests.
+
 ## Local verification
 
 Install dependencies with the frozen lockfiles, then run the existing component scripts from their component directories. The root README lists the web, API, collaboration, CLI, browser, and SDK commands. The `scripts/lockfiles.sh --check` command verifies lockfile consistency locally. Run applicable tests before committing. The hosted build workflow checks builds and API compilation. Run application tests, migrations against a disposable database, and browser acceptance separately.

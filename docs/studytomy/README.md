@@ -6,11 +6,13 @@ Read only the documents needed for the task. Source, mounted routes and tests ar
 |---|---|---|
 | Any code change | Root `AGENTS.md` and applicable scoped instructions | Current HEAD, worktree/index, actual callers and tests |
 | Architecture or ownership | [Agent architecture guide](AGENT-ARCHITECTURE-GUIDE.md) | Referenced models, services and contracts |
+| Client or stakeholder walkthrough | [Client process overview](architecture/client-process-overview.html) | [Implementation status](IMPLEMENTATION-STATUS.md) and [Sri Lankan decision baseline](SRI-LANKA-DECISION-BASELINE.md) |
 | Current vs. planned status | [Implementation status](IMPLEMENTATION-STATUS.md) | [Dated documentation review](DOCUMENTATION-REVIEW.md), [architecture inventory](ARCHITECTURE-IMPLEMENTATION-INVENTORY.md), and current source |
 | Task or acceptance-checklist state | [Atomic implementation checklist](../../STUDYTOMY-FAMILY-LEARNING-ATOMIC-IMPLEMENTATION-SPEC.md) | [Implementation status](IMPLEMENTATION-STATUS.md) for per-task evidence; the checklist is not acceptance proof |
 | Frozen baseline and decision gates | [Baseline record](BASELINE.md) (see its §7 dated addendum) | Current source, migrations and tests |
 | Local setup and verification | [Root README](../../README.md), [local-only policy](../../LOCAL-ONLY.md) | [Local verification log](LOCAL-VERIFICATION.md), [end-to-end testing runbook](../LOCAL_END_TO_END_TESTING.md), component manifests and test scripts |
 | Learning, mastery, assessments | [Adaptive learning implementation](ALE-IMPLEMENTATION.md), [adaptive pilot runbook](ALE-LOCAL-PILOT.md) | `apps/api/src/routers/studytomy/adaptive.py`, `services/studytomy/adaptive_*`, native assignment callers and focused tests |
+| Managed PDF topic check and lesson order | [Topic learning loop](TOPIC-LEARNING-LOOP.md) | `services/studytomy/topic_check.py`, `ManagedPdfTopicCheck.tsx`, the [live topic-check spec](../../apps/e2e/features/studytomy/tests/21-managed-pdf-topic-check-live.spec.ts), and `services/courses/chapters.py` |
 | Content review or release | [Content publication paths](CONTENT-PUBLICATION-PATHS.md) | `services/studytomy/publication.py`, `releases.py`, course/activity access paths |
 | Curriculum and syllabus scope | [Sri Lankan decision baseline](SRI-LANKA-DECISION-BASELINE.md) | Approved sources, rights records and the open `D-01`/`D-02` decisions |
 | Interactive lesson UI | [Generative UI implementation](GENUI-IMPLEMENTATION.md) | AI learning surface contracts and lesson components |

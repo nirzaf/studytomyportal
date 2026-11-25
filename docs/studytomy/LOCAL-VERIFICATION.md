@@ -767,10 +767,6 @@ Headed Chromium was necessary for the built-in PDF viewer: in headless Chromium 
 
 The task-created PostgreSQL, Redis, RustFS, Ollama, API, and web processes are disposable and loopback-bound. No named Docker volumes were attached. The final run's synthetic source was revoked by the test cleanup path; exact cleanup of the task-created processes and temporary credentials is recorded in the delivery report. No schema migration was introduced.
 
-### Git delivery receipt
-
-Implementation and test commit `1146e796b1d905ac299e3e20911fbf9f172387c7` was pushed normally to `origin/main` after the post-commit runtime identity check and both Explore Topics browser specs passed. `git ls-remote origin refs/heads/main` returned the same SHA. This receipt is a documentation-only follow-up; it contains no application or test-code changes.
-
 ## Final isolated verification receipt (22 November 2026)
 
 **Tested revision:** `d9d35b8d90c6a770ac6a324b4d36b46c40b6858e` on `main`, with `origin/main` at the same SHA before this documentation-only update. The source tree digest reported by the live runtime was `39165f4d30b05f6753f2284808c427f0ce0a64dc5e3a041f114051b4a0a1d5cd`; the runtime reported a clean source tree and matching web/API build identity. The API and frontend/test files are unchanged from implementation commit `1146e796b1d905ac299e3e20911fbf9f172387c7` through this tested revision.
@@ -800,3 +796,20 @@ Implementation and test commit `1146e796b1d905ac299e3e20911fbf9f172387c7` was pu
 **Portability (WIN-01):** The branding fixture selects a drive-qualified Windows file URL on Windows and a POSIX file URL elsewhere. On this macOS host, the branding test passed and a Node `fileURLToPath(..., { windows: true })` probe accepted the drive-qualified URL and decoded its space. A native Windows test runner was unavailable; Windows execution remains **UNVERIFIED**.
 
 **Limits:** PostgreSQL and browser verification used synthetic records and the isolated database only. The test run used local Ollama for embeddings, with text generation disabled and no paid AI calls. The source fixture cleanup revoked its approved version while retaining audit history; no active approved synthetic source remained. These results do not establish production behavior, educator validation, real-provider answer quality, or deployment readiness. No schema migration or application-code change was made for this receipt.
+
+## Markdown documentation refresh (25 November 2026)
+
+**Source baseline:** `main` and `origin/main` at `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`; source changes in the merged commit were not altered by this docs-only pass. The current guides were aligned with association-backed course ordering, the managed-PDF topic-check entry point and its test boundaries, enum-only tutor action vocabulary, the current family/migration gaps, and the existing local-only deployment status. Dated records and approval documents remain historical.
+
+| Command/check | Result |
+|---|---|
+| `cd docs && bun run test:snippets` | Exit 0; 3 passed, 0 failed, 0 skipped. |
+| `cd docs && bun run build` | Exit 0; Next.js compiled and generated 461 static pages. Remote OpenAPI fetch failed and the configured bundled snapshot fallback was used. Sitemap generation was skipped because `NEXT_PUBLIC_DOCS_URL` was not set. |
+| Relative-link and docs-route inventory across tracked `.md`/`.mdx` | 191 files inventoried; 281 relative repository targets and 510 root-relative documentation/asset routes resolved; no missing targets. Generated `/reference` routes were checked by the docs build rather than the filesystem mapping. External URLs and every fragment anchor were not checked. |
+| `git diff --check` | Passed after the documentation changes. |
+
+GitHub verification is separate: [CI Build run 45660150950](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) and [Repository Security run 45660150883](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) both passed on the exact source baseline. No local API/UI/browser test, database operation, migration, commit, push or deployment was performed by this documentation refresh. The managed-PDF live browser spec still requires its own isolated fixture-backed run.
+
+### Git delivery receipt
+
+Implementation and test commit `1146e796b1d905ac299e3e20911fbf9f172387c7` was pushed normally to `origin/main` after the post-commit runtime identity check and both Explore Topics browser specs passed. `git ls-remote origin refs/heads/main` returned the same SHA. This receipt is a documentation-only follow-up; it contains no application or test-code changes.

@@ -6,6 +6,8 @@ For generated visuals during a topic recheck, follow the [topic learning loop](T
 
 The current service resolves reviewed examples and approved modes from server-side records. Recovery and actions recheck the saved mode. Scored visuals follow the server-issued item, and exploration stays interactive. Learning surface records remain separate from grades and mastery. See the [current implementation summary](IMPLEMENTATION-STATUS.md) for approval and verification gates.
 
+`LessonTutorAction` currently contributes only the `ask_question`, `explain_visual`, `deepen_topic` and `evaluate_answer` enum values to the learning-surface schema. A source search finds no production caller; there is no new four-action tutor request/response workflow to advertise. This vocabulary does not authorize a provider call or replace the existing policy-gated practice path.
+
 ## GENUI-01 — Checkout reconciliation
 
 Inspected `main` at `a8afa133bdfc949d73e64246fb4d92059f0e42c1` against the matching GitHub `origin/main`. The worktree already contained staged Studytomy policy, identity, consent, privacy, evidence, and offer work, as well as unrelated API fixes. This inventory includes that local source, so it does not describe the published revision or a live environment.

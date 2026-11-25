@@ -15,7 +15,7 @@ This section explains how to bring existing course content into Studytomy Portal
 <Callout>
 Moving from Moodle, Canvas, Blackboard, Brightspace, Open edX or another Common Cartridge platform? You don't need to script anything: upload the course export from the dashboard and Studytomy Portal converts it. See [Import from Another LMS](/developers/migration/from-another-lms).
 </Callout>
-Both approaches share the same underlying data model: a Course contains Chapters, and each Chapter contains an ordered list of Activities.
+Both approaches share the same underlying data model: a Course contains Chapters, and each Chapter contains an ordered list of Activities. Ordering lives on the `CourseChapter` and `ChapterActivity` association rows, not on `Activity`; when stored order values tie, course reads use the association row ID as a stable tie-breaker.
 
 <Callout type="info">
 All endpoints below are prefixed with `/api/v1/`. In local development the base URL is `http://localhost:1338/api/v1/`. In production it is served at `/api/v1/` on your instance domain.

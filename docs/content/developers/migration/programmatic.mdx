@@ -113,7 +113,7 @@ Response (`ChapterRead`):
 Capture `id`: it is the `chapter_id` you will pass when creating activities.
 
 <Callout type="info">
-Chapters appear in the order they are created. To rearrange them later (or to reorder activities inside a chapter), call `PUT /api/v1/chapters/course/{course_uuid}/order` with the desired ordering. See [Reordering](#reordering) below.
+Course reads use `CourseChapter.order` for chapter order and `ChapterActivity.order` for activity order. Equal order values are resolved by the association row ID, so ordering does not depend on an `Activity.order` field. To rearrange chapters or activities, call `PUT /api/v1/chapters/course/{course_uuid}/order` with the desired ordering. See [Reordering](#reordering) below.
 </Callout>
 
 ## 3. Create activities
