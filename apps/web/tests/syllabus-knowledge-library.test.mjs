@@ -1,12 +1,20 @@
-import { expect, test } from 'bun:test'
+import { expect, mock, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { OrgContext } from '../components/Contexts/OrgContext'
-import { SessionContext } from '../components/Contexts/LHSessionContext'
-import ExploreTopics from '../components/Studytomy/ExploreTopics'
-import SyllabusLibraryManager from '../components/Studytomy/SyllabusLibraryManager'
-import { buildExploreTopicsPayload } from '../components/Studytomy/exploreTopicsRequest'
+
+mock.module('@sentry/nextjs', () => ({
+  isInitialized: () => false,
+  captureException: () => undefined,
+  lastEventId: () => undefined,
+  showReportDialog: () => undefined,
+}))
+
+const { OrgContext } = await import('../components/Contexts/OrgContext')
+const { SessionContext } = await import('../components/Contexts/LHSessionContext')
+const { default: ExploreTopics } = await import('../components/Studytomy/ExploreTopics')
+const { default: SyllabusLibraryManager } = await import('../components/Studytomy/SyllabusLibraryManager')
+const { buildExploreTopicsPayload } = await import('../components/Studytomy/exploreTopicsRequest')
 
 const session = {
   status: 'authenticated',

@@ -46,7 +46,7 @@ Versions below are manifest declarations unless explicitly marked observed runti
 |---|---|
 | Web | Next.js `^16.4.6`, React/React DOM `19.3.1`, TypeScript `6.0.3`, Tailwind `^4.3.5`; `apps/web/package.json` |
 | Web data/editor | TanStack React Query `^5.108.4` (not a replacement framework), Tiptap `3.32.3`, Yjs `^13.6.33`, Hocuspocus provider `^4.9.0`; web manifest |
-| Web package manager | `bun@1.4.5` from the web manifest and `.bun-version`. The combined Dockerfile remains on Bun 1.4.4. |
+| Web package manager | `bun@1.4.5` from the web manifest and `.bun-version`. The combined Dockerfile uses the same pin. |
 | API | Python `>=3.14.7,<3.14.8`, FastAPI `0.162.0`, Pydantic `2.14.3`, SQLModel `0.0.44`, Uvicorn `0.54.0`; `apps/api/pyproject.toml` |
 | Database/migrations | PostgreSQL **16.16 observed in earlier local checks** and **19.0 observed in an isolated 2026-11-21 upgrade test**; Alembic `1.20.1`, asyncpg `0.32.0`, psycopg2-binary `2.9.13` declared |
 | Vector retrieval | PostgreSQL vector extension **0.8.7 observed locally**; Python pgvector `0.5.1`; `Vector(768)` and cosine HNSW |

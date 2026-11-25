@@ -42,10 +42,15 @@ jobs:
       - name: Scan reachable Git history
         shell: bash
         run: |
+          umask 077
+          history_dir=$(mktemp -d "$RUNNER_TEMP/studytomy-history.XXXXXX")
+          trap 'rm -f -- "$history_dir/history.json"; rmdir -- "$history_dir"' EXIT
           history_status=0
           # Reset the image's wildcard trust and allow only this checkout.
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v "$GITHUB_WORKSPACE:/repo:ro" \
+            -v "$history_dir:/scan-report" \
             -w /repo \
             -e GIT_CONFIG_COUNT=2 \
             -e GIT_CONFIG_KEY_0=safe.directory \
@@ -54,12 +59,12 @@ jobs:
             -e GIT_CONFIG_VALUE_1=/repo \
             --entrypoint /bin/sh "$GITLEAKS_IMAGE" -c "$GITLEAKS_RUN" gitleaks \
             git --log-opts='--all --reflog' \
-              --redact=100 --report-format=json --report-path=/tmp/history.json \
+              --redact=100 --report-format=json --report-path=/scan-report/history.json \
               --exit-code=42 --log-level=error --no-banner || history_status=$?
 
           case "$history_status" in
             0) echo 'History scan passed.' ;;
-            42) echo '::error::History scan detected secret findings.'; exit 1 ;;
+            42) python3 scripts/check_gitleaks_history.py "$history_dir/history.json" ;;
             *) echo "::error::History scan could not complete (exit $history_status)."; exit 1 ;;
           esac
 

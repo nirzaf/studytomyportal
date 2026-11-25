@@ -1,14 +1,21 @@
 // Who gets the platform hub (workspace switcher, create organization, demo) and
 // where an auth flow lands by default. A school's members only see the school.
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 
-import {
+mock.module("@sentry/nextjs", () => ({
+  isInitialized: () => false,
+  captureException: () => undefined,
+  lastEventId: () => undefined,
+  showReportDialog: () => undefined,
+}));
+
+const {
   hasManagingRoleFromSession,
   managesAnyOrgFromSession,
   seesPlatformHubFromSession,
-} from "../components/Hooks/useAdminStatus.tsx";
-import { defaultPostAuthPath } from "../services/auth/redirects.ts";
+} = await import("../components/Hooks/useAdminStatus.tsx");
+const { defaultPostAuthPath } = await import("../services/auth/redirects.ts");
 
 const role = (orgId, canUpdateOrg, extra = {}) => ({
   org: { id: orgId, org_uuid: `org_${orgId}`, ...extra },
