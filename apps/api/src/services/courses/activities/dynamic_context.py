@@ -116,7 +116,9 @@ async def course_navigation(course_id: int, db_session: AsyncSession) -> dict[st
         .join(Chapter, Chapter.id == ChapterActivity.chapter_id)  # type: ignore[arg-type]
         .join(CourseChapter, CourseChapter.chapter_id == Chapter.id)  # type: ignore[arg-type]
         .where(CourseChapter.course_id == course_id, Activity.published == True)  # noqa: E712
-        .order_by(CourseChapter.order, ChapterActivity.order)  # type: ignore[arg-type]
+        .order_by(
+            CourseChapter.order, CourseChapter.id, ChapterActivity.order, ChapterActivity.id,
+        )  # type: ignore[arg-type]
     )).all()
     return {
         uuid: (chapter, rows[i + 1][1] if i + 1 < len(rows) else "")

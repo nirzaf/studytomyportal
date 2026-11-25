@@ -17,6 +17,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy import update
 
 from src.db.courses.activities import (
     Activity,
@@ -24,7 +25,10 @@ from src.db.courses.activities import (
     ActivityTypeEnum,
 )
 from src.db.courses.chapter_activities import ChapterActivity
+from src.db.courses.chapters import Chapter
+from src.db.courses.course_chapters import CourseChapter
 from src.db.users import PublicUser
+from src.services.courses.activities.dynamic_context import course_navigation
 from src.services.courses.chapters import get_course_chapters
 
 
@@ -370,3 +374,40 @@ def test_slim_extra_metadata_keeps_only_ready_storyboard():
     assert _slim_extra_metadata({"captions": {}}) is None
     assert _slim_extra_metadata(None) is None
     assert _slim_extra_metadata("bad") is None
+
+
+
+@pytest.mark.parametrize("slim", [False, True])
+async def test_course_reading_order_breaks_ties_by_association_id(
+    db, mock_request, public_user, course, chapter, heavy_activity, second_activity, bypass_rbac, slim,
+):
+    await db.execute(update(CourseChapter).where(CourseChapter.chapter_id == chapter.id).values(id=30))
+    next_chapter = Chapter.model_validate(chapter, update={"id": 2, "chapter_uuid": "chapter_second"})
+    db.add(next_chapter)
+    await db.flush()
+    db.add(CourseChapter(
+        id=2, order=1, chapter_id=next_chapter.id, course_id=course.id, org_id=chapter.org_id,
+        creation_date=chapter.creation_date, update_date=chapter.update_date,
+    ))
+    next_activity = Activity.model_validate(second_activity, update={
+        "id": 3, "activity_uuid": "activity_chapter_second",
+    })
+    db.add(next_activity)
+    await db.flush()
+    db.add(ChapterActivity(
+        id=3, order=9, chapter_id=next_chapter.id, activity_id=next_activity.id,
+        course_id=course.id, org_id=chapter.org_id,
+        creation_date=chapter.creation_date, update_date=chapter.update_date,
+    ))
+    await db.execute(update(ChapterActivity).where(ChapterActivity.activity_id == heavy_activity.id).values(id=30))
+    await db.execute(update(ChapterActivity).where(ChapterActivity.activity_id == second_activity.id).values(order=1))
+    await db.commit()
+
+    chapters = await get_course_chapters(
+        mock_request, course.id, db, public_user, with_unpublished_activities=False, slim=slim, course=course,
+    )
+    assert [item.id for item in chapters] == [next_chapter.id, chapter.id]
+    assert [item.id for item in chapters[1].activities] == [second_activity.id, heavy_activity.id]
+    navigation = await course_navigation(course.id, db)
+    assert list(navigation) == [next_activity.activity_uuid, second_activity.activity_uuid, heavy_activity.activity_uuid]
+    assert navigation[second_activity.activity_uuid][1] == heavy_activity.name
