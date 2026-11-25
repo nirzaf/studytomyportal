@@ -2,6 +2,8 @@
 
 ## Current source summary
 
+The first complete product slice is defined in the [topic learning loop](TOPIC-LEARNING-LOOP.md). Existing authoring, managed release, grounded PDF drafts and practice are foundations, not evidence that automatic topic checks, cited alternate explanations, equivalent rechecks and authorized history all work together.
+
 Reviewed public `main` at `45178067d44372f508adea16cfce5a193ff783ac`. The dated checkpoints below retain their original test results and approval status.
 
 | Area | Current implementation and remaining evidence |

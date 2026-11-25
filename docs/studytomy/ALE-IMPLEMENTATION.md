@@ -1,5 +1,7 @@
 # Adaptive Learning Engine implementation evidence
 
+The [topic learning loop](TOPIC-LEARNING-LOOP.md) defines the first integrated teacher-to-learner acceptance slice and scoped staff history. Dated implementation receipts below are evidence for their own stated scope only.
+
 **Reading order:** chronological checkpoint evidence. ALE-001 is a historical baseline, not current absence of the features added below. Use current source and the local pilot runbook first; preserve each dated test scope rather than summing counts or treating a recorded migration head as current.
 
 ## ALE-001 and CASE-01

@@ -1,5 +1,7 @@
 # Generative interactive learning implementation
 
+For generated visuals during a topic recheck, follow the [topic learning loop](TOPIC-LEARNING-LOOP.md): a reviewed component can support a cited explanation but does not extend source authority, issue a mark, or replace the reviewed equivalent recheck.
+
 **Reading order:** chronological evidence ledger, not a current feature matrix. Initial missing routes/practice statements describe that checkpoint; inspect current routes and services. Practice remains policy-gated, and intercepted browser responses are not end-to-end backend acceptance.
 
 The current service resolves reviewed examples and approved modes from server-side records. Recovery and actions recheck the saved mode. Scored visuals follow the server-issued item, and exploration stays interactive. Learning surface records remain separate from grades and mastery. See the [current implementation summary](IMPLEMENTATION-STATUS.md) for approval and verification gates.
