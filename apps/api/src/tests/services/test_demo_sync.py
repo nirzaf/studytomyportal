@@ -1048,8 +1048,7 @@ _TAMPERINGS = [
     ("community", "src.db.communities.communities", "Community", "name", "Renamed community"),
     ("discussion", "src.db.communities.discussions", "Discussion", "title", "Renamed discussion"),
     ("discussion_locked", "src.db.communities.discussions", "Discussion", "is_locked", True),
-    ("podcast", "src.db.podcasts.podcasts", "Podcast", "name", "Renamed podcast"),
-    ("episode", "src.db.podcasts.episodes", "PodcastEpisode", "title", "Renamed episode"),
+    # Demo bundle engagement.json intentionally seeds no podcasts/episodes.
     ("certification", "src.db.courses.certifications", "Certifications", "config", {"certification_name": "Tampered"}),
 ]
 
@@ -1178,8 +1177,7 @@ _RESTORABLE = [
     ("playground", "src.db.playgrounds", "Playground", "playground_uuid"),
     ("community", "src.db.communities.communities", "Community", "community_uuid"),
     ("discussion", "src.db.communities.discussions", "Discussion", "discussion_uuid"),
-    ("podcast", "src.db.podcasts.podcasts", "Podcast", "podcast_uuid"),
-    ("episode", "src.db.podcasts.episodes", "PodcastEpisode", "episode_uuid"),
+    # Demo bundle engagement.json intentionally seeds no podcasts/episodes.
     ("certification", "src.db.courses.certifications", "Certifications", "certification_uuid"),
 ]
 

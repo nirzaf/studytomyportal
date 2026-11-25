@@ -188,15 +188,20 @@ async def test_events_startup_shutdown_and_reconcile(monkeypatch):
         def __init__(self):
             self.cancel = Mock()
 
+        def done(self):
+            return False
+
         def __await__(self):
             raise asyncio.CancelledError
             yield  # pragma: no cover
 
-    fake_task = _AwaitableFakeTask()
+    created_tasks: list[_AwaitableFakeTask] = []
 
     def fake_create_task(coro):
         coro.close()
-        return fake_task
+        task = _AwaitableFakeTask()
+        created_tasks.append(task)
+        return task
 
     monkeypatch.setattr(core_events, "get_learnhouse_config", lambda: fake_config)
     monkeypatch.setattr(core_events, "connect_to_db", connect_to_db)
@@ -233,11 +238,12 @@ async def test_events_startup_shutdown_and_reconcile(monkeypatch):
     reconcile_packs.assert_called_once()
     cleanup_temp_migrations.assert_called_once()
     run_ee_startup.assert_called_once_with(app)
-    assert core_events._cleanup_task is fake_task
+    assert created_tasks
+    assert core_events._cleanup_task is created_tasks[0]
 
     close_webhook_client = AsyncMock()
     close_database = AsyncMock()
-    monkeypatch.setattr(core_events, "_cleanup_task", fake_task)
+    monkeypatch.setattr(core_events, "_cleanup_task", created_tasks[0])
     monkeypatch.setattr(
         "src.services.webhooks.dispatch.close_webhook_client",
         close_webhook_client,
@@ -247,7 +253,8 @@ async def test_events_startup_shutdown_and_reconcile(monkeypatch):
     close_app = core_events.shutdown_app(app)
     await close_app()
 
-    fake_task.cancel.assert_called_once()
+    created_tasks[0].cancel.assert_called_once()
+    assert all(task.cancel.call_count == 1 for task in created_tasks)
     close_webhook_client.assert_awaited_once()
     close_database.assert_awaited_once_with(app)
 

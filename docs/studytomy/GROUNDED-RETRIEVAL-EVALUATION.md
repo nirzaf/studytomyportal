@@ -30,7 +30,7 @@ The existing authorized `GET /api/v1/ai/rag/status?course_uuid=<course_uuid>` en
 
 Retained PDF sources, including revoked versions, require retention review before deleting their linked lesson, course, organization, or uploader account. This local implementation rejects those deletions before native cleanup starts. A reviewed source disposal operation is still pending.
 
-The current course retrieval path uses pgvector cosine distance with organization and course filtering, bounded overfetch, and an activity-level authorization check before snippets reach model context or citations. The optional exact-underfill fallback is disabled unless explicitly enabled. [Current query](../../apps/api/src/services/ai/rag/query_service.py) · [Activity authorization](../../apps/api/src/services/ai/rag/access.py)
+The current course retrieval path uses pgvector cosine distance with organization, course, unmanaged-course, and embedding-space filtering. For single-course requests with at most 1,000 compatible chunks (discovered by inspecting at most 1,001 activity identifiers), it resolves readable activity IDs before invoking the embedding provider or vector ranker, applies those IDs directly via parameterized SQL while preserving eligible null-activity course/chapter metadata, and exits early without embedding when nothing is readable. Larger and multi-course scopes keep bounded overfetch. Every retrieval path applies `filter_readable_chunks()` immediately before snippets reach model context or citations. The optional exact-underfill fallback (`LEARNHOUSE_RAG_SMALL_COURSE_EXACT=true`) remains disabled unless explicitly enabled, reuses same-request resolved permissions, and rechecks the 1,000-row ceiling during materialization. [Current query](../../apps/api/src/services/ai/rag/query_service.py) · [Activity authorization](../../apps/api/src/services/ai/rag/access.py)
 
 The offline comparison used a disposable loopback-only PostgreSQL 16 container with pgvector. A temporary table held six eligible curriculum chunks and three controls from another tenant, a draft, and a revoked source. Four queries covered an exact curriculum code, an exact teaching term, and two conceptual paraphrases. The vectors were hand-authored to isolate ranking behavior. Every candidate set was authorized before ranking.
 
@@ -59,6 +59,26 @@ The isolated loopback fixture used PostgreSQL 19.0 and pgvector 0.8.7. It contai
 | Filtered HNSW, `strict_order` | 3 | 1.00 | 0.014 ms | 29 | Yes |
 
 Shared buffer hits and reads were zero for these temporary-table plans. The timing is PostgreSQL's `EXPLAIN ANALYZE` executor time on this tiny local fixture; it is not a throughput or production-latency estimate. The result confirms that iterative scanning recovers this test's selective result set, while exact authorized ranking provides the comparison baseline. It does not justify changing HNSW defaults or enabling iterative scans globally. The runtime setting and HNSW index remain unchanged. The native RAG exact fallback remains opt-in and only addresses underfilled, bounded, single-course scopes.
+
+#### Bounded prefiltering and 32-query offline benchmark (24 November 2026)
+
+The isolated loopback fixture used PostgreSQL `19.0 (Debian 19.0-1.pgdg12+1)` with `pgvector 0.8.7` from the pinned CLI image (`pgvector/pgvector:0.8.7-pg19@sha256:89879f41...`). A temporary table (`bench_retrieval`) held 32 synthetic authorized 16-dimensional chunks (`org_id = 1`, `embedding_space = 'space_active'`, published, unlocked, permitted) and 256 closer unauthorized controls across other tenants (`org_id = 2, 3`), mismatched/`NULL` embedding spaces, unpublished drafts, locked activities, and revoked access (11.1% selective authorized cohort) with an HNSW cosine index. Thirty-two judged synthetic queries spanned conceptual paraphrases (6), syllabus codes (6), scientific terminology (6), units (5), numeric labels (5), and exact identifiers (4). Hybrid inputs used identical materialized authorized candidate sets, PostgreSQL `simple` text search, exact curriculum-code matching, and RRF (`k = 60`). Per-query execution times came from `EXPLAIN (ANALYZE, FORMAT JSON)`:
+
+| Ranking path | Queries | Recall@5 | Underfilled (`<5`) | Median (ms) | p95 (ms) | Unauthorized |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Exact authorized cosine (`exact_vector`) | 32 | 0.8281 | 0 | 0.093 | 0.179 | 0 |
+| Filtered HNSW (`iterative_scan=off`, `ef_search=8`) | 32 | 0.6719 | 30 | 0.057 | 0.080 | 0 |
+| Bounded strict iterative HNSW (`strict_order`, `max_scan_tuples=2000`, `ef_search=8`) | 32 | 0.7969 | 0 | 0.073 | 0.084 | 0 |
+| PostgreSQL `simple` FTS + exact code match (`full_text`) | 32 | 0.8125 | 32 | 0.141 | 0.198 | 0 |
+| Reciprocal-rank fusion (`rrf_hybrid`, `k = 60`) | 32 | 1.0000 | 0 | 0.258 | 0.387 | 0 |
+
+Observed tradeoffs and activation boundary:
+
+- Every ranking path returned **zero** unauthorized results.
+- Filtered HNSW without iterative scanning underfilled 30/32 queries and dropped Recall@5 to `0.6719`. Bounded `strict_order` iterative HNSW eliminated underfill (`0/32`) and lifted Recall@5 to `0.7969` with lower median latency (`0.073 ms`) than exact scan, though it remained approximate relative to exact cosine (`0.8281`) at `ef_search=8`.
+- Standalone `simple` FTS + exact code matching recovered syllabus codes, units, numeric labels, and exact identifiers but missed conceptual paraphrases and returned fewer than five lexical matches on all 32 queries.
+- RRF (`k = 60`) recovered both paraphrases and exact identifiers (`Recall@5 = 1.0000`, `0/32` underfilled) at roughly 2.8× the median executor time of exact cosine (`0.258 ms` vs `0.093 ms`) on this small synthetic fixture.
+- **Runtime status:** Both iterative HNSW tuning and hybrid RRF ranking remain **disabled** in production runtime. No database indexes, global HNSW parameters, embedding dimensions, or provider configurations changed. Separate evaluation with real embedding providers and approved Sri Lankan curriculum corpora is required before proposing activation. [Benchmark fixture](../../apps/api/src/tests/studytomy/test_grounded_retrieval_postgres.py)
 
 Row-level security remains deferred. Any future local evaluation should use a non-owner role without `BYPASSRLS`, test default denial and cross-tenant access, and account for transaction and connection reuse. No shared roles or policies changed. [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
 

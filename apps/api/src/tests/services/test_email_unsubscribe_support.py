@@ -246,11 +246,12 @@ class TestNudgeRendering:
         assert "List-Unsubscribe" not in headers
         assert "List-Unsubscribe-Post" not in headers
 
-    def test_reply_to_is_set(self):
+    def test_reply_to_is_set(self, monkeypatch):
         """Several nudges invite a reply; from a no-reply sender that would be
         a lie."""
+        monkeypatch.setenv("LEARNHOUSE_CONTACT_EMAIL", "support@example.test")
         captured = self._send()
-        assert "@" in captured["headers"]["Reply-To"]
+        assert captured["headers"]["Reply-To"] == "support@example.test"
 
     def test_cta_button_is_rendered(self):
         captured = self._send()
