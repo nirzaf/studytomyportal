@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Studytomy Learning Portal — Complete Client Process &amp; Architecture Guide</title>
+  <style>
+    :root {
+      --paper: #f7f9fb;
+      --surface: #ffffff;
+      --surface-subtle: #f0f4f8;
+      --ink: #10253a;
+      --ink-secondary: #3d5368;
+      --ink-muted: #62778c;
+      --line: #d5e0ea;
+      --line-strong: #b4c6d8;
+
+      --navy: #143a5c;
+      --navy-soft: #e6eff7;
+      --emerald: #14634f;
+      --emerald-soft: #e4f3ee;
+      --amber: #8f530d;
+      --amber-soft: #fef4e4;
+      --plum: #5b3b78;
+      --plum-soft: #f2ecf8;
+      --crimson: #8f2d2d;
+      --crimson-soft: #fbeaea;
+
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+
+      --font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4 {
+      margin: 0;
+      color: var(--ink);
+      line-height: 1.25;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.9rem, 3.2vw, 2.65rem);
+      font-weight: 700;
+      letter-spacing: -0.015em;
+    }
+
+    h2 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.4rem, 2.2vw, 1.8rem);
+      font-weight: 700;
+    }
+
+    h3 {
+      font-size: 1.08rem;
+      font-weight: 650;
+    }
+
+    p {
+      margin: 0;
+      max-width: 72ch;
+      color: var(--ink-secondary);
+    }
+
+    a {
+      color: var(--navy);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--navy);
+      outline-offset: 2px;
+    }
+
+    /* Top Masthead */
+    .masthead {
+      background: var(--ink);
+      color: #ffffff;
+      border-bottom: 4px solid var(--emerald);
+      padding: 2.5rem 1.5rem 2.25rem;
+    }
+
+    .masthead-inner {
+      max-width: 1240px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1.5rem;
+      align-items: end;
+    }
+
+    .masthead-context {
+      display: inline-block;
+      font-size: 0.85rem;
+      color: #c8daea;
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      margin-bottom: 0.9rem;
+    }
+
+    .masthead h1 {
+      color: #ffffff;
+      max-width: 26ch;
+    }
+
+    .masthead-lead {
+      color: #d6e3ef;
+      font-size: 1.04rem;
+      margin-top: 0.85rem;
+      max-width: 68ch;
+      line-height: 1.65;
+    }
+
+    .masthead-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+    }
+
+    .btn-utility {
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 1rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      transition: background 0.15s ease;
+    }
+
+    .btn-utility:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    /* Main Layout Grid */
+    .workspace {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+      display: grid;
+      grid-template-columns: 255px minmax(0, 1fr);
+      gap: 2.25rem;
+      align-items: start;
+    }
+
+    /* Sticky Chapter Navigation */
+    .side-nav {
+      position: sticky;
+      top: 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 1.1rem;
+    }
+
+    .side-nav-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--ink-muted);
+      padding-bottom: 0.65rem;
+      margin-bottom: 0.65rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .side-nav ol {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .side-nav a {
+      display: block;
+      text-decoration: none;
+      color: var(--ink-secondary);
+      font-size: 0.86rem;
+      padding: 0.46rem 0.65rem;
+      border-radius: var(--radius-sm);
+      line-height: 1.35;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .side-nav a:hover,
+    .side-nav a.active {
+      background: var(--navy-soft);
+      color: var(--navy);
+      font-weight: 600;
+    }
+
+    .side-nav-note {
+      margin-top: 1rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--line);
+      font-size: 0.78rem;
+      color: var(--ink-muted);
+      line-height: 1.5;
+    }
+
+    /* Content Column */
+    .main-column {
+      display: flex;
+      flex-direction: column;
+      gap: 2.75rem;
+    }
+
+    .chapter {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      scroll-margin-top: 1.25rem;
+    }
+
+    .chapter-header {
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 1.15rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .chapter-number {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 0.3rem;
+    }
+
+    .chapter-header p {
+      margin-top: 0.55rem;
+      font-size: 0.98rem;
+    }
+
+    /* Pill / Status Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.78rem;
+      font-weight: 650;
+      padding: 0.22rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid transparent;
+    }
+
+    .badge-emerald {
+      background: var(--emerald-soft);
+      color: var(--emerald);
+      border-color: #b7dfd3;
+    }
+
+    .badge-navy {
+      background: var(--navy-soft);
+      color: var(--navy);
+      border-color: #bfd6ea;
+    }
+
+    .badge-amber {
+      background: var(--amber-soft);
+      color: var(--amber);
+      border-color: #f2d5a7;
+    }
+
+    .badge-plum {
+      background: var(--plum-soft);
+      color: var(--plum);
+      border-color: #d7c5ea;
+    }
+
+    /* Two-Door Comparison */
+    .two-doors {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 1.15rem;
+      align-items: stretch;
+    }
+
+    .door-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 1.35rem;
+      background: var(--surface-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .door-card.portal-highlight {
+      background: #ffffff;
+      border: 2px solid var(--navy);
+    }
+
+    .door-divider {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0 0.35rem;
+      color: var(--ink-muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-align: center;
+      max-width: 110px;
+    }
+
+    .door-divider-line {
+      width: 2px;
+      flex: 1;
+      background: repeating-linear-gradient(
+        to bottom,
+        var(--line-strong) 0,
+        var(--line-strong) 5px,
+        transparent 5px,
+        transparent 10px
+      );
+      margin: 0.4rem 0;
+    }
+
+    .clean-list {
+      margin: 0;
+      padding-left: 1.15rem;
+      color: var(--ink-secondary);
+      font-size: 0.92rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    /* Scope Strip (Sri Lanka Grades 6-13) */
+    .grade-bands {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 1.35rem;
+    }
+
+    .grade-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 1.1rem;
+      background: var(--surface);
+    }
+
+    .grade-card strong {
+      display: block;
+      color: var(--navy);
+      font-size: 0.96rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .grade-card span {
+      font-size: 0.87rem;
+      color: var(--ink-secondary);
+    }
+
+    /* Interactive Visual Architecture Map */
+    .atlas-diagram-box {
+      background: var(--surface-subtle);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+      overflow-x: auto;
+    }
+
+    .atlas-svg {
+      width: 100%;
+      min-width: 760px;
+      height: auto;
+      display: block;
+    }
+
+    .atlas-node {
+      cursor: pointer;
+      transition: opacity 0.15s ease;
+    }
+
+    .atlas-node rect {
+      transition: stroke-width 0.15s ease, fill 0.15s ease;
+    }
+
+    .atlas-node:hover rect,
+    .atlas-node.selected rect {
+      stroke-width: 3px;
+    }
+
+    /* 7-Stage Selector Pills & Detail Panel */
+    .stage-tabs {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .stage-tab {
+      text-align: left;
+      padding: 0.7rem 0.65rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: var(--surface-subtle);
+      color: var(--ink);
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .stage-tab:hover {
+      border-color: var(--navy);
+    }
+
+    .stage-tab[aria-selected="true"] {
+      background: var(--navy);
+      color: #ffffff;
+      border-color: var(--navy);
+    }
+
+    .stage-tab-num {
+      display: block;
+      font-size: 0.74rem;
+      font-weight: 700;
+      opacity: 0.82;
+    }
+
+    .stage-tab-label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 650;
+      margin-top: 0.15rem;
+      line-height: 1.25;
+    }
+
+    .stage-panel {
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      background: var(--surface);
+    }
+
+    .stage-panel-top {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .stage-grid {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1.2rem;
+    }
+
+    .step-sequence {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+
+    .step-sequence li {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 0.75rem;
+      align-items: start;
+      font-size: 0.93rem;
+      color: var(--ink-secondary);
+    }
+
+    .step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--navy-soft);
+      color: var(--navy);
+      font-weight: 700;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.1rem;
+    }
+
+    .guardrail-box {
+      background: var(--surface-subtle);
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--emerald);
+      border-radius: var(--radius-sm);
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .guardrail-box h4 {
+      font-size: 0.92rem;
+      color: var(--ink);
+    }
+
+    /* Topic Learning Loop Interactive Walkthrough */
+    .loop-simulator {
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .loop-controls {
+      background: var(--surface-subtle);
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.85rem;
+    }
+
+    .path-switch {
+      display: inline-flex;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .path-switch button {
+      border: none;
+      background: transparent;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--ink-secondary);
+    }
+
+    .path-switch button.active {
+      background: var(--navy);
+      color: #ffffff;
+    }
+
+    .loop-steps-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      padding: 1.35rem;
+      background: var(--surface);
+    }
+
+    .loop-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    .loop-card.highlight-emerald {
+      border-color: var(--emerald);
+      background: var(--emerald-soft);
+    }
+
+    .loop-card.highlight-amber {
+      border-color: var(--amber);
+      background: var(--amber-soft);
+    }
+
+    .loop-card.highlight-navy {
+      border-color: var(--navy);
+      background: var(--navy-soft);
+    }
+
+    .loop-card-step {
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--ink-muted);
+    }
+
+    /* Coverage Badges Grid */
+    .coverage-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.9rem;
+      margin-top: 1.25rem;
+    }
+
+    .coverage-item {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 0.95rem 1.05rem;
+      background: var(--surface-subtle);
+    }
+
+    .coverage-item p {
+      font-size: 0.88rem;
+      margin-top: 0.4rem;
+    }
+
+    /* Classroom Building Blocks (Chapter 4) */
+    .hierarchy-tree {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.85rem;
+      background: var(--surface-subtle);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .hierarchy-step {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--navy);
+      border-radius: var(--radius-sm);
+      padding: 0.95rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .hierarchy-step span {
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .hierarchy-step p {
+      font-size: 0.85rem;
+    }
+
+    .ops-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.15rem;
+    }
+
+    .ops-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 1.3rem;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    /* Role Explorer */
+    .role-selector {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .role-btn {
+      padding: 0.58rem 1rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line-strong);
+      background: var(--surface-subtle);
+      color: var(--ink);
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .role-btn[aria-selected="true"] {
+      background: var(--navy);
+      color: #ffffff;
+      border-color: var(--navy);
+    }
+
+    .role-view {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      background: var(--surface);
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .boundary-panel {
+      background: var(--surface-subtle);
+      border-radius: var(--radius-sm);
+      padding: 1.1rem;
+      border: 1px solid var(--line);
+    }
+
+    /* Scenario Explorer ("What happens if...?") */
+    .scenario-layout {
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 1.25rem;
+    }
+
+    .scenario-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    .scenario-btn {
+      text-align: left;
+      padding: 0.72rem 0.9rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: var(--surface-subtle);
+      color: var(--ink);
+      font-size: 0.87rem;
+      font-weight: 550;
+      line-height: 1.35;
+    }
+
+    .scenario-btn[aria-selected="true"] {
+      background: var(--navy-soft);
+      border-color: var(--navy);
+      color: var(--navy);
+      font-weight: 700;
+    }
+
+    .scenario-answer {
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+
+    /* Non-Negotiable Rules Table */
+    .rules-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .rules-table th,
+    .rules-table td {
+      text-align: left;
+      vertical-align: top;
+      padding: 0.9rem 1rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .rules-table th {
+      background: var(--surface-subtle);
+      color: var(--ink);
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    /* Readiness Matrix */
+    .readiness-columns {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.1rem;
+    }
+
+    .readiness-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .readiness-card h3 {
+      font-size: 1rem;
+    }
+
+    /* Print-Only Full Dump Container (hidden on screen unless expanded) */
+    .print-all-stages {
+      display: none;
+    }
+
+    body.expanded-print-view .print-all-stages {
+      display: block;
+      margin-top: 1.5rem;
+    }
+
+    body.expanded-print-view .interactive-only {
+      display: none;
+    }
+
+    .printed-stage-block {
+      border-top: 1px solid var(--line);
+      padding: 1.15rem 0;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 0.83rem;
+      color: var(--ink-muted);
+      padding-top: 1rem;
+    }
+
+    /* Responsive Breakpoints */
+    @media (max-width: 1024px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+      .side-nav {
+        position: static;
+      }
+      .side-nav ol {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+      .stage-tabs {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .loop-steps-grid,
+      .hierarchy-tree {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .scenario-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .masthead-inner {
+        grid-template-columns: 1fr;
+      }
+      .two-doors {
+        grid-template-columns: 1fr;
+      }
+      .door-divider {
+        flex-direction: row;
+        max-width: none;
+      }
+      .door-divider-line {
+        height: 2px;
+        width: auto;
+      }
+      .grade-bands,
+      .stage-grid,
+      .role-view,
+      .coverage-grid,
+      .ops-grid,
+      .readiness-columns,
+      .loop-steps-grid,
+      .hierarchy-tree {
+        grid-template-columns: 1fr;
+      }
+      .stage-tabs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .chapter {
+        padding: 1.35rem;
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+      .masthead {
+        background: #ffffff;
+        color: var(--ink);
+        border-bottom: 2px solid var(--ink);
+        padding: 1rem 0;
+      }
+      .masthead h1, .masthead-lead, .masthead-context {
+        color: var(--ink);
+        border-color: var(--ink);
+      }
+      .masthead-actions, .side-nav, .interactive-only {
+        display: none !important;
+      }
+      .print-all-stages {
+        display: block !important;
+      }
+      .workspace {
+        display: block;
+        padding: 0;
+      }
+      .chapter {
+        break-inside: avoid;
+        border: 1px solid #cccccc;
+        margin-bottom: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- MASTHEAD -->
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div>
+        <div class="masthead-context">Client Architecture &amp; Operational Walkthrough · Plain-Language Edition</div>
+        <h1>How the Studytomy Learning Portal Works</h1>
+        <p class="masthead-lead">
+          A complete visual guide to how official Sri Lankan syllabus sources, teacher-reviewed lessons, cited AI study help, science labs, student assessments, child-privacy rules, and verified parent progress reports work together inside <strong>lms.studytomy.com</strong>.
+        </p>
+      </div>
+      <div class="masthead-actions">
+        <button type="button" class="btn-utility" id="toggleExpandBtn" onclick="toggleFullReadingMode()">
+          Show All Sections Expanded
+        </button>
+        <button type="button" class="btn-utility" onclick="window.print()">
+          Print / Save as PDF
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <div class="workspace">
+
+    <!-- STICKY CHAPTER RAIL -->
+    <nav class="side-nav" aria-label="Document sections">
+      <div class="side-nav-title">Guide Chapters</div>
+      <ol>
+        <li><a href="#separation" class="active">1. Two Separate Doors &amp; Syllabus Scope</a></li>
+        <li><a href="#lifecycle">2. The 7-Stage Master Process</a></li>
+        <li><a href="#learning-loop">3. Inside a Lesson &amp; Cited AI Help</a></li>
+        <li><a href="#classroom-ops">4. Courses, Labs, Enrolments &amp; Awards</a></li>
+        <li><a href="#roles">5. Experience by Person (6 Roles)</a></li>
+        <li><a href="#scenarios">6. Real-World "What Happens If...?"</a></li>
+        <li><a href="#guardrails">7. Quality, Privacy &amp; Safety Rules</a></li>
+        <li><a href="#readiness">8. Current Stage &amp; Launch Sign-Offs</a></li>
+      </ol>
+      <div class="side-nav-note">
+        Prepared in plain business and educational language—without software jargon—while keeping a clear boundary between built capabilities, human sign-off gates, and planned phases.
+      </div>
+    </nav>
+
+    <!-- CONTENT COLUMN -->
+    <main class="main-column">
+
+      <!-- CHAPTER 1: TWO SEPARATE DOORS & SRI LANKAN SCOPE -->
+      <section id="separation" class="chapter">
+        <div class="chapter-header">
+          <div class="chapter-number">Chapter 1 · System Boundary &amp; Educational Scope</div>
+          <h2>Two Separate Doors, One Dedicated Learning Workspace</h2>
+          <p>
+            To keep student records private and leave existing public marketing pages untouched, the public website and the learning portal operate as completely separate spaces.
+          </p>
+        </div>
+
+        <div class="two-doors">
+          <div class="door-card">
+            <div><span class="badge badge-amber">Unchanged Public Website</span></div>
+            <h3>studytomy.com / www.studytomy.com</h3>
+            <p>
+              Remains a standalone public brochure and general inquiry website with its own separate sign-ins and records.
+            </p>
+            <ul class="clean-list">
+              <li>Introduces Studytomy programmes to prospective students and parents</li>
+              <li>Handles general public inquiries and informational pages</li>
+              <li>Has zero automatic connection to private lessons, grades, or family records inside the learning portal</li>
+            </ul>
+          </div>
+
+          <div class="door-divider" aria-hidden="true">
+            <div class="door-divider-line"></div>
+            <span>Kept Strictly Separate</span>
+            <div class="door-divider-line"></div>
+          </div>
+
+          <div class="door-card portal-highlight">
+            <div><span class="badge badge-navy">Dedicated Learning Portal</span></div>
+            <h3>lms.studytomy.com</h3>
+            <p>
+              The private, sign-in school workspace built for structured teaching, guided practice, and verified family progress reporting.
+            </p>
+            <ul class="clean-list">
+              <li>Houses approved syllabus PDFs, structured courses, videos, quizzes, science labs, and assignments</li>
+              <li>Provides source-cited AI study help and topic checks strictly within each learner's permissions</li>
+              <li>Protects student identity, consent choices, teacher reviews, certificates, and guardian reports in one controlled workspace</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.75rem;">
+          <h3>Tailored to the Sri Lankan National School Syllabus (English Medium)</h3>
+          <p style="margin-top: 0.35rem; font-size: 0.93rem;">
+            Academic structure aligns with the National Institute of Education (NIE) and Ministry of Education stages in English instruction, locking each course to a specific syllabus edition and student cohort (for example, keeping 2015/2017 cohorts cleanly separated from an upcoming Grade 6 curriculum reform cohort).
+          </p>
+          <div class="grade-bands">
+            <div class="grade-card">
+              <strong>Junior Secondary · Grades 6–9</strong>
+              <span>Foundational Mathematics, Science, English, and ICT concepts with guided topic checks, visual explanations, and protected dependent-student accounts.</span>
+            </div>
+            <div class="grade-card">
+              <strong>G.C.E. O/L Stage · Grades 10–11</strong>
+              <span>Structured syllabus coverage, prerequisite diagnostic checks, cited topic exploration, objective quizzes, and teacher-marked written assignments.</span>
+            </div>
+            <div class="grade-card">
+              <strong>G.C.E. A/L Stage · Grades 12–13</strong>
+              <span>Advanced subject streams, interactive laboratory simulations (starting with the Momentum pilot), concept-to-page syllabus comparison, and student-controlled report sharing.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAPTER 2: THE 7-STAGE MASTER PROCESS -->
+      <section id="lifecycle" class="chapter">
+        <div class="chapter-header">
+          <div class="chapter-number">Chapter 2 · End-to-End Operational Flow</div>
+          <h2>How Material Moves Safely From Syllabus to Family Report</h2>
+          <p>
+            Nothing reaches a student or parent without passing clear human checks. Click any stage box in the diagram—or any of the seven stage tabs—to trace who acts, what happens, and what safeguard protects that step.
+          </p>
+        </div>
+
+        <!-- Interactive SVG Flow Map -->
+        <div class="atlas-diagram-box interactive-only">
+          <svg class="atlas-svg" viewBox="0 0 980 250" role="img" aria-label="Seven-stage Studytomy process flow diagram">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#4f6982" />
+              </marker>
+            </defs>
+
+            <!-- Zone Backdrops -->
+            <rect x="10" y="12" width="405" height="226" rx="10" fill="#eef4f9" stroke="#c8d8e8" />
+            <text x="24" y="34" font-size="11.5" font-weight="700" fill="#143a5c">EDUCATOR PREPARATION &amp; QUALITY GATES</text>
+
+            <rect x="430" y="12" width="395" height="226" rx="10" fill="#edf7f3" stroke="#bddfd3" />
+            <text x="444" y="34" font-size="11.5" font-weight="700" fill="#14634f">GUIDED STUDENT WORKSPACE</text>
+
+            <rect x="840" y="12" width="130" height="226" rx="10" fill="#fef6e7" stroke="#ecd2a6" />
+            <text x="852" y="34" font-size="11.5" font-weight="700" fill="#8f530d">FAMILY &amp; TRUST</text>
+
+            <!-- Connector Arrows -->
+            <line x1="132" y1="95" x2="152" y2="95" stroke="#4f6982" stroke-width="2" marker-end="url(#arrow)" />
+            <line x1="274" y1="95" x2="294" y2="95" stroke="#4f6982" stroke-width="2" marker-end="url(#arrow)" />
+            <line x1="402" y1="95" x2="444" y2="95" stroke="#4f6982" stroke-width="2" marker-end="url(#arrow)" />
+            <line x1="560" y1="95" x2="582" y2="95" stroke="#4f6982" stroke-width="2" marker-end="url(#arrow)" />
+            <line x1="698" y1="95" x2="718" y2="95" stroke="#4f6982" stroke-width="2" marker-end="url(#arrow)" />
+            <line x1="816" y1="95" x2="850" y2="95" stroke="#4f6982" stroke-width="2" marker-end="url(#arrow)" />
+
+            <!-- Feedback loop from Stage 6 back to Stage 5 -->
+            <path d="M 767 142 L 767 192 L 639 192 L 639 142" fill="none" stroke="#14634f" stroke-width="1.8" stroke-dasharray="5,4" marker-end="url(#arrow)" />
+            <text x="646" y="212" font-size="10.5" fill="#14634f" font-weight="600">Updates next recommended study topic</text>
+
+            <!-- Stage Nodes -->
+            <g class="atlas-node selected" id="svg-node-0" onclick="selectStage(0)">
+              <rect x="22" y="54" width="110" height="84" rx="8" fill="#ffffff" stroke="#143a5c" stroke-width="2" />
+              <text x="32" y="74" font-size="10.5" font-weight="700" fill="#143a5c">Stage 1</text>
+              <text x="32" y="92" font-size="12" font-weight="700" fill="#10253a">Programme &amp;</text>
+              <text x="32" y="108" font-size="12" font-weight="700" fill="#10253a">Policy Setup</text>
+              <text x="32" y="126" font-size="10" fill="#62778c">Cohort &amp; rules</text>
+            </g>
+
+            <g class="atlas-node" id="svg-node-1" onclick="selectStage(1)">
+              <rect x="156" y="54" width="118" height="84" rx="8" fill="#ffffff" stroke="#143a5c" stroke-width="1.5" />
+              <text x="166" y="74" font-size="10.5" font-weight="700" fill="#143a5c">Stage 2</text>
+              <text x="166" y="92" font-size="12" font-weight="700" fill="#10253a">Syllabus PDF</text>
+              <text x="166" y="108" font-size="12" font-weight="700" fill="#10253a">2-Person Check</text>
+              <text x="166" y="126" font-size="10" fill="#62778c">Rights &amp; quotes</text>
+            </g>
+
+            <g class="atlas-node" id="svg-node-2" onclick="selectStage(2)">
+              <rect x="298" y="54" width="104" height="84" rx="8" fill="#ffffff" stroke="#143a5c" stroke-width="1.5" />
+              <text x="308" y="74" font-size="10.5" font-weight="700" fill="#143a5c">Stage 3</text>
+              <text x="308" y="92" font-size="12" font-weight="700" fill="#10253a">Authoring &amp;</text>
+              <text x="308" y="108" font-size="12" font-weight="700" fill="#10253a">Frozen Release</text>
+              <text x="308" y="126" font-size="10" fill="#62778c">Reviewer sign-off</text>
+            </g>
+
+            <g class="atlas-node" id="svg-node-3" onclick="selectStage(3)">
+              <rect x="448" y="54" width="112" height="84" rx="8" fill="#ffffff" stroke="#14634f" stroke-width="1.5" />
+              <text x="458" y="74" font-size="10.5" font-weight="700" fill="#14634f">Stage 4</text>
+              <text x="458" y="92" font-size="12" font-weight="700" fill="#10253a">Learner Access</text>
+              <text x="458" y="108" font-size="12" font-weight="700" fill="#10253a">&amp; Family Links</text>
+              <text x="458" y="126" font-size="10" fill="#62778c">Privacy &amp; consent</text>
+            </g>
+
+            <g class="atlas-node" id="svg-node-4" onclick="selectStage(4)">
+              <rect x="586" y="54" width="112" height="84" rx="8" fill="#ffffff" stroke="#14634f" stroke-width="1.5" />
+              <text x="596" y="74" font-size="10.5" font-weight="700" fill="#14634f">Stage 5</text>
+              <text x="596" y="92" font-size="12" font-weight="700" fill="#10253a">Daily Lessons &amp;</text>
+              <text x="596" y="108" font-size="12" font-weight="700" fill="#10253a">Cited AI Help</text>
+              <text x="596" y="126" font-size="10" fill="#62778c">Topic check loop</text>
+            </g>
+
+            <g class="atlas-node" id="svg-node-5" onclick="selectStage(5)">
+              <rect x="722" y="54" width="94" height="84" rx="8" fill="#ffffff" stroke="#14634f" stroke-width="1.5" />
+              <text x="731" y="74" font-size="10.5" font-weight="700" fill="#14634f">Stage 6</text>
+              <text x="731" y="92" font-size="12" font-weight="700" fill="#10253a">Quizzes, Labs</text>
+              <text x="731" y="108" font-size="12" font-weight="700" fill="#10253a">&amp; Grading</text>
+              <text x="731" y="126" font-size="10" fill="#62778c">Human marks</text>
+            </g>
+
+            <g class="atlas-node" id="svg-node-6" onclick="selectStage(6)">
+              <rect x="854" y="54" width="104" height="84" rx="8" fill="#ffffff" stroke="#8f530d" stroke-width="1.5" />
+              <text x="864" y="74" font-size="10.5" font-weight="700" fill="#8f530d">Stage 7</text>
+              <text x="864" y="92" font-size="12" font-weight="700" fill="#10253a">Parent Reports</text>
+              <text x="864" y="108" font-size="12" font-weight="700" fill="#10253a">&amp; Safeguarding</text>
+              <text x="864" y="126" font-size="10" fill="#62778c">Verified sharing</text>
+            </g>
+
+            <!-- Gate Callouts along bottom of Educator Zone -->
+            <text x="24" y="172" font-size="10.5" fill="#3d5368">• Uploader cannot approve their own syllabus PDF</text>
+            <text x="24" y="190" font-size="10.5" fill="#3d5368">• Unpublished drafts never appear in student search or AI answers</text>
+            <text x="24" y="208" font-size="10.5" fill="#3d5368">• Released lessons are frozen so mid-term edits don't disrupt learners</text>
+          </svg>
+        </div>
+
+        <!-- Stage Selector Buttons -->
+        <div class="stage-tabs interactive-only" role="tablist" aria-label="Seven process stages">
+          <button type="button" role="tab" aria-selected="true" class="stage-tab" id="stage-tab-0" onclick="selectStage(0)">
+            <span class="stage-tab-num">Stage 1</span>
+            <span class="stage-tab-label">Programme &amp; Rules</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="stage-tab" id="stage-tab-1" onclick="selectStage(1)">
+            <span class="stage-tab-num">Stage 2</span>
+            <span class="stage-tab-label">Syllabus Library</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="stage-tab" id="stage-tab-2" onclick="selectStage(2)">
+            <span class="stage-tab-num">Stage 3</span>
+            <span class="stage-tab-label">Authoring &amp; Release</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="stage-tab" id="stage-tab-3" onclick="selectStage(3)">
+            <span class="stage-tab-num">Stage 4</span>
+            <span class="stage-tab-label">Access &amp; Privacy</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="stage-tab" id="stage-tab-4" onclick="selectStage(4)">
+            <span class="stage-tab-num">Stage 5</span>
+            <span class="stage-tab-label">Guided Study &amp; AI</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="stage-tab" id="stage-tab-5" onclick="selectStage(5)">
+            <span class="stage-tab-num">Stage 6</span>
+            <span class="stage-tab-label">Quizzes &amp; Labs</span>
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="stage-tab" id="stage-tab-6" onclick="selectStage(6)">
+            <span class="stage-tab-num">Stage 7</span>
+            <span class="stage-tab-label">Parent Reports</span>
+          </button>
+        </div>
+
+        <!-- Dynamic Active Stage Panel -->
+        <div id="stage-detail-panel" class="stage-panel interactive-only" role="tabpanel"></div>
+
+        <!-- Full Expanded View for Print / Reading Mode -->
+        <div id="print-all-stages" class="print-all-stages"></div>
+      </section>
+
+      <!-- CHAPTER 3: DEEP DIVE INTO DAILY STUDENT LEARNING & CITED AI -->
+      <section id="learning-loop" class="chapter">
+        <div class="chapter-header">
+          <div class="chapter-number">Chapter 3 · Inside a Lesson</div>
+          <h2>How Guided Topic Checks &amp; Cited AI Study Help Work</h2>
+          <p>
+            Instead of letting students passively click past topics they did not grasp—or letting an AI chatbot invent unverified answers—Studytomy guides learners through a calm, source-cited learning loop.
+          </p>
+        </div>
+
+        <!-- Interactive Path Switcher -->
+        <div class="loop-simulator interactive-only">
+          <div class="loop-controls">
+            <div>
+              <strong style="font-size: 0.93rem;">Interactive Lesson Walkthrough:</strong>
+              <span style="font-size: 0.86rem; color: var(--ink-secondary); margin-left: 0.35rem;">Choose a student situation to trace what the portal does</span>
+            </div>
+            <div class="path-switch" role="group" aria-label="Student lesson paths">
+              <button type="button" id="loop-btn-struggle" class="active" onclick="selectLoopPath('struggle')">
+                When a Student Answers Incorrectly
+              </button>
+              <button type="button" id="loop-btn-correct" onclick="selectLoopPath('correct')">
+                When a Student Answers Correctly
+              </button>
+              <button type="button" id="loop-btn-ask" onclick="selectLoopPath('ask')">
+                When a Student Asks "Explore Topics"
+              </button>
+            </div>
+          </div>
+          <div id="loop-steps-container" class="loop-steps-grid"></div>
+        </div>
+
+        <!-- Print-mode representation of all 3 loop paths -->
+        <div id="print-all-loops" class="print-all-stages"></div>
+
+        <!-- Syllabus Coverage Badges Explanation -->
+        <div style="margin-top: 1.75rem;">
+          <h3>How Students Know Whether an Answer Is Officially in Their Syllabus</h3>
+          <p style="margin-top: 0.35rem; font-size: 0.92rem;">
+            When students search <strong>Explore Topics</strong> across approved reference PDFs, every cited page carries an honest syllabus-coverage badge based strictly on educator-reviewed page mappings—never guesswork:
+          </p>
+          <div class="coverage-grid">
+            <div class="coverage-item">
+              <span class="badge badge-emerald">Confirmed in Selected Syllabus</span>
+              <p>An independent educator verified that this exact PDF page maps directly to a concept in the student's selected official syllabus edition.</p>
+            </div>
+            <div class="coverage-item">
+              <span class="badge badge-navy">Mapped to Another Approved Syllabus</span>
+              <p>The page belongs to an approved official syllabus in the library, but for a different grade or edition than the one currently selected.</p>
+            </div>
+            <div class="coverage-item">
+              <span class="badge badge-plum">Supplementary Reference</span>
+              <p>Approved by educators as helpful supporting study material, without claiming it is an official NIE syllabus requirement.</p>
+            </div>
+            <div class="coverage-item">
+              <span class="badge badge-amber">Unverified Coverage</span>
+              <p>The document is approved for reading, but no page-specific curriculum mapping has been signed off for this exact page yet.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAPTER 4: COURSES, SCIENCE LABS, ENROLMENTS & CERTIFICATES -->
+      <section id="classroom-ops" class="chapter">
+        <div class="chapter-header">
+          <div class="chapter-number">Chapter 4 · Classroom Structure &amp; Student Services</div>
+          <h2>How Courses, Science Labs, Enrolments &amp; Certificates Work</h2>
+          <p>
+            Beyond individual lessons, the portal organizes complete subjects, hands-on scientific simulations, seat allocations, and verifiable completion awards.
+          </p>
+        </div>
+
+        <h3 style="margin-bottom: 0.65rem;">How Learning Material Is Organized</h3>
+        <div class="hierarchy-tree">
+          <div class="hierarchy-step">
+            <span>Level 1 · School Workspace</span>
+            <strong>Organization &amp; Cohort</strong>
+            <p>Separates each school or programme workspace, its staff permissions, approved policies, and syllabus editions.</p>
+          </div>
+          <div class="hierarchy-step">
+            <span>Level 2 · Subject Container</span>
+            <strong>Course &amp; Frozen Release</strong>
+            <p>Groups a full subject (such as Grade 10 Science) with controlled drafts for teachers and frozen approved releases for students.</p>
+          </div>
+          <div class="hierarchy-step">
+            <span>Level 3 · Study Sequence</span>
+            <strong>Ordered Chapters</strong>
+            <p>Arranges topics in teaching order, supporting scheduled release dates (drip) and prerequisite or group locks.</p>
+          </div>
+          <div class="hierarchy-step">
+            <span>Level 4 · Daily Tasks</span>
+            <strong>Lesson &amp; Assessment Activities</strong>
+            <p>Reading pages, searchable PDFs, captioned videos, collaborative boards, topic checks, science labs, quizzes, and assignments.</p>
+          </div>
+        </div>
+
+        <div class="ops-grid">
+          <div class="ops-card">
+            <div><span class="badge badge-emerald">Hands-On Science</span></div>
+            <h3>Virtual Science Laboratories (Momentum Pilot)</h3>
+            <p style="font-size: 0.9rem;">
+              Students don't just read formulas—they run structured experiments where real physics laws drive every measurement:
+            </p>
+            <ul class="clean-list">
+              <li>Students adjust trolley masses and starting velocities on an interactive collision track</li>
+              <li>Verified physics equations—never AI text guesses—compute pre- and post-collision motion</li>
+              <li>Students record structured observations and submit their lab trial for scoring and educator review</li>
+            </ul>
+          </div>
+
+          <div class="ops-card">
+            <div><span class="badge badge-navy">Enrolment Integrity</span></div>
+            <h3>Course Readiness, Seat Allocation &amp; Re-Entry</h3>
+            <p style="font-size: 0.9rem;">
+              Commercial and enrolment steps protect families from incomplete courses or lost academic history:
+            </p>
+            <ul class="clean-list">
+              <li><strong>Readiness Checklist:</strong> A course cannot be offered until it is published, staff owners are named, and required policies are approved</li>
+              <li><strong>Named Learner Seats:</strong> Orders bind each seat to a specific student and exact offer terms; unused seats can be corrected cleanly with an audit trail</li>
+              <li><strong>Safe Re-Entry:</strong> If a student re-enrols in a later term, a fresh access period opens without erasing their earlier grades or completion history</li>
+            </ul>
+          </div>
+
+          <div class="ops-card">
+            <div><span class="badge badge-plum">Verifiable Recognition</span></div>
+            <h3>Certificates With Correction &amp; Withdrawal History</h3>
+            <p style="font-size: 0.9rem;">
+              Awards carry real weight because they are tied directly to verified student work:
+            </p>
+            <ul class="clean-list">
+              <li>Authorized staff issue certificates only after confirming the learner's verified completion record for that course</li>
+              <li>Only the award holder (and authorized staff) sees private stored certificates—other students cannot browse them</li>
+              <li>If a grade appeal or marking review later amends a result, staff can issue a tracked correction or withdrawal while keeping the full lineage intact</li>
+            </ul>
+          </div>
+
+          <div class="ops-card">
+            <div><span class="badge badge-amber">Accountable Care</span></div>
+            <h3>Confidential Support, Privacy &amp; Safeguarding Cases</h3>
+            <p style="font-size: 0.9rem;">
+              Sensitive family, privacy, or safeguarding matters are handled outside ordinary class chats:
+            </p>
+            <ul class="clean-list">
+              <li>Each case is claimed by a single accountable staff owner within that exact scope—preventing bystander snooping or duplicate handling</li>
+              <li>Independent students can request a bounded export of their own completion records through a verified workflow</li>
+              <li>Active case holds automatically block routine cleanup from deleting linked files until reviewed</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAPTER 5: EXPERIENCE BY PERSON -->
+      <section id="roles" class="chapter">
+        <div class="chapter-header">
+          <div class="chapter-number">Chapter 5 · Day-to-Day Responsibilities</div>
+          <h2>How the Portal Works for Each Person</h2>
+          <p>
+            Every account sees only the tools and records meant for its role. Select any of the six roles below to inspect what they do—and what boundaries protect everyone else.
+          </p>
+        </div>
+
+        <div class="role-selector interactive-only" role="tablist" aria-label="Portal roles">
+          <button type="button" role="tab" aria-selected="true" class="role-btn" id="role-tab-dependent" onclick="selectRole('dependent')">
+            Younger / Dependent Student
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="role-btn" id="role-tab-independent" onclick="selectRole('independent')">
+            Older / Independent Student
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="role-btn" id="role-tab-teacher" onclick="selectRole('teacher')">
+            Course Teacher &amp; Grader
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="role-btn" id="role-tab-reviewer" onclick="selectRole('reviewer')">
+            Independent Quality Reviewer
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="role-btn" id="role-tab-parent" onclick="selectRole('parent')">
+            Parent / Guardian
+          </button>
+          <button type="button" role="tab" aria-selected="false" class="role-btn" id="role-tab-admin" onclick="selectRole('admin')">
+            Administrator &amp; Safeguarding Lead
+          </button>
+        </div>
+
+        <div id="role-detail-panel" class="role-view interactive-only" role="tabpanel"></div>
+        <div id="print-all-roles" class="print-all-stages"></div>
+      </section>
+
+      <!-- CHAPTER 6: REAL-WORLD EDGE CASES ("WHAT HAPPENS IF...?") -->
+      <section id="scenarios" class="chapter">
+        <div class="chapter-header">
+          <div class="chapter-number">Chapter 6 · Operational Resilience &amp; Safeguards</div>
+          <h2>Real-World "What Happens If...?" Walkthroughs</h2>
+          <p>
+            Clients and educators rightly ask how the portal behaves when everyday complications arise—such as dropped Wi-Fi, unreadable scans, revoked permissions, or shared family laptops. Select any situation below.
+          </p>
+        </div>
+
+        <div class="scenario-layout interactive-only">
+          <div class="scenario-list" role="tablist" aria-label="Edge-case questions">
+            <button type="button" role="tab" aria-selected="true" class="scenario-btn" id="scen-tab-0" onclick="selectScenario(0)">
+              1. Internet drops while a student is typing a Topic Check answer
+            </button>
+            <button type="button" role="tab" aria-selected="false" class="scenario-btn" id="scen-tab-1" onclick="selectScenario(1)">
+              2. Student asks AI about a locked chapter or unpublished teacher draft
+            </button>
+            <button type="button" role="tab" aria-selected="false" class="scenario-btn" id="scen-tab-2" onclick="selectScenario(2)">
+              3. Teacher uploads a scanned photo PDF with no selectable text
+            </button>
+            <button type="button" role="tab" aria-selected="false" class="scenario-btn" id="scen-tab-3" onclick="selectScenario(3)">
+              4. AI tries to invent a quote that isn't actually on the syllabus page
+            </button>
+            <button type="button" role="tab" aria-selected="false" class="scenario-btn" id="scen-tab-4" onclick="selectScenario(4)">
+              5. An adult pays for a course and asks to read the student's reports
+            </button>
+            <button type="button" role="tab" aria-selected="false" class="scenario-btn" id="scen-tab-5" onclick="selectScenario(5)">
+              6. A syllabus PDF is retired or loses copyright permission mid-year
+            </button>
+            <button type="button" role="tab" aria-selected="false" class="scenario-btn" id="scen-tab-6" onclick="selectScenario(6)">
+              7. Two siblings share the same family laptop or tablet at home
+            </button>
+            <button type="button" role="tab" aria-selected="false" class="scenario-btn" id="scen-tab-7" onclick="selectScenario(7)">
+              8. NIE introduces a new syllabus edition for an upcoming grade cohort
+            </button>
+          </div>
+          <div id="scenario-detail-panel" class="scenario-answer" role="tabpanel"></div>
+        </div>
+
+        <div id="print-all-scenarios" class="print-all-stages"></div>
+      </section>
+
+      <!-- CHAPTER 7: THE 8 NON-NEGOTIABLE RULES -->
+      <section id="guardrails" class="chapter">
+        <div class="chapter-header">
+          <div class="chapter-number">Chapter 7 · Academic Integrity &amp; Child Protection</div>
+          <h2>Eight Non-Negotiable Quality &amp; Safety Commitments</h2>
+          <p>
+            Studytomy enforces clear boundaries between helpful digital tools and genuine educator or family authority.
+          </p>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table class="rules-table">
+            <thead>
+              <tr>
+                <th style="width: 24%;">Principle</th>
+                <th style="width: 38%;">How Studytomy Operates</th>
+                <th style="width: 38%;">What Studytomy Never Allows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1. Lesson Completion vs. Mastery</strong></td>
+                <td>Tracks reading and viewing progress separately from verified diagnostics, quizzes, and educator-reviewed work.</td>
+                <td>Never claims a student has mastered a syllabus topic just because they clicked through all pages of a chapter.</td>
+              </tr>
+              <tr>
+                <td><strong>2. AI Question Drafts vs. Official Exams</strong></td>
+                <td>Lets teachers generate editable draft quiz questions tied to exact PDF quotes for faster lesson preparation.</td>
+                <td>Never represents AI-drafted quizzes as official NIE / Department of Examinations G.C.E. O/L or A/L papers.</td>
+              </tr>
+              <tr>
+                <td><strong>3. Objective Marking vs. Written Work</strong></td>
+                <td>Automatically scores clear multiple-choice and exact numeric answers using educator-approved rules.</td>
+                <td>Never lets AI issue final formal grades on essays, worked proofs, speaking tasks, or practical observations.</td>
+              </tr>
+              <tr>
+                <td><strong>4. Science Simulations vs. AI Guessing</strong></td>
+                <td>Calculates laboratory motion and measurements (such as the Momentum collision lab) using tested physics formulas.</td>
+                <td>Never uses an AI text model to invent or estimate scientific experiment numbers.</td>
+              </tr>
+              <tr>
+                <td><strong>5. Two-Person Content Sign-Off</strong></td>
+                <td>Requires a second, independent authorized educator to verify source permissions and approve syllabus mappings or managed releases.</td>
+                <td>Never lets an uploader self-approve copyright permissions or publish unreviewed AI drafts directly to protected courses.</td>
+              </tr>
+              <tr>
+                <td><strong>6. Payment vs. Family Authority</strong></td>
+                <td>Verifies guardian authority or older-student sharing consent independently before unlocking academic progress reports.</td>
+                <td>Never grants an adult access to a child's academic reports or privacy choices merely because that adult paid an invoice.</td>
+              </tr>
+              <tr>
+                <td><strong>7. Protected Minor Privacy</strong></td>
+                <td>Keeps younger students' profiles and class discussion posts private by default, and checks AI consent per purpose.</td>
+                <td>Never exposes protected learners in public member directories or sends their work to external AI services without approved policy and consent.</td>
+              </tr>
+              <tr>
+                <td><strong>8. Permanent Audit &amp; Retention Safety</strong></td>
+                <td>Preserves an uneditable record of approvals, grade revisions, consent choices, and certificate versions, and blocks accidental deletion of held records.</td>
+                <td>Never overwrites past course releases, erases historical learning evidence during course re-entry, or deletes safeguarded case files without review.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CHAPTER 8: HONEST CURRENT STATUS & LAUNCH CHECKLIST -->
+      <section id="readiness" class="chapter">
+        <div class="chapter-header">
+          <div class="chapter-number">Chapter 8 · Project Transparency &amp; Next Milestones</div>
+          <h2>What Is Ready Today vs. What Happens Before Launch</h2>
+          <p>
+            The portal is currently verified in a controlled development workspace—not yet opened to live student traffic—so curriculum rights, educator reviews, and child-privacy policies are signed off in the right order before launching <strong>lms.studytomy.com</strong>.
+          </p>
+        </div>
+
+        <div class="readiness-columns">
+          <div class="readiness-card">
+            <div><span class="badge badge-emerald">Built &amp; Tested in Development</span></div>
+            <h3>Working Portal Foundations</h3>
+            <ul class="clean-list">
+              <li>Courses, chapters, rich lessons, PDFs, videos, objective quizzes, manual teacher grading, certificates, and collaborative boards</li>
+              <li>Syllabus Knowledge Library with two-educator review, exact page-quote mappings, and student <strong>Explore Topics</strong></li>
+              <li>Permission-checked course study assistant that filters out drafts and locked lessons before searching</li>
+              <li>PDF-grounded lesson and quiz drafting with verbatim page citations</li>
+              <li>Reviewed fractions Topic Check loop (check → cited reteach → new recheck) plus 30-minute local rough-work recovery</li>
+              <li>Adaptive curriculum/diagnostic foundation, pilot Momentum virtual science lab, family-link &amp; consent records, and automated quality/security checks on every update</li>
+            </ul>
+          </div>
+
+          <div class="readiness-card">
+            <div><span class="badge badge-amber">Human Sign-Offs Before Live Use</span></div>
+            <h3>Pre-Launch Governance Checklist</h3>
+            <ul class="clean-list">
+              <li><strong>Pilot Syllabus Selection:</strong> Confirm the exact initial grade(s), subject(s), NIE syllabus edition, and student cohort</li>
+              <li><strong>Source Rights Clearance:</strong> Record publisher / NIE permission references for each official PDF uploaded</li>
+              <li><strong>Educator Content Acceptance:</strong> Subject-specialist sign-off on curriculum mappings, lesson releases, and marking rubrics</li>
+              <li><strong>Child &amp; Family Policies:</strong> Owner approval of privacy notices, guardian identity verification steps, data retention periods, and AI consent terms</li>
+              <li><strong>Commercial Terms:</strong> Confirm pricing currency (such as LKR), refund rules, and end-to-end pilot walkthrough sign-off with representative accounts</li>
+            </ul>
+          </div>
+
+          <div class="readiness-card">
+            <div><span class="badge badge-plum">Planned Future Enhancements</span></div>
+            <h3>Post-Pilot Expansion</h3>
+            <ul class="clean-list">
+              <li><strong>Scanned Document Reading:</strong> Optical text recognition so older image-only scanned PDFs can be prepared before upload</li>
+              <li><strong>Broader Topic Checks &amp; Labs:</strong> Expanding interactive topic checks across more subjects and adding new validated Physics, Chemistry, and Biology labs</li>
+              <li><strong>Managed Young-Learner Logins:</strong> Simplified login and recovery options for younger students without personal email addresses once child-account policies are approved</li>
+              <li><strong>Live Classes &amp; Exam Marking:</strong> Tutor class scheduling, attendance tracking, and structured step-by-step / handwritten answer evaluation</li>
+              <li><strong>Hosted Production Launch:</strong> Controlled cloud hosting and backup operations on <strong>lms.studytomy.com</strong></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer-note">
+        Studytomy Portal Client Process &amp; Architecture Overview · Prepared for stakeholder walkthroughs in plain language.
+      </footer>
+
+    </main>
+  </div>
+
+  <script>
+    const STAGES = [
+      {
+        num: "Stage 1 of 7",
+        badgeClass: "badge-navy",
+        badgeText: "Governance Foundation",
+        title: "Programme Scope, Cohort Locking & Owner Policies",
+        summary: "Before any student enrolls or any AI assistant turns on, leadership defines the exact academic scope and safety rules for the organization.",
+        steps: [
+          "Leadership selects the Sri Lankan National School Syllabus scope (Grades 6–13, English medium) and records the exact syllabus edition and student cohort—so a future syllabus reform never scrambles courses for existing students.",
+          "Named staff owners are assigned for curriculum quality, family verification, safeguarding, and commercial readiness.",
+          "Written policies for child privacy, guardian verification, data retention, source copyright, and AI usage are reviewed and approved. Until required policies are active, sensitive student AI paths and public sales stay safely locked."
+        ],
+        guardrailTitle: "Why this matters for clients",
+        guardrails: [
+          "No guesswork with minors: unclear or unapproved policies automatically pause protected features rather than assuming permission.",
+          "Different syllabus years stay cleanly separated for repeaters and new cohorts alike."
+        ]
+      },
+      {
+        num: "Stage 2 of 7",
+        badgeClass: "badge-navy",
+        badgeText: "Two-Educator Verification",
+        title: "Syllabus Knowledge Library & Source Rights Review",
+        summary: "Trusted teaching starts with verified reference PDFs—every page extracted cleanly and checked by two separate educators.",
+        steps: [
+          "An authorized educator uploads a searchable syllabus guide or reference PDF (up to 200 pages) along with its grade, subject, edition, publisher, and copyright/permission reference.",
+          "The portal reads every page preserving original PDF page numbers. If any page is a blank scan or unreadable image, the upload is flagged immediately with clear guidance rather than silently storing incomplete material.",
+          "A second, different authorized educator inspects the extracted pages, confirms the permission evidence, and approves the version.",
+          "Educators link specific PDF page ranges and verbatim quotes to published syllabus concepts—and a second educator reviews those mappings too."
+        ],
+        guardrailTitle: "Built-in safeguards",
+        guardrails: [
+          "No single uploader can approve their own document or copyright claim.",
+          "If a document is ever revoked, it disappears immediately from student search and AI citations while keeping an audit record."
+        ]
+      },
+      {
+        num: "Stage 3 of 7",
+        badgeClass: "badge-navy",
+        badgeText: "Controlled Publication",
+        title: "Course Authoring, Cited AI Drafting & Frozen Releases",
+        summary: "Teachers build rich courses—optionally using AI to speed up first drafts—while independent review locks an approved edition for learners.",
+        steps: [
+          "Teachers structure courses into ordered Chapters and Lesson Activities (reading pages, PDFs, videos, interactive blocks, quizzes, and assignments).",
+          "To save preparation time, a teacher can select up to five approved lesson PDFs and ask for a draft lesson or quiz. Every drafted paragraph or quiz question must carry an exact page number and verbatim quote from those PDFs—if the PDFs don't support the topic, the portal refuses to invent content.",
+          "The teacher edits the draft in the workspace and saves it as unpublished. If a cited source later changes or is revoked, the portal flags the draft as outdated before release.",
+          "For managed courses, an independent reviewer checks curriculum alignment, rights, and topic checks, then publishes a frozen course release snapshot."
+        ],
+        guardrailTitle: "Built-in safeguards",
+        guardrails: [
+          "Ongoing teacher edits happen in draft without altering the frozen release currently assigned to active learners.",
+          "AI drafts never go live to students without human editing and educator sign-off."
+        ]
+      },
+      {
+        num: "Stage 4 of 7",
+        badgeClass: "badge-emerald",
+        badgeText: "Identity, Family & Privacy",
+        title: "Student Onboarding, Verified Family Links & Consent",
+        summary: "Each learner receives age-appropriate account controls, default-private visibility, and verified family connections.",
+        steps: [
+          "Staff record human eligibility decisions for each learner—distinguishing independent older learners from dependent younger learners (school grade alone is never used to guess legal capacity).",
+          "For dependent learners, a parent or guardian submits a relationship request; an assigned staff reviewer checks supporting evidence and approves specific permissions (such as managing consent or viewing progress summaries) for a defined period.",
+          "Independent older learners control their own optional sharing grants—choosing who may view their progress and for how long, with one-click withdrawal.",
+          "Learners (or verified guardians, once dependent policies are active) review plain-language notices and grant or withdraw optional permissions—such as Explore Topics AI explanations—without affecting basic course reading."
+        ],
+        guardrailTitle: "Built-in safeguards",
+        guardrails: [
+          "Protected student profiles and class comments stay hidden from public directories and other learners' AI searches.",
+          "Restricting or revoking a disputed family link immediately cuts off guardian access across the portal."
+        ]
+      },
+      {
+        num: "Stage 5 of 7",
+        badgeClass: "badge-emerald",
+        badgeText: "Daily Student Experience",
+        title: "Guided Lessons, Cited Study Help & Topic Check Loop",
+        summary: "Students study unlocked lessons, ask source-grounded questions, and complete low-pressure topic checks that reteach concepts when needed.",
+        steps: [
+          "When a student opens a lesson, the portal checks their current enrollment, chapter schedule, and release access.",
+          "If the student asks the course Study Assistant or searches Explore Topics, the portal first filters down to lessons and approved PDFs that exact student is allowed to open—then returns answers with clickable page or video-time citations.",
+          "At the end of a topic, the student takes a short verified Topic Check (with automatic 30-minute rough-work saving in their browser if Wi-Fi drops).",
+          "If the answer is wrong, the portal provides an alternate explanation citing approved lesson pages plus a different equivalent recheck question—recording the whole learning timeline for authorized teachers."
+        ],
+        guardrailTitle: "Built-in safeguards",
+        guardrails: [
+          "Hidden drafts, locked chapters, and other organizations' files are excluded before AI answers are generated.",
+          "If an AI response cites a quote that doesn't match the stored PDF page word-for-word, the unverified explanation is withheld automatically."
+        ]
+      },
+      {
+        num: "Stage 6 of 7",
+        badgeClass: "badge-emerald",
+        badgeText: "Honest Evaluation",
+        title: "Diagnostics, Virtual Science Labs, Assignments & Awards",
+        summary: "Practice, diagnostic guidance, hands-on science experiments, formal marking, and certificates each follow clear academic rules.",
+        steps: [
+          "Diagnostic checks present reviewed questions to map what a student already knows and refresh personalized next-topic study recommendations.",
+          "In interactive science labs (beginning with the Momentum collision pilot), tested physics equations compute trolley motion and measurements—students record observations and submit structured lab work.",
+          "Objective quiz tasks are scored consistently by the portal, while essays, worked solutions, and open responses go to authorized teachers for manual marking and written feedback.",
+          "When a student completes required reviewed work, authorized staff can issue a verifiable certificate linked to the exact completion record—supporting audited corrections or withdrawals if a grade is later amended."
+        ],
+        guardrailTitle: "Built-in safeguards",
+        guardrails: [
+          "Ungraded practice exploration never hurts formal grades or fabricates mastery records.",
+          "Late saves and simultaneous grading actions are coordinated cleanly so student attempts are never lost or double-counted."
+        ]
+      },
+      {
+        num: "Stage 7 of 7",
+        badgeClass: "badge-amber",
+        badgeText: "Family & Operations",
+        title: "Reviewed Parent Reports, Course Offers & Safeguarding Care",
+        summary: "Families receive educator-reviewed progress summaries, while administrators manage enrolments, support, and safeguarding with full accountability.",
+        steps: [
+          "Educators review progress report snapshots combining lesson completion with verified release milestones before any report is published.",
+          "Before displaying or emailing a report, the portal re-checks that the parent's guardian authority or student sharing grant is still active today.",
+          "On the commercial side, a course Readiness Panel blocks public sale until course publication, named staff owners, and required policies are all in place; orders bind seats to named learners and preserve history on course re-entry.",
+          "Support, privacy, and safeguarding inquiries enter a confidential queue where one accountable staff owner claims each case and retention holds prevent premature file deletion."
+        ],
+        guardrailTitle: "Built-in safeguards",
+        guardrails: [
+          "Parents see clear, reviewed academic progress—not raw student chat logs or unreviewed AI guesses.",
+          "Expired or withdrawn sharing permissions clear report visibility immediately on reload."
+        ]
+      }
+    ];
+
+    const LOOP_PATHS = {
+      struggle: [
+        {
+          step: "Step 1 · Topic Check",
+          style: "",
+          title: "Student Tries the First Question",
+          body: "After reading the approved PDF lesson (for example, comparing fractions), the student answers a short reviewed Topic Check. Rough typing is cushioned locally in the browser for 30 minutes in case the connection flickers."
+        },
+        {
+          step: "Step 2 · Calm Diagnosis",
+          style: "highlight-amber",
+          title: "Portal Spots the Gap Without Penalty",
+          body: "The portal checks the answer against the educator's rule. Because it is incorrect, the topic is not marked complete—and the portal does not guess or label the child negatively."
+        },
+        {
+          step: "Step 3 · Cited Re-Explanation",
+          style: "highlight-navy",
+          title: "Different Explanation + Page Proof",
+          body: "The student receives a fresh, clearer explanation of the same concept pointing directly to the exact approved PDF page (plus an approved visual diagram when configured). If AI is unavailable, a reviewed educator fallback appears."
+        },
+        {
+          step: "Step 4 · Equivalent Recheck",
+          style: "highlight-emerald",
+          title: "Second Chance With a New Question",
+          body: "The portal presents a different reviewed question testing the exact same skill. Answering correctly completes the topic check; answering wrong keeps the student in supported practice for teacher follow-up."
+        }
+      ],
+      correct: [
+        {
+          step: "Step 1 · Lesson Study",
+          style: "",
+          title: "Student Completes the Topic Material",
+          body: "The student reads the published lesson release allocated to them—viewing text, approved PDF pages, or video explanations in clear chapter order."
+        },
+        {
+          step: "Step 2 · First-Attempt Check",
+          style: "",
+          title: "Student Submits Correct Answer",
+          body: "The student answers the reviewed Topic Check question accurately. Once confirmed by the portal, any temporary rough draft in the browser is cleared."
+        },
+        {
+          step: "Step 3 · Verified Record",
+          style: "highlight-emerald",
+          title: "Topic Check Recorded Cleanly",
+          body: "The portal records the completed topic check against that exact lesson version in an uneditable timeline visible to the lesson creator and scoped administrators."
+        },
+        {
+          step: "Step 4 · Honest Next Step",
+          style: "",
+          title: "Ready for Practice or Formal Quiz",
+          body: "The student moves smoothly to the next topic or formal assignment—keeping quick lesson checks distinct from full exam mastery."
+        }
+      ],
+      ask: [
+        {
+          step: "Step 1 · Permission Gate",
+          style: "",
+          title: "Portal Checks What Learner May Read",
+          body: "Before searching a single word, the portal verifies the student's organization, active policies, AI consent, and which specific courses and unlocked lessons they are allowed to open."
+        },
+        {
+          step: "Step 2 · Approved Search Only",
+          style: "",
+          title: "Searches Only Permitted Pages",
+          body: "Unpublished teacher drafts, locked chapters, and retired syllabus editions are excluded upfront. If no approved page matches the question, the portal stops immediately and says so honestly."
+        },
+        {
+          step: "Step 3 · Verbatim Quote Check",
+          style: "highlight-amber",
+          title: "Every Claim Checked Against the PDF",
+          body: "In Explore Topics, every generated explanation block must cite a retrieved passage and include an exact verbatim quote present on that PDF page—otherwise the AI summary is withheld."
+        },
+        {
+          step: "Step 4 · Clickable Citations",
+          style: "highlight-emerald",
+          title: "Student Opens Exact Page & Coverage",
+          body: "The student reads a concise answer with clickable links to the exact PDF page or video timestamp, alongside a clear badge showing whether that page is confirmed in their selected syllabus."
+        }
+      ]
+    };
+
+    const ROLES = {
+      dependent: {
+        badge: "Protected Learner Account",
+        title: "Younger / Dependent Student (e.g., Grades 6–9)",
+        intro: "Experiences a distraction-free learning space where mistakes during practice are safe and personal details stay private.",
+        canDo: [
+          "Open assigned courses, chapters, videos, approved PDFs, and interactive practice activities",
+          "Take ungraded Topic Checks with cited re-explanations and fresh recheck questions",
+          "Complete quizzes, submit assignments, and view teacher feedback",
+          "Keep temporary rough answers safe for 30 minutes if home internet drops mid-question"
+        ],
+        boundaries: [
+          "Profile and class comments are private by default—never listed in public member directories",
+          "External AI features remain off unless school policies and verified guardian consent are active",
+          "Cannot alter grades, unlock restricted future chapters early, or view other students' work"
+        ]
+      },
+      independent: {
+        badge: "Self-Managed Learner Account",
+        title: "Older / Independent Student (e.g., Senior Grades with Approved Eligibility)",
+        intro: "Studies advanced O/L or A/L subjects with full transparency and direct control over optional privacy and progress-sharing choices.",
+        canDo: [
+          "Use Explore Topics to compare approved syllabus editions and follow cited PDF pages",
+          "Run interactive science lab trials (such as the Momentum collision lab) and submit observations",
+          "View personal consent history and grant or withdraw optional AI/privacy choices at any time",
+          "Optionally grant a parent, guardian, or mentor time-limited access to reviewed progress reports—and revoke it whenever desired"
+        ],
+        boundaries: [
+          "Independent status comes from an explicit staff eligibility review, never assumed automatically from age or grade",
+          "If account status ever changes back to dependent protection, prior independent sharing links close automatically"
+        ]
+      },
+      teacher: {
+        badge: "Academic Author & Assessor",
+        title: "Course Teacher & Grader",
+        intro: "Spends less time formatting routine drafts and more time refining explanations, reviewing student understanding, and giving meaningful feedback.",
+        canDo: [
+          "Build courses, chapters, multimedia lessons, quizzes, and assignments",
+          "Upload lesson reference PDFs and generate cited lesson or quiz previews with exact page quotes",
+          "Inspect chronological Topic Check timelines for lessons they created within their current scope",
+          "Grade written/practical student submissions and provide individualized feedback"
+        ],
+        boundaries: [
+          "Cannot self-approve official Syllabus Library copyright permissions without a second educator",
+          "Cannot read Topic Check histories for unrelated classes or pre-existing PDFs without verified creator attribution"
+        ]
+      },
+      reviewer: {
+        badge: "Independent Second Pair of Eyes",
+        title: "Curriculum & Quality Reviewer",
+        intro: "Protects academic accuracy and copyright compliance before any syllabus source, mapping, or managed course release reaches students.",
+        canDo: [
+          "Inspect extracted PDF pages and independently verify publisher / NIE permission references",
+          "Approve or reject page-to-syllabus concept mappings after checking the verbatim page quote",
+          "Review managed course candidates—blocking release if any cited lesson source was edited or revoked",
+          "Review progress reports and unused seat-allocation corrections within assigned scope"
+        ],
+        boundaries: [
+          "Must be a different educator from the person who uploaded the syllabus PDF or proposed the mapping",
+          "Cannot edit historical frozen releases—new changes always create a new tracked revision"
+        ]
+      },
+      parent: {
+        badge: "Verified Family Partner",
+        title: "Parent / Guardian",
+        intro: "Receives honest, educator-reviewed visibility into a child's progress without invading private study drafts or unreviewed interactions.",
+        canDo: [
+          "Submit a family relationship request for staff verification (for dependent learners)",
+          "View reviewed progress reports showing completed releases, lesson progress, and learning milestones",
+          "Receive scheduled progress report emails only when both report review and email authority are active"
+        ],
+        boundaries: [
+          "Paying for a course order never automatically unlocks academic reports or consent authority",
+          "If a relationship expires, is restricted, or is disputed, report access stops immediately on the very next page load"
+        ]
+      },
+      admin: {
+        badge: "Governance & Safeguarding",
+        title: "Portal Administrator & Safeguarding Lead",
+        intro: "Coordinates staff permissions, policy readiness, family verifications, certificates, and confidential student-care cases.",
+        canDo: [
+          "Assign granular Studytomy responsibilities (curriculum, family review, commerce, support, safeguarding) rather than blanket access",
+          "Check the Course Offer Readiness panel to see exactly which policies or reviews are still needed before launch",
+          "Issue, correct, or withdraw learner certificates tied to verified completion records",
+          "Manage support, privacy export, and safeguarding cases with single-owner accountability and file retention holds"
+        ],
+        boundaries: [
+          "Ordinary general-admin rights do not automatically grant access to sensitive Studytomy safeguarding or governance records",
+          "Cannot silently erase audit trails, consent histories, or legally held case evidence"
+        ]
+      }
+    };
+
+    const SCENARIOS = [
+      {
+        tag: "Connection & Device Resilience",
+        title: "What happens if the internet drops while a student is typing a Topic Check answer?",
+        whatHappens: "As the student types their working (such as a fraction answer), the browser quietly cushions that unsubmitted text on that device for up to 30 minutes—tied strictly to that signed-in student, organization, course, lesson, and exact question.",
+        recovery: "When Wi-Fi returns or the tab is reopened, the portal first confirms that the student still has access and hasn't already submitted the answer elsewhere. It then restores their typed text into the box—never auto-submitting it behind their back—so they can review and press Submit.",
+        safety: "If the student signs out, switches accounts, or 30 minutes pass, the temporary browser draft is cleared so the next person on a shared computer cannot see it."
+      },
+      {
+        tag: "Data & Draft Isolation",
+        title: "What happens if a student asks the AI Study Assistant about a locked chapter or an unpublished teacher draft?",
+        whatHappens: "Before calling any AI model or ranking lesson passages, the portal resolves which exact activities in that course the student is permitted to open right now—checking publication status, chapter locks, scheduled release dates, and group access.",
+        recovery: "Unpublished teacher drafts and locked chapters are excluded before search, and checked a second time right before any citation is shown. If a teacher unpublishes a lesson mid-request, it is dropped immediately.",
+        safety: "If the student has zero readable content for that scope, the portal returns an empty result without even sending the question to an external AI provider."
+      },
+      {
+        tag: "Document Quality Control",
+        title: "What happens if an educator uploads a scanned photo PDF with no selectable text?",
+        whatHappens: "During upload, the portal inspects every page of the PDF. If a file has no extractable text—or even a single blank/image-only page in the Syllabus Library—the portal refuses to pretend the book was read.",
+        recovery: "In Lesson Draft Sources, the upload receipt lists exact readable and unreadable page numbers (and rejects completely unreadable scans with a clear 'text recognition needed first' message). In the Syllabus Library, the version is marked failed with clear guidance and cannot be approved for students.",
+        safety: "Students and AI tools are never fed half-missing syllabus chapters that could cause misleading study advice."
+      },
+      {
+        tag: "Anti-Hallucination Guardrail",
+        title: "What happens if an AI model tries to invent a quote or cite a page inaccurately?",
+        whatHappens: "When generating grounded lesson drafts, quiz previews, or Explore Topics explanations, the portal requires every claim to point to a specific approved source version, original page number, and exact verbatim quote.",
+        recovery: "The portal checks character-for-character that the quoted sentence actually exists on that stored PDF page. In Explore Topics, if even one claim fails verification, the entire AI explanation is withheld and the student is shown the real approved PDF excerpts instead.",
+        safety: "Students always have trustworthy syllabus passages even if an AI model behaves unpredictably."
+      },
+      {
+        tag: "Child Safeguarding & Privacy",
+        title: "What happens if an adult pays for a child's course and asks to read their progress reports?",
+        whatHappens: "Studytomy separates commercial purchase records from family academic authority. Being the payer on an order only records payment and seat allocation—it grants zero automatic right to read academic reports or sign privacy consents.",
+        recovery: "To view dependent student reports, the adult must hold an explicitly reviewed and active guardian relationship with report permission (or, for an eligible independent student, a voluntary sharing grant from that student).",
+        safety: "Protects children in complex household or sponsorship situations—and allows staff to restrict a disputed adult link immediately without disrupting the child's own classes."
+      },
+      {
+        tag: "Curriculum Maintenance",
+        title: "What happens if an approved syllabus PDF is found to have an error or loses copyright clearance mid-year?",
+        whatHappens: "An authorized reviewer revokes that source version with a recorded reason. The portal immediately removes it from Explore Topics search and revokes its active curriculum mappings.",
+        recovery: "Any unpublished managed course candidate that relied on quotes from that revoked PDF is automatically flagged as needing educator review before a new course release can be published. Existing historical records remain intact for audit.",
+        safety: "Outdated or unauthorized material stops circulating in student search right away, without secretly rewriting past history."
+      },
+      {
+        tag: "Shared Family & School Devices",
+        title: "What happens when siblings or classmates share the same browser or computer?",
+        whatHappens: "All open portal views, background tasks, AI chat panels, and local topic-check drafts are separated by the signed-in account and organization—and synchronized across browser tabs.",
+        recovery: "The moment a learner signs out (or their session expires in another tab), the portal covers the screen, clears saved screen data and unsubmitted drafts, and displays a clear account banner inside the lesson reader showing whose account is active.",
+        safety: "Prevents one sibling's unsubmitted answer or study history from accidentally spilling into the next student's session."
+      },
+      {
+        tag: "Syllabus Reform Readiness",
+        title: "What happens when the NIE introduces a new syllabus edition for an upcoming Grade 6 cohort?",
+        whatHappens: "Each curriculum revision and Syllabus Library PDF records its exact syllabus edition and effective student cohort rather than lumping every Grade 6 class together.",
+        recovery: "Educators prepare and review a new curriculum revision and course release for the incoming cohort, while students already studying under the previous syllabus edition keep their exact bound lessons, assessments, and progress records undisturbed.",
+        safety: "Zero mid-year curriculum confusion during national syllabus transitions."
+      }
+    ];
+
+    function renderStageCard(stage) {
+      const stepsHtml = stage.steps.map((text, itemIdx) => `
+        <li>
+          <span class="step-num">${itemIdx + 1}</span>
+          <span>${text}</span>
+        </li>
+      `).join('');
+
+      const guardHtml = stage.guardrails.map(g => `<li>${g}</li>`).join('');
+
+      return `
+        <div class="stage-panel-top">
+          <div>
+            <div style="font-size: 0.8rem; font-weight: 700; color: var(--ink-muted); margin-bottom: 0.25rem;">${stage.num}</div>
+            <h3>${stage.title}</h3>
+          </div>
+          <span class="badge ${stage.badgeClass}">${stage.badgeText}</span>
+        </div>
+        <p style="margin-top: 0.85rem; font-size: 0.95rem;">${stage.summary}</p>
+        <div class="stage-grid">
+          <div>
+            <h4 style="font-size: 0.88rem; color: var(--ink-muted); margin-bottom: 0.7rem;">Step-by-step process</h4>
+            <ol class="step-sequence">${stepsHtml}</ol>
+          </div>
+          <div class="guardrail-box">
+            <h4>${stage.guardrailTitle}</h4>
+            <ul class="clean-list">${guardHtml}</ul>
+          </div>
+        </div>
+      `;
+    }
+
+    function selectStage(pos) {
+      document.getElementById('stage-detail-panel').innerHTML = renderStageCard(STAGES[pos]);
+      STAGES.forEach((_, i) => {
+        const tab = document.getElementById('stage-tab-' + i);
+        const node = document.getElementById('svg-node-' + i);
+        if (tab) tab.setAttribute('aria-selected', i === pos ? 'true' : 'false');
+        if (node) {
+          if (i === pos) node.classList.add('selected');
+          else node.classList.remove('selected');
+        }
+      });
+    }
+
+    function renderLoopCards(pathKey) {
+      return LOOP_PATHS[pathKey].map(item => `
+        <div class="loop-card ${item.style}">
+          <div class="loop-card-step">${item.step}</div>
+          <h4 style="font-size: 0.96rem;">${item.title}</h4>
+          <p style="font-size: 0.87rem; line-height: 1.55;">${item.body}</p>
+        </div>
+      `).join('');
+    }
+
+    function selectLoopPath(pathKey) {
+      ['struggle', 'correct', 'ask'].forEach(k => {
+        const btn = document.getElementById('loop-btn-' + k);
+        if (btn) btn.className = k === pathKey ? 'active' : '';
+      });
+      document.getElementById('loop-steps-container').innerHTML = renderLoopCards(pathKey);
+    }
+
+    function renderRoleBlock(role) {
+      const canHtml = role.canDo.map(item => `<li>${item}</li>`).join('');
+      const boundHtml = role.boundaries.map(item => `<li>${item}</li>`).join('');
+      return `
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div><span class="badge badge-navy">${role.badge}</span></div>
+          <h3>${role.title}</h3>
+          <p style="font-size: 0.93rem;">${role.intro}</p>
+          <h4 style="font-size: 0.88rem; margin-top: 0.35rem;">What they do in the portal</h4>
+          <ul class="clean-list">${canHtml}</ul>
+        </div>
+        <div class="boundary-panel">
+          <h4 style="font-size: 0.9rem; margin-bottom: 0.55rem; color: var(--ink);">Protective boundaries</h4>
+          <ul class="clean-list">${boundHtml}</ul>
+        </div>
+      `;
+    }
+
+    function selectRole(roleKey) {
+      document.getElementById('role-detail-panel').innerHTML = renderRoleBlock(ROLES[roleKey]);
+      Object.keys(ROLES).forEach(k => {
+        const btn = document.getElementById('role-tab-' + k);
+        if (btn) btn.setAttribute('aria-selected', k === roleKey ? 'true' : 'false');
+      });
+    }
+
+    function renderScenarioBlock(s) {
+      return `
+        <div><span class="badge badge-amber">${s.tag}</span></div>
+        <h3>${s.title}</h3>
+        <div>
+          <strong style="font-size: 0.88rem; color: var(--ink);">Immediate portal check:</strong>
+          <p style="font-size: 0.92rem; margin-top: 0.2rem;">${s.whatHappens}</p>
+        </div>
+        <div>
+          <strong style="font-size: 0.88rem; color: var(--emerald);">How the experience continues cleanly:</strong>
+          <p style="font-size: 0.92rem; margin-top: 0.2rem;">${s.recovery}</p>
+        </div>
+        <div style="background: var(--surface-subtle); border-left: 3px solid var(--navy); padding: 0.75rem 0.95rem; border-radius: 4px;">
+          <strong style="font-size: 0.85rem; color: var(--navy);">Safety outcome:</strong>
+          <span style="font-size: 0.88rem; color: var(--ink-secondary); margin-left: 0.25rem;">${s.safety}</span>
+        </div>
+      `;
+    }
+
+    function selectScenario(pos) {
+      document.getElementById('scenario-detail-panel').innerHTML = renderScenarioBlock(SCENARIOS[pos]);
+      SCENARIOS.forEach((_, i) => {
+        const btn = document.getElementById('scen-tab-' + i);
+        if (btn) btn.setAttribute('aria-selected', i === pos ? 'true' : 'false');
+      });
+    }
+
+    function buildExpandedPrintSections() {
+      document.getElementById('print-all-stages').innerHTML = STAGES.map(s => `
+        <div class="printed-stage-block">${renderStageCard(s)}</div>
+      `).join('');
+
+      const loopTitles = {
+        struggle: "Path A: When a Student Answers Incorrectly",
+        correct: "Path B: When a Student Answers Correctly",
+        ask: "Path C: When a Student Asks Explore Topics / Study Help"
+      };
+      document.getElementById('print-all-loops').innerHTML = ['struggle', 'correct', 'ask'].map(k => `
+        <div class="printed-stage-block">
+          <h3 style="margin-bottom: 0.75rem;">${loopTitles[k]}</h3>
+          <div class="loop-steps-grid" style="padding: 0;">${renderLoopCards(k)}</div>
+        </div>
+      `).join('');
+
+      document.getElementById('print-all-roles').innerHTML = Object.values(ROLES).map(r => `
+        <div class="printed-stage-block"><div class="role-view">${renderRoleBlock(r)}</div></div>
+      `).join('');
+
+      document.getElementById('print-all-scenarios').innerHTML = SCENARIOS.map(s => `
+        <div class="printed-stage-block"><div class="scenario-answer">${renderScenarioBlock(s)}</div></div>
+      `).join('');
+    }
+
+    function toggleFullReadingMode() {
+      const expanded = document.body.classList.toggle('expanded-print-view');
+      const btn = document.getElementById('toggleExpandBtn');
+      btn.textContent = expanded ? 'Return to Interactive View' : 'Show All Sections Expanded';
+    }
+
+    // Highlight active chapter in sticky sidebar on scroll
+    const chapterIds = ['separation', 'lifecycle', 'learning-loop', 'classroom-ops', 'roles', 'scenarios', 'guardrails', 'readiness'];
+    window.addEventListener('scroll', () => {
+      let current = chapterIds[0];
+      for (const id of chapterIds) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= 140) {
+          current = id;
+        }
+      }
+      document.querySelectorAll('.side-nav a').forEach(link => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+      });
+    }, { passive: true });
+
+    // Expose handlers on window for inline controls and initialize views
+    window.selectStage = selectStage;
+    window.selectLoopPath = selectLoopPath;
+    window.selectRole = selectRole;
+    window.selectScenario = selectScenario;
+    window.toggleFullReadingMode = toggleFullReadingMode;
+
+    selectStage(0);
+    selectLoopPath('struggle');
+    selectRole('dependent');
+    selectScenario(0);
+    buildExpandedPrintSections();
+  </script>
+</body>
+</html>

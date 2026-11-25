@@ -214,6 +214,17 @@ from src.services.studytomy.report_notifications import (
 from src.services.studytomy.idempotency import claim_idempotency, complete_idempotency
 from src.services.studytomy.policies import lock_organization
 
+from src.services.studytomy.topic_check import (
+    TopicCheckView,
+    TopicScope,
+    TopicSubmission,
+    TopicTimeline,
+    read_topic_check,
+    read_topic_timeline,
+    submit_topic_check,
+)
+
+
 router = APIRouter(route_class=PrivateStudyTomyRoute)
 
 
@@ -1457,3 +1468,25 @@ async def api_read_diagnostic(
     db: AdaptiveDB,
 ) -> DiagnosticStaffRead:
     return await read_diagnostic(request, db, org, actor, revision_uuid)
+
+
+@router.get("/orgs/{org_uuid}/me/topic-check")
+async def api_read_topic_check(
+    org: AdaptiveOrg, actor: AdaptiveActor, db: AdaptiveDB, scope: Annotated[TopicScope, Query()],
+) -> TopicCheckView:
+    return await read_topic_check(db, org, actor, scope)
+
+
+@router.post("/orgs/{org_uuid}/me/topic-check")
+async def api_submit_topic_check(
+    org: AdaptiveOrg, actor: AdaptiveActor, db: AdaptiveDB, body: TopicSubmission,
+) -> TopicCheckView:
+    return await submit_topic_check(db, org, actor, body)
+
+
+@router.get("/orgs/{org_uuid}/staff/learners/{learner_uuid}/topic-check")
+async def api_read_topic_timeline(
+    request: Request, org: AdaptiveOrg, actor: AdaptiveActor, db: AdaptiveDB,
+    learner_uuid: Annotated[str, Path(min_length=1, max_length=100)], scope: Annotated[TopicScope, Query()],
+) -> TopicTimeline:
+    return await read_topic_timeline(request, db, org, actor, learner_uuid, scope)

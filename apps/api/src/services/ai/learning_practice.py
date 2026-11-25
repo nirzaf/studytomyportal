@@ -113,6 +113,19 @@ class ReviewedNumberLineExample(BaseModel):
 ReviewedPracticeExample = ReviewedFractionExample | ReviewedNumberLineExample
 
 
+class ReviewedTopicCheck(BaseModel):
+    """A separately reviewed, release-pinned fractions pilot."""
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    release_snapshot_sha256: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
+    pdf_sha256: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
+    pdf_page: Annotated[int, Field(ge=1, le=500)]
+    initial_example_id: str
+    recheck_example_id: str
+    reteaching: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=600, pattern=r"^[^<>]+$")]
+    show_visual: bool = False
+
+
 class _PracticeReview(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
@@ -129,10 +142,23 @@ class _PracticeReview(BaseModel):
     reviewer_user_uuid: Annotated[str, StringConstraints(min_length=1, max_length=100)]
     examples: Annotated[list[ReviewedPracticeExample], Field(min_length=1, max_length=12)]
 
+    topic_check: ReviewedTopicCheck | None = None
+
     @model_validator(mode="after")
     def examples_are_unique(self):
         if len({example.example_id for example in self.examples}) != len(self.examples):
             raise ValueError("Reviewed example identifiers must be unique")
+        if self.topic_check:
+            initial = next((item for item in self.examples if item.example_id == self.topic_check.initial_example_id), None)
+            recheck = next((item for item in self.examples if item.example_id == self.topic_check.recheck_example_id), None)
+            if not isinstance(initial, ReviewedFractionExample) or not isinstance(recheck, ReviewedFractionExample):
+                raise ValueError("Topic checks require two reviewed fractions examples")
+            if (
+                initial.example_id == recheck.example_id
+                or Fraction(initial.numerator, initial.denominator) == Fraction(recheck.numerator, recheck.denominator)
+                or self.topic_check.reteaching in {initial.explanation, initial.incorrect_feedback, recheck.explanation}
+            ):
+                raise ValueError("Topic checks require a distinct recheck answer and a distinct reteaching explanation")
         return self
 
 
@@ -209,6 +235,8 @@ class PracticePermission:
     evidence_reference: str | None = None
     activity_digest: str | None = None
     policy_version_ids: tuple[int, ...] = ()
+    topic_check: ReviewedTopicCheck | None = None
+    review_policy_id: int | None = None
 
 
 async def _resolve_practice_binding(
@@ -425,6 +453,8 @@ async def require_learning_practice_policy(
         rights_reference=review.rights_reference,
         evidence_reference=review.evidence_reference,
         activity_digest=review.activity_digest,
+        topic_check=review.topic_check,
+        review_policy_id=int(current[StudyPolicyKey.D_16.value].id),
         policy_version_ids=tuple(sorted(int(policy.id) for policy in policies)),
     )
 
@@ -711,14 +741,14 @@ async def _latest_action(db: AsyncSession, surface_uuid: str) -> StudyLearningAc
 def _project_surface(
     source: PracticeSource, record: StudyLearningSurface, action: StudyLearningAction | None,
 ) -> LearningSurface:
+    if record.source_identity != source.identity:
+        raise _stale_practice()
     surface = LearningSurface.model_validate(record.presentation if action is None else action.presentation)
     mode_allowed = source.allow_explore if surface.mode == "explore" else source.allow_practice
     if not mode_allowed:
         raise studytomy_http_error(
             409, "PRACTICE_ACTION_UNAVAILABLE", "This lesson mode is not currently approved.",
         )
-    if record.source_identity != source.identity:
-        raise _stale_practice()
     if not any(item.kind in source.approved_visuals for item in surface.components):
         raise studytomy_http_error(409, POLICY_NOT_APPROVED, "This lesson visual is not approved.")
     if "request_hint" in surface.actions and not source.allow_hints:
