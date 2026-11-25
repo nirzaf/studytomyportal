@@ -1,5 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { Window } from "happy-dom";
+
+mock.module("@sentry/nextjs", () => ({
+  isInitialized: () => false,
+  captureException: () => undefined,
+  lastEventId: () => undefined,
+  showReportDialog: () => undefined,
+}));
 
 const domWindow = new Window({ url: "http://localhost/" });
 for (const key of [

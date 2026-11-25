@@ -115,7 +115,7 @@ def body(result):
 
 def test_build_server_and_manager():
     server = srv.build_mcp_server(_registry())
-    assert server.name == "learnhouse"
+    assert server.name == "studytomy"
     assert "get_context" in server.instructions
     manager = srv.build_mcp_session_manager(_registry())
     assert srv.MCPASGIApp(manager).manager is manager
