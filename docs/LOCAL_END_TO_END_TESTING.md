@@ -20,7 +20,9 @@ See [the detailed verification record](studytomy/LOCAL-VERIFICATION.md), [archit
 
 ## 1. Isolate the checkout, dependencies and storage
 
-Prerequisites: Docker Desktop running, Git, Python/API dependencies matching `apps/api/uv.lock`, Bun/web dependencies matching the committed lockfile, and installed Playwright Chromium for browser tests. Do not update dependencies to fix an unrelated setup issue.
+Prerequisites: a reachable Docker Engine through Docker Desktop, Colima, or another supported Docker context; Git; Python/API dependencies matching `apps/api/uv.lock`; Bun/web dependencies matching the committed lockfile; and installed Playwright Chromium for browser tests. Do not update dependencies to fix an unrelated setup issue.
+
+On macOS, Colima can provide the Docker Engine without changing the Compose commands below. Start the intended Colima profile, then select its Docker context with `docker context use colima`; confirm the active context with `docker context show` before creating test containers. Keep the Colima VM data on a volume with sufficient free space. Return to the prior Docker context with `docker context use <context-name>` when switching runtimes.
 
 Inspect the main checkout and applicable instructions first. Never reset or clean someone else's changes. Use a git archive so build output and filesystem media cannot collide with an active development server:
 

@@ -25,6 +25,7 @@ from src.services.studytomy.learning_practice_retention import (
 from src.services.ai.schemas.learning_surface import (
     ActionRequest,
     LearningPresentation,
+    LessonTutorAction,
     LearningAvailability,
     LearningSurface,
     StartLearningSurface,
@@ -368,3 +369,19 @@ async def test_unapproved_practice_never_calls_provider_or_reserves_credit(monke
     assert denied.value.detail["code"] == "POLICY_NOT_APPROVED"
     provider.assert_not_awaited()
     reserve_credit.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("value", "action"),
+    [
+        ("ask_question", LessonTutorAction.ASK_QUESTION),
+        ("explain_visual", LessonTutorAction.EXPLAIN_VISUAL),
+        ("deepen_topic", LessonTutorAction.DEEPEN_TOPIC),
+        ("evaluate_answer", LessonTutorAction.EVALUATE_ANSWER),
+    ],
+)
+def test_lesson_tutor_action_contract(value, action):
+    adapter = TypeAdapter(LessonTutorAction)
+    parsed = adapter.validate_python(value)
+    assert parsed is action
+    assert adapter.dump_python(parsed, mode="json") == value

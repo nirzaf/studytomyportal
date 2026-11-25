@@ -333,7 +333,7 @@ async def get_course_chapters(
         .join(CourseChapter, Chapter.id == CourseChapter.chapter_id) # type: ignore
         .where(CourseChapter.course_id == course_id)
         .where(Chapter.course_id == course_id)
-        .order_by(CourseChapter.order) # type: ignore
+        .order_by(CourseChapter.order, func.min(CourseChapter.id)) # type: ignore
         .group_by(Chapter.id, CourseChapter.order) # type: ignore
     )
     chapters = (await db_session.execute(statement)).scalars().all()
@@ -371,7 +371,7 @@ async def get_course_chapters(
                 )
                 .join(Activity, Activity.id == ChapterActivity.activity_id)  # type: ignore
                 .where(ChapterActivity.chapter_id.in_(chapter_ids))  # type: ignore
-                .order_by(ChapterActivity.chapter_id, ChapterActivity.order)  # type: ignore
+                .order_by(ChapterActivity.chapter_id, ChapterActivity.order, ChapterActivity.id)  # type: ignore
             )
             if not with_unpublished_activities:
                 activity_statement = activity_statement.where(Activity.published == True)
@@ -428,7 +428,7 @@ async def get_course_chapters(
                 select(ChapterActivity, Activity)
                 .join(Activity, Activity.id == ChapterActivity.activity_id)  # type: ignore
                 .where(ChapterActivity.chapter_id.in_(chapter_ids))  # type: ignore
-                .order_by(ChapterActivity.chapter_id, ChapterActivity.order)  # type: ignore
+                .order_by(ChapterActivity.chapter_id, ChapterActivity.order, ChapterActivity.id)  # type: ignore
             )
             if not with_unpublished_activities:
                 activity_statement = activity_statement.where(Activity.published == True)

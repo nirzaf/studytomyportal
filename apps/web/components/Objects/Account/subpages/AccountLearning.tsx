@@ -133,8 +133,9 @@ function LearningView({
 }) {
   const { i18n } = useTranslation()
   const [view, setView] = useState<View>({ kind: 'loading' })
-  const lessonCourse = view.kind === 'lesson' ? view.release.course_uuid : undefined
-  const lessonRelease = view.kind === 'lesson' ? view.release.release_uuid : undefined
+  const adaptiveLesson = view.kind === 'lesson' || (view.kind === 'media' && view.lesson.format === 'pdf')
+  const lessonCourse = adaptiveLesson ? view.release.course_uuid : undefined
+  const lessonRelease = adaptiveLesson ? view.release.release_uuid : undefined
   const adaptiveRelease = useMemo(() => lessonCourse && lessonRelease
     ? { course_uuid: lessonCourse, course_release_uuid: lessonRelease }
     : undefined, [lessonCourse, lessonRelease])
@@ -214,7 +215,7 @@ function LearningView({
   }
 
   async function openManagedRecommendation(recommendation: LessonRecommendation): Promise<boolean> {
-    if (view.kind !== 'lesson') return false
+    if (!adaptiveLesson) return false
     const { release } = view
     if (recommendation.course_uuid !== release.course_uuid || recommendation.course_release_uuid !== release.release_uuid) {
       return false
@@ -519,6 +520,8 @@ function LearningView({
         />
         {view.lesson.format === 'pdf' && <ManagedPdfTopicCheck key={mediaUrl} orgUuid={orgUuid} token={token} learnerUuid={learnerUuid}
           courseUuid={view.release.course_uuid} releaseUuid={view.release.release_uuid} activityUuid={view.lesson.activity_uuid} />}
+        {adaptiveRelease && <AdaptiveAttemptPanel orgUuid={orgUuid} activityUuid={view.lesson.activity_uuid}
+          release={adaptiveRelease} onOpenRecommendation={openManagedRecommendation} />}
       </>
       break
     }

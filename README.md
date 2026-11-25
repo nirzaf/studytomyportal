@@ -6,7 +6,7 @@ Documentation navigation: [task-oriented index](docs/studytomy/README.md). Read 
 
 Studytomy Portal is an educator-led learning platform under active development, combining structured courses, tutoring, context-aware AI assistance, assessments, interactive learning, and evidence-based progress tracking. The intended learner offering is the Sri Lankan National School Syllabus (National Institute of Education / Ministry of Education, Grades 6–13, English instruction) for students and their parents/guardians; see the [Sri Lankan decision baseline](docs/studytomy/SRI-LANKA-DECISION-BASELINE.md). That scope is an engineering alignment only: the programme, market and cohort decisions behind it (`D-01`, `D-02`) remain unapproved.
 
-**Studytomy Portal is an open-source project published under the [GNU Affero General Public License v3.0](LICENSE).** The application is in local development. For setup, contributions, and private vulnerability reports, see [LOCAL-ONLY.md](LOCAL-ONLY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md).
+**Studytomy Portal is a public open-source project published under the [GNU Affero General Public License v3.0](LICENSE).** The application is in local development. For setup, contributions, and private vulnerability reports, see [LOCAL-ONLY.md](LOCAL-ONLY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [SECURITY.md](SECURITY.md).
 
 ## Contents
 
@@ -27,7 +27,7 @@ Studytomy Portal is an educator-led learning platform under active development, 
 
 ## Product vision
 
-The [topic learning loop](docs/studytomy/TOPIC-LEARNING-LOOP.md) is the first end-to-end product target: an educator publishes a lesson with approved material, the learner answers a short question at a topic boundary, and a wrong answer triggers cited reteaching and a distinct equivalent recheck. Scoped staff history shows where the learner struggled and what helped. One reviewed PDF fractions pilot passed a local synthetic author-to-learner-and-staff check. This does not establish the broader course flow or production readiness.
+The [topic learning loop](docs/studytomy/TOPIC-LEARNING-LOOP.md) is the first end-to-end product target: an educator publishes a lesson with approved material, the learner answers a short question at a topic boundary, and a wrong answer triggers cited reteaching and a distinct equivalent recheck. Scoped staff history shows where the learner struggled and what helped. One local synthetic fractions check has been reported as passing, but the full signed-in author → publish → learner → staff workflow remains unverified. This does not establish the broader course flow or production readiness.
 
 Studytomy is intended to help students learn, practise, receive feedback, and improve while giving tutors a controlled way to author educational material, guide students, and review learning evidence. AI assists teachers and learners; it is not the authority for curriculum accuracy, final academic decisions, or scientifically valid experiments.
 
@@ -76,7 +76,7 @@ Use these terms consistently:
 
 ### Studytomy code currently present
 
-**Source status, 23 November 2026:** the modules listed below are present in `main` at `dd12ed6362a392924d65edaaf56aa1f46c9f14bc`. Their presence is source evidence only; it does not establish educator approval, complete acceptance, production readiness, or deployment. See the [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) for scope and limitations.
+**Source status:** the modules listed below are present in the checked source tree. Their presence is source evidence only; it does not establish educator approval, complete acceptance, production readiness, or deployment. See the [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) for scope and limitations.
 
 The working source contains additive Studytomy modules, rather than only a proposed fork. The following are **source-present / acceptance pending**; file presence and targeted tests are not production certification or completion of the 73-task specification.
 
@@ -161,7 +161,7 @@ flowchart TD
 
 ### Current source stack
 
-This inventory describes the checked-out source and committed dependency declarations, not a live deployment attestation. Versions below come from manifests, lockfiles and Dockerfiles, not registry latest-version claims. Snapshot: 23 November 2026.
+This inventory describes the checked-out source and committed dependency declarations, not a live deployment attestation. Versions below come from manifests, lockfiles and Dockerfiles, not registry latest-version claims. Snapshot: 25 November 2026.
 
 | Layer | Technology and version | Evidence |
 |---|---|---|

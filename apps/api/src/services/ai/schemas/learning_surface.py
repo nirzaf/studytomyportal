@@ -5,6 +5,7 @@ surface, including all identities, question instances, and available actions.
 Evaluation data belongs in a separate server-only record.
 """
 
+from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -18,6 +19,15 @@ ContentIdentity = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 PlainText = Annotated[str, StringConstraints(min_length=1, max_length=600, pattern=r"^[^<>]+$")]
 PartCount = Annotated[int, Field(ge=1, le=12)]
 Mark = Annotated[int, Field(ge=-12, le=12)]
+
+
+class LessonTutorAction(StrEnum):
+    """Action vocabulary for the launch tutor, separate from practice surface actions."""
+
+    ASK_QUESTION = "ask_question"
+    EXPLAIN_VISUAL = "explain_visual"
+    DEEPEN_TOPIC = "deepen_topic"
+    EVALUATE_ANSWER = "evaluate_answer"
 
 
 class _Contract(BaseModel):
