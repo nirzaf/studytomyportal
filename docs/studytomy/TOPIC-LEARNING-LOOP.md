@@ -1,10 +1,10 @@
 # Topic learning loop
 
-This is the product and acceptance contract, not a release receipt. Use the [implementation status](IMPLEMENTATION-STATUS.md) for current delivery and the [local runbook](../LOCAL_END_TO_END_TESTING.md) for executable evidence. The inspected foundation was local `main` at `594ba9b4d` on 24 November 2026.
+This is the product and acceptance contract, not a release receipt. Use the [implementation status](IMPLEMENTATION-STATUS.md) for current delivery and the [local runbook](../LOCAL_END_TO_END_TESTING.md) for executable evidence. The original foundation inspection at `594ba9b4d` on 24 November 2026 is historical; the current source and hosted checks are summarized in the 25 November checkpoint in the implementation status.
 
 ## Authoring and approved sources
 
-The storage hierarchy is **Course → ordered Chapter → ordered Activity**. A lesson is a lesson activity, not a second container above activities. One lesson may cover one or more explicit topics; each topic names its learning objective and the approved evidence supporting it. Keep lesson-local ordering deterministic. Do not infer mastery or objectives from the activity title or chapter order.
+The storage hierarchy is **Course → ordered Chapter → ordered Activity**. A lesson is a lesson activity, not a second container above activities. Chapter order is stored on `CourseChapter.order`; activity order is stored on `ChapterActivity.order`. Equal order values use the association row ID as a stable tie-breaker; `Activity` has no order field. One lesson may cover one or more explicit topics; each topic names its learning objective and the approved evidence supporting it. Do not infer mastery or objectives from the activity title or chapter order.
 
 An authorized administrator or teacher creates the course, chapters and lesson activities, attaches teaching materials, defines topic boundaries and checks, and submits through the applicable review and publication path. A reviewed text PDF alone is enough for the first slice. Images, audio, video and links are optional for authoring and playback. An attachment is not automatically an approved AI source: record its exact authorized revision and a page, section or time locator. In the PDF-first implementation, bind citations to the reviewed PDF hash (SHA-256) and page. Unsupported or empty extraction must not become usable evidence. Preserve tenant, course and lesson permissions and the rights, reviewer and curriculum requirements.
 

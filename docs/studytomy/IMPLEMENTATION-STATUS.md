@@ -2,7 +2,7 @@
 
 ## Current source summary
 
-The first complete product slice is defined in the [topic learning loop](TOPIC-LEARNING-LOOP.md). Existing authoring, managed release, grounded PDF drafts and practice are foundations, not evidence that automatic topic checks, cited alternate explanations, equivalent rechecks and authorized history all work together.
+The target product slice is defined in the [topic learning loop](TOPIC-LEARNING-LOOP.md). A managed-PDF fractions topic-check path now exists in source, including a reviewed initial question, cited reteaching, a distinct recheck and scoped history. The complete signed-in author → independent review → publish → learner → staff journey remains unverified as one acceptance flow; source presence and focused tests do not establish that end-to-end result.
 
 This summary reflects the current merged source. Dated checkpoints below retain their original baselines, test results, and approval status.
 
@@ -10,10 +10,31 @@ This summary reflects the current merged source. Dated checkpoints below retain 
 |---|---|
 | Adaptive progress | Diagnostic completion triggers mastery and recommendation refresh. Recommendation transport errors show a retry state. Formal assessments retain their existing scoring and evidence paths. |
 | Reviewed lesson practice | The API checks current lesson, curriculum, educator review, consent, and retention authority. It returns separate exploration and practice permissions and checks them again for saved actions and recovery. Exploration visuals remain interactive. Scored visuals follow the server-issued question and stay read-only. Practice is ungraded and creates no independent mastery evidence. Real learner activation and a complete real-backend browser journey remain unverified. [Practice implementation](GENUI-IMPLEMENTATION.md) |
-| Managed PDF topic check | A reviewed fractions check is available in the managed PDF lesson flow, with exact release/source binding, a distinct recheck, and scoped staff history. The current signed-in author → publish → learner → staff browser acceptance remains unverified; see the [topic learning loop](TOPIC-LEARNING-LOOP.md). |
+| Managed PDF topic check | The code supports a D-16-reviewed fractions check bound to the exact managed release and PDF, with a distinct recheck and scoped staff history. Availability depends on a matching, currently approved release; no live approved pilot record or complete signed-in author → independent review → publish → learner → staff acceptance has been verified. See the [topic learning loop](TOPIC-LEARNING-LOOP.md). |
+| Tutor action vocabulary | `LessonTutorAction` defines four action names in the learning-surface schema and unit tests validate those enum values. There is no production caller or four-action tutor route; the vocabulary is not an enabled tutor workflow. |
+| Guardian welcome and target study path | The family workspace route exists, but source inspection found no guardian welcome-message/study-path generation and one-time email workflow. Do not describe that requested flow as implemented. |
+| Legacy tutoring migration | `apps/api/scripts/studytomy_backfill.py` performs a read-only PostgreSQL inventory of legacy learner/submission mappings. It is not an idempotent tutoring-data migration and has no write or `--dry-run` mode. |
 | Syllabus and Explore Topics | Approved PDF sources support independent search scope and syllabus comparison, citation pages, and source-limited follow-ups. Native course retrieval enforces bounded single-course activity prefiltering (at most 1,000 compatible chunks), skips embeddings when nothing is readable, keeps multi-course and >1,000-row searches on bounded approximate retrieval, and revalidates with `filter_readable_chunks()` on every path. Exact recovery for underfilled small single-course searches remains opt-in; iterative HNSW and hybrid RRF remain benchmark-only and disabled in runtime. [Syllabus library](SYLLABUS-KNOWLEDGE-LIBRARY.md) · [Retrieval evaluation](GROUNDED-RETRIEVAL-EVALUATION.md) |
 | Database | The source has one Alembic head, `2d6a1b7c9e40`. Verify the target database separately before migration. [Migration and rollback](MIGRATION-AND-ROLLBACK.md) |
 | GitHub | Build and repository-security workflows are configured. Check the Actions results for the exact merged commit before treating its checks as passed. The security workflow scans reachable Git history and tracked source and checks locked dependencies; see the [security policy](../../SECURITY.md). |
+
+## Verified source and documentation checkpoints (25–26 November 2026)
+
+The source checkpoint below is `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`. Documentation reconciliation was committed as `28eff10ec9eace33cee5024465378307f7a6d425`; it changed no application behavior.
+
+CI Build and Repository Security passed on the source checkpoint (runs [45660150950](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) and [45660150883](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883)) and on the documentation checkpoint (runs [45666724422](https://github.com/nirzaf/studytomyportal/actions/runs/45666724422) and [45666724252](https://github.com/nirzaf/studytomyportal/actions/runs/45666724252)). These checks do not exercise the fixture-backed live topic-check browser journey or establish curriculum, content-rights, safeguarding or production approval.
+
+The managed-PDF topic-check implementation is present, but the live browser spec starts from a pre-provisioned published release. The authoring, independent review and publication steps remain fixture prerequisites and the complete user journey remains unverified. The guardian welcome/study-path workflow and write-capable legacy tutoring migration are also absent, as recorded in the current-source table above.
+
+## Merged source and CI checkpoint (25 November 2026)
+
+**Inspected revision:** `main` and `origin/main` at `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7` (PR #9). The change orders chapters by `CourseChapter.order` and activities by `ChapterActivity.order`, with association-ID tie-breaks; no order column was added to `Activity`. It adds the managed-PDF topic-check entry point to the learner learning page and a live Playwright spec that begins with a pre-provisioned reviewed release. The separate IndexedDB spec covers browser-local draft recovery, not API persistence.
+
+`LessonTutorAction` defines the four tutor action names as a Pydantic enum, but current production source has no caller beyond the enum definition; its unit tests validate the vocabulary only. Do not describe the four actions as a shipped tutor workflow. D-01/D-02 and other business approvals remain unchanged and unapproved.
+
+**Hosted checks on this exact commit:** [CI Build](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) completed successfully: Build API, CLI, Collab, Packages and Web plus Test API, Web, Collab and PostgreSQL all passed. [Repository Security](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) completed successfully: secret-history/source scan and dependency vulnerability scan passed. These GitHub runs are not a signed-in author/reviewer/publish browser acceptance, a deployment, or educator approval.
+
+The live topic-check spec requires an isolated loopback stack, matching runtime/database identity, a published synthetic PDF release, and separate authorized identities in its fixture. It tests after publication; lesson authoring and independent review are fixture prerequisites, not steps in that spec. The draft-storage spec uses synthetic browser storage state and does not prove server persistence. See the [E2E guide](../../apps/e2e/README.md) and [local verification receipt](LOCAL-VERIFICATION.md#markdown-documentation-refresh-25-november-2026).
 
 ## Reliability, CI test gates, and bounded RAG checkpoint (24 November 2026)
 

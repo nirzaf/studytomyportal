@@ -11,7 +11,7 @@ Before installing Studytomy Portal, make sure your server meets the following re
 | Software | Minimum Version | Notes |
 |---|---|---|
 | Docker Engine | A current release | The daemon must be running and your user must be able to reach it |
-| Docker Compose | v2 (`docker compose` plugin) | Included with Docker Desktop; install `docker-compose-plugin` separately on Linux |
+| Docker Compose | v2 (`docker compose` plugin) | Included with Docker Desktop and many desktop Docker runtimes; install `docker-compose-plugin` separately on Linux |
 | Node.js | 22+ | Required to run the Studytomy Portal CLI. The one-line installers install Node.js 24 when it is missing or too old. |
 | npm / npx | Comes with Node.js | Used to run `npx learnhouse` |
 
@@ -32,7 +32,7 @@ Disk usage grows over time with the amount of uploaded content (videos, document
 The CLI runs on:
 
 - **Linux** (any distribution with Docker support). The one-line installer supports Debian/Ubuntu, Fedora/RHEL and Alpine package managers.
-- **macOS** (with Docker Desktop)
+- **macOS** (with Docker Desktop or another compatible Docker Engine context)
 - **Windows** (with Docker Desktop). A PowerShell installer is available.
 
 Linux is recommended for production deployments.

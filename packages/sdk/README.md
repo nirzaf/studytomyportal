@@ -178,5 +178,4 @@ left out.
 
 ## License
 
-<!-- TODO: license is pending a decision with the maintainer. package.json says MIT as a placeholder. -->
-MIT (placeholder, pending confirmation).
+This package is licensed under the [MIT License](LICENSE), as declared in `package.json`.

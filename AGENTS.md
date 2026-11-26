@@ -57,7 +57,7 @@ Never copy private Enterprise code, disable licensing safeguards to enable Enter
 
 ### Studytomy-specific work: mixed local implementation and planned scope
 
-The 2026-11-17 working-tree review found local curriculum, diagnostic, learning-evidence, mastery, tutoring and reviewed-report paths. Do not treat the list below as proof these are absent, or treat local code as released. Consult [the documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md) and inspect the current source before classifying a task. Existing policy, licensing and release gates remain unchanged.
+The 2026-11-17 working-tree review is historical: it found local curriculum, diagnostic, learning-evidence, mastery, tutoring and reviewed-report paths. Do not treat its inventory as proof these are absent, or treat local code as released. Consult the current [implementation status](docs/studytomy/IMPLEMENTATION-STATUS.md), the dated [documentation review](docs/studytomy/DOCUMENTATION-REVIEW.md), and current source before classifying a task. Existing policy, licensing and release gates remain unchanged.
 
 The following product ambitions still require per-feature implementation, policy/rights approval, and acceptance checks:
 

@@ -53,7 +53,7 @@ feature-local things relatively. Specs never reach into another feature.
 
 ## Running locally
 
-Requires Docker running, plus Node 22+ / bun (the default `E2E_CLI` is the published `learnhouse` image, which declares `engines.node >= 22` — `apps/cli/package.json:55-57`).
+Requires a reachable Docker Engine (for example Docker Desktop, OrbStack, Colima, or Linux Docker Engine), plus Node 22+ / bun (the default `E2E_CLI` is the published `learnhouse` image, which declares `engines.node >= 22` — `apps/cli/package.json:55-57`).
 
 ```bash
 cd apps/e2e
@@ -150,12 +150,59 @@ the isolated database can be inspected. A passing mocked test does not
 substitute for this live acceptance test or the separate PostgreSQL service
 tests.
 
+#### Managed-PDF topic check and browser-local draft recovery
+
+`21-managed-pdf-topic-check-live.spec.ts` uses real application HTTP responses
+for a synthetic learner journey against a pre-provisioned, already published
+managed PDF release. It checks a wrong initial answer, idempotent replay,
+reload/recheck, scoped administrator and lesson-author timeline access, and
+denial for unrelated staff and learner identities. It does **not** create or
+review the lesson itself; provision an isolated synthetic release, its current
+policy/review binding and the fixture manifest described in
+[`TOPIC-LEARNING-LOOP.md`](../../docs/studytomy/TOPIC-LEARNING-LOOP.md) first.
+The standard global setup and database/runtime identity guards still apply.
+
+`22-topic-draft-storage.spec.ts` exercises the production IndexedDB draft
+module in Chromium with synthetic identities and checkpoints. It covers
+closure/reopen, stale leases, account/scope separation, expiry, logout, blocked
+storage and a stalled open. Its page requests are synthetic; it does not test
+the FastAPI or PostgreSQL topic-check endpoints. The regular Playwright config
+still runs its global setup, so satisfy the configured local identity and
+disposable-database prerequisites even for this storage-focused spec.
+
+Run the two checks separately so their guarantees remain clear:
+
+```bash
+cd apps/e2e
+bunx playwright test features/studytomy/tests/21-managed-pdf-topic-check-live.spec.ts --project=chromium --reporter=list
+bunx playwright test features/studytomy/tests/22-topic-draft-storage.spec.ts --project=chromium --reporter=list
+```
+
+The live topic-check test is skipped unless its loopback fixture is available;
+a skip is not live acceptance. See the dated [local verification record](../../docs/studytomy/LOCAL-VERIFICATION.md)
+for the latest executed evidence and its limits.
+
 Run a single module or spec:
 
 ```bash
 bunx playwright test features/assignments         # one feature
 bunx playwright test features/assignments/tests/06-manual-grading.spec.ts
 ```
+
+### Disposable local test administrator
+
+For a fresh loopback-only API and disposable `_test` database, set
+`LEARNHOUSE_INITIAL_ADMIN_EMAIL` to a synthetic address. Generate a new value
+with `openssl rand -hex 24` and supply it privately as
+`LEARNHOUSE_INITIAL_ADMIN_PASSWORD` for the initial API bootstrap. Set
+`E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` to those same test-only values in
+the Playwright process. Bootstrap does not change the password of an
+existing account. Do not reuse an existing environment or commit passwords
+or Playwright storage-state files. Discard both when the test database is
+removed.
+
+The administrator alone does not provision the managed-PDF release, review
+record, or five browser identities required by spec 21.
 
 ### Configuration (env)
 
@@ -183,7 +230,11 @@ bunx playwright test features/assignments/tests/06-manual-grading.spec.ts
   caches tokens per email + retries on 429. A full run does only a handful of
   logins (the API rate-limits logins to **30 / 5 min / IP**).
 
-## Feature coverage: assignments (34 tests across 24 specs)
+## Feature coverage: assignments
+
+The assignment table below is a feature map, not a current run receipt. Any
+test/spec totals in this historical guide are approximate inventory snapshots;
+use Playwright output and CI for exact counts at a given revision.
 
 Driven through the UI, verified against the REST API (`features/assignments/verify.ts`):
 

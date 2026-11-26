@@ -93,3 +93,28 @@ Read-only cross-checks covered the current summaries, historical checkpoint stru
 After the active writer explicitly reserved these five files, minimal history headings/reading-order notes and the two stale revision/count phrasings were corrected locally. All five content hashes were checked before editing; the existing Git index hash was unchanged afterward. The reservation was then released. These evidence files remain with their staged/untracked implementation work; this documentation publication does not copy or stage the entire large logs. The local-only edits will accompany their owner’s future reviewed publication.
 
 Final published-tree check: 29 tracked Markdown files, 77 relative file links checked, zero missing targets. This checks file existence, not external URLs or every heading anchor. Documentation whitespace validation passed. No application tests, production operations or deployment were run for this audit.
+
+## Updated-source documentation sweep (25 November 2026)
+
+**Source baseline:** `main` and `origin/main` at `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`, clean before the documentation sweep. The merged source adds deterministic ordering through `CourseChapter` and `ChapterActivity` association rows, a managed-PDF topic-check UI/API path, and Playwright specs 21 and 22. The documentation changes from that sweep were subsequently committed and pushed in `28eff10ec9eace33cee5024465378307f7a6d425`; no application code, migration or deployment was included.
+
+The tracked inventory contains **53 `.md` files and 138 `.mdx` files (191 Markdown-family files total)**. The current-facing pages below were reconciled against source and the latest exact-SHA checks. Date-stamped baselines, implementation ledgers, proposals, approval records, package docs, licensing notices, generated agent guidance, and old test receipts were retained as historical/contracts; their old result counts were not relabeled as current.
+
+| Updated current-facing documents | Reconciled contract |
+|---|---|
+| `README.md`, `AGENTS.md`, `LOCAL-ONLY.md` | Project scope, current source vs approval status, association-backed order, latest hosted verification, and no-deployment boundary. |
+| `docs/studytomy/IMPLEMENTATION-STATUS.md`, `TOPIC-LEARNING-LOOP.md`, `GENUI-IMPLEMENTATION.md`, `README.md` | Managed-PDF topic-check status and acceptance limits; tutor enum-only status; guardian welcome/study-path and legacy-migration gaps; precise lesson-ordering contract. |
+| `apps/e2e/README.md`, `docs/LOCAL_END_TO_END_TESTING.md` | Specs 21/22 guarantees, fixture and global-setup prerequisites, topic-check runner commands, and Docker Engine context options including OrbStack. |
+| `docs/content/developers/migration/index.mdx`, `programmatic.mdx` | Course, chapter and activity hierarchy and the actual association-owned ordering/tie-break behavior. |
+| `docs/content/self-hosting/installation/requirements.mdx`, `docs/content/developers/contributing/dev-environment.mdx` | Engine-neutral Compose/runtime requirements and resource-setting wording. |
+| `packages/sdk/README.md` | Removed an obsolete MIT-license placeholder; it now links the existing package license and matches `packages/sdk/package.json`. |
+
+The current source check confirms `LessonTutorAction` is only defined in `learning_surface.py` and used by its enum unit tests, not a production route. `families/page.tsx` mounts the family workspace, but no guardian welcome/study-path email flow was found. `studytomy_backfill.py` is read-only inventory, not a data migration. These gaps are recorded explicitly; no launch/business approval was inferred.
+
+**Source-checkpoint CI evidence:** [CI Build run 45660150950](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) passed all nine build/test jobs on `997ac953`. [Repository Security run 45660150883](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) passed both secret-history/source and dependency-scan jobs. These workflows do not execute the live Playwright topic-check scenario or deploy the application.
+
+**Documentation validation:** 281 relative repository links and 510 root-relative docs/asset routes were checked with zero missing targets; generated `/reference` routes were excluded from the filesystem check. The Fumadocs production build validates the generated documentation routes. External URL reachability and every fragment anchor were not tested. Dated acceptance logs remain scoped to their recorded environment and SHA.
+
+## Main-branch verification receipt (26 November 2026)
+
+At this verification point, `main` was `28eff10ec9eace33cee5024465378307f7a6d425`. [CI Build run 45666724422](https://github.com/nirzaf/studytomyportal/actions/runs/45666724422) passed all nine jobs; [Repository Security run 45666724252](https://github.com/nirzaf/studytomyportal/actions/runs/45666724252) passed both jobs. The follow-up corrected the current implementation summary and replaced stale “local-only/no commit” wording with the actual publication receipt. It did not deploy the application or run the fixture-backed topic-check browser scenario.
