@@ -5,15 +5,15 @@
   "build_version": "1.0.0-pilot.1",
   "versioned_entry_path": "conservation-momentum/1.0.0-pilot.1/index.html",
   "build_identity": "studytomy-lab-source-input-sha256-v1",
-  "build_sha256": "e5b013fc9943ba82be536ba49b6aa12b2c0f8c9672fe094dc50320fe00448c7f",
+  "build_sha256": "5999f84c886d627d7d3fc01df6fc6b0481a35e4d4e95af0506382a43c1563001",
   "build_tool": {
     "name": "Bun",
-    "version": "1.4.2",
-    "repository_pin": "1.4.4"
+    "version": "1.4.5",
+    "repository_pin": "1.4.5"
   },
-  "artifact_sha256": "7554218e7cbdd2ebb5942f28b2a55bd952e8adbd6d638c691d95ee4b8f7532a8",
-  "bundle_asset": "assets/momentum-lab.fdc1ab065e9e.js",
-  "bundle_sha256": "fdc1ab065e9e07b35330443acc9927773c5306b776b78924e0cc2f1bba1dd79f",
+  "artifact_sha256": "267bab82e0f524621124f379447887ee5d10c0bffdfb8a9425abd9a18fe96d0f",
+  "bundle_asset": "assets/momentum-lab.4a62846af8c4.js",
+  "bundle_sha256": "4a62846af8c4106538f92697ca50985ec3fbef91ff6a6e4366f080c694812704",
   "license_sha256": "372dff4c1ee0d317258b43c045c41d4fdd8c0917c79983ac94d5f843426ca3b9",
   "upstream_source": {
     "repository": "https://github.com/danielw-sudo/agentuto",
