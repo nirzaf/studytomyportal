@@ -189,6 +189,21 @@ bunx playwright test features/assignments         # one feature
 bunx playwright test features/assignments/tests/06-manual-grading.spec.ts
 ```
 
+### Disposable local test administrator
+
+For a fresh loopback-only API and disposable `_test` database, set
+`LEARNHOUSE_INITIAL_ADMIN_EMAIL` to a synthetic address. Generate a new value
+with `openssl rand -hex 24` and supply it privately as
+`LEARNHOUSE_INITIAL_ADMIN_PASSWORD` for the initial API bootstrap. Set
+`E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` to those same test-only values in
+the Playwright process. Bootstrap does not change the password of an
+existing account. Do not reuse an existing environment or commit passwords
+or Playwright storage-state files. Discard both when the test database is
+removed.
+
+The administrator alone does not provision the managed-PDF release, review
+record, or five browser identities required by spec 21.
+
 ### Configuration (env)
 
 | Var | Default | Purpose |
