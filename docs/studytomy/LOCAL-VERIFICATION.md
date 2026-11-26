@@ -799,7 +799,7 @@ The task-created PostgreSQL, Redis, RustFS, Ollama, API, and web processes are d
 
 ## Markdown documentation refresh (25 November 2026)
 
-**Source baseline:** `main` and `origin/main` at `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`; source changes in the merged commit were not altered by this docs-only pass. The current guides were aligned with association-backed course ordering, the managed-PDF topic-check entry point and its test boundaries, enum-only tutor action vocabulary, the current family/migration gaps, and the existing local-only deployment status. Dated records and approval documents remain historical.
+**Source baseline:** `main` and `origin/main` at `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`; source changes in that merged commit were not altered by the documentation pass. The current guides were aligned with association-backed course ordering, the managed-PDF topic-check entry point and its test boundaries, enum-only tutor action vocabulary, the current family/migration gaps, and the local-only deployment status. Dated records and approval documents remain historical. The refresh was later committed and pushed as documentation-only commit `28eff10ec9eace33cee5024465378307f7a6d425`.
 
 | Command/check | Result |
 |---|---|
@@ -808,8 +808,18 @@ The task-created PostgreSQL, Redis, RustFS, Ollama, API, and web processes are d
 | Relative-link and docs-route inventory across tracked `.md`/`.mdx` | 191 files inventoried; 281 relative repository targets and 510 root-relative documentation/asset routes resolved; no missing targets. Generated `/reference` routes were checked by the docs build rather than the filesystem mapping. External URLs and every fragment anchor were not checked. |
 | `git diff --check` | Passed after the documentation changes. |
 
-GitHub verification is separate: [CI Build run 45660150950](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) and [Repository Security run 45660150883](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) both passed on the exact source baseline. No local API/UI/browser test, database operation, migration, commit, push or deployment was performed by this documentation refresh. The managed-PDF live browser spec still requires its own isolated fixture-backed run.
+GitHub verification is separate: [CI Build run 45660150950](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) and [Repository Security run 45660150883](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) passed on the source baseline. No local API/UI/browser test, database operation, migration or deployment was performed as part of the documentation refresh. The managed-PDF live browser spec still requires its own isolated fixture-backed run.
 
 ### Git delivery receipt
 
-Implementation and test commit `1146e796b1d905ac299e3e20911fbf9f172387c7` was pushed normally to `origin/main` after the post-commit runtime identity check and both Explore Topics browser specs passed. `git ls-remote origin refs/heads/main` returned the same SHA. This receipt is a documentation-only follow-up; it contains no application or test-code changes.
+Implementation and test commit `1146e796b1d905ac299e3e20911fbf9f172387c7` was pushed normally to `origin/main` after the post-commit runtime identity check and both Explore Topics browser specs passed. `git ls-remote origin refs/heads/main` returned the same SHA. This receipt records that earlier delivery; the documentation-only follow-up below is separate.
+
+### Documentation follow-up receipt (26 November 2026)
+
+The follow-up docs audit corrected the stale current-status wording and updated the CI/security receipts. The preceding documentation checkpoint `28eff10ec9eace33cee5024465378307f7a6d425` was pushed to `origin/main`, and both workflows passed on that SHA. No application deployment, migration or live browser scenario was run as part of the documentation work.
+
+| Check on the 26 November documentation follow-up | Result |
+|---|---|
+| `cd docs && bun run test:snippets` | Exit 0; 3 passed, 0 failed, 0 skipped. |
+| `cd docs && bun run build` | Exit 0; compiled and generated 461 static pages. Remote OpenAPI fetch used the bundled snapshot fallback. Sitemap generation was skipped because `NEXT_PUBLIC_DOCS_URL` was unset. |
+| `git diff --check` | Exit 0. |

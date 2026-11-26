@@ -2,7 +2,7 @@
 
 Studytomy Portal is a public source repository. GitHub Actions builds the web, API, collaboration server, packages, and CLI. The repository also runs secret and dependency scans. Application setup and functional verification use local or isolated test environments. There is no application deployment workflow. See the [security policy](SECURITY.md) for the checks required on `main`.
 
-The latest verified merge checkpoint is `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`: [CI Build](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) passed all nine build/test jobs, and [Repository Security](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) passed both secret-scanning and dependency-scan jobs. These runs do not deploy the application or replace local signed-in acceptance tests.
+The latest application-source checkpoint reviewed here is `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`; its [CI Build](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) passed all nine build/test jobs, and [Repository Security](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) passed both scans. Documentation checkpoint `28eff10ec9eace33cee5024465378307f7a6d425` also passed [CI Build](https://github.com/nirzaf/studytomyportal/actions/runs/45666724422) and [Repository Security](https://github.com/nirzaf/studytomyportal/actions/runs/45666724252). These checks do not deploy the application or replace local signed-in acceptance tests.
 
 ## Local verification
 

@@ -96,7 +96,7 @@ Final published-tree check: 29 tracked Markdown files, 77 relative file links ch
 
 ## Updated-source documentation sweep (25 November 2026)
 
-**Inspected revision:** `main` and `origin/main` at `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`, clean before this documentation-only pass. The merged source adds deterministic ordering through `CourseChapter` and `ChapterActivity` association rows, a managed-PDF topic-check UI/API path, and Playwright specs 21 and 22. The worktree remains local; no commit, push, migration or deployment is included in this sweep.
+**Source baseline:** `main` and `origin/main` at `997ac953d8e4c7acfcdd666ba8a53cc72422d9b7`, clean before the documentation sweep. The merged source adds deterministic ordering through `CourseChapter` and `ChapterActivity` association rows, a managed-PDF topic-check UI/API path, and Playwright specs 21 and 22. The documentation changes from that sweep were subsequently committed and pushed in `28eff10ec9eace33cee5024465378307f7a6d425`; no application code, migration or deployment was included.
 
 The tracked inventory contains **53 `.md` files and 138 `.mdx` files (191 Markdown-family files total)**. The current-facing pages below were reconciled against source and the latest exact-SHA checks. Date-stamped baselines, implementation ledgers, proposals, approval records, package docs, licensing notices, generated agent guidance, and old test receipts were retained as historical/contracts; their old result counts were not relabeled as current.
 
@@ -111,6 +111,10 @@ The tracked inventory contains **53 `.md` files and 138 `.mdx` files (191 Markdo
 
 The current source check confirms `LessonTutorAction` is only defined in `learning_surface.py` and used by its enum unit tests, not a production route. `families/page.tsx` mounts the family workspace, but no guardian welcome/study-path email flow was found. `studytomy_backfill.py` is read-only inventory, not a data migration. These gaps are recorded explicitly; no launch/business approval was inferred.
 
-**Exact-commit CI evidence:** [CI Build run 45660150950](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) passed all nine build/test jobs on this SHA. [Repository Security run 45660150883](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) passed both secret-history/source and dependency-scan jobs. These workflows do not execute the live Playwright topic-check scenario or deploy the application.
+**Source-checkpoint CI evidence:** [CI Build run 45660150950](https://github.com/nirzaf/studytomyportal/actions/runs/45660150950) passed all nine build/test jobs on `997ac953`. [Repository Security run 45660150883](https://github.com/nirzaf/studytomyportal/actions/runs/45660150883) passed both secret-history/source and dependency-scan jobs. These workflows do not execute the live Playwright topic-check scenario or deploy the application.
 
 **Documentation validation:** 281 relative repository links and 510 root-relative docs/asset routes were checked with zero missing targets; generated `/reference` routes were excluded from the filesystem check. The Fumadocs production build validates the generated documentation routes. External URL reachability and every fragment anchor were not tested. Dated acceptance logs remain scoped to their recorded environment and SHA.
+
+## Main-branch verification receipt (26 November 2026)
+
+At this verification point, `main` was `28eff10ec9eace33cee5024465378307f7a6d425`. [CI Build run 45666724422](https://github.com/nirzaf/studytomyportal/actions/runs/45666724422) passed all nine jobs; [Repository Security run 45666724252](https://github.com/nirzaf/studytomyportal/actions/runs/45666724252) passed both jobs. The follow-up corrected the current implementation summary and replaced stale “local-only/no commit” wording with the actual publication receipt. It did not deploy the application or run the fixture-backed topic-check browser scenario.
