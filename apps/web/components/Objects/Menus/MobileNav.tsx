@@ -15,7 +15,6 @@ import {
   ChatsCircle,
   User,
   ShoppingBag,
-  Book,
   SignOut,
   CaretRight,
   SquaresFour,
@@ -32,7 +31,8 @@ import { getUriWithOrg } from '@services/config/config'
 import { isFeatureAvailable } from '@services/plans/plans'
 import { DASHBOARD_MENU_ITEMS, DashboardMenuItem } from '@/lib/dashboard-menu-items'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
-import { useOrgMenuItems } from './OrgMenuLinks'
+import { activeOrgMenuItem, orgMenuPath } from '@/lib/org-menu-path'
+import { useOrgMenuItems, type OrgMenuItem } from './OrgMenuLinks'
 
 /** Fired by the header avatar to open the More sheet from outside the tab bar. */
 export const OPEN_MOBILE_MORE_EVENT = 'lh:open-mobile-more'
@@ -49,20 +49,6 @@ function hidesTabBar(pathname: string) {
   )
 }
 
-/** Strip the org prefix proxy routing may leave on the path, so /orgs/x/courses and /courses compare equal. */
-function pagePath(pathname: string) {
-  return pathname.replace(/^\/orgs\/[^/]+/, '') || '/'
-}
-
-function isActive(path: string, href: string) {
-  const target = pagePath(new URL(href, 'http://x').pathname)
-  if (target === '/') return path === '/'
-  return path === target || path.startsWith(target + '/') ||
-    // A course or path page belongs to its catalog tab.
-    (target === '/courses' && path.startsWith('/course/')) ||
-    (target === '/paths' && path.startsWith('/path/'))
-}
-
 /**
  * Phone and tablet navigation: a bottom tab bar in the iOS/Android idiom, with
  * the rest of the org menu, the account and admin entries in a "More" sheet.
@@ -75,7 +61,7 @@ export function MobileTabBar({ orgslug, primaryColor = '' }: { orgslug: string; 
   const { setOpen: openSearch } = useSiteCommandPalette()
   const menuItems = useOrgMenuItems(orgslug)
   const [moreOpen, setMoreOpen] = useState(false)
-  const path = pagePath(pathname)
+  const path = orgMenuPath(pathname)
   const hidden = hidesTabBar(pathname)
   const isAuthenticated = session?.status === 'authenticated'
 
@@ -102,25 +88,27 @@ export function MobileTabBar({ orgslug, primaryColor = '' }: { orgslug: string; 
 
   // Second tab is the org's own first section (usually Courses).
   const primary = menuItems.find((i) => !i.external) ?? null
+  const activeItem = activeOrgMenuItem(menuItems, pathname)
+  const moreItems = hidden ? menuItems : menuItems.filter((item) => item !== primary)
   const sheet = (
-    <MobileMoreSheet open={moreOpen} onOpenChange={setMoreOpen} orgslug={orgslug} skipKey={hidden ? undefined : primary?.key} />
+    <MobileMoreSheet open={moreOpen} onOpenChange={setMoreOpen} orgslug={orgslug} menuItems={moreItems} activeItem={activeItem} />
   )
 
   // The header avatar can still open the sheet where the bar steps aside.
   if (hidden) return sheet
 
-  const accent = primaryColor || '#0a0a0a'
+  const accent = primaryColor || '#115e59'
 
   const tabs: { key: string; label: string; Icon: any; href?: string; onClick?: () => void; active: boolean }[] = [
     { key: 'home', label: t('common.home'), Icon: House, href: getUriWithOrg(orgslug, '/'), active: path === '/' },
     ...(primary
-      ? [{ key: primary.key, label: primary.label, Icon: primary.Icon ?? Books, href: primary.href, active: isActive(path, primary.href) }]
+      ? [{ key: primary.key, label: primary.label, Icon: primary.Icon ?? Books, href: primary.href, active: path !== '/' && activeItem === primary }]
       : []),
     { key: 'search', label: t('common.search'), Icon: MagnifyingGlass, onClick: () => openSearch(true), active: path.startsWith('/search') },
     isAuthenticated
       ? { key: 'trail', label: t('courses.progress'), Icon: Signpost, href: getUriWithOrg(orgslug, '/trail'), active: path.startsWith('/trail') }
       : { key: 'login', label: t('auth.login'), Icon: SignIn, href: getUriWithOrg(orgslug, '/login'), active: path.startsWith('/login') },
-    { key: 'more', label: t('common.more'), Icon: DotsNine, onClick: () => setMoreOpen(true), active: moreOpen },
+    { key: 'more', label: t('common.more'), Icon: DotsNine, onClick: () => setMoreOpen(true), active: moreOpen || Boolean(activeItem && activeItem !== primary && path !== '/') },
   ]
 
   return (
@@ -149,7 +137,7 @@ export function MobileTabBar({ orgslug, primaryColor = '' }: { orgslug: string; 
                     {inner}
                   </Link>
                 ) : (
-                  <button type="button" onClick={onClick} className={cls} style={style} aria-label={label}>
+                  <button type="button" onClick={onClick} className={cls} style={style} aria-label={label} aria-haspopup="dialog" aria-expanded={key === 'more' ? moreOpen : undefined}>
                     {inner}
                   </button>
                 )}
@@ -184,6 +172,7 @@ function SheetRow({
   label,
   trailing,
   tone = 'default',
+  current = false,
 }: {
   href?: string
   external?: boolean
@@ -192,6 +181,7 @@ function SheetRow({
   label: string
   trailing?: React.ReactNode
   tone?: 'default' | 'danger'
+  current?: boolean
 }) {
   const body = (
     <>
@@ -202,13 +192,13 @@ function SheetRow({
       >
         <Icon size={18} weight="fill" data-dir-flip={tone === 'danger' ? true : undefined} />
       </span>
-      <span className={`flex-1 truncate text-[15px] font-medium ${tone === 'danger' ? 'text-red-600' : 'text-neutral-900'}`}>
+      <span className={`min-w-0 flex-1 wrap-break-word text-[15px] font-medium ${tone === 'danger' ? 'text-red-600' : 'text-neutral-900'}`}>
         {label}
       </span>
       {trailing ?? (tone === 'default' && <CaretRight size={14} weight="bold" className="text-neutral-300 rtl:rotate-180" />)}
     </>
   )
-  const cls = 'lh-press flex w-full items-center gap-3 px-3 min-h-[52px] text-start active:bg-black/[0.03]'
+  const cls = `lh-press flex w-full items-center gap-3 px-3 py-2 min-h-[52px] text-start active:bg-black/[0.03] ${current ? 'bg-teal-50' : ''}`
   if (href && external) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>
@@ -218,7 +208,7 @@ function SheetRow({
   }
   if (href) {
     return (
-      <Link href={href} className={cls} onClick={onClick}>
+      <Link href={href} className={cls} onClick={onClick} aria-current={current ? 'page' : undefined}>
         {body}
       </Link>
     )
@@ -234,12 +224,14 @@ function MobileMoreSheet({
   open,
   onOpenChange,
   orgslug,
-  skipKey,
+  menuItems,
+  activeItem,
 }: {
   open: boolean
   onOpenChange: (_open: boolean) => void
   orgslug: string
-  skipKey?: string
+  menuItems: OrgMenuItem[]
+  activeItem?: OrgMenuItem
 }) {
   const { t } = useTranslation()
   const session = useLHSession() as any
@@ -248,7 +240,6 @@ function MobileMoreSheet({
   const { track } = useLHAnalytics()
   const messagingEnabled = useMessagingEnabled()
   const { unreadTotal } = useMessaging()
-  const menuItems = useOrgMenuItems(orgslug).filter((i) => i.key !== skipKey)
 
   const isAuthenticated = session?.status === 'authenticated'
   const user = session?.data?.user
@@ -263,9 +254,9 @@ function MobileMoreSheet({
   })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="lg:hidden flex flex-col p-0 bg-white md:max-h-[85vh] md:w-[420px] [&>button:last-child]:hidden">
+      <DialogContent className="lg:hidden flex flex-col p-0 bg-white md:max-h-[85vh] md:w-[420px]" aria-describedby={undefined}>
         <DialogTitle className="sr-only">{t('common.more')}</DialogTitle>
-        <div className="flex-1 overflow-y-auto overscroll-contain pt-7 pb-4 space-y-5">
+        <div className="flex-1 overflow-y-auto overscroll-contain pt-16 pb-4 space-y-5">
           {/* Who's signed in */}
           {isAuthenticated ? (
             <Link
@@ -303,7 +294,7 @@ function MobileMoreSheet({
           {menuItems.length > 0 && (
             <SheetGroup title={t('mobile_nav.explore', { defaultValue: 'Explore' })}>
               {menuItems.map((it) => (
-                <SheetRow key={it.key} href={it.href} external={it.external} Icon={it.Icon} label={it.label} />
+                <SheetRow key={it.key} href={it.href} external={it.external} Icon={it.Icon} label={it.label} current={it === activeItem} onClick={() => onOpenChange(false)} />
               ))}
             </SheetGroup>
           )}

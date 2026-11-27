@@ -69,6 +69,9 @@ class AIConfig(BaseModel):
     # the legacy `gemini_api_key` fallback is configured). Override the exact
     # model id with LEARNHOUSE_AI_IMAGE_MODEL; provider-specific defaults apply.
     image_model: str | None = None
+    # Explicit Azure Foundry settings for image generation and edits only.
+    mai_image_endpoint: str | None = None
+    mai_image_api_key: str | None = None
     # Text-to-speech / podcast model (Google Gemini TTS). This is a Google-only
     # path resolving its key from `api_key` (when provider is Google) or
     # `gemini_api_key`. Override the exact model id with
@@ -507,6 +510,8 @@ def get_learnhouse_config() -> LearnHouseConfig:
 
     gemini_api_key = env_gemini_api_key or yaml_ai_config.get("gemini_api_key")
     ai_image_model = os.environ.get("LEARNHOUSE_AI_IMAGE_MODEL") or yaml_ai_config.get("image_model")
+    mai_image_endpoint = os.environ.get("LEARNHOUSE_MAI_IMAGE_ENDPOINT") or yaml_ai_config.get("mai_image_endpoint")
+    mai_image_api_key = os.environ.get("LEARNHOUSE_MAI_IMAGE_API_KEY") or yaml_ai_config.get("mai_image_api_key")
     ai_tts_model = os.environ.get("LEARNHOUSE_AI_TTS_MODEL") or yaml_ai_config.get("tts_model")
 
     # Provider-agnostic generation settings (env takes precedence over yaml).
@@ -722,6 +727,8 @@ def get_learnhouse_config() -> LearnHouseConfig:
         embedding_dimensions=ai_embedding_dimensions,
         gemini_api_key=gemini_api_key,
         image_model=ai_image_model,
+        mai_image_endpoint=mai_image_endpoint,
+        mai_image_api_key=mai_image_api_key,
         tts_model=ai_tts_model,
         atlas_model=atlas_model,
     )

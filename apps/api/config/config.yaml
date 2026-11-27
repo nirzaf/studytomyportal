@@ -102,8 +102,9 @@ ai_config:
   embedding_dimensions: ""  # default: 768
   # Google/Gemini key. Also the embeddings fallback for providers that lack an embeddings API.
   gemini_api_key: ""
-  # Image generation uses the configured OpenAI key when provider=openai; Google
-  # providers use api_key, with gemini_api_key retained as a legacy fallback.
+  # To use Azure Foundry for images, set LEARNHOUSE_MAI_IMAGE_ENDPOINT and
+  # LEARNHOUSE_MAI_IMAGE_API_KEY in the server environment. image_model is the deployment name.
+  # Without those settings, images use the configured OpenAI or Google key.
   image_model: ""       # Provider default: gpt-image-2.5-flare (OpenAI), gemini-2.5-flash-image (Google).
   tts_model: ""         # AI audio / podcast generation  (default: gemini-2.5-flash-preview-tts)
 

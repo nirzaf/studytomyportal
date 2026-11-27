@@ -1,13 +1,16 @@
 import { useOrg } from '@components/Contexts/OrgContext'
 import { getUriWithOrg } from '@services/config/config'
-import { Books, FolderSimple, ChatsCircle, Headphones, Cube, ShoppingBag, Steps, VideoCamera, Compass } from '@phosphor-icons/react'
+import { Books, CaretDown, FolderSimple, ChatsCircle, Headphones, Cube, ShoppingBag, Steps, VideoCamera, Compass, DotsThree, TextAa } from '@phosphor-icons/react'
 import { menuIcon } from '@components/Objects/Menus/menuIcons'
 import Link from 'next/link'
-import React from 'react'
+import { usePathname } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
 import { getMenuColorClasses } from '@services/utils/ts/colorUtils'
-import { ShortcutHint } from '@components/Objects/Shortcuts/ShortcutHint'
 import { sitePages } from '@/lib/site-search/registry'
+import { activeOrgMenuItem } from '@/lib/org-menu-path'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@components/ui/tooltip'
+import { Keys } from '@components/Objects/Shortcuts/Kbd'
 
 // Chord per builtin menu entry, read from the same registry the palette uses.
 const CHORD_BY_TYPE: Record<string, string | undefined> = Object.fromEntries(
@@ -30,6 +33,7 @@ const BUILTIN: Record<string, Builtin> = {
 
 // Default order when an org has no custom menu config.
 const DEFAULT_ORDER = ['courses', 'explore', 'paths', 'library', 'podcasts', 'live', 'communities', 'playgrounds', 'store']
+const DESKTOP_VISIBLE_ITEMS = 3
 
 export type OrgMenuItem = {
   key: string
@@ -90,38 +94,114 @@ export function useOrgMenuItems(orgslug: string): OrgMenuItem[] {
     .filter(Boolean) as OrgMenuItem[]
 }
 
-function MenuLinks(props: { orgslug: string; primaryColor?: string }) {
+function MenuLinks({ orgslug, primaryColor = '', expanded, onToggle }: {
+  orgslug: string
+  primaryColor?: string
+  expanded: boolean
+  onToggle: () => void
+}) {
   const { t } = useTranslation()
-  const colors = getMenuColorClasses(props.primaryColor || '')
-  const rendered = useOrgMenuItems(props.orgslug)
+  const colors = getMenuColorClasses(primaryColor)
+  const items = useOrgMenuItems(orgslug)
+  const pathname = usePathname()
+  const active = pathname ? activeOrgMenuItem(items, pathname) : undefined
+  const visible = items.slice(0, DESKTOP_VISIBLE_ITEMS)
+  const more = items.slice(DESKTOP_VISIBLE_ITEMS)
+  const buttonClass = 'inline-flex h-10 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2'
+  const linkClass = `${buttonClass} ${expanded ? 'gap-1.5 whitespace-nowrap px-2.5 text-sm font-semibold' : 'w-10'}`
+  const idleClass = `${colors.text} ${colors.hoverBg}`
+  const activeClass = primaryColor ? `${colors.text} bg-current/10` : 'bg-teal-50 text-teal-900'
+  const toggleLabel = t('dashboard.nav.show_labels', { defaultValue: 'Show navigation labels' })
 
   return (
-    <div className="ps-1">
-      <ul className="flex space-x-4 xl:space-x-5">
-        {rendered.map((it) => {
-          // Icons only until xl: with labels, a full menu pushes the search
-          // and account controls out of a small laptop's header.
+    <TooltipProvider delayDuration={250}>
+      <ul className="flex items-center gap-0.5 xl:gap-1">
+        {visible.map((item) => {
+          const selected = item === active
+          const className = `${linkClass} ${selected ? activeClass : idleClass}`
           const content = (
-            <li className={`flex space-x-2 items-center ${colors.text} font-semibold`} title={it.label}>
-              <it.Icon size={20} weight="fill" aria-hidden /> <span className="sr-only xl:not-sr-only">{it.label}</span>
+            <>
+              <item.Icon size={expanded ? 18 : 23} weight={selected ? 'fill' : 'regular'} aria-hidden className="shrink-0" />
+              {expanded && <span className="max-w-[4.5rem] truncate min-[1150px]:max-w-28 xl:max-w-32">{item.label}</span>}
+            </>
+          )
+          const link = item.external ? (
+            <a href={item.href} target="_blank" rel="noopener noreferrer" className={className} aria-label={item.label}>{content}</a>
+          ) : (
+            <Link href={item.href} className={className} aria-label={item.label} aria-current={selected ? 'page' : undefined}>{content}</Link>
+          )
+          return (
+            <li key={item.key}>
+              <Tooltip>
+                <TooltipTrigger asChild>{link}</TooltipTrigger>
+                <TooltipContent side="bottom" className="flex items-center gap-2 text-xs">
+                  {item.label}
+                  {item.shortcut && <Keys keys={item.shortcut} />}
+                </TooltipContent>
+              </Tooltip>
             </li>
           )
-          if (it.external) {
-            return (
-              <a key={it.key} href={it.href} target="_blank" rel="noopener noreferrer">{content}</a>
-            )
-          }
-          const link = <Link href={it.href}>{content}</Link>
-          return it.shortcut ? (
-            <ShortcutHint key={it.key} label={t('shortcuts.go_to', { page: it.label })} keys={it.shortcut}>
-              {link}
-            </ShortcutHint>
-          ) : (
-            <React.Fragment key={it.key}>{link}</React.Fragment>
-          )
         })}
+        {more.length > 0 && (
+          <li>
+            <DropdownMenu modal={false}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={t('common.more')}
+                      className={`${linkClass} ${active && more.includes(active) ? activeClass : idleClass} data-[state=open]:bg-current/10`}
+                    >
+                      {expanded ? (
+                        <>{t('common.more')}<CaretDown size={13} weight="bold" aria-hidden /></>
+                      ) : <DotsThree size={23} weight="bold" aria-hidden />}
+                    </button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{t('common.more')}</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="start" sideOffset={10} className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-60 overflow-y-auto rounded-xl p-1.5">
+                {more.map((item) => {
+                  const selected = item === active
+                  const content = (
+                    <>
+                      <item.Icon size={17} aria-hidden />
+                      <span className="min-w-0 flex-1 wrap-break-word">{item.label}</span>
+                      {item.shortcut && <span aria-hidden="true"><Keys keys={item.shortcut} /></span>}
+                    </>
+                  )
+                  return (
+                    <DropdownMenuItem key={item.key} asChild className={`min-h-9 rounded-md ${selected ? 'bg-teal-50 font-semibold text-teal-900' : ''}`}>
+                      {item.external ? (
+                        <a href={item.href} target="_blank" rel="noopener noreferrer">{content}</a>
+                      ) : (
+                        <Link href={item.href} aria-current={selected ? 'page' : undefined}>{content}</Link>
+                      )}
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </li>
+        )}
+        {visible.length > 0 && (
+          <li className="ms-1 border-s border-current/10 ps-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" aria-label={toggleLabel} aria-pressed={expanded} onClick={onToggle}
+                  className={`${buttonClass} w-10 ${expanded ? activeClass : idleClass}`}>
+                  <TextAa size={21} weight="bold" aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {expanded ? t('dashboard.nav.hide_labels', { defaultValue: 'Hide navigation labels' }) : toggleLabel}
+              </TooltipContent>
+            </Tooltip>
+          </li>
+        )}
       </ul>
-    </div>
+    </TooltipProvider>
   )
 }
 

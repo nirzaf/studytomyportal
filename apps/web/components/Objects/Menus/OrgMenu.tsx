@@ -14,12 +14,11 @@ import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { SearchTrigger } from '@components/Objects/Search/SearchTrigger'
 import { usePathname } from 'next/navigation'
-import { useMediaQuery } from 'usehooks-ts'
+import { useLocalStorage, useMediaQuery } from 'usehooks-ts'
 import { useTranslation } from 'react-i18next'
 import useAdminStatus from '@components/Hooks/useAdminStatus'
 import {
   Question,
-  Book,
   Globe,
   ChatCircleDots,
   SquaresFour,
@@ -28,7 +27,6 @@ import {
   ChatsCircle,
   CalendarDots,
 } from '@phosphor-icons/react'
-import { DiscordIcon } from '@components/Objects/Icons/DiscordIcon'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,9 +60,9 @@ const FeedbackModal = dynamic(
 export const OrgMenu = (props: any) => {
   const orgslug = props.orgslug
   const session = useLHSession() as any;
-  const _access_token = session?.data?.tokens?.access_token;
   const org = useOrg() as any;
   const [isFocusMode, setIsFocusMode] = useState(false)
+  const [expanded, setExpanded] = useLocalStorage('studytomy-navigation-labels', false, { initializeWithValue: false })
   const isPhone = useMediaQuery('(max-width: 767px)')
   const pathname = usePathname()
   const { t } = useTranslation()
@@ -85,6 +83,9 @@ export const OrgMenu = (props: any) => {
   const config = org?.config?.config
   const primaryColor = config?.customization?.general?.color || config?.general?.color || ''
   const colors = getMenuColorClasses(primaryColor)
+  const utilityClass = `inline-flex ${expanded ? 'size-9' : 'size-10'} shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${colors.iconBtn}`
+  const utilityIconSize = expanded ? 19 : 22
+  const dividerClass = primaryColor ? 'border-current/15' : 'border-slate-200'
   const showBranding = useShowLearnHouseBranding()
 
   // Filter dashboard menu items by resolved_features from API
@@ -137,49 +138,41 @@ export const OrgMenu = (props: any) => {
 
   return (
     <>
-      <div className="backdrop-blur-lg h-[60px] blur-3xl" style={{ zIndex: 'var(--z-behind)', marginTop: topOffset }}></div>
+      <div aria-hidden="true" className="h-[60px] shrink-0" style={{ marginTop: topOffset }} />
       <nav
         aria-label={t('dashboard.nav.top_navigation')}
-        className={`backdrop-blur-lg fixed start-0 end-0 h-[60px] ${!primaryColor ? 'bg-white/90 nice-shadow' : ''}`}
+        className={`fixed inset-x-0 h-[60px] border-b backdrop-blur-lg ${primaryColor ? 'border-current/10 ' + colors.text : 'border-slate-200 bg-white/95'}`}
         style={{
           zIndex: 'var(--z-nav)',
           backgroundColor: primaryColor || undefined,
           top: topOffset
         }}
       >
-        <div className="flex items-center justify-between w-full max-w-(--breakpoint-2xl) mx-auto px-4 sm:px-6 lg:px-8 h-full">
-          <div className="flex items-center space-x-5 max-lg:min-w-0">
-            <div className="logo flex shrink-0">
-              <Link href={getUriWithOrg(orgslug, '/')} className="shrink-0">
-                <div className="flex w-auto h-9 rounded-md items-center m-auto py-1 justify-center">
-                  {org?.logo_image ? (
-                    <img
-                      src={`${getOrgLogoMediaDirectory(org.org_uuid, org?.logo_image)}`}
-                      alt={org?.name || 'Logo'}
-                      className="h-full w-auto max-w-[150px] lg:max-w-[180px] shrink-0 object-contain rounded-md"
-                    />
-                  ) : showBranding ? (
-                    <StudytomyLogo logoFilter={colors.logoFilter} />
-                  ) : (
-                    <span className={`text-lg font-bold truncate max-w-[200px] ${colors.text}`}>{org?.name}</span>
-                  )}
-                </div>
-              </Link>
-            </div>
-            <div className="hidden lg:flex">
-              <MenuLinks orgslug={orgslug} primaryColor={primaryColor} />
-            </div>
+        <div className="mx-auto flex h-full w-full max-w-(--breakpoint-2xl) items-center gap-3 px-4 sm:px-6 xl:gap-5 xl:px-8">
+          <div className="logo flex min-w-0 shrink-0">
+            <Link href={getUriWithOrg(orgslug, '/')} className="flex h-11 min-w-0 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2">
+              {org?.logo_image ? (
+                <img
+                  src={`${getOrgLogoMediaDirectory(org.org_uuid, org?.logo_image)}`}
+                  alt={org?.name || 'Logo'}
+                  className="h-10 w-auto max-w-28 object-contain rounded-md xl:max-w-36"
+                />
+              ) : showBranding ? (
+                <StudytomyLogo logoFilter={colors.logoFilter} />
+              ) : (
+                <span className={`max-w-28 truncate text-base font-bold xl:max-w-36 ${colors.text}`} title={org?.name}>{org?.name}</span>
+              )}
+            </Link>
+          </div>
+          <div className="hidden lg:flex">
+            <MenuLinks orgslug={orgslug} primaryColor={primaryColor} expanded={expanded} onToggle={() => setExpanded((value) => !value)} />
           </div>
 
-          {/* Search Section */}
-          {/* The header never fit a full search next to labelled links and
-              the profile name inside 1536px: below 1780px the search gives
-              way (icon-only from 1280 to 1535) so nothing is pushed off-screen. */}
-          <div className="lh-header-search hidden lg:flex flex-1 min-w-0 min-[1780px]:min-w-auto justify-center max-w-lg px-4">
-            <SearchTrigger className="w-full" primaryColor={primaryColor} />
+          <div className={`lh-header-search ms-auto hidden min-w-10 justify-end lg:flex ${expanded ? 'max-w-72 flex-1' : 'w-10 shrink-0'}`}>
+            <SearchTrigger primaryColor={primaryColor} />
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="ms-auto flex shrink-0 items-center gap-0.5 lg:ms-0">
             {/* Progress / Trail */}
             <AuthenticatedClientElement checkMethod="authentication">
               <div className="hidden lg:flex">
@@ -188,10 +181,10 @@ export const OrgMenu = (props: any) => {
                     <TooltipTrigger asChild>
                       <Link
                         href={getUriWithOrg(orgslug, '/trail')}
-                        className={`p-2 rounded-lg transition-colors ${colors.iconBtn}`}
+                        className={utilityClass}
                         aria-label={t('courses.progress')}
                       >
-                        <Signpost size={20} weight="fill" />
+                        <Signpost size={utilityIconSize} aria-hidden />
                       </Link>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="flex items-center gap-2 text-xs">
@@ -210,10 +203,10 @@ export const OrgMenu = (props: any) => {
                     <TooltipTrigger asChild>
                       <Link
                         href={getUriWithOrg(orgslug, '/calendar')}
-                        className={`p-2 rounded-lg transition-colors ${colors.iconBtn}`}
+                        className={utilityClass}
                         aria-label={t('calendar.title')}
                       >
-                        <CalendarDots size={20} weight="fill" />
+                        <CalendarDots size={utilityIconSize} aria-hidden />
                       </Link>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="flex items-center gap-2 text-xs">
@@ -233,10 +226,10 @@ export const OrgMenu = (props: any) => {
                       <TooltipTrigger asChild>
                         <Link
                           href={getUriWithOrg(orgslug, '/boards')}
-                          className={`p-2 rounded-lg transition-colors ${colors.iconBtn}`}
+                          className={utilityClass}
                           aria-label={t('common.boards')}
                         >
-                          <ChalkboardSimple size={20} weight="fill" />
+                          <ChalkboardSimple size={utilityIconSize} aria-hidden />
                         </Link>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="flex items-center gap-2 text-xs">
@@ -257,10 +250,10 @@ export const OrgMenu = (props: any) => {
                       <TooltipTrigger asChild>
                         <Link
                           href={getUriWithOrg(orgslug, '/messages')}
-                          className={`relative p-2 rounded-lg transition-colors ${colors.iconBtn}`}
+                          className={`relative ${utilityClass}`}
                           aria-label={unreadTotal ? `Messages, ${unreadTotal} unread` : 'Messages'}
                         >
-                          <ChatsCircle size={20} weight="fill" />
+                          <ChatsCircle size={utilityIconSize} aria-hidden />
                           {unreadTotal > 0 && (
                             <span className="absolute top-0.5 end-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-4 text-center ring-2 ring-white tabular-nums">
                               {unreadTotal > 99 ? '99+' : unreadTotal}
@@ -285,10 +278,10 @@ export const OrgMenu = (props: any) => {
                       <TooltipTrigger asChild>
                         <DropdownMenuTrigger asChild>
                           <button
-                            className={`p-2 rounded-lg transition-colors ${colors.iconBtn}`}
+                            className={utilityClass}
                             aria-label={t('common.dashboard')}
                           >
-                            <SquaresFour size={20} weight="fill" />
+                            <SquaresFour size={utilityIconSize} aria-hidden />
                           </button>
                         </DropdownMenuTrigger>
                       </TooltipTrigger>
@@ -332,10 +325,10 @@ export const OrgMenu = (props: any) => {
                       <TooltipTrigger asChild>
                         <DropdownMenuTrigger asChild>
                           <button
-                            className={`p-2 rounded-lg transition-colors ${colors.iconBtn}`}
+                            className={utilityClass}
                             aria-label={t('common.help')}
                           >
-                            <Question size={20} weight="fill" />
+                            <Question size={utilityIconSize} aria-hidden />
                           </button>
                         </DropdownMenuTrigger>
                       </TooltipTrigger>
@@ -377,7 +370,7 @@ export const OrgMenu = (props: any) => {
               </div>
             )}
 
-            <div className="hidden lg:flex">
+            <div className={`hidden lg:flex ${session?.status === 'authenticated' ? `ms-1 border-s ps-2 ${dividerClass}` : ''}`}>
               <HeaderProfileBox primaryColor={primaryColor} />
             </div>
             {/* Phone and tablet actions. Navigation lives in the bottom tab bar
@@ -445,7 +438,8 @@ const StudytomyLogo = ({ logoFilter }: { logoFilter: string }) => {
       alt="Studytomy logo"
       width={639}
       height={428}
-      className="h-9 w-auto object-contain"
+      loading="eager"
+      className="h-10 w-auto object-contain"
       style={{ filter: logoFilter }}
     />
   )

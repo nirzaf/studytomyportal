@@ -191,24 +191,13 @@ textarea {
   }
 }
 
-/* Header search: when labelled links, the icons and the avatar leave too
-   little room for a usable field, it becomes a round icon button that opens
-   the same palette. The search slot is flex-1, so its width is exactly the
-   space left over; a container query collapses it only when that space is
-   short (orgs with few links or signed-out visitors keep the full field).
-   From 1780px the slot sizes to its content again, as it always has. */
-@media (min-width: 1024px) and (max-width: 1779px) {
-  .lh-header-search {
-    container-type: inline-size;
-  }
+/* Keep search usable when long organization labels or extra tools take space. */
+.lh-header-search {
+  container: header-search / inline-size;
 }
-@container (max-width: 210px) {
+@container header-search (width < 9rem) {
   .lh-header-search > button {
-    width: 2.25rem;
-    padding: 0;
-  }
-  .lh-header-search .lh-search-icon {
-    inset: 0;
+    width: 2.5rem;
     justify-content: center;
     padding: 0;
   }

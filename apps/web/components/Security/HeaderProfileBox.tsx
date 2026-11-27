@@ -173,11 +173,16 @@ export const HeaderProfileBox = ({ primaryColor = '' }: { primaryColor?: string 
           <ul className="flex space-x-0.5 sm:space-x-1 items-center">
             <li>
               <Link
-                className={`px-3 py-2 rounded-lg transition-colors text-sm font-bold ${colors.hoverBg} ${colors.text}`}
+                className={`inline-flex h-9 items-center whitespace-nowrap rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${colors.hoverBg} ${colors.text}`}
                 href={getUriWithOrg(org?.slug, '/login')} >{t('auth.login')}</Link>
             </li>
-            <li className={`rounded-lg shadow-sm transition-colors px-4 py-2 text-xs sm:text-sm font-bold ms-1 sm:ms-2 ${colors.signUpBtn}`}>
-              <Link href={getUriWithOrg(org?.slug, '/signup')}>{t('auth.sign_up')}</Link>
+            <li>
+              <Link
+                className={`inline-flex h-9 items-center whitespace-nowrap rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${colors.signUpBtn}`}
+                href={getUriWithOrg(org?.slug, '/signup')}
+              >
+                {t('auth.sign_up')}
+              </Link>
             </li>
           </ul>
         </div>
@@ -187,20 +192,34 @@ export const HeaderProfileBox = ({ primaryColor = '' }: { primaryColor?: string 
           <div className="flex items-center space-x-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className={`cursor-pointer flex items-center space-x-3 rounded-lg p-2 transition-colors ${colors.profileHover}`}>
-                  <UserAvatar border="border-2" rounded="rounded-lg" width={30} shadow={primaryColor ? '' : undefined} />
-                  {/* Name and email only where the header has room for them
-                      next to a full menu; the dropdown repeats both. */}
-                  <div className="hidden min-[1780px]:flex flex-col items-start space-y-0">
-                    <div className="flex items-center space-x-2">
-                      <p className={`text-sm font-semibold capitalize ${colors.profileName}`}>{session.data.user.username}</p>
+                <button
+                  type="button"
+                  aria-label={t('account.profile')}
+                  title={t('account.profile')}
+                  className={`flex h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${colors.profileHover}`}
+                >
+                  <UserAvatar border="border-2" rounded="rounded-full" width={30} shadow={primaryColor ? '' : undefined} />
+                  <CaretDown aria-hidden size={13} weight="bold" className={colors.profileMuted} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-60" align="end" sideOffset={8}>
+                <DropdownMenuLabel>
+                  <div className="flex items-center gap-2">
+                    <UserAvatar border="border-2" rounded="rounded-full" width={30} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium" title={session.data.user.username}>{session.data.user.username}</p>
+                      <p className="truncate text-xs font-normal text-gray-500" title={session.data.user.email}>{session.data.user.email}</p>
+                    </div>
+                  </div>
+                  {(userRoleInfo || customRoles.length > 0) && (
+                    <div className="mt-2 flex flex-wrap gap-1">
                       {userRoleInfo && userRoleInfo.name !== 'USER' && (
-                        <Tooltip 
+                        <Tooltip
                           content={userRoleInfo.description}
                           sideOffset={15}
                           side="bottom"
                         >
-                          <div className={`text-[6px] ${userRoleInfo.bgColor} ${userRoleInfo.textColor} px-1 py-0.5 font-medium rounded-full flex items-center gap-0.5 w-fit`}>
+                          <div className={`text-[10px] ${userRoleInfo.bgColor} ${userRoleInfo.textColor} px-2 py-0.5 font-medium rounded-full flex items-center gap-1 max-w-full`}>
                             {userRoleInfo.icon}
                             {userRoleInfo.name}
                           </div>
@@ -208,33 +227,20 @@ export const HeaderProfileBox = ({ primaryColor = '' }: { primaryColor?: string 
                       )}
                       {/* Custom roles */}
                       {customRoles.map((customRole, index) => (
-                        <Tooltip 
+                        <Tooltip
                           key={index}
                           content={customRole.description || `${t('roles.custom_role')}: ${customRole.name}`}
                           sideOffset={15}
                           side="bottom"
                         >
-                          <div className="text-[6px] bg-gray-500 text-white px-1 py-0.5 font-medium rounded-full flex items-center gap-0.5 w-fit">
+                          <div className="text-[10px] bg-gray-500 text-white px-2 py-0.5 font-medium rounded-full flex items-center gap-1 max-w-full">
                             <Shield size={12} weight="fill" />
-                            {customRole.name}
+                            <span className="truncate">{customRole.name}</span>
                           </div>
                         </Tooltip>
                       ))}
                     </div>
-                    <p className={`text-xs ${colors.profileMuted}`}>{session.data.user.email}</p>
-                  </div>
-                  <CaretDown aria-hidden="true" size={16} weight="fill" className={`hidden min-[1780px]:block ${colors.profileMuted}`} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end">
-                <DropdownMenuLabel>
-                  <div className="flex items-center space-x-2">
-                    <UserAvatar border="border-2" rounded="rounded-full" width={24} />
-                    <div>
-                      <p className="text-sm font-medium">{session.data.user.username}</p>
-                      <p className="text-xs text-gray-500 capitalize">{session.data.user.email}</p>
-                    </div>
-                  </div>
+                  )}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {rights?.dashboard?.action_access && (

@@ -1,4 +1,4 @@
-"""AI image generation through the configured OpenAI or Google provider.
+"""AI image generation through Azure Foundry, OpenAI or Google.
 
 OpenAI image requests reuse ``ai_config.api_key`` when ``provider=openai``;
 Google requests reuse it for Google providers and retain the legacy dedicated
@@ -16,9 +16,12 @@ import asyncio
 import base64
 import binascii
 import logging
+import re
 from typing import Optional
 
-from config.config import get_learnhouse_config
+import httpx
+
+from config.config import AIConfig, get_learnhouse_config
 from src.services.ai.llm import AINotConfiguredError
 from src.services.ai.llm.errors import is_quota_error, is_spend_cap_error
 from src.services.ai.llm.provider import _GOOGLE_ALIASES
@@ -32,6 +35,7 @@ logger = logging.getLogger(__name__)
 # to opt into one once it is enabled for your key.
 DEFAULT_IMAGE_MODEL = "gemini-2.5-flash-image"
 DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2.5-flare"
+DEFAULT_MAI_IMAGE_MODEL = "mai-image-2-6-flash"
 
 # Both supported providers return PNG bytes in the format requested below.
 OUTPUT_MIME = "image/png"
@@ -69,13 +73,27 @@ def _is_retryable(exc: Exception) -> bool:
     return name in ("ServerError", "ServiceUnavailable", "ResourceExhausted")
 
 
-def _resolve_image_config() -> tuple[str, str, str]:
+def _resolve_image_config(cfg: AIConfig | None = None) -> tuple[str, str, str]:
     """Return ``(provider, api_key, model)`` or raise if image generation is unconfigured.
 
     OpenAI uses the same provider key as text generation. Other text providers
     retain the previous Google-image fallback when a dedicated Gemini key exists.
     """
-    cfg = get_learnhouse_config().ai_config
+    if cfg is None:
+        cfg = get_learnhouse_config().ai_config
+    mai_endpoint = (getattr(cfg, "mai_image_endpoint", None) or "").strip()
+    mai_key = (getattr(cfg, "mai_image_api_key", None) or "").strip()
+    if mai_endpoint or mai_key:
+        if not mai_key or not re.fullmatch(
+            r"https://[a-z0-9-]+\.services\.ai\.azure\.com/?", mai_endpoint, re.IGNORECASE
+        ):
+            raise AINotConfiguredError(
+                "MAI image generation requires LEARNHOUSE_MAI_IMAGE_API_KEY and an HTTPS "
+                "Azure Foundry resource origin in LEARNHOUSE_MAI_IMAGE_ENDPOINT."
+            )
+        model = (getattr(cfg, "image_model", None) or "").strip() or DEFAULT_MAI_IMAGE_MODEL
+        return "mai", mai_key, model
+
     provider_id = (getattr(cfg, "provider", None) or "").strip().lower()
 
     image_provider = "google"
@@ -94,7 +112,8 @@ def _resolve_image_config() -> tuple[str, str, str]:
         raise AINotConfiguredError(
             "AI image generation requires an API key. Set LEARNHOUSE_AI_API_KEY "
             "with LEARNHOUSE_AI_PROVIDER=openai or google, or set "
-            "LEARNHOUSE_GEMINI_API_KEY for the legacy Google image path."
+            "LEARNHOUSE_GEMINI_API_KEY for the legacy Google image path. For Azure Foundry, "
+            "set LEARNHOUSE_MAI_IMAGE_ENDPOINT and LEARNHOUSE_MAI_IMAGE_API_KEY."
         )
 
     model = (getattr(cfg, "image_model", None) or "").strip() or default_model
@@ -200,6 +219,40 @@ async def _generate_openai_image(
     return image_bytes
 
 
+async def _generate_mai_image(
+    prompt: str, api_key: str, model: str, endpoint: str, input_images: list[bytes]
+) -> bytes:
+    payload = {"model": model, "prompt": prompt}
+    if input_images:
+        if len(input_images) > 5 or any(
+            not image.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff")) for image in input_images
+        ):
+            raise ValueError("MAI image edits support up to five PNG or JPEG reference images.")
+        path = "edits"
+        request = {"data": payload, "files": [("image", file) for file in _openai_input_files(input_images)]}
+    else:
+        path = "generations"
+        request = {"json": {**payload, "width": 1024, "height": 1024}}
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60, connect=10), trust_env=False) as client:
+            response = await client.post(
+                f"{endpoint}/mai/v1/images/{path}", headers={"api-key": api_key}, **request
+            )
+            response.raise_for_status()
+            data = response.json()["data"]
+            image = base64.b64decode(data[0]["b64_json"], validate=True)
+            if not image.startswith(b"\x89PNG\r\n\x1a\n"):
+                raise ValueError("Expected PNG output")
+            return image
+    except httpx.HTTPStatusError as exc:
+        logger.warning("MAI image request returned HTTP %d", exc.response.status_code)
+        raise RuntimeError("Image generation failed") from None
+    except (httpx.RequestError, KeyError, IndexError, TypeError, ValueError) as exc:
+        logger.warning("MAI image request failed: %s", type(exc).__name__)
+        raise RuntimeError("Image generation failed") from None
+
+
 async def generate_image(
     prompt: str,
     *,
@@ -216,8 +269,12 @@ async def generate_image(
     if len(prompt) > MAX_PROMPT_CHARS:
         prompt = prompt[:MAX_PROMPT_CHARS]
 
-    provider, api_key, model = _resolve_image_config()
+    cfg = get_learnhouse_config().ai_config
+    provider, api_key, model = _resolve_image_config(cfg)
     imgs = [img for img in (input_images or []) if img]
+    if provider == "mai":
+        endpoint = (cfg.mai_image_endpoint or "").strip().rstrip("/")
+        return await _generate_mai_image(prompt, api_key, model, endpoint, imgs)
     if provider == "openai":
         return await _generate_openai_image(prompt, api_key, model, imgs)
 

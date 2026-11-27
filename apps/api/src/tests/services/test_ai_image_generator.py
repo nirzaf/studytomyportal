@@ -1,12 +1,14 @@
-"""Tests for src/services/ai/image/generator.py (Google and OpenAI image gen).
+"""Tests for the Azure Foundry, Google, and OpenAI image adapters.
 
 Provider SDKs and the global config are fully mocked.
 """
 
 import base64
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 import src.services.ai.image.generator as gen
@@ -263,3 +265,49 @@ def test_openai_rate_limit_status_is_retryable_when_error_code_is_text():
     error.code = "insufficient_quota"
     error.status_code = 429
     assert gen._is_retryable(error)
+
+
+@pytest.mark.parametrize("reference", [None, b"\x89PNG\r\n\x1a\ninput"])
+async def test_mai_uses_foundry_image_endpoint_and_dedicated_key(reference):
+    cfg = _cfg(provider="openai", api_key="text-provider-key", image_model="reviewed-deployment")
+    cfg.ai_config.mai_image_api_key = "synthetic-image-key"
+    cfg.ai_config.mai_image_endpoint = "https://example.services.ai.azure.com/"
+    output = b"\x89PNG\r\n\x1a\noutput"
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"b64_json": base64.b64encode(output).decode()}]})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    with patch.object(gen, "get_learnhouse_config", return_value=cfg), patch.object(
+        gen.httpx, "AsyncClient", return_value=client
+    ):
+        assert await gen.generate_image("draw a circle", input_images=[reference] if reference else []) == output
+
+    request, = requests
+    assert request.url.host == "example.services.ai.azure.com"
+    assert request.headers["api-key"] == "synthetic-image-key"
+    assert "authorization" not in request.headers
+    if reference:
+        assert request.url.path == "/mai/v1/images/edits"
+        assert b'name="model"' in request.content and b"reviewed-deployment" in request.content
+        assert b'name="image"' in request.content and reference in request.content
+    else:
+        assert request.url.path == "/mai/v1/images/generations"
+        assert json.loads(request.content) == {
+            "model": "reviewed-deployment", "prompt": "draw a circle", "width": 1024, "height": 1024
+        }
+
+
+@pytest.mark.parametrize("endpoint,key", [
+    ("https://example.services.ai.azure.com", None),
+    ("http://example.services.ai.azure.com", "synthetic"),
+    ("https://example.services.ai.azure.com.example.org", "synthetic"),
+])
+def test_partial_or_untrusted_mai_settings_fail_closed(endpoint, key):
+    cfg = _cfg()
+    cfg.ai_config.mai_image_endpoint = endpoint
+    cfg.ai_config.mai_image_api_key = key
+    with pytest.raises(AINotConfiguredError, match="LEARNHOUSE_MAI_IMAGE_ENDPOINT"):
+        gen._resolve_image_config(cfg.ai_config)
