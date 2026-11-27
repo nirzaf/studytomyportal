@@ -62,13 +62,18 @@ async def seed(args):
             ), db)
             now = datetime.now(UTC).isoformat()
             accounts = []
+            fixture_passwords = {
+                "admin": "Admin@123",
+                "teacher": "Teacher@123",
+                "learner": "Student@123",
+            }
             # Reviewer is intentionally an Instructor account without release-review
             # business scope. A separate approved scenario must provision that scope.
             for label, role_id in (("admin", 1), ("teacher", 3), ("reviewer", 3), ("learner", 4)):
                 role = await db.get(Role, role_id)
                 if role is None:
                     raise ValueError("Native role bootstrap incomplete")
-                password = secrets.token_urlsafe(24) + "Aa1!"
+                password = fixture_passwords.get(label, secrets.token_urlsafe(24) + "Aa1!")
                 user = User(username=f"demo-{label}", email=f"demo-{label}@example.com",
                             first_name="Synthetic", last_name=label.title(),
                             user_uuid=f"user_{uuid4()}", password=security_hash_password(password),
