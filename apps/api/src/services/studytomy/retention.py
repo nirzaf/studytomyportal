@@ -69,6 +69,7 @@ class EvidenceDryRun(BaseModel):
     files: list[EvidenceCandidate]
     snapshot_sha256: str
     completed_removals: dict[str, UUID]
+    completed_removal_approvals: dict[str, UUID] = Field(default_factory=dict)
 
 
 class EvidenceRemovalApprovalCommand(BaseModel):
@@ -208,6 +209,7 @@ async def dry_run_case_evidence_retention(
         "hold_history": [event.event_uuid for event in [*holds, *releases]],
     })
     completed_removals = {}
+    completed_removal_approvals = {}
     if files:
         expected = {file.evidence_uuid: file.content_sha256 for file in files}
         receipts = (await db.execute(select(StudyBusinessEvent).where(
@@ -219,7 +221,33 @@ async def dry_run_case_evidence_retention(
             receipt.resource_uuid: receipt.event_uuid for receipt in receipts
             if (receipt.after_state or {}).get("evidence_sha256") == expected[receipt.resource_uuid]
         }
-    return EvidenceDryRun(**projection, snapshot_sha256=digest, completed_removals=completed_removals)
+        removal_operation_ids = {
+            receipt.operation_uuid for receipt in receipts
+            if receipt.resource_uuid in completed_removals and receipt.operation_uuid is not None
+        }
+        if removal_operation_ids:
+            approvals = (await db.execute(select(StudyBusinessEvent).where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.action == _REMOVAL_APPROVED,
+                StudyBusinessEvent.event_uuid.in_(removal_operation_ids),
+                StudyBusinessEvent.resource_kind == "record_request_removal",
+            ))).scalars().all()
+            approval_references = {
+                approval.event_uuid: UUID(approval.resource_uuid)
+                for approval in approvals
+            }
+            completed_removal_approvals = {
+                receipt.resource_uuid: approval_references[receipt.operation_uuid]
+                for receipt in receipts
+                if receipt.resource_uuid in completed_removals
+                and receipt.operation_uuid in approval_references
+            }
+    return EvidenceDryRun(
+        **projection,
+        snapshot_sha256=digest,
+        completed_removals=completed_removals,
+        completed_removal_approvals=completed_removal_approvals,
+    )
 
 
 def _candidate(

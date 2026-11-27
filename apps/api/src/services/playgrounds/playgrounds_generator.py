@@ -272,6 +272,8 @@ Please modify the HTML code above according to the user's request. Output ONLY t
                 yield chunk
 
         generated_html = extract_html_from_response(full_response)
+        if not generated_html:
+            raise ValueError("Playground generation returned no content")
         if session.context.learner_adaptation.enabled:
             generated_html = validate_and_install_adaptive_runtime(
                 generated_html,
@@ -293,7 +295,8 @@ Please modify the HTML code above according to the user's request. Output ONLY t
         if len(session.message_history) > 12:
             session.message_history = session.message_history[-12:]
 
-        save_playground_session(session)
+        if not save_playground_session(session):
+            raise RuntimeError("Could not persist generated playground")
 
     except AdaptiveWidgetValidationError:
         # This is a safe, user-correctable output-contract failure. Let the SSE
@@ -302,7 +305,7 @@ Please modify the HTML code above according to the user's request. Output ONLY t
     except Exception as exc:
         # Never yield raw error text as a content chunk or emit a subsequent
         # done event; propagate a terminal failure to the SSE stream handler.
-        logger.exception("Playground generation stream failed")
+        logger.warning("Playground generation stream failed")
         raise PlaygroundGenerationError(
             "An internal error occurred while generating content."
         ) from exc

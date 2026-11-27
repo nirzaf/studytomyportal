@@ -18,6 +18,7 @@ from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.services.studytomy.cases import (
     PublicSafeguardingContact,
     SafeguardingReviewStatus,
+    _SAFEGUARDING_TRANSITIONS,
     assign_safeguarding_case,
     get_own_safeguarding_report_status,
     list_safeguarding_triage,
@@ -52,6 +53,8 @@ class SafeguardingCaseSummary(BaseModel):
     status: str
     version: int
     assigned_to_me: bool
+    can_assign: bool
+    allowed_transitions: list[SafeguardingReviewStatus]
 
 
 class VersionedCaseCommand(BaseModel):
@@ -93,6 +96,9 @@ def _summary(case: StudyServiceCase, actor_id: int, response: Response) -> Safeg
     return SafeguardingCaseSummary(
         case_uuid=UUID(case.case_uuid), status=case.status, version=case.version,
         assigned_to_me=case.owner_user_id == actor_id,
+        can_assign=case.owner_user_id in (None, actor_id) and case.status not in ("resolved", "closed"),
+        allowed_transitions=sorted(_SAFEGUARDING_TRANSITIONS.get(case.status, ()))
+        if case.owner_user_id == actor_id else [],
     )
 
 

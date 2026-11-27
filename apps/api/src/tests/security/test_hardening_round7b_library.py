@@ -145,7 +145,7 @@ async def library(db, org, regular_user):
     for uuid, public, folder_id in media:
         db.add(Media(
             name=uuid, media_type=MediaTypeEnum.UPLOAD, public=public, org_id=org.id,
-            media_uuid=uuid, file_id="x.pdf", storage_key="k/x.pdf", file_format="pdf",
+            media_uuid=uuid, file_id="x.pdf", storage_key=f"orgs/{org.org_uuid}/media/{uuid}/x.pdf", file_format="pdf",
             creation_date=_now(), update_date=_now(),
         ))
         db.add(FolderContent(

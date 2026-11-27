@@ -1,7 +1,9 @@
 from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from contextlib import aclosing
+
+from src.routers.playgrounds.credit_stream import PlaygroundCreditReservation
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 import json
@@ -34,17 +36,20 @@ from src.services.playgrounds.schemas.playgrounds_generator import (
 router = APIRouter(dependencies=[Depends(require_playgrounds_feature)])
 
 
-async def event_generator(generator, session_uuid: str):
+async def event_generator(generator, session_uuid: str, reservation=None):
     """Convert async generator to SSE format."""
     try:
-        async for chunk in generator:
-            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        async with aclosing(generator):
+            async for chunk in generator:
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        if reservation is not None:
+            reservation.complete()
         yield f"data: {json.dumps({'type': 'done', 'session_uuid': session_uuid})}\n\n"
-    except AdaptiveWidgetValidationError as exc:
-        logging.info("Rejected adaptive Playground output: %s", exc)
+    except AdaptiveWidgetValidationError:
+        logging.info("Rejected adaptive Playground output")
         yield f"data: {json.dumps({'type': 'error', 'message': 'The generated widget did not meet the level and skill adaptation checks. Try again or turn adaptation off.'})}\n\n"
     except Exception:
-        logging.exception("Error in playground event stream for session %s", session_uuid)
+        logging.warning("Error in playground event stream for session %s", session_uuid)
         yield f"data: {json.dumps({'type': 'error', 'message': 'An internal error occurred.'})}\n\n"
 
 
@@ -186,48 +191,49 @@ async def start_playground_session(
     from src.services.security.rate_limiting import enforce_ai_rate_limit
     enforce_ai_rate_limit(generate_acting_user_id, org.id)
     await reserve_ai_credit(org.id, db_session, amount=3)
+    reservation = PlaygroundCreditReservation(org.id)
+    with reservation.setup():
+        ai_model = await get_org_ai_model(org.id, db_session)
 
-    ai_model = await get_org_ai_model(org.id, db_session)
+        # Fetch RAG context if course linked
+        course_context, _ = await _get_course_context(
+            request,
+            current_user,
+            session_request.context.course_uuid,
+            org.id,
+            db_session,
+            session_request.prompt,
+        )
 
-    # Fetch RAG context if course linked
-    course_context, _ = await _get_course_context(
-        request,
-        current_user,
-        session_request.context.course_uuid,
-        org.id,
-        db_session,
-        session_request.prompt,
-    )
+        playground = await _persist_playground_adaptation_with_governance(
+            db_session,
+            playground,
+            session_request.context.learner_adaptation.model_dump(),
+        )
 
-    playground = await _persist_playground_adaptation_with_governance(
-        db_session,
-        playground,
-        session_request.context.learner_adaptation.model_dump(),
-    )
+        session = create_playground_session(
+            playground_uuid=session_request.playground_uuid,
+            context=session_request.context,
+            user_id=generate_acting_user_id,
+        )
 
-    session = create_playground_session(
-        playground_uuid=session_request.playground_uuid,
-        context=session_request.context,
-        user_id=generate_acting_user_id,
-    )
+        stream = generate_playground_stream(
+            prompt=session_request.prompt,
+            session=session,
+            model_name=ai_model,
+            current_html=playground.html_content or None,
+            course_context=course_context,
+        )
 
-    stream = generate_playground_stream(
-        prompt=session_request.prompt,
-        session=session,
-        model_name=ai_model,
-        current_html=playground.html_content or None,
-        course_context=course_context,
-    )
-
-    return StreamingResponse(
-        event_generator(stream, session.session_uuid),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+        return reservation.response(
+            event_generator(stream, session.session_uuid, reservation),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
 
 @router.post(
@@ -304,46 +310,47 @@ async def iterate_playground_session(
     from src.services.security.rate_limiting import enforce_ai_rate_limit
     enforce_ai_rate_limit(iterate_acting_user_id, org.id)
     await reserve_ai_credit(org.id, db_session, amount=3)
+    reservation = PlaygroundCreditReservation(org.id)
+    with reservation.setup():
+        ai_model = await get_org_ai_model(org.id, db_session)
 
-    ai_model = await get_org_ai_model(org.id, db_session)
-
-    # Fetch RAG context if course linked
-    course_context, _ = await _get_course_context(
-        request,
-        current_user,
-        session.context.course_uuid,
-        org.id,
-        db_session,
-        message_request.message,
-    )
-
-    if message_request.learner_adaptation is not None:
-        session.context.learner_adaptation = message_request.learner_adaptation
-        playground = await _persist_playground_adaptation_with_governance(
+        # Fetch RAG context if course linked
+        course_context, _ = await _get_course_context(
+            request,
+            current_user,
+            session.context.course_uuid,
+            org.id,
             db_session,
-            playground,
-            message_request.learner_adaptation.model_dump(),
+            message_request.message,
         )
 
-    html_to_iterate = message_request.current_html or session.current_html
+        if message_request.learner_adaptation is not None:
+            session.context.learner_adaptation = message_request.learner_adaptation
+            playground = await _persist_playground_adaptation_with_governance(
+                db_session,
+                playground,
+                message_request.learner_adaptation.model_dump(),
+            )
 
-    stream = generate_playground_stream(
-        prompt=message_request.message,
-        session=session,
-        model_name=ai_model,
-        current_html=html_to_iterate,
-        course_context=course_context,
-    )
+        html_to_iterate = message_request.current_html or session.current_html
 
-    return StreamingResponse(
-        event_generator(stream, session.session_uuid),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+        stream = generate_playground_stream(
+            prompt=message_request.message,
+            session=session,
+            model_name=ai_model,
+            current_html=html_to_iterate,
+            course_context=course_context,
+        )
+
+        return reservation.response(
+            event_generator(stream, session.session_uuid, reservation),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
 
 @router.get(

@@ -23,6 +23,7 @@ from src.db.studytomy.family import (
     StudyRelationshipWithdrawalCreate,
     StudySharingGrant,
 )
+from src.db.studytomy.cases import StudyServiceCase
 from src.db.studytomy.governance import (
     POLICY_REQUIRED_DECISION_AREAS,
     StudyOwnerAssignment,
@@ -137,6 +138,29 @@ async def test_family_history_blocks_account_deletion_before_cleanup(
     assert await db.get(User, regular_user.id) is not None
 
 
+async def _verified_attachment(db, org, profile, relationship, reviewer, monkeypatch):
+    from uuid import uuid4
+
+    from src.db.studytomy.operations import StudyEvidenceFile
+
+    ids = [31, 32, 33, 34, 35]
+    monkeypatch.setattr(
+        "src.services.studytomy.learners._current_policies",
+        AsyncMock(return_value=[SimpleNamespace(id=value) for value in ids]),
+    )
+    ref = f"ev_{uuid4().hex}"
+    db.add(StudyEvidenceFile(
+        org_id=org.id, learner_profile_id=profile.id, relationship_uuid=relationship.relationship_uuid,
+        uploaded_by_user_id=reviewer.id, purpose="guardian_authority_evidence", evidence_uuid=ref,
+        storage_reference=f"private/studytomy/{org.org_uuid}/guardian/{ref}.pdf",
+        content_sha256="c" * 64, media_type="application/pdf", size_bytes=100,
+        retention_category="synthetic", upload_status="ready",
+        verified_at=datetime.now(timezone.utc), policy_version_ids=ids,
+    ))
+    await db.commit()
+    return ref
+
+
 async def _create_request(db, org, regular_user, profile, *, key="request-key"):
     return await authority.create_relationship_request(
         db,
@@ -181,6 +205,82 @@ async def _seed_reviewer_scope(db, org, reviewer, requester, profile):
 
 
 class TestRelationshipAuthority:
+    async def test_case_reference_resolves_one_actual_verified_attachment(
+        self, db, org, admin_user, regular_user, monkeypatch
+    ):
+        from uuid import uuid4
+
+        from src.db.studytomy.operations import StudyEvidenceFile
+
+        monkeypatch.setattr(authority, "_current_relationship_policies", _policy_snapshot)
+        profile = await _make_profile(db, org, admin_user, regular_user)
+        relationship = await _create_request(db, org, regular_user, profile)
+        case_uuid = str(uuid4())
+        case = StudyServiceCase(
+            org_id=org.id,
+            case_uuid=case_uuid,
+            reporter_user_id=profile.user_id,
+            owner_user_id=admin_user.id,
+            category="safeguarding",
+            status="assigned",
+        )
+        db.add(case)
+        await db.flush()
+
+        case_policy_ids = [41, 42, 43, 44]
+        monkeypatch.setattr(
+            "src.services.studytomy.cases._require_case_review",
+            AsyncMock(return_value=(case, SimpleNamespace(policy_version_ids=case_policy_ids))),
+        )
+        monkeypatch.setattr(
+            "src.services.studytomy.learners._current_policies",
+            AsyncMock(return_value=[SimpleNamespace(id=45)]),
+        )
+
+        def add_attachment(evidence_uuid: str) -> None:
+            db.add(StudyEvidenceFile(
+                org_id=org.id,
+                evidence_uuid=evidence_uuid,
+                safeguarding_case_uuid=case_uuid,
+                purpose="safeguarding_case_evidence",
+                storage_reference=f"private/evidence/{evidence_uuid}.pdf",
+                content_sha256="e" * 64,
+                policy_version_ids=[*case_policy_ids, 45],
+                media_type="application/pdf",
+                size_bytes=100,
+                retention_category="synthetic",
+                upload_status="ready",
+                uploaded_by_user_id=admin_user.id,
+                verified_at=datetime.now(timezone.utc),
+            ))
+
+        add_attachment(f"ev_{uuid4()}")
+        await db.flush()
+        resolved_case = await authority._require_guardian_authority_evidence(
+            db,
+            org,
+            admin_user,
+            profile,
+            relationship,
+            f"case_{case_uuid}",
+            datetime.now(timezone.utc),
+        )
+        assert resolved_case == case_uuid
+
+        add_attachment(f"ev_{uuid4()}")
+        await db.flush()
+        with pytest.raises(HTTPException) as ambiguous:
+            await authority._require_guardian_authority_evidence(
+                db,
+                org,
+                admin_user,
+                profile,
+                relationship,
+                f"case_{case_uuid}",
+                datetime.now(timezone.utc),
+            )
+        assert ambiguous.value.status_code == 422
+
     async def test_restriction_transition_fails_closed_without_approved_d11(
         self, db, org, admin_user
     ):
@@ -362,13 +462,14 @@ class TestRelationshipAuthority:
 
         valid_from = datetime.now(timezone.utc) + timedelta(minutes=5)
         valid_to = valid_from + timedelta(days=30)
+        evidence_ref = await _verified_attachment(db, org, profile, pending, admin_user, monkeypatch)
         decision = StudyRelationshipDecisionCreate(
             outcome=StudyRelationshipDecisionOutcome.ACCEPT,
             expected_version=1,
             approved_scopes=["progress_summary"],
             valid_from=valid_from,
             valid_to=valid_to,
-            evidence_reference="case_fedcba9876543210",
+            evidence_reference=evidence_ref,
             reason_code="AUTHORITY_VERIFIED",
         )
         accepted = await authority.decide_relationship_request(
@@ -469,12 +570,21 @@ class TestRelationshipAuthority:
             "authorize_studytomy_staff_action",
             AsyncMock(return_value=SimpleNamespace(policy_version_ids=POLICY_IDS)),
         )
+        evidence_ref = await _verified_attachment(db, org, profile, pending, admin_user, monkeypatch)
         denial = StudyRelationshipDecisionCreate(
             outcome=StudyRelationshipDecisionOutcome.DENY,
             expected_version=1,
-            evidence_reference="case_fedcba9876543210",
+            evidence_reference=evidence_ref,
             reason_code="AUTHORITY_NOT_VERIFIED",
         )
+
+        with pytest.raises(HTTPException) as unsupported_case:
+            await authority.decide_relationship_request(
+                db, org, admin_user, profile.learner_uuid, pending.relationship_uuid,
+                denial.model_copy(update={"evidence_reference": "case_unbound_0123456789"}),
+                "unbound-case-key",
+            )
+        assert unsupported_case.value.status_code == 422
 
         denied = await authority.decide_relationship_request(
             db,
@@ -503,6 +613,7 @@ class TestRelationshipAuthority:
         authorization = AsyncMock(return_value=SimpleNamespace(policy_version_ids=POLICY_IDS))
         monkeypatch.setattr(authority, "authorize_studytomy_staff_action", authorization)
         valid_from = datetime.now(timezone.utc) + timedelta(minutes=5)
+        evidence_ref = await _verified_attachment(db, org, profile, pending, admin_user, monkeypatch)
         accepted = await authority.decide_relationship_request(
             db,
             org,
@@ -515,7 +626,7 @@ class TestRelationshipAuthority:
                 approved_scopes=["progress_summary"],
                 valid_from=valid_from,
                 valid_to=valid_from + timedelta(days=30),
-                evidence_reference="case_fedcba9876543210",
+                evidence_reference=evidence_ref,
                 reason_code="AUTHORITY_VERIFIED",
             ),
             "initial-decision-key",
@@ -543,6 +654,7 @@ class TestRelationshipAuthority:
         ))
         await db.commit()
         other_pending = await _create_request(db, org, other_guardian, profile, key="second-request")
+        other_ref = await _verified_attachment(db, org, profile, other_pending, admin_user, monkeypatch)
         other_accepted = await authority.decide_relationship_request(
             db, org, admin_user, profile.learner_uuid, other_pending.relationship_uuid,
             StudyRelationshipDecisionCreate(
@@ -551,7 +663,7 @@ class TestRelationshipAuthority:
                 approved_scopes=["assessment_feedback"],
                 valid_from=valid_from,
                 valid_to=valid_from + timedelta(days=30),
-                evidence_reference="case_abcdef9876543210",
+                evidence_reference=other_ref,
                 reason_code="AUTHORITY_VERIFIED",
             ),
             "second-decision",
@@ -576,6 +688,24 @@ class TestRelationshipAuthority:
             )
 
         monkeypatch.setattr(authority, "_current_restriction_policies", restriction_policies)
+        from src.db.studytomy.operations import StudyOutboxRecord, StudyOutboxStatus
+
+        affected_notice = StudyOutboxRecord(
+            org_id=org.id, recipient_user_id=regular_user.id,
+            purpose="progress_report", template_key="progress_report_available",
+            resource_kind="progress_report", resource_uuid="report_fixture",
+            authority_reference_uuid=pending.relationship_uuid,
+            dedupe_hash="a" * 64, request_hash="b" * 64,
+        )
+        unrelated_notice = StudyOutboxRecord(
+            org_id=org.id, recipient_user_id=other_guardian.id,
+            purpose="progress_report", template_key="progress_report_available",
+            resource_kind="progress_report", resource_uuid="report_fixture",
+            authority_reference_uuid=other_pending.relationship_uuid,
+            dedupe_hash="c" * 64, request_hash="d" * 64,
+        )
+        db.add_all([affected_notice, unrelated_notice])
+        await db.commit()
         disputed = await authority.restrict_relationship_authority(
             db,
             org,
@@ -585,12 +715,17 @@ class TestRelationshipAuthority:
             StudyRelationshipRestrictionCreate(
                 action=StudyRelationshipRestrictionAction.DISPUTE,
                 expected_version=2,
-                evidence_reference="case_abcdef0123456789",
+                evidence_reference=evidence_ref,
                 reason_code="AUTHORITY_DISPUTED",
             ),
             "dispute-key",
         )
 
+        await db.refresh(affected_notice)
+        await db.refresh(unrelated_notice)
+        assert affected_notice.status == StudyOutboxStatus.SUPPRESSED
+        assert affected_notice.completed_at is not None
+        assert unrelated_notice.status == StudyOutboxStatus.QUEUED
         assert disputed.status == StudyRelationshipStatus.DISPUTED
         assert disputed.approved_scopes == []
         assert disputed.authority_version == 3

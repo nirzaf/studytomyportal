@@ -84,6 +84,8 @@ async def export_courses_batch(
     if not course_uuids:
         raise HTTPException(status_code=400, detail="No courses specified for export")
 
+    from src.services.courses.courses import require_native_course_transfer
+
     # Phase 1: Validate access and load all DB data on the main thread
     courses_to_export = []
     org: Optional[Organization] = None
@@ -102,6 +104,7 @@ async def export_courses_batch(
         # included) plus its content files: exporting is an editor action, not
         # a read. Learner submissions and answer keys are left out entirely.
         await check_resource_access(request, db_session, current_user, course.course_uuid, AccessAction.UPDATE)
+        require_native_course_transfer(course)
 
         if org is None:
             org_statement = select(Organization).where(Organization.id == course.org_id)

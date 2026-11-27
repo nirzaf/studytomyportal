@@ -823,3 +823,168 @@ The follow-up docs audit corrected the stale current-status wording and updated 
 | `cd docs && bun run test:snippets` | Exit 0; 3 passed, 0 failed, 0 skipped. |
 | `cd docs && bun run build` | Exit 0; compiled and generated 461 static pages. Remote OpenAPI fetch used the bundled snapshot fallback. Sitemap generation was skipped because `NEXT_PUBLIC_DOCS_URL` was unset. |
 | `git diff --check` | Exit 0. |
+
+## Local audit continuation (27 November 2026)
+
+**Inspected revision:** local `main` at `b7e57929eba1230577fe23767aac162fefccf80d`, matching `origin/main` at the start of this continuation. The worktree already contained extensive uncommitted audit changes; they were preserved. This continuation made no commit, push, deployment, migration, or live-data change.
+
+| Verification | Result |
+|---|---|
+| F01 credit settlement, board/playground routes, and MCP OAuth regressions | 48 passed. |
+| Full API tests excluding PostgreSQL-marked and Ollama tests | 10,704 passed, 14 skipped, 211 existing warnings. |
+| Isolated PostgreSQL 19 StudyTOMY integration suite | 93 passed, 413 deselected; migration tests separately passed 4 with 1 expected skip. Disposable loopback test data only. |
+| API Ruff on the changed retention/governance policy paths | Passed. |
+| Web unit suite, TypeScript, lint, and production build | 809 passed; typecheck passed; lint exit 0 with 965 warnings and no errors; build passed with 41/41 static pages. Existing Sentry/Turbopack tracing warnings remain. |
+| CLI typecheck and test suite | Passed; 22 files, 855 passed, 1 skipped. |
+| Documentation snippets and production build | 3 snippet tests passed; build passed and generated 461 pages. Remote OpenAPI fetch used the bundled snapshot; sitemap generation was skipped because no verified `NEXT_PUBLIC_DOCS_URL` was configured. |
+| SDK/package synchronization and tests | Passed after regenerating API schema and syncing `@learnhouse/react` dependencies; SDK 118, React 28, Vue 10 tests passed. |
+| Momentum Pilot 01 build, verification, and tests | Passed; 8 tests passed. |
+| Root and standalone API Dockerfiles under OrbStack | Fresh local builds passed. Smoke checks confirmed runtime UID/GID 1001, `ffmpeg`, the packaged momentum manifest (matching the checkout SHA-256), writable runtime directories, and API module imports. Both healthcheck definitions were inspected; no services were started, so live health transitions remain unverified. |
+| E2E typecheck and safety helpers | Passed; identity 4, browser egress 1, database guard 3 tests passed. |
+| Ollama-marked API tests | 12 collected; not run because the local loopback Ollama endpoint was unavailable. |
+| Local learner browser routes | `/playgrounds` showed the Practice Studio and saved Grade 8 Maths demo; `/explore` showed the approved-source search interface. These read-only observations are not the author/reviewer/publish acceptance journey. |
+
+**Remaining acceptance:** Full signed-in multi-role E2E acceptance was not run. `E2E_BASE_URL`, `E2E_API_URL`, and `STUDYTOMY_TEST_DATABASE_URL` were unset in this execution environment; the open local browser is connected to an existing learner session, not a proven disposable acceptance stack. The F01 Redis refund failure path has no durable idempotent reconciliation record, so a process crash during a failed refund remains an explicitly reported limitation. F08 credential/recovery remains gated on named D-01/D-03/D-12 decisions and the ADR choice. F09 sales, payments, and offer activation remain gated on the applicable named policy decisions and an approved provider. No synthetic fixture was treated as live approval.
+
+### Focused findings follow-up (27 November 2026)
+
+This local-only continuation resumed at the same inspected SHA, `b7e57929eba1230577fe23767aac162fefccf80d`, with a heavily modified worktree. It preserved all earlier uncommitted work and made no commit, push, migration, deployment, or real-recipient send.
+
+| Findings | Verification and current boundary |
+|---|---|
+| F01 | Existing credit-refund/playground/MCP regression group: **48 passed**. At that checkpoint, ambiguous Redis refunds had no retry. The later F01 follow-up below adds one same-key idempotent retry; durable reconciliation across process crashes remains unavailable. |
+| F02–F03 | Managed-course native/RBAC/copy/export and Zapier projection regressions: **54 passed**. |
+| F04 | Media/board/stream/calendar focused API regressions: **245 passed**; Collab access recheck suite: **48 passed**. The existing tests cover chunk-stop denial and calendar extension scoping, but this follow-up did not execute a database-backed concurrent stream revocation scenario. |
+| F05 | Family, sharing, privacy, consent, record-retention and case API unit group: **47 passed**; focused family/privacy/retention web tests: **16 passed**. The earlier isolated PostgreSQL Studytomy suite passed **93** tests. D-13 classification and exact object-version deletion remain required before real-record/S3 removal. |
+| F06 | Added `report-outbox-drain`: default is read-only aggregate preview; execution is bounded to 25, requires exact opt-in, a loopback PostgreSQL `_test` database, and loopback SMTP. Status and drain now both reject non-PostgreSQL, non-loopback, query-routed, or non-`_test` databases before reading or processing. Scheduler/CLI regression file: **17 passed**; separate non-PostgreSQL retention/case/concurrency checks: **14 passed**; Ruff and CLI help passed. The drain was not executed, and no external email was sent. Additional archive/idempotency/overdue-review CLI lifecycle actions remain incomplete or policy-gated. |
+| F07–F09 | Focused offer/readiness/authorization API group: **25 passed**; readiness web regression: **1 passed, 11 assertions**. Governance and offers remain private until current evidence and approvals exist. F08 credential/recovery is blocked on named D-01/D-03/D-12 decisions and the ADR choice; F09 sale activation is blocked on D-02/D-04/D-05/D-18/D-20 and an approved provider. |
+
+API test commands used the isolated test environment prefix `PYTHON_DOTENV_DISABLED=true TESTING=true LEARNHOUSE_CONTENT_DELIVERY_TYPE=filesystem LEARNHOUSE_DISABLE_EE=1 LEARNHOUSE_DEMO_ENABLED=0 LEARNHOUSE_REDIS_CONNECTION_STRING=redis://127.0.0.1:1/0`:
+
+```sh
+uv run --no-sync pytest -q src/tests/security/test_resource_access.py src/tests/admin/test_admin_api.py src/tests/services/ai_tools/test_course_copy.py src/tests/services/test_export_service.py src/tests/services/test_activities_service.py src/tests/integrations/test_zapier.py -k 'managed_course or native_admin_hides_managed_enrollment or managed or zapier' --tb=short
+uv run --no-sync pytest -q src/tests/services/test_media_service_coverage.py src/tests/services/test_boards_service.py src/tests/services/test_calendar.py src/tests/routers/test_content_files_router.py src/tests/routers/test_local_content_router.py src/tests/routers/test_media_serve_router.py src/tests/routers/test_media_authz.py src/tests/studytomy/test_managed_media_staging.py src/tests/security/test_content_access.py src/tests/security/test_hardening_round7_content.py src/tests/security/test_hardening_round7_boards.py --tb=short
+uv run --no-sync pytest -q src/tests/studytomy/test_family_authority.py src/tests/studytomy/test_family_sharing.py src/tests/studytomy/test_privacy_projections.py src/tests/studytomy/test_consent_events.py src/tests/studytomy/test_record_retention_postgres.py src/tests/studytomy/test_service_cases_postgres.py -m 'not studytomy_postgres' --tb=short
+uv run --no-sync pytest -q src/tests/studytomy/test_report_delivery_scheduler.py src/tests/studytomy/test_record_retention_postgres.py src/tests/studytomy/test_service_cases_postgres.py src/tests/studytomy/test_concurrency_postgres.py -m 'not studytomy_postgres' --tb=short
+uv run --no-sync pytest -q src/tests/studytomy/test_report_delivery_scheduler.py --tb=short
+uv run --no-sync ruff check cli.py src/tests/studytomy/test_report_delivery_scheduler.py
+uv run --no-sync pytest -q src/tests/studytomy/test_offer_readiness.py src/tests/studytomy/test_offer_award_terms.py src/tests/studytomy/test_checkout_router.py src/tests/studytomy/test_studytomy_access.py -m 'not studytomy_postgres' --tb=short
+uv run --no-sync python cli.py report-outbox-drain --help
+```
+
+`apps/collab`: `bun run test` (**48 passed**). `apps/web`: `bun test --isolate tests/studytomy-readiness.test.mjs` (**1 passed, 11 assertions**). `docs`: `bun run test:snippets` (**3 passed**). Repository root: `git diff --check` passed. Full API, web, CLI, package, Docker build and PostgreSQL results remain as recorded in the preceding 27 November table; they were not rerun after adding the F06 CLI. Full author → independent reviewer → publish → learner → staff browser acceptance remains **NOT RUN** because this continuation did not provision a matching isolated browser/API/database fixture.
+
+### F04 stream and native-access follow-up (27 November 2026)
+
+This follow-up used the existing disposable `studytomy-guidance-audit-test` PostgreSQL container and synthetic records only. No migration, application deployment, commit or push was performed.
+
+| Check | Result |
+|---|---|
+| API media, boards, calendar and file-access regressions | **285 passed** across the focused media, board, calendar, content-file, local-content, authorization and staging test modules. |
+| Collaboration socket and access-recheck regressions | **48 passed**, 0 failed, 0 skipped. Revoked/expired authorization closes or rejects the collaboration connection as expected. |
+| PostgreSQL grant revocation while streaming | **1 passed, 12 deselected.** `test_checkout_router.py -m studytomy_postgres -k stream` pauses after the first media chunk, revokes the learner grant in a separate PostgreSQL session, then verifies the stream ends at that chunk, the staged file closes, and a later request is denied. |
+
+The ordinary `/content/...` and local-content paths do not carry an immutable release identifier. They therefore use the managed-course staff authorization gate and do not grant managed learners native-file access. Learner media delivery remains on the release-specific Studytomy route, whose fresh-session revalidation checks the exact release, policy, progression and current grant before each chunk. This is a deliberate fail-closed boundary; do not infer learner release access from a native URL. The managed calendar projection likewise lists the current actor's releases and reads linked assignments under that actor; its focused test checks the released extension, actor binding, denial, and that leftover native enrollment does not supply a managed deadline.
+
+`STUDYTOMY_TEST_DATABASE_URL` was unset in the shell. For the single PostgreSQL test, a URL was assembled in-process from the named test container's configuration and was never printed; the fixture enforced loopback and the `_test` suffix and verified the Alembic schema before running. Two initial `-k` selectors matched no cases and exited 5; the corrected `-k stream` run above executed the intended scenario successfully.
+
+### F05 authority and evidence follow-up (27 November 2026)
+
+| Check | Result |
+|---|---|
+| Family authority, scoped sharing service, privacy projections, consent, case and retention API regressions | **47 passed, 8 deselected** (`-m 'not studytomy_postgres'`). The checks cover relationship evidence resolution, invalid/unbound case references, default-private work filters, and reviewed record-request evidence. |
+| Family/privacy/retention browser-component regressions | **18 passed**, 0 failed; 90 assertions across five existing web tests. |
+| Isolated PostgreSQL record-evidence retention journey | **1 passed, 12 deselected** (`test_checkout_router.py -m studytomy_postgres -k reentry`). Synthetic data exercised a current D-13/D-18 decision, expiry, hold blocking and release, stale-manifest rejection, failed filesystem unlink, concurrent same-approval removal/replay, removal receipts, and restore replay. |
+
+The current path validates relationship evidence against an exact verified tenant/learner/relationship record or one uniquely bound learner-reported case attachment. Restriction writes suppress queued/retry notices in the same transaction; leased sends still require the F06 send-time authority check. Existing family/privacy workspaces expose relationship decisions, evidence, eligibility, consent, record requests, holds, reviewed removal and safeguarding retention. Independent sharing remains API/service-only because the applicable D-12 audience/purpose decision is not verified; the default-private filters stay fail-closed.
+
+**F05 remains PARTIAL / approval-gated.** `StudyEvidenceFile` stores an internal storage key but no object version identifier. The case-evidence removal executor explicitly allows only filesystem storage under current D-18 execution policy. It cannot safely perform exact S3/R2 version removal, and no schema change or unapproved object deletion was made. Real-record removal remains unavailable until D-13 retention classification, the selected storage's exact-version deletion capability, and the corresponding D-18 execution authority are verified. Synthetic policy fixtures in the passing test do not constitute those approvals.
+
+### F06 delivery and maintenance follow-up (27 November 2026)
+
+| Check | Result |
+|---|---|
+| Report scheduler, outbox, generic worker and concurrency unit regressions | **121 passed, 10 deselected** across `test_report_delivery_scheduler.py`, `test_wave1_operations.py` and non-PostgreSQL cases in `test_concurrency_postgres.py`. Covers idempotent enqueue, bounded claims, retry and reconciliation outcomes, provider timeout/unknown handling, recipient revalidation, and scheduler shutdown. |
+| Isolated PostgreSQL delivery and worker concurrency cases | **8 passed, 6 deselected** from `test_concurrency_postgres.py -m studytomy_postgres -k 'idempotency or outbox or report_delivery or scheduler'`. Exercises unique idempotency races, `SKIP LOCKED` claims, lease recovery, stale finalization, recipient/policy revalidation, and scheduler polling. The test URL was assembled in-process from the named loopback `_test` container and was not printed. |
+| Ruff and local CLI help | **Passed.** `ruff check` covered the CLI, outbox, report dispatcher, scheduler, generic worker, idempotency, archive-retention and learner services plus the exercised tests. `python cli.py report-outbox-status --help` exited 0. |
+
+The existing scheduler is a single default-off lifecycle task. Its current dispatcher is intentionally restricted to `PROGRESS_REPORT`; it re-resolves the published report, recipient, relationship or scoped grant, consent and policy immediately before sending. The email adapter receives the stable outbox idempotency key for supported providers. Provider timeouts/ambiguous outcomes enter reconciliation and are never automatically resent; this is at-least-once-safe handling, not a claim of exactly-once email. The existing aggregate status and bounded drain CLI are local `_test`-database-only; the drain additionally requires explicit opt-in and loopback SMTP.
+
+**F06 remains PARTIAL / policy-gated.** There are allowlisted outbox purposes for required notices, receipts, optional reminders and marketing, but no current dispatchers/producers for those purposes beyond the reviewed progress-report path. Optional reminders, marketing and guardian study-path mail were not enabled. Assessment-archive removal and case-evidence removal remain explicit reviewed operations, not automatic cleanup. Idempotency records carry an engineering replay horizon (`RETENTION_DAYS = 30`) but are not purged; no D-13 retention approval for deleting these records was verified. `review_due_at` currently affects eligibility, but no separately approved staff-escalation channel/purpose was verified. No deletion, policy change, email send, schema migration, commit or push occurred.
+
+### F07 readiness and governance follow-up (27 November 2026)
+
+| Check | Result |
+|---|---|
+| Readiness, course-evidence and offer API regressions | **7 passed, 114 deselected** across `test_offer_readiness.py`, the readiness selection in `test_wave1_operations.py`, and the readiness selection in `test_content_evidence.py`. This includes a valid exact reviewed release clearing the course-review blocker and a changed course revision restoring that blocker. |
+| Readiness/governance UI regression | **1 passed**, 0 failed; 11 assertions. The test confirms that the existing panel calls real governance/draft workflows, communicates that policy drafts are not approvals, and does not render an activation control. |
+
+The exact course-release predicate is implemented in `readiness.py`: it checks the tenant/course, independent active education reviewer, current scoped review assignment, snapshot digest, and current release-policy binding. The governance and private-offer draft flows are wired in the existing course general page through `ReadinessPanel.tsx`; the panel presents policy version/status, effective dates, evidence references and required/recorded approver responsibilities. The current policy contract has no next-review date, and the UI says so explicitly.
+
+**F07 remains PARTIAL.** Source inspection found no `StudyCapacity` staffing/support-capacity record or persisted D-17 pilot-acceptance decision model. `StudyCapacityHold` is a checkout reservation, not evidence of staffed support, and metrics are not pilot acceptance. Readiness therefore retains `SUPPORT_CAPACITY_EVIDENCE_MISSING` and `PILOT_ACCEPTANCE_EVIDENCE_MISSING` even when course review passes; `ready_to_sell` remains false. No evidence or approvals were fabricated, and no schema change was introduced. A future completion requires the approved D-04 capacity evidence contract and D-17 criteria/acceptance record, then tenant-scoped validity predicates and dedicated regressions.
+
+### F08 credentials and F09 sale-gate follow-up (27 November 2026)
+
+**F08 is BLOCKED by required human decisions.** `ADR-LEARNER-CREDENTIALS.md` remains proposed and records D-01, D-03 and D-12 as unapproved, with no selected credential option, cohort, named approver or evidence. The current identity contract remains email-based (`UserBase.email: EmailStr`); the learner profile references an existing user and does not provision credentials. No auth, schema, placeholder-address, guardian-login or recovery change was made. This finding needs the authorized owners to record the exact policy/ADR decision before implementation can continue.
+
+For F09, the current order acceptance checked an exact D-17 offer-version allowlist but passed a literal `sales_open=True` into capacity reservation. The code now requires current F07 readiness for every course in the offer, combines that result with the exact persisted D-17 version binding, hides not-ready offers from checkout, and passes the computed state into bounded reservation. A not-ready acceptance returns `OFFER_SALES_PAUSED` before acceptance or hold writes. Since F07 currently has no approved support-capacity or pilot-acceptance evidence contract, the actual checkout list remains empty and sale acceptance stays closed. Private quotes/drafts remain non-sale operations. No state schema, payment provider or finance behavior was added.
+
+| Check | Result |
+|---|---|
+| Offer quote/readiness API regressions | **4 passed** (`test_order_quote.py` and `test_offer_readiness.py`). The acceptance regression verifies that an exact D-17 offer still cannot be accepted without F07 readiness and that no `StudyOrderAcceptance` or capacity hold is written. |
+| PostgreSQL signed-checkout regressions | **12 passed, 1 deselected** from `test_checkout_router.py -m studytomy_postgres -k signed_checkout_accepts_only_retained_approved_terms`. The real readiness predicate exposed no sale-ready offers; downstream settlement scenarios used an explicit test-only readiness stub after that assertion to keep testing their separate authorization, manual collection, correction and refund boundaries. This is synthetic integration evidence, not proof of live sale authorization. |
+| Ruff and `git diff --check` | **Passed.** Ruff covered the changed order service and its API tests. |
+
+**F09 remains PARTIAL / blocked by F07 and policy.** No actual support-capacity or pilot-acceptance records can satisfy the readiness predicate, and no sale-enabled offer state exists beyond the exact D-17 pilot allowlist. The existing award and assessed-pass blockers remain intact; payment collection/refund remains manual. D-02/D-04/D-05/D-17/D-18/D-20 and an approved provider/market contract must be verified before any real sale. The test-only readiness stub above is limited to regression coverage of downstream mechanics and is not stored policy evidence.
+
+### Remaining findings follow-up (27 November 2026)
+
+The source review continued through F10–F21 at `b7e57929eba1230577fe23767aac162fefccf80d`. All verification used local files, synthetic fixtures or the previously recorded disposable PostgreSQL run; no GitHub workflow was triggered, and no application deployment, commit or push occurred.
+
+| Finding | Status and evidence |
+|---|---|
+| F10 | **Locally verified:** root and API images built under OrbStack in the preceding receipt, with non-root runtime, `ffmpeg`, packaged momentum manifest and writable paths checked. The web image had a separate build/smoke check there. No service health transition was exercised. |
+| F11 | **Partial:** the focused guidance, policy, topic-check and learning-surface API set passed **78**, with **3 PostgreSQL cases skipped** because `STUDYTOMY_TEST_DATABASE_URL` was not configured for this invocation. Focused tutor/configuration and learning-surface web tests passed **15** (89 assertions). Policy resolvers are fail-closed for D-10/D-13; real-user activation still requires current policy/consent approvals and a live learner journey. The four-value `LessonTutorAction` enum remains vocabulary only, with no production route/caller. |
+| F12 | **Partial / approval-gated:** guest challenge issuance and redemption use hashed single-use tokens, rate limits, D-04/D-12 authorization and a feature opt-in; existing PostgreSQL case tests were included in the earlier isolated StudyTOMY run (**93 passed** across that suite). New case categories, external contact, or sanction/appeal policy remain unavailable until the named decisions exist. No real contact was sent. |
+| F13 | **Focused checks passed:** organization help-route and active-navigation tests passed (**3**). Staff workspaces are projected by the authorized API and linked from desktop/mobile organization navigation. No signed-in role-by-role browser acceptance was run. |
+| F14 | **Focused checks passed:** edition-route gate, navigation and billing-webhook test group passed (**18**). OSS routes return 404 through the route gate; billing webhook checks its feature guard before payload processing. Paid-edition behavior remains source/test verified, not exercised against a licensed runtime. |
+| F15 | **Blocked by policy:** recurring memberships, withdrawal remedies, promotions and managed-learner community remain unavailable pending D-05/D-06/D-07/D-11/D-18/D-19/D-20 and a separately approved provider. No commercial behavior or price terms were invented. |
+| F16 | **Partial:** existing source-derived metrics and inventory-only backfill helpers remain present. The audited metric helpers are not exposed through a current staff metrics API/workspace; D-17 measures and TASK-069 service targets are not approved. No write-mode legacy migration or PostgreSQL backup/restore rehearsal was performed. |
+| F17 | **Pilot implementation checked:** `bun run build`, `bun run verify`, and `bun run test` in `apps/labs/momentum-pilot` passed; **8 tests**. The workflow now contains a pilot test job. Hosted origin/CSP and qualified educator, safeguarding, curriculum and rights sign-offs remain open; no hosted deployment occurred. |
+| F18 | **Not complete:** added a credential-free CI job for E2E typecheck and existing database, browser-egress and runtime-identity tests. Locally, E2E typecheck passed; database guard **3**, browser-egress **1**, identity **4** passed. `actionlint .github/workflows/ci-build.yml` and `git diff --check` passed. This verifies the workflow syntax and helper contracts only. The full author → independent reviewer → publication → learner → staff acceptance and AC-01–34 matrix remain **NOT RUN**; no current isolated live E2E fixture/runtime identity was provisioned in this continuation. Policy-denial tests do not count as a completed business scenario. |
+| F19 | **Targeted docs state is accurate:** demo podcast/audio removal is described, local PG/Redis ports are documented as `5433`/`6380`, and the portal guide states generated JavaScript controls are disabled and the momentum lab is separately governed. The local docs snippet suite passed **3**; the previous docs build produced **461 pages**. This is not a fresh exhaustive external-link/fragment audit. |
+| F20 | **Verified locally:** workflow action references are immutable and the existing `uv` version is pinned to `0.10.7`; CLI and Compose Redis references both use `redis:8.6.1-alpine`. E2E database-guard tests passed **3**, and `actionlint` passed. Unreferenced helper deletion and a native macOS/PostgreSQL restore rehearsal were not performed. |
+| F21 | **Scope preserved:** later exam generation, advanced marking, self-service family updates, new reminders, AI marketing and Momentum Lab P3–P6 remain roadmap/proposal scope; no later feature was promoted to a launch commitment. |
+
+The new local outbox status and drain commands both fail closed unless the configured target is a loopback PostgreSQL database ending in `_test`, with no routing query. The drain remains a bounded opt-in through loopback SMTP; it was not executed. Its regression file now has **17 passing tests**, and Ruff passes. No delivery or real-recipient email was sent.
+
+### F01 credit-settlement follow-up (27 November 2026)
+
+The playground reservation now carries a unique refund operation key. `refund_ai_credit()` can apply that refund atomically with a Redis `SET NX EX` marker, and an ambiguous Redis response gets at most one retry using the same key. The marker uses the existing 30-day engineering replay window; this is not a D-15 retention-policy decision. A replay of the same operation is suppressed while Redis retains its marker. Ordinary callers without an operation key retain the previous refund behavior.
+
+Verification after this change:
+
+| Check | Result |
+|---|---|
+| `uv run --no-sync pytest -q src/tests/security/test_ai_credit_atomic.py src/tests/security/test_remediation_ai_credit_refund.py --tb=short` | **37 passed**. Covers same-key replay, org scoping, refund retry, successful settlement, setup failure, invalid output, provider error, disconnect and cancellation. |
+| Broader F01 credit, board/playground and OAuth regression suite | **215 passed**, 0 failed; 6 warnings from existing test setup invoking async session methods without awaiting them. |
+| `uv run --no-sync ruff check src/security/features_utils/usage.py src/routers/playgrounds/credit_stream.py src/tests/security/test_ai_credit_atomic.py src/tests/security/test_remediation_ai_credit_refund.py` | **Passed.** |
+| Isolated `redis:8.6.1-alpine` loopback container with the actual Python Redis client and Lua script | **Passed.** Refunding 3 from 8 produced 5; replaying the same key kept the counter at 5; the 30-day marker TTL was present. The temporary container was removed. |
+
+**F01 remains PARTIAL for crash recovery:** no durable record tracks a reserved request whose process exits before it can attempt a refund. The idempotency marker makes an in-process retry safe while Redis retains the marker, but it does not provide a reconciliation worker or exactly-once settlement across process crashes. No blind retry, database schema, or persistent ledger was added.
+
+Resumed verification on 27 November 2026:
+
+| Check | Result |
+|---|---|
+| F01 credit, board/playground, MCP OAuth and protected-learner regressions (`test_ai_credit_atomic.py`, `test_remediation_ai_credit_refund.py`, `test_ai_chat_router.py`, `test_boards_router.py`, `test_playgrounds_router.py`, `test_mcp_oauth_router.py`, `test_ai_approval_gate.py`) | **81 passed**, 0 failed. |
+| Ruff for the F01 routes, refund helper and focused tests | **Passed.** |
+| `git diff --check` | **Passed.** |
+
+The refund operation key is generated per request and retained only by the active reservation; Redis makes a same-key retry safe while its bounded marker exists. There is no durable ledger/reconciliation record for a process crash after reservation and before refund confirmation. This remains an explicit recovery limitation; this implementation does not claim exactly-once recovery across process crashes.
+
+### F10 current-image health and mount smoke (27 November 2026)
+
+Using OrbStack and the locally built `studytomy-local-audit-api-20261127:local` and `studytomy-local-audit-root-20261127:local` images, a fresh internal-only Docker network, and disposable PostgreSQL 19 / Redis 8.6.1 containers, the API and combined images completed the existing startup path and became `healthy`. The unauthenticated `/api/v1/health` route returned HTTP 200; the combined image's `/api/health` probe also returned HTTP 200. Synthetic install data and random local-only credentials existed only in the disposable database/environment.
+
+The combined image ran as UID 1001, included `ffmpeg`, and found the momentum manifest at `/app/labs/momentum-pilot/manifest.json`. The API image ran as UID 1001, included `ffmpeg`, and found the manifest at `/labs/momentum-pilot/manifest.json`. A UID-1001 bind-mount write/cleanup check passed against a temporary host directory. The test containers, temporary database data and network were removed; no existing named volume was mounted or modified. One earlier probe failed at the expected empty-database auto-install gate, and a follow-up corrected the disposable initialization inputs before the successful health run; no application source change was needed.

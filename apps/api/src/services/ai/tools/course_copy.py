@@ -106,9 +106,12 @@ def _course_path(ctx: ToolContext, course: Course) -> str:
 
 
 async def _require_edit(ctx: ToolContext, course: Course, checked: set[int]) -> None:
+    from src.services.courses.courses import require_native_course_transfer
+
     if course.id in checked:
         return
     await check_resource_access(ctx.request, ctx.db_session, ctx.user, course.course_uuid, AccessAction.UPDATE)
+    require_native_course_transfer(course)
     checked.add(course.id)
 
 

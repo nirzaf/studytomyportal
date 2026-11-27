@@ -14,6 +14,8 @@ import {
   ChartBar,
   Code,
   Steps,
+  ShieldWarning,
+  Headset,
 } from '@phosphor-icons/react'
 import { isOrgAnalyticsAvailable } from '@ee/components/Analytics/availability'
 
@@ -29,6 +31,14 @@ export interface DashboardMenuItem {
   /** Hides the item when it returns false (e.g. Enterprise-only pages). */
   available?: () => boolean
 }
+
+export const STUDYTOMY_STAFF_WORKSPACES = [
+  { id: 'families', href: '/dash/studytomy/families', icon: Users, labelKey: 'dashboard.studytomy.families', label: 'Family services' },
+  { id: 'cases', href: '/studytomy/cases', icon: ShieldWarning, labelKey: 'dashboard.studytomy.cases', label: 'Safeguarding cases' },
+  { id: 'finance', href: '/studytomy/finance', icon: CurrencyCircleDollar, labelKey: 'dashboard.studytomy.finance', label: 'Finance reviews' },
+  { id: 'privacy-reviews', href: '/studytomy/privacy-reviews', icon: Files, labelKey: 'dashboard.studytomy.privacy', label: 'Privacy reviews' },
+  { id: 'support-cases', href: '/studytomy/support-cases', icon: Headset, labelKey: 'dashboard.studytomy.support', label: 'Assigned support cases' },
+] as const
 
 export const DASHBOARD_MENU_ITEMS: DashboardMenuItem[] = [
   {

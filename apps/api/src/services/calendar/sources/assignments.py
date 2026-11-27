@@ -4,7 +4,8 @@ Only courses the user is enrolled in (a trail run) or authors are considered:
 an assignment in a public course the user never started is not something they
 have to act on. Each of those courses is then re-checked with course READ, and
 for learners every assignment goes through the same gate as the assignment
-read itself (published, activity draft/paywall/locks).
+read itself (published, activity draft/paywall/locks). Managed deadlines
+come from the learner’s authorized release and reviewed adjustment.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from src.db.courses.assignments import (
     AssignmentUserSubmissionStatus,
 )
 from src.db.courses.courses import Course
+from src.db.users import PublicUser
 from src.services.calendar.sources import register_source
 from src.services.calendar.sources.common import user_course_ids
 from src.services.calendar.types import (
@@ -32,7 +34,12 @@ from src.services.calendar.types import (
     iso_utc,
 )
 from src.services.courses.activities.access import verify_activity_reader_access
-from src.services.courses.activities.assignments import _is_assignment_past_due, effective_assignment_extension
+from src.services.courses.activities.assignments import _is_assignment_past_due
+from src.services.studytomy.access_policy import (
+    list_managed_text_lessons,
+    list_my_managed_releases,
+    read_managed_linked_assignment,
+)
 
 
 def parse_due_date(raw: Optional[str]) -> tuple[Optional[date | datetime], bool]:
@@ -76,13 +83,79 @@ def _activity_path(course: Course, activity: Activity) -> str:
     )
 
 
+async def _managed_assignment_due_dates(ctx: CalendarContext) -> list[CalendarEvent]:
+    actor = ctx.current_user
+    if not isinstance(actor, PublicUser):
+        return []
+
+    events: list[CalendarEvent] = []
+    cursor = None
+    while True:
+        try:
+            page = await list_my_managed_releases(
+                ctx.db_session, ctx.org, actor, after=cursor, limit=100,
+            )
+        except HTTPException as error:
+            if error.status_code not in (403, 404, 409):
+                raise
+            return []
+        for release in page.releases:
+            keys = (ctx.db_session, ctx.org, actor, release.course_uuid, release.release_uuid)
+            try:
+                index = await list_managed_text_lessons(*keys)
+            except HTTPException as error:
+                if error.status_code not in (403, 404, 409):
+                    raise
+                continue
+            if index.requires_first_use:
+                continue
+            assignment_activities = {
+                lesson.linked_assignment_activity_uuid for lesson in index.lessons
+                if lesson.available and lesson.linked_assignment_activity_uuid
+            }
+            for activity_uuid in sorted(assignment_activities):
+                try:
+                    assignment = await read_managed_linked_assignment(*keys, activity_uuid)
+                except HTTPException as error:
+                    if error.status_code not in (403, 404, 409):
+                        raise
+                    continue
+                due, all_day = parse_due_date(assignment.due_date)
+                if due is None or assignment.release_conflict_uuid:
+                    continue
+                overlaps = ctx.overlaps_day(due) if all_day else ctx.overlaps(due)
+                if not overlaps:
+                    continue
+                status = (assignment.submission_status or "").lower()
+                if status not in {"graded", "submitted", "late"}:
+                    status = "overdue" if assignment.past_due else "open"
+                events.append(CalendarEvent(
+                    id=f"assignment:{release.release_uuid}:{assignment.assignment_uuid}",
+                    type="assignment", title=assignment.title,
+                    starts_at=due.isoformat() if all_day else iso_utc(due),
+                    ends_at=None, all_day=all_day, url="/account/learning",
+                    course={"course_uuid": release.course_uuid, "name": release.name},
+                    status=status,
+                    meta={
+                        "assignment_uuid": assignment.assignment_uuid,
+                        "activity_uuid": activity_uuid,
+                        "release_uuid": release.release_uuid,
+                        "instructor": False,
+                    },
+                ))
+        if page.next_cursor is None:
+            return events
+        cursor = page.next_cursor
+
+
 async def assignment_due_dates(ctx: CalendarContext) -> list[CalendarEvent]:
     if not await ctx.feature_enabled("assignments"):
         return []
     db = ctx.db_session
+    events = await _managed_assignment_due_dates(ctx)
     course_ids = await user_course_ids(ctx)
     if not course_ids:
-        return []
+        return events
 
     rows = (await db.execute(
         select(Assignment, Activity, Course)
@@ -92,23 +165,23 @@ async def assignment_due_dates(ctx: CalendarContext) -> list[CalendarEvent]:
             Assignment.course_id.in_(course_ids),  # type: ignore[attr-defined]
             Assignment.org_id == ctx.org.id,
             Course.org_id == ctx.org.id,
+            Course.studytomy_managed.is_(False),
             Assignment.due_date.is_not(None),  # type: ignore[union-attr]
             Assignment.due_date != "",
         )
     )).all()
 
-    # Managed learner extensions can move an otherwise out-of-range assignment into the window.
     in_range = []
     for assignment, activity, course in rows:
         due, all_day = parse_due_date(assignment.due_date)
         if due is None:
             continue
         overlaps = ctx.overlaps(due) if isinstance(due, datetime) else ctx.overlaps_day(due)
-        if not overlaps and not (course.studytomy_managed and assignment.published):
+        if not overlaps:
             continue
-        in_range.append((assignment, activity, course, due, all_day, overlaps))
+        in_range.append((assignment, activity, course, due, all_day))
     if not in_range:
-        return []
+        return events
 
     submissions = {
         s.assignment_id: s
@@ -120,12 +193,10 @@ async def assignment_due_dates(ctx: CalendarContext) -> list[CalendarEvent]:
         )).scalars().all()
     }
 
-    events: list[CalendarEvent] = []
-    for assignment, activity, course, due, all_day, overlaps in in_range:
+    for assignment, activity, course, due, all_day in in_range:
         if not await ctx.can_read_course(course):
             continue
         editor = await ctx.can_edit_course(course)
-        extension = None
         submission = submissions.get(assignment.id)
         if editor and submission is None:
             if not assignment.published:
@@ -140,14 +211,7 @@ async def assignment_due_dates(ctx: CalendarContext) -> list[CalendarEvent]:
                     await verify_activity_reader_access(ctx.request, activity, course, ctx.current_user, db)
                 except HTTPException:
                     continue
-                if course.studytomy_managed:
-                    extension = await effective_assignment_extension(db, assignment, ctx.user_id)
-            status = "open" if extension is not None else _learner_status(assignment, submission)
-
-        if extension is not None:
-            due, all_day, overlaps = extension, False, ctx.overlaps(extension)
-        if not overlaps:
-            continue
+            status = _learner_status(assignment, submission)
 
         events.append(CalendarEvent(
             id=f"assignment:{assignment.assignment_uuid}",

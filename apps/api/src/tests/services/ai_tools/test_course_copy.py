@@ -269,6 +269,41 @@ async def test_copy_refusals(registry, db, org, admin_user, regular_user, rich_s
     assert len((await db.execute(select(Chapter).where(Chapter.course_id == target.id))).scalars().all()) == 1
 
 
+async def test_copy_rejects_managed_source_and_destination_before_writes(
+    registry, db, org, admin_user, course, rich_source, target
+):
+    course.studytomy_managed = True
+    course.public = False
+    course.published = False
+    db.add(course)
+    await db.commit()
+
+    source_denied = await call(
+        registry,
+        ctx_for(db, org, admin_user),
+        "copy_course_items",
+        {"course_uuid": target.course_uuid, "chapter_uuids": ["chapter_test"]},
+    )
+    assert source_denied.status == "denied" and source_denied.denied_code == "http_409"
+    assert len((await db.execute(select(Chapter).where(Chapter.course_id == target.id))).scalars().all()) == 1
+
+    course.studytomy_managed = False
+    target.studytomy_managed = True
+    target.public = False
+    target.published = False
+    db.add_all([course, target])
+    await db.commit()
+
+    target_denied = await call(
+        registry,
+        ctx_for(db, org, admin_user),
+        "copy_course_items",
+        {"course_uuid": target.course_uuid, "chapter_uuids": ["chapter_test"]},
+    )
+    assert target_denied.status == "denied" and target_denied.denied_code == "http_409"
+    assert len((await db.execute(select(Chapter).where(Chapter.course_id == target.id))).scalars().all()) == 1
+
+
 async def test_copy_needs_edit_rights_on_the_source(registry, db, org, admin_user, rich_source, target):
     """Edit rights on the target are not enough: a copy carries drafts and answers."""
     from fastapi import HTTPException

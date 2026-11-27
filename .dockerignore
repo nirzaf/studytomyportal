@@ -139,3 +139,12 @@ media/
 README.md
 docs/
 *.md
+
+
+# Local API data, uploaded courses and generated lab artifacts stay outside images.
+apps/api/content/*
+!apps/api/content/__init__.py
+apps/api/data
+apps/api/logs
+apps/labs/*/dist
+courses/

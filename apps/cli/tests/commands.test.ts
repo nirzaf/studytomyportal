@@ -2650,9 +2650,30 @@ describe('setup / update in-process', () => {
     expect(fs.readFileSync(path.join(dir, '.env'), 'utf-8')).toContain('POSTGRES_PASSWORD=')
   })
 
+  it('uses Redis 8.6.1 for new installations and retains the existing Redis image on reconfigure', async () => {
+    const opts = {
+      ci: true, name: 'redis-image', domain: 'localhost', port: 8095,
+      adminEmail: 'admin@school.dev', adminPassword: 'password123', start: false,
+    }
+    await setupCommand(opts)
+    const dir = path.join(home, '.learnhouse', opts.name)
+    const composePath = path.join(dir, 'docker-compose.yml')
+    const original = fs.readFileSync(composePath, 'utf-8')
+    expect(original).toContain('    image: redis:8.6.1-alpine')
+    fs.writeFileSync(composePath, original.replace('image: redis:8.6.1-alpine', 'image: redis:7.4-alpine'))
+
+    await setupCommand(opts)
+    const reconfigured = fs.readFileSync(composePath, 'utf-8')
+    expect(reconfigured).toContain('    image: redis:7.4-alpine')
+    expect(reconfigured).not.toContain('    image: redis:8.6.1-alpine')
+    expect(reconfigured.match(/learnhouse_redis_data_[a-z0-9]+:\/data/)?.[0])
+      .toBe(original.match(/learnhouse_redis_data_[a-z0-9]+:\/data/)?.[0])
+  })
+
   it.each([
     ['missing app service', (compose: string) => compose.replace(/  learnhouse-app:[\s\S]*?(?=  [A-Za-z0-9_.-]+:|volumes:|networks:|$)/, '')],
     ['missing app image', (compose: string) => compose.replace(/^    image: .*\n/m, '')],
+    ['missing Redis image', (compose: string) => compose.replace(/^    image: redis:.*\n/m, '')],
   ])('setup --ci refuses reconfiguration with a %s before changing files', async (_label, change) => {
     const opts = {
       ci: true, name: `missing-${_label.replaceAll(' ', '-')}`, domain: 'localhost', port: 8096,

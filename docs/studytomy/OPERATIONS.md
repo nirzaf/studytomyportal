@@ -2,6 +2,10 @@
 
 The report scheduler is off by default. Enable `LEARNHOUSE_STUDYTOMY_REPORT_DELIVERY_ENABLED=true` only in the isolated test API for a synthetic rehearsal. Live operation requires named owners, approved disclosure policies, and service targets under TASK-069. No availability, response, or recovery target has been approved in this record.
 
+## Local outbox inspection and bounded drain
+
+From `apps/api`, `uv run --no-sync python cli.py report-outbox-status` prints aggregate counts only. `uv run --no-sync python cli.py report-outbox-drain --limit 10` is a read-only preview. Execution requires `--execute`, the exact report-delivery opt-in, a loopback PostgreSQL database whose name ends in `_test`, and SMTP configured to a loopback sink (`localhost`, `127.0.0.1` or `::1`). Each invocation processes at most 25 records through the normal recipient, consent, policy, resource-version and lease checks. Resend and non-loopback SMTP targets are refused. Use synthetic recipients and a disposable database; this command is not a production delivery path.
+
 ## When an outbox lease expires
 
 The next poll moves the expired lease to `reconciliation_required` with `LEASE_EXPIRED_OUTCOME_UNKNOWN`. The provider may already have accepted the message. The scheduler does not claim that row again, and the original sender cannot finalize the expired lease. Keep the row and its recorded outcome for review.

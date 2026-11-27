@@ -83,7 +83,7 @@ export default function EditorLoader({ courseid: _courseid, activityuuid }: Edit
   }
 
   if (isEmbedActivity && dataReady) {
-    return <EmbedActivity activity={activity} editable />
+    return <EmbedActivity activity={activity} editable virtualLabOptions={bootstrap.virtual_lab_options} />
   }
 
   if (isResourceActivity && dataReady) {

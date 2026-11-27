@@ -4,6 +4,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 from fastapi import HTTPException, Request, UploadFile
+from sqlalchemy import String, cast
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -360,6 +361,11 @@ async def authorize_media_file(
     await check_resource_access(
         request, db_session, current_user, media.media_uuid, AccessAction.READ
     )
+    if media.media_type == MediaTypeEnum.UPLOAD:
+        from src.services.media.media_serve import _resolve_storage_key
+
+        await _resolve_storage_key(db_session, media)
+        await _reject_managed_course_media(db_session, media)
     is_public = bool(media.public) and not await media_in_any_private_folder(
         db_session, media.media_uuid
     )
@@ -381,6 +387,11 @@ async def create_media_share_link(
     await check_resource_access(
         request, db_session, current_user, media.media_uuid, AccessAction.READ
     )
+    if media.media_type == MediaTypeEnum.UPLOAD:
+        from src.services.media.media_serve import _resolve_storage_key
+
+        await _resolve_storage_key(db_session, media)
+        await _reject_managed_course_media(db_session, media)
     token = secrets.token_urlsafe(32)
     db_session.add(
         MediaShareToken(
@@ -418,12 +429,73 @@ async def authorize_share_token(
     media = (
         await db_session.execute(select(Media).where(Media.media_uuid == row.media_uuid))
     ).scalars().first()
-    if not media:
+    if not media or media.org_id != row.org_id:
         raise HTTPException(status_code=404, detail="Media not found")
     await check_resource_access(
         request, db_session, current_user, media.media_uuid, AccessAction.READ
     )
+    if media.media_type == MediaTypeEnum.UPLOAD:
+        from src.services.media.media_serve import _resolve_storage_key
+
+        await _resolve_storage_key(db_session, media)
+        await _reject_managed_course_media(db_session, media)
     is_public = bool(media.public) and not await media_in_any_private_folder(
         db_session, media.media_uuid
     )
     return media, is_public
+
+
+async def _reject_managed_course_media(db_session: AsyncSession, media: Media) -> None:
+    """Do not serve a Library file through a native URL when reviewed course
+    content binds it to a managed course. The native URL has no course/release
+    context, so it cannot prove a learner grant; managed files use the existing
+    release-scoped media route instead.
+    """
+    from src.db.courses.activities import Activity
+    from src.db.courses.courses import Course
+    from src.db.studytomy.education import StudyCourseRelease
+    from src.services.courses.transfer.library_media import library_refs
+
+    activity_contents = (
+        await db_session.execute(
+            select(Activity.content)
+            .join(Course, Course.id == Activity.course_id)
+            .where(
+                Activity.org_id == media.org_id,
+                Course.org_id == media.org_id,
+                Course.studytomy_managed.is_(True),
+                cast(Activity.content, String).contains(media.media_uuid, autoescape=True),
+            )
+        )
+    ).scalars().all()
+    linked_in_managed_content = any(
+        media.media_uuid in library_refs(content) for content in activity_contents
+    )
+
+    if not linked_in_managed_content:
+        snapshots = (
+            await db_session.execute(
+                select(StudyCourseRelease.snapshot)
+                .join(Course, Course.course_uuid == StudyCourseRelease.course_uuid)
+                .where(
+                    StudyCourseRelease.org_id == media.org_id,
+                    Course.org_id == media.org_id,
+                    Course.studytomy_managed.is_(True),
+                    cast(StudyCourseRelease.snapshot, String).contains(
+                        media.media_uuid, autoescape=True,
+                    ),
+                )
+            )
+        ).scalars().all()
+        for snapshot in snapshots:
+            activities = snapshot.get("activities") if isinstance(snapshot, dict) else None
+            if isinstance(activities, list) and any(
+                isinstance(activity, dict)
+                and media.media_uuid in library_refs(activity.get("content"))
+                for activity in activities
+            ):
+                linked_in_managed_content = True
+                break
+
+    if linked_in_managed_content:
+        raise HTTPException(status_code=404, detail="Media not found")

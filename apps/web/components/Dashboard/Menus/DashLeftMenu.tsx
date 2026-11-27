@@ -1,5 +1,6 @@
 'use client'
 import { useOrg } from '@components/Contexts/OrgContext'
+import { useStudytomyStaffWorkspaces } from '@components/Hooks/useStudytomyStaffWorkspaces'
 import { signOut } from '@components/Contexts/AuthContext'
 import {
   House,
@@ -118,6 +119,7 @@ const UPGRADE_STARS: {
 function DashLeftMenu() {
   const org = useOrg() as any
   const session = useLHSession() as any
+  const staffWorkspaces = useStudytomyStaffWorkspaces(true)
   const { t } = useTranslation()
   const { track } = useLHAnalytics('dashboard')
   const pathname = usePathname() || ''
@@ -362,6 +364,13 @@ function DashLeftMenu() {
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col py-4 px-3">
         <AdminAuthorization authorizationMode="component">
           <div className="space-y-1 my-auto">
+            {staffWorkspaces.map(item => <MenuLink key={item.id}
+              href={getUriWithOrg(org?.slug, item.href)}
+              icon={<item.icon size={20} weight="fill" />}
+              label={t(item.labelKey, item.label)}
+              isCollapsed={isCollapsed}
+              active={isActivePath(item.href)}
+            />)}
             <MenuLink
               href="/dash"
               icon={<House size={20} weight="fill" />}

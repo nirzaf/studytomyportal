@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+from contextlib import aclosing
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from types import SimpleNamespace
@@ -53,6 +54,7 @@ from src.routers.studytomy.commerce import router
 from src.security.api_token_utils import get_authenticated_non_api_token_user
 from src.security.studytomy_access import StudytomyCapabilityName
 from src.services.auth.session import mint_session_tokens
+from src.services.studytomy import orders as orders_service
 from src.services.studytomy.collections import (
     ManualBankEvidence,
     allocate_confirmed_order,
@@ -129,15 +131,16 @@ async def test_checkout_rejects_client_price_and_missing_pilot_approval(db, org,
      (0, True, False, False, None), (0, True, True, False, None), (0, True, False, False, "retry"),
      (0, True, False, False, "race"), (0, True, False, False, "receipt_scope_absent"),
      (125, False, False, False, "settled_refund"), (0, True, False, False, "reentry"),
-     (0, True, False, False, "media_delivery")],
+     (0, True, False, False, "media_delivery"), (0, True, False, False, "stream_revocation")],
     ids=["paid", "paid-chargeback-first", "free-unapproved", "free-approved", "free-rollback-and-retry",
          "free-correction", "free-correction-first-open-race", "free-correction-receipt-scope-absent",
-         "paid-correction-settled-refund", "free-reentry", "free-release-media"],
+         "paid-correction-settled-refund", "free-reentry", "free-release-media", "free-release-stream-revocation"],
 )
 async def test_signed_checkout_accepts_only_retained_approved_terms(
     postgres_session_factory, price_minor, free_approved, delay_remedy_policy, overlap_before_settlement, correction_scenario,
     tmp_path, monkeypatch,
 ):
+    media_scenario = correction_scenario in ("media_delivery", "stream_revocation")
     correct_before_first_use = correction_scenario not in (None, "reentry")
     token = uuid4().hex
     offer_uuid, version_uuid = str(uuid4()), str(uuid4())
@@ -179,6 +182,8 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         writer = PdfWriter()
         writer.add_blank_page(width=300, height=420)
         writer.add_blank_page(width=420, height=300)
+        if correction_scenario == "stream_revocation":
+            writer.add_metadata({"/Subject": "x" * (64 * 1024)})
         with BytesIO() as pdf:
             writer.write(pdf)
             release_media_bytes = pdf.getvalue()
@@ -234,7 +239,7 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 "content": {"answer": "synthetic private draft content"},
             },
         ]
-        if correction_scenario == "media_delivery":
+        if media_scenario:
             retained_activities.append({
                 "id": 3, "activity_uuid": media_activity_uuid, "published": True,
                 "activity_type": "TYPE_DOCUMENT", "activity_sub_type": "SUBTYPE_DOCUMENT_PDF",
@@ -255,29 +260,31 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                     "name": "Unsupported audio", "lock_type": "public", "content": {"filename": "audio.mp3"},
                 },
             ])
+        course = Course(
+            org_id=org.id, course_uuid="course_synthetic", name="Synthetic course",
+            public=False, published=False, open_to_contributors=False, studytomy_managed=True,
+        )
+        db.add(course)
+        await db.flush()
         retained = {
             "schema": "course_content_evidence_v4",
-            "course": {"name": "Synthetic course", "course_uuid": "course_synthetic"},
+            "course": {"name": course.name, "course_uuid": course.course_uuid, "id": course.id, "org_id": org.id},
             "activities": retained_activities,
             "chapters": [{"id": 1, "lock_type": "public"}],
             "chapter_order": [[1, 1]],
             "activity_order": [
                 [1, 1, 1], [1, 2, 2],
-                *([[1, 3, 3], [1, 4, 4], [1, 5, 5]] if correction_scenario == "media_delivery" else []),
+                *([[1, 3, 3], [1, 4, 4], [1, 5, 5]] if media_scenario else []),
                 [1, 6, 6],
             ],
         }
         review, snapshot, release_policies = await _seed_postgres_release_sources(
             db, org, owner.id, token, snapshot=retained,
         )
-        course = Course(
-            org_id=org.id, course_uuid=review.course_uuid, name="Synthetic course",
-            public=False, published=False, open_to_contributors=False, studytomy_managed=True,
-        )
         release = StudyCourseRelease(
             org_id=org.id, course_uuid=course.course_uuid, review_id=review.id,
             snapshot_sha256=review.revision_sha256, snapshot=snapshot,
-            media_manifest=release_media_manifest if correction_scenario == "media_delivery" else {},
+            media_manifest=release_media_manifest if media_scenario else {},
             assessment_policy_id=release_policies[0].id, progression_policy_id=release_policies[1].id,
             retention_policy_id=release_policies[2].id, rights_policy_id=release_policies[3].id,
             retention_category="synthetic",
@@ -344,7 +351,7 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                     },
                     **({"ungated_media_activities": {
                         course.course_uuid: [media_activity_uuid, video_activity_uuid, unsupported_media_uuid],
-                    }} if correction_scenario == "media_delivery" else {}),
+                    }} if media_scenario else {}),
                 }} if row.policy_key == StudyPolicyKey.D_09.value else None
                 row.body = _synthetic_policy_body(StudyPolicyKey(row.policy_key), specified).model_dump(mode="json")
             row.effective_from = datetime.now(UTC)
@@ -432,10 +439,10 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
             decisions[StudyPolicyKey.D_15] = {
                 "supported_formats": {"max_bytes": 1024, "media_types": ["application/pdf"]},
             }
-        elif correction_scenario == "media_delivery":
+        elif media_scenario:
             decisions[StudyPolicyKey.D_15] = {
                 "supported_formats": {
-                    "max_bytes": 1024,
+                    "max_bytes": 128 * 1024 if correction_scenario == "stream_revocation" else 1024,
                     "media_types": ["application/pdf", "video/mp4", "text/vtt"],
                 },
             }
@@ -525,11 +532,15 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
         checkout_offers = await client.get(f"{prefix}/offers")
         assert checkout_offers.status_code == 200, checkout_offers.text
         assert checkout_offers.headers["cache-control"] == "private, no-store"
-        assert checkout_offers.json() == [{
-            "offer_uuid": offer_uuid,
-            "offer_version_uuid": version_uuid,
-            "title": "Synthetic course",
-        }]
+        # The exact D-17 allowlist is insufficient without current F07 readiness.
+        assert checkout_offers.json() == []
+
+        async def synthetic_ready_course_offer(_db, _org, _terms):
+            # Later assertions exercise settlement mechanics under an explicitly
+            # simulated readiness result; the real predicate was checked above.
+            return True
+
+        monkeypatch.setattr(orders_service, "_course_offer_ready_for_sale", synthetic_ready_course_offer)
         checkout_learners = await client.get(f"{prefix}/learners")
         assert checkout_learners.status_code == 200, checkout_learners.text
         assert checkout_learners.headers["cache-control"] == "private, no-store"
@@ -920,6 +931,9 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 assert finished_manifest.json()["completed_removals"] == {
                     decision["evidence_reference"]: removed.json()["removal_receipt"],
                 }
+                assert finished_manifest.json()["completed_removal_approvals"] == {
+                    decision["evidence_reference"]: new_approval.json()["approval_reference"],
+                }
                 original_approval_retry = await client.put(new_approval_path, json=approval | {
                     "snapshot_sha256": finished_manifest.json()["snapshot_sha256"],
                 }, headers=review_headers)
@@ -1035,7 +1049,7 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
                 headers={**headers, "Idempotency-Key": "synthetic-free-course-consent"},
             )
             assert consent.status_code == 201, consent.text
-            if correction_scenario == "media_delivery":
+            if media_scenario:
                 overview_path = release_path
                 finance_headers = {
                     "Authorization": f"Bearer {mint_session_tokens(verifier.email, amr='mfa', org_id=org.id).access_token}"
@@ -1342,6 +1356,38 @@ async def test_signed_checkout_accepts_only_retained_approved_terms(
 
                 await change_grant_during_staging("expired")
                 monkeypatch.setattr(access_policy, "datetime", datetime)
+                if correction_scenario == "stream_revocation":
+                    first_chunk_sent = asyncio.Event()
+                    resume_stream = asyncio.Event()
+                    original_stream = access_policy.ManagedActivityMedia.stream
+
+                    async def pause_after_first_chunk(media):
+                        async with aclosing(original_stream(media)) as chunks:
+                            yield await anext(chunks)
+                            first_chunk_sent.set()
+                            await resume_stream.wait()
+                            async for chunk in chunks:
+                                yield chunk
+
+                    monkeypatch.setattr(access_policy.ManagedActivityMedia, "stream", pause_after_first_chunk)
+                    monkeypatch.setattr(access_policy, "open_content_stream", open_fixture_media)
+                    delivery = asyncio.create_task(client.get(media_path, headers=headers))
+                    try:
+                        await asyncio.wait_for(first_chunk_sent.wait(), timeout=5)
+                        async with postgres_session_factory() as revoker:
+                            record = await revoker.get(StudyCourseAccessGrant, grant.id)
+                            record.revoked_at = datetime.now(UTC)
+                            await revoker.commit()
+                    finally:
+                        resume_stream.set()
+                        response = await asyncio.wait_for(delivery, timeout=5)
+                    assert response.status_code == 200
+                    assert response.content == release_media_bytes[:64 * 1024]
+                    assert int(response.headers["content-length"]) > len(response.content)
+                    assert staged_files and all(staged_file.closed for staged_file in staged_files)
+                    assert (await client.get(media_path, headers=headers)).status_code == 404
+                    return
+
                 await change_grant_during_staging("revoked")
                 reads_before_revoked = len(storage_reads)
                 assert (await client.get(media_path, headers=headers)).status_code == 404

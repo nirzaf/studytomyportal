@@ -389,3 +389,52 @@ async def test_pdf_authoring_records_managed_creator_not_client_metadata(postgre
             created.activity_uuid, maker, db,
         )
         assert updated.extra_metadata == {key: maker.user_uuid, "display": "changed"}
+
+
+def test_synthetic_live_fixture_binds_candidate_curriculum_and_physical_pdf_page(monkeypatch):
+    from hashlib import sha256
+    from pathlib import Path
+
+    from src.services.studytomy.idempotency import canonical_request_hash
+    from src.tests.services.rag_helpers import make_pdf
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[5] / "scripts"))
+    from local_pdf_topic_check_e2e_evidence import reviewed_fractions_fixture
+
+    activity = {
+        "id": 19, "course_id": 4, "org_id": 2, "activity_uuid": "activity_pdf",
+        "current_version": 7, "published": True, "activity_sub_type": "SUBTYPE_DOCUMENT_PDF",
+    }
+    snapshot = {
+        "schema": "course_content_evidence_v4",
+        "course": {"id": 4, "org_id": 2, "course_uuid": "course_fixture", "name": "Synthetic fractions"},
+        "activities": [activity],
+    }
+    pdf = make_pdf(["Equal parts of one whole", "Shade two of the six equal parts"])
+    digest = sha256(pdf).hexdigest()
+    args = {
+        "snapshot": snapshot, "candidate_digest": canonical_request_hash(snapshot),
+        "activity_uuid": "activity_pdf", "curriculum_uuid": "curriculum_fixture",
+        "curriculum_digest": "c" * 64, "concept_uuid": "concept_fixture", "reviewer_user_uuid": "reviewer_fixture",
+        "pdf": pdf, "pdf_page": 2, "retained_pdf_sha256": digest,
+    }
+    approved = _PracticeReview.model_validate(reviewed_fractions_fixture(**args))
+    assert approved.activity_version == 7
+    assert approved.topic_check.pdf_sha256 == digest
+    assert approved.topic_check.pdf_page == 2
+
+    updated = {**snapshot, "activities": [{**activity, "current_version": 8}]}
+    revised = _PracticeReview.model_validate(reviewed_fractions_fixture(**(args | {
+        "snapshot": updated, "candidate_digest": canonical_request_hash(updated),
+    })))
+    assert revised.activity_digest != approved.activity_digest
+    assert revised.topic_check.release_snapshot_sha256 != approved.topic_check.release_snapshot_sha256
+
+    for changes, message in (
+        ({"pdf_page": 3}, "physical page"),
+        ({"snapshot": updated}, "current review candidate"),
+        ({"retained_pdf_sha256": "0" * 64}, "retained PDF"),
+        ({"snapshot": {**snapshot, "activities": [activity, activity]}}, "exactly one"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            reviewed_fractions_fixture(**(args | changes))

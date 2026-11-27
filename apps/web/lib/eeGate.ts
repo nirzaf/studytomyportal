@@ -1,7 +1,8 @@
 import 'server-only'
-import { getServerAPIUrl } from '@services/config/config'
+import type { InstanceMode } from './instanceMode'
 
-export type InstanceMode = 'saas' | 'oss' | 'ee'
+export { fetchInstanceMode } from './instanceMode'
+export type { InstanceMode } from './instanceMode'
 
 /**
  * The whole gate policy, in one pure function so it can be tested directly.
@@ -14,26 +15,4 @@ export type InstanceMode = 'saas' | 'oss' | 'ee'
  */
 export function isSuperadminSurfaceBlocked(mode: InstanceMode | null): boolean {
   return mode === 'oss'
-}
-
-/**
- * Resolve the deployment mode without trusting anything client-supplied.
- *
- * The URL here comes from server env, never from the request, so nothing on
- * this path is caller-controlled. lib/saas.ts::getInstanceMode() caches on top
- * of this for the SaaS-only integrations.
- */
-export async function fetchInstanceMode(): Promise<InstanceMode | null> {
-  try {
-    const res = await fetch(`${getServerAPIUrl()}instance/info`, {
-      cache: 'no-store',
-      signal: AbortSignal.timeout(4000),
-    })
-    if (!res.ok) return null
-    const info = await res.json()
-    const mode = info?.mode
-    return mode === 'saas' || mode === 'oss' || mode === 'ee' ? mode : null
-  } catch {
-    return null
-  }
 }

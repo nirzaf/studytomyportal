@@ -1,25 +1,76 @@
 """Purpose-scoped guest support verification and maintenance."""
 
+import base64
 import hashlib
+import hmac
+import logging
 import os
 import re
-from datetime import UTC, datetime
+import secrets
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from cryptography.fernet import Fernet
 from fastapi import HTTPException
 from sqlalchemy import delete
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from config.config import get_learnhouse_config
 from src.db.organizations import Organization
 from src.db.studytomy.cases import StudyGuestSupportChallenge, StudyServiceCase
 from src.db.studytomy.governance import StudyPolicyVersion
+from src.services.email.utils import send_email
 from src.services.studytomy.business_events import append_business_event
-from src.services.studytomy.evidence_files import _policy_area_values
 from src.services.studytomy.policies import lock_organization
-from src.services.studytomy.support import SupportCaseReceipt, _support_guidance
+from src.services.studytomy.support import SupportCaseReceipt, _guest_verification_available, _support_guidance
 
 _CHALLENGE_TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
+logger = logging.getLogger(__name__)
+
+
+def _contact_key() -> bytes:
+    secret = get_learnhouse_config().security_config.auth_jwt_secret_key
+    return hmac.digest(secret.encode(), b"studytomy:guest-support-contact:v1", "sha256")
+
+
+def guest_contact_bucket(email: str) -> str:
+    return hmac.digest(_contact_key(), email.casefold().encode(), "sha256").hex()
+
+
+async def issue_guest_support_challenge(db: AsyncSession, org: Organization, email: str, topic: str) -> str:
+    unavailable = HTTPException(404, "Guest support verification is unavailable.")
+    if os.getenv("LEARNHOUSE_STUDYTOMY_GUEST_SUPPORT_ENABLED") != "true":
+        raise unavailable
+    await lock_organization(db, org.id)
+    now = datetime.now(UTC)
+    guidance, policy_ids, _ = await _support_guidance(db, org)
+    service = await db.get(StudyPolicyVersion, policy_ids[0])
+    if (
+        not guidance.intake_available or topic not in guidance.categories or service is None
+        or not await _guest_verification_available(db, org, service, now)
+    ):
+        raise unavailable
+    token = secrets.token_urlsafe(32)
+    db.add(StudyGuestSupportChallenge(
+        org_id=org.id, token_digest=hashlib.sha256(token.encode("ascii")).hexdigest(),
+        contact_ciphertext=Fernet(base64.urlsafe_b64encode(_contact_key())).encrypt(email.encode()).decode(),
+        topic=topic, created_at=now, expires_at=now + timedelta(minutes=10),
+    ))
+    return token
+
+
+def deliver_guest_support_challenge(email: str, token: str) -> None:
+    try:
+        send_email(
+            email, "Studytomy support verification",
+            f"<p>Your support verification code is <strong>{token}</strong>.</p>"
+            "<p>Enter this code on the help page within 10 minutes. "
+            "If you did not request it, you can ignore this message.</p>",
+            single_attempt=True,
+        )
+    except Exception:
+        logger.warning("Guest support verification email could not be delivered")
 
 
 async def redeem_guest_support_challenge(
@@ -40,8 +91,7 @@ async def redeem_guest_support_challenge(
         raise unavailable
     guidance, policy_ids, staff = await _support_guidance(db, org)
     policy = await db.get(StudyPolicyVersion, policy_ids[0])
-    contact = _policy_area_values(policy, "support_routes").get("public_support")
-    if not isinstance(contact, dict) or contact.get("guest_intake_enabled") is not True:
+    if policy is None or not await _guest_verification_available(db, org, policy, now):
         raise unavailable
     if challenge.case_uuid is not None:
         return SupportCaseReceipt(case_uuid=UUID(challenge.case_uuid), topic=challenge.topic, status="assigned")

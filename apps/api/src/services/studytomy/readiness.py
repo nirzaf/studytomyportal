@@ -155,6 +155,64 @@ async def _approval_assignment_is_current(
     return membership.scalar_one_or_none() is not None
 
 
+async def _has_current_course_release(
+    db: AsyncSession, org: Organization, course: Course, now: datetime,
+) -> bool:
+    if not course.studytomy_managed or course.public or course.published:
+        return False
+
+    from src.db.studytomy.education import StudyCourseRelease, StudyCourseReview
+    from src.security.studytomy_access import StudytomyCapabilityName, _find_active_staff_scope
+    from src.services.studytomy.content_evidence import _POLICIES
+    from src.services.studytomy.idempotency import canonical_request_hash
+    from src.services.studytomy.learners import _current_policies
+    from src.services.studytomy.publication import _checked_course_release
+
+    candidate = (await db.execute(
+        select(StudyCourseRelease, StudyCourseReview)
+        .join(StudyCourseReview, StudyCourseReview.id == StudyCourseRelease.review_id)
+        .where(
+            StudyCourseRelease.org_id == org.id,
+            StudyCourseRelease.course_uuid == course.course_uuid,
+            StudyCourseReview.org_id == org.id,
+            StudyCourseReview.course_uuid == course.course_uuid,
+        )
+        .order_by(StudyCourseRelease.id.desc())
+        .limit(1)
+    )).first()
+    if candidate is None:
+        return False
+    release, review = candidate
+    if (
+        review.decision != "approved"
+        or review.owner_user_id == review.reviewer_user_id
+        or release.snapshot_sha256 != review.revision_sha256
+        or canonical_request_hash(release.snapshot) != release.snapshot_sha256
+    ):
+        return False
+    reviewer_membership = await db.scalar(select(UserOrganization.id).where(
+        UserOrganization.org_id == org.id,
+        UserOrganization.user_id == review.reviewer_user_id,
+    ).limit(1))
+    if reviewer_membership is None:
+        return False
+    assignment, allowed = await _find_active_staff_scope(
+        db, org.id, review.reviewer_user_id, StudyOwnerFunction.EDUCATION,
+        StudytomyCapabilityName.CONTENT_RELEASE_REVIEW, "course",
+        course.course_uuid, org.org_uuid, now,
+    )
+    if not allowed or assignment is None or assignment.id != review.reviewer_assignment_id:
+        return False
+    try:
+        policies = await _current_policies(db, org, _POLICIES, now)
+        _, _, binding = await _checked_course_release(db, org, course, policies, review.uuid)
+    except HTTPException as error:
+        if error.status_code not in (403, 404, 409, 422):
+            raise
+        return False
+    return release.policy_binding == binding.model_dump(mode="json")
+
+
 async def evaluate_course_offer_readiness(
     db_session: AsyncSession,
     organization: Organization,
@@ -174,7 +232,8 @@ async def evaluate_course_offer_readiness(
         raise HTTPException(status_code=404, detail="Course not found")
 
     blockers: list[StudyReadinessBlocker] = []
-    if not course.published:
+    current_release = await _has_current_course_release(db_session, organization, course, now)
+    if not course.published and not current_release:
         blockers.append(
             _blocker(
                 "COURSE_NOT_PUBLISHED",
@@ -282,15 +341,14 @@ async def evaluate_course_offer_readiness(
                     )
                 )
 
-    # TASK-036 has not created course review evidence yet. Keep every course
-    # unavailable for sale until approval is bound to the exact content revision.
-    blockers.append(
-        _blocker(
-            "COURSE_REVIEW_EVIDENCE_MISSING",
-            "No verified content and rights review is bound to this course revision.",
-            "Complete the version-bound course review before marking the offer ready.",
+    if not current_release:
+        blockers.append(
+            _blocker(
+                "COURSE_REVIEW_EVIDENCE_MISSING",
+                "No verified content and rights review is bound to this course revision.",
+                "Complete the version-bound course review before marking the offer ready.",
+            )
         )
-    )
     # D-04 capacity and D-17 acceptance evidence need operational records that
     # are introduced by later staffing and pilot-measure tasks.
     blockers.append(

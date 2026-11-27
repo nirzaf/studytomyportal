@@ -18,6 +18,10 @@ const planWrites = [];
 let sessionRetrieveQueue = [];
 let sessionRetrieveCalls = 0;
 let signatureValid = true;
+let billingAvailable = true;
+mock.module("../app/api/billing/_lib", () => ({
+  guardBilling: async () => billingAvailable ? null : new Response(null, { status: 404 }),
+}));
 
 mock.module("next/headers", () => ({
   headers: async () => new Map([["stripe-signature", "sig_test"]]),
@@ -113,6 +117,18 @@ afterEach(() => {
 });
 
 // --- tests ------------------------------------------------------------------
+
+test("disabled billing rejects a webhook before reading its payload", async () => {
+  billingAvailable = false;
+  try {
+    const readBody = mock(async () => "");
+    const response = await POST({ text: readBody });
+    expect(response.status).toBe(404);
+    expect(readBody).not.toHaveBeenCalled();
+  } finally {
+    billingAvailable = true;
+  }
+});
 
 describe("signature verification", () => {
   test("an unsigned or mis-signed payload is rejected without touching the plan", async () => {

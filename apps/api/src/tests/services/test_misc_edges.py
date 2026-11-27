@@ -181,12 +181,13 @@ def test_is_anonymous():
     assert folders_service._is_anonymous(AnonymousUser()) is True
 
 
-async def test_folder_content_must_be_a_known_resource_in_the_org(db, org):
-    with pytest.raises(HTTPException) as missing:
-        await folders_service._require_resource_in_org(db, "course_missing", org.id)
+async def test_folder_content_must_be_a_known_resource_in_the_org(db, org, mock_request, admin_user):
+    with patch.object(folders_service, "check_resource_access", new_callable=AsyncMock):
+        with pytest.raises(HTTPException) as missing:
+            await folders_service._require_filing_access(mock_request, admin_user, db, "course_missing", org.id)
     assert missing.value.status_code == 404
     with pytest.raises(HTTPException) as unknown:
-        await folders_service._require_resource_in_org(db, "spreadsheet_1", org.id)
+        await folders_service._require_filing_access(mock_request, admin_user, db, "spreadsheet_1", org.id)
     assert unknown.value.status_code == 400
     assert unknown.value.detail == "Unsupported resource type"
 

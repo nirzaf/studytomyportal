@@ -1,10 +1,5 @@
-// Stripe webhook receiver (server-only).
-//
-// Faithful port of the platform repo's app/api/payments/route.ts. The webhook
-// self-authenticates by verifying the Stripe signature against
-// STRIPE_WEBHOOK_SECRET, so it does NOT call assertSaaSBilling(). An
-// unconfigured deployment simply has no STRIPE_WEBHOOK_SECRET and every event
-// fails signature verification with a 400.
+// Stripe webhook receiver. Require both SaaS billing and a valid Stripe signature.
+import { guardBilling } from "../_lib";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { updateOrganizationConfigInternally } from "@services/billing/orgPlan";
@@ -57,6 +52,9 @@ function cleanupProcessedEvents() {
 }
 
 export async function POST(request: Request) {
+  const blocked = await guardBilling();
+  if (blocked) return blocked;
+
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
 
   let event: any;

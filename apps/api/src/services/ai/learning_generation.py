@@ -3,12 +3,15 @@
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, Request
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.db.studytomy.operations import StudyIdempotencyRecord, StudyIdempotencyStatus
 from src.db.studytomy.practice import StudyLearningSurface
 from src.db.users import PublicUser
 from src.security.features_utils.usage import refund_ai_credit, reserve_ai_credit
@@ -125,6 +128,20 @@ async def start_learning_surface(
         return await recover_learning_surface(
             request, db, viewer, start.activity_uuid, UUID(replay.resource_uuid), initial=True,
         )
+
+    if source.max_starts_per_day is not None:
+        # Source authorization locks the learner, serializing this check and the commit.
+        used = (await db.execute(select(func.count(StudyIdempotencyRecord.id)).where(
+            StudyIdempotencyRecord.org_id == source.org_id,
+            StudyIdempotencyRecord.actor_user_id == viewer.id,
+            StudyIdempotencyRecord.operation == _OPERATION,
+            StudyIdempotencyRecord.status == StudyIdempotencyStatus.COMPLETED,
+            StudyIdempotencyRecord.completed_at > datetime.now(UTC) - timedelta(days=1),
+        ))).scalar_one()
+        if used >= source.max_starts_per_day:
+            raise studytomy_http_error(
+                429, "LEARNING_SURFACE_ALLOWANCE", "The approved daily lesson visual allowance has been reached.",
+            )
 
     enforce_ai_rate_limit(viewer.id, source.org_id)
     try:

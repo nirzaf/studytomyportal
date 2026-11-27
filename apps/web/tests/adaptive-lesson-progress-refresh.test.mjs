@@ -4,6 +4,7 @@ import React, { act } from 'react'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import AdaptiveLessonProgress from '../components/Objects/Activities/AdaptiveLessonProgress'
+import { AdaptiveRequestError } from '../services/studytomy/adaptive'
 
 test('completed adaptive attempts refresh visible mastery and recommendation data', async () => {
   const dom = new Window({ url: 'http://localhost/' })
@@ -38,21 +39,38 @@ test('completed adaptive attempts refresh visible mastery and recommendation dat
   let failNextMastery = false
   let failNextRecommendation = false
   let returnNoRecommendations = false
+  let masteryDisabled = false
+  let curriculumDenied = false
+  const curriculumUuid = 'curriculum_12345678-1234-4234-8234-123456789abc'
   const calls = []
   const client = async path => {
     calls.push(path)
     if (path.startsWith('me/lesson-mastery?')) {
+      if (masteryDisabled) throw new AdaptiveRequestError(403, 'ADAPTIVE_DISABLED', 'Disabled')
       if (failNextMastery) {
         failNextMastery = false
         throw new Error('Synthetic temporary failure')
       }
       return {
+        curriculum_revision_uuid: curriculumUuid,
         next_offset: null,
         concepts: [{
           concept_uuid: 'concept_synthetic', title: 'Equivalent fractions',
           state: completed ? 'developing' : 'not_assessed',
           independent_family_count: completed ? 1 : 0,
           assisted_count: 0, review_due: false,
+        }],
+      }
+    }
+    if (path.startsWith('me/mastery?')) {
+      expect(new URLSearchParams(path.split('?')[1]).get('curriculum_revision_uuid')).toBe(curriculumUuid)
+      if (curriculumDenied) throw new AdaptiveRequestError(404, undefined, 'Unavailable')
+      return {
+        curriculum_revision_uuid: curriculumUuid,
+        next_offset: null,
+        concepts: [{
+          concept_uuid: 'concept_other', title: 'Ratio and proportion', state: 'not_assessed',
+          independent_family_count: 0, assisted_count: 0, review_due: false,
         }],
       }
     }
@@ -133,6 +151,27 @@ test('completed adaptive attempts refresh visible mastery and recommendation dat
     expect(container.textContent).toContain('Next supported lesson')
     expect(container.textContent).not.toContain('Suggested activities are unavailable.')
     expect(calls.filter(path => path.startsWith('me/recommendations?'))).toHaveLength(8)
+
+    const clickByText = async (label) => {
+      const button = [...container.querySelectorAll('button')].find(item => item.textContent === label)
+      expect(button).toBeDefined()
+      await act(async () => button.dispatchEvent(new dom.MouseEvent('click', { bubbles: true })))
+    }
+    await clickByText('View curriculum concepts')
+    expect(container.textContent).toContain('Ratio and proportion')
+    expect(container.textContent).not.toContain('Suggested activities')
+    curriculumDenied = true
+    await act(async () => render(6))
+    expect(container.textContent).not.toContain('Ratio and proportion')
+    await clickByText('View lesson concepts')
+    expect(container.textContent).toContain('Equivalent fractions')
+
+    masteryDisabled = true
+    await act(async () => render(7))
+    const panel = container.querySelector('[role="region"]')
+    expect(panel.textContent).toContain('Concept tracking is not enabled for this organization.')
+    expect(panel.textContent).not.toContain('Not yet assessed')
+    expect(panel.textContent).not.toContain('Retry concept progress')
   } finally {
     await act(async () => root.unmount())
     await dom.happyDOM.close()

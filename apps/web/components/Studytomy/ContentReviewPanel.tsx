@@ -150,6 +150,14 @@ export default function ContentReviewPanel({ client, initial }: {
     }
     const signature = JSON.stringify(body)
     return run(async signal => {
+      const verified = await client.verifyEvidence({
+        revision_sha256: candidate.revision_sha256,
+        rights_evidence_uuid: rights,
+        accessibility_evidence_uuid: accessibility,
+      }, signal)
+      const verifiedRights = verified.some(item => item.evidence_uuid === rights && item.purpose === 'content_rights')
+      const verifiedAccessibility = verified.some(item => item.evidence_uuid === accessibility && item.purpose === 'content_accessibility')
+      if (!verifiedRights || !verifiedAccessibility) throw new CourseReviewError('REVIEW_EVIDENCE_MISMATCH')
       if (attempt.current?.body !== signature) {
         attempt.current = { body: signature, id: crypto.randomUUID() }
       }
@@ -164,6 +172,20 @@ export default function ContentReviewPanel({ client, initial }: {
       }))
       setRelease(null)
       setStatus(t('contentReview.saved', 'Review decision recorded.'))
+    })
+  }
+
+  function designateManagedDraft() {
+    if (busy || !window.confirm(
+      'Mark this private, unpublished course as a Studytomy-managed draft? Publication will remain unavailable until the separate review and release checks pass.'
+    )) return
+    return run(async signal => {
+      await client.designateManagedDraft(signal)
+      const latest = await client.candidate(signal)
+      if (signal.aborted) return
+      setCandidate(latest)
+      setRelease(null)
+      setStatus('This draft is designated for Studytomy managed review. It has not been published.')
     })
   }
 
@@ -205,6 +227,9 @@ export default function ContentReviewPanel({ client, initial }: {
       </p>}
       <button type="button" className={control} disabled={busy} onClick={() => void load(false)}>
         {t('contentReview.reload', 'Reload candidate')}
+      </button>
+      <button type="button" className={control} disabled={busy} onClick={() => void designateManagedDraft()}>
+        Designate private draft for managed review
       </button>
       {canRecordRelease && !release && <button type="button" className={control} disabled={busy} onClick={() => void recordRelease()}>
         {t('contentReview.recordRelease', 'Record reviewed release')}

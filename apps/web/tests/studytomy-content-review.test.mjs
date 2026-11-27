@@ -31,6 +31,7 @@ test('course review presents separate evidence selections and requires explicit 
   expect(markup).toContain('Changes requested for this candidate.')
   expect(markup).toContain('Evidence purpose')
   expect(markup).toContain('Evidence file')
+  expect(markup).toContain('Designate private draft for managed review')
   expect(markup).toMatch(/type="submit" disabled="">Upload attachment/)
   expect(markup).toMatch(/value="approved" disabled="">Record approval/)
   expect(markup).not.toContain('Publish course')

@@ -13,6 +13,7 @@ SECURITY:
 
 import asyncio
 import os
+from contextlib import aclosing
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
@@ -344,6 +345,18 @@ async def _check_content_access(
     raise HTTPException(status_code=403, detail="Access denied")
 
 
+async def revalidate_managed_file(path: str, request: Request, current_user) -> bool:
+    async with aclosing(get_db_session()) as sessions:
+        async for session in sessions:
+            try:
+                return await enforce_managed_course_file_access(
+                    split_content_path(path), request, current_user, session,
+                )
+            except HTTPException:
+                return False
+    return False
+
+
 @router.get(
     "/content/{file_path:path}",
     summary="Serve a content file",
@@ -374,6 +387,9 @@ async def serve_content_file(
         raise HTTPException(status_code=400, detail="Invalid path")
 
     is_public = await _check_content_access(safe_path, current_user, db_session, request=request)
+    managed = not is_public and await enforce_managed_course_file_access(
+        split_content_path(safe_path), request, current_user, db_session,
+    )
 
     s3_key = f"content/{safe_path}"
     s3_client = get_storage_client()
@@ -436,59 +452,32 @@ async def serve_content_file(
         headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
         headers["Content-Length"] = str(content_length)
 
-        def stream_range():
-            remaining = content_length
-            pos = start
-            while remaining > 0:
-                chunk_end = min(pos + CHUNK_SIZE - 1, end)
-                resp = s3_client.get_object(
-                    Bucket=bucket, Key=s3_key,
-                    Range=f"bytes={pos}-{chunk_end}",
-                )
-                try:
-                    data = resp['Body'].read()
-                finally:
-                    resp['Body'].close()
-                if not data:
-                    break
-                remaining -= len(data)
-                pos += len(data)
-                yield data
-
-        return StreamingResponse(
-            stream_range(),
-            status_code=206,
-            headers=headers,
-            media_type=mime_type,
-        )
+        status_code = 206
     else:
-        headers["Content-Length"] = str(file_size)
+        start, end = 0, file_size - 1
+        content_length = file_size
+        headers["Content-Length"] = str(content_length)
+        status_code = 200
 
-        def stream_full():
-            remaining = file_size
-            pos = 0
-            while remaining > 0:
-                chunk_end = min(pos + CHUNK_SIZE - 1, file_size - 1)
-                resp = s3_client.get_object(
-                    Bucket=bucket, Key=s3_key,
-                    Range=f"bytes={pos}-{chunk_end}",
-                )
-                try:
-                    data = resp['Body'].read()
-                finally:
-                    resp['Body'].close()
-                if not data:
-                    break
-                remaining -= len(data)
-                pos += len(data)
-                yield data
+    def read_range(pos: int, chunk_end: int) -> bytes:
+        response = s3_client.get_object(Bucket=bucket, Key=s3_key, Range=f"bytes={pos}-{chunk_end}")
+        try:
+            return response["Body"].read()
+        finally:
+            response["Body"].close()
 
-        return StreamingResponse(
-            stream_full(),
-            status_code=200,
-            headers=headers,
-            media_type=mime_type,
-        )
+    async def stream():
+        pos = start
+        while pos <= end:
+            data = await asyncio.to_thread(read_range, pos, min(pos + CHUNK_SIZE - 1, end))
+            if not data:
+                return
+            if managed and not await revalidate_managed_file(safe_path, request, current_user):
+                return
+            pos += len(data)
+            yield data
+
+    return StreamingResponse(stream(), status_code=status_code, headers=headers, media_type=mime_type)
 
 
 @router.head(

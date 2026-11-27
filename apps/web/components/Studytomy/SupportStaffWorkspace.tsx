@@ -91,14 +91,14 @@ function StaffQueue({ url, token }: { url: string; token: string }) {
       <p role="status">{message || (queue?.cases.length === 0 ? (view === 'assigned' ? 'No open cases assigned to you.' : 'No cases need a new owner.') : '')}</p>
       <ul className="divide-y divide-slate-200">
         {queue?.cases.map((item) => (
-          <SupportCaseRow key={`${item.case_uuid}:${item.version}`} item={item} url={url} token={token} view={view} onUpdated={(updated) => {
+          <SupportCaseRow key={`${view}:${item.case_uuid}`} item={item} url={url} token={token} view={view} onUpdated={(updated, action) => {
             setQueue((current) => current && {
               ...current,
               cases: current.cases.flatMap((entry) => entry.case_uuid === updated.case_uuid
                 ? updated.status === 'closed' || view === 'recoverable' ? [] : [updated]
                 : [entry]),
             })
-            setMessage(view === 'recoverable'
+            setMessage(action === 'read' ? 'Case details loaded.' : view === 'recoverable'
               ? 'Case recovered. It now appears under Assigned to me.'
               : `Case updated to ${labels.get(updated.status) ?? updated.status}.`)
           }} onHandedOff={(reference) => {
@@ -115,8 +115,10 @@ function StaffQueue({ url, token }: { url: string; token: string }) {
 
 function SupportCaseRow({ item, url, token, view, onUpdated, onHandedOff }: {
   item: StaffCase; url: string; token: string; view: QueueView;
-  onUpdated: (_item: StaffCase) => void; onHandedOff: (_reference: string) => void
+  onUpdated: (_item: StaffCase, _action?: 'read') => void; onHandedOff: (_reference: string) => void
 }) {
+  const [detail, setDetail] = useState<StaffCase>()
+  const current = detail?.version === item.version ? detail : undefined
   const [choice, setChoice] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -124,16 +126,46 @@ function SupportCaseRow({ item, url, token, view, onUpdated, onHandedOff }: {
   const pending = useRef<AbortController | null>(null)
   useEffect(() => () => pending.current?.abort(), [])
 
+  async function loadDetail() {
+    if (pending.current || view !== 'assigned') return
+    const controller = new AbortController()
+    pending.current = controller
+    setDetail(undefined)
+    setChoice('')
+    setConfirmHandoff(false)
+    setBusy(true)
+    setError('')
+    try {
+      const response = await secureFetch(`${url}/${encodeURIComponent(item.case_uuid)}`, {
+        ...RequestBodyWithAuthHeader('GET', null, null, token),
+        redirect: 'error', signal: controller.signal,
+      })
+      if (!response.ok) throw new Error('Case unavailable')
+      const result: StaffCase = await response.json()
+      if (result.case_uuid !== item.case_uuid) throw new Error('Unexpected case reference')
+      if (!controller.signal.aborted) {
+        setDetail(result)
+        onUpdated(result, 'read')
+      }
+    } catch {
+      if (!controller.signal.aborted) setError('This case detail is unavailable. Refresh the queue before retrying.')
+    } finally {
+      pending.current = null
+      if (!controller.signal.aborted) setBusy(false)
+    }
+  }
+
   async function update(action: 'transition' | 'handoff' | 'recover') {
-    if (pending.current || (action === 'transition' && !item.allowed_transitions.includes(choice))) return
+    if (pending.current || (action !== 'recover' && !current)
+      || (action === 'transition' && !current?.allowed_transitions.includes(choice))) return
     const controller = new AbortController()
     pending.current = controller
     setBusy(true)
     setError('')
     try {
       const payload = action === 'transition'
-        ? { expected_version: item.version, next_status: choice }
-        : { expected_version: item.version }
+        ? { expected_version: current?.version, next_status: choice }
+        : { expected_version: current?.version ?? item.version }
       const response = await secureFetch(`${url}/${encodeURIComponent(item.case_uuid)}/${action}`, {
         ...RequestBodyWithAuthHeader('POST', payload, null, token),
         redirect: 'error', signal: controller.signal,
@@ -143,10 +175,19 @@ function SupportCaseRow({ item, url, token, view, onUpdated, onHandedOff }: {
         if (!controller.signal.aborted) onHandedOff(item.case_uuid)
       } else {
         const next: StaffCase = await response.json()
-        if (!controller.signal.aborted) onUpdated(next)
+        if (!controller.signal.aborted) {
+          setDetail(next)
+          setChoice('')
+          onUpdated(next)
+        }
       }
     } catch {
-      if (!controller.signal.aborted) setError('The update could not be confirmed. Refresh the queue before retrying.')
+      if (!controller.signal.aborted) {
+        setDetail(undefined)
+        setChoice('')
+        setConfirmHandoff(false)
+        setError('The update could not be confirmed. Reload the case before retrying.')
+      }
     } finally {
       pending.current = null
       if (!controller.signal.aborted) setBusy(false)
@@ -158,21 +199,25 @@ function SupportCaseRow({ item, url, token, view, onUpdated, onHandedOff }: {
       <h2 className="font-semibold">{item.topic}</h2>
       <p className="break-all text-sm text-slate-600">{item.case_uuid}</p>
       <p>{labels.get(item.status) ?? 'Status unavailable'}</p>
-      {item.allowed_transitions.length > 0 && (
+      {view === 'assigned' && <Button type="button" variant="outline" disabled={busy} onClick={() => void loadDetail()}>
+        {current ? 'Reload case details' : 'Open case details'}
+      </Button>}
+      {current && <p className="text-sm">Case version {current.version}</p>}
+      {current && current.allowed_transitions.length > 0 && (
         <form onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void update('transition') }} className="flex flex-wrap items-end gap-2">
           <label className="space-y-1">
             <span className="block text-sm font-medium">Next status</span>
             <select className="rounded-md border border-slate-400 bg-white p-2" required value={choice}
               disabled={busy} onChange={(event) => setChoice(event.target.value)}>
               <option value="">Choose a status</option>
-              {item.allowed_transitions.map((status) => <option key={status} value={status}>{labels.get(status) ?? status}</option>)}
+              {current.allowed_transitions.map((status) => <option key={status} value={status}>{labels.get(status) ?? status}</option>)}
             </select>
           </label>
           <Button type="submit" disabled={busy || !choice}>{busy ? 'Updating…' : 'Update case'}</Button>
         </form>
       )}
       {view === 'recoverable' && <Button type="button" disabled={busy} onClick={() => void update('recover')}>Recover case</Button>}
-      {view === 'assigned' && item.status !== 'closed' && (confirmHandoff ? (
+      {view === 'assigned' && current && current.status !== 'closed' && (confirmHandoff ? (
         <div className="flex flex-wrap items-center gap-2">
           <p>The approved alternate will take over this case.</p>
           <Button type="button" disabled={busy} onClick={() => void update('handoff')}>Confirm handoff</Button>

@@ -142,6 +142,9 @@ async def test_auto_install_does_not_create_its_own_engine():
 @pytest.mark.asyncio
 async def test_content_and_logs_helpers(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
+    # This test covers the local directory helper; avoid importing the S3
+    # configuration path from its background thread.
+    monkeypatch.setattr(content_events, "_ensure_s3_bucket_sync", lambda: None)
 
     created_dirs = []
     monkeypatch.setattr(

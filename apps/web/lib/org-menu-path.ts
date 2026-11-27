@@ -1,11 +1,16 @@
 type MenuDestination = { key: string; href: string; external: boolean }
 
+export const ORG_HELP_ROUTES = [
+  { key: 'support', href: '/help', external: false },
+  { key: 'safety', href: '/help/report', external: false },
+] as const
+
 // The org proxy may leave its internal prefix on the current path.
 export function orgMenuPath(pathname: string) {
   return pathname.replace(/^\/orgs\/[^/]+/, '').replace(/\/+$/, '') || '/'
 }
 
-export function activeOrgMenuItem<T extends MenuDestination>(items: T[], pathname: string) {
+export function activeOrgMenuItem<T extends MenuDestination>(items: readonly T[], pathname: string) {
   const path = orgMenuPath(pathname)
   let match: T | undefined
   let matchLength = 0

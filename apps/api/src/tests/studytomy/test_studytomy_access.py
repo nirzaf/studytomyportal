@@ -886,9 +886,31 @@ class TestGovernanceLifecycleAndDestructiveGuards:
         assert approvals == []
 
     async def test_policy_lifecycle_requires_all_named_owners_and_rejects_overlap(
-        self, db, org, admin_user, regular_user
+        self, db, org, admin_user, regular_user, user_role
     ):
         now = datetime.now(timezone.utc)
+
+        independent_reviewer = User(
+            username="policy_reviewer_synthetic",
+            first_name="Policy",
+            last_name="Reviewer",
+            email="policy-reviewer-synthetic@example.test",
+            password="synthetic-hash",
+            user_uuid=f"policy-reviewer-{uuid4()}",
+            creation_date=str(now),
+            update_date=str(now),
+        )
+        db.add(independent_reviewer)
+        await db.commit()
+        await db.refresh(independent_reviewer)
+        db.add(UserOrganization(
+            user_id=independent_reviewer.id,
+            org_id=org.id,
+            role_id=user_role.id,
+            creation_date=str(now),
+            update_date=str(now),
+        ))
+        await db.commit()
 
         # Propose D-01 (requires both BUSINESS and SAFEGUARDING owner approvals)
         proposal = StudyPolicyProposal(
@@ -903,13 +925,33 @@ class TestGovernanceLifecycleAndDestructiveGuards:
         draft = await propose_policy_version(db, org, admin_user.id, proposal)
         assert draft.status == StudyPolicyStatus.DRAFT
         assert draft.version == 1
+        assert set(draft.required_responsibilities) == {
+            StudyOwnerFunction.BUSINESS,
+            StudyOwnerFunction.SAFEGUARDING,
+        }
 
-        # Approving without an active owner assignment -> 403
-        with pytest.raises(HTTPException) as no_owner_exc:
+        # The author cannot approve their own policy even if they are an org admin.
+        with pytest.raises(HTTPException) as self_approval_exc:
             await approve_policy_version(
                 db,
                 org,
                 admin_user.id,
+                draft.policy_uuid,
+                StudyPolicyApprovalRequest(
+                    responsibility=StudyOwnerFunction.BUSINESS,
+                    evidence_reference="EV-SELF-APPROVAL",
+                    rationale="Author self-approval must be denied",
+                ),
+            )
+        assert self_approval_exc.value.status_code == 403
+        assert self_approval_exc.value.detail["code"] == "CONFLICT_OF_INTEREST_EXCLUDED"
+
+        # An unrelated member without an active owner assignment is also denied.
+        with pytest.raises(HTTPException) as no_owner_exc:
+            await approve_policy_version(
+                db,
+                org,
+                regular_user.id,
                 draft.policy_uuid,
                 StudyPolicyApprovalRequest(
                     responsibility=StudyOwnerFunction.BUSINESS,
@@ -919,13 +961,13 @@ class TestGovernanceLifecycleAndDestructiveGuards:
             )
         assert no_owner_exc.value.status_code == 403
 
-        # Assign admin_user as BUSINESS owner and regular_user as SAFEGUARDING owner
+        # The two required responsibilities have separate, non-author owners.
         await create_owner_assignment(
             db,
             org,
             admin_user.id,
             StudyOwnerAssignmentCreate(
-                user_uuid=admin_user.user_uuid,
+                user_uuid=regular_user.user_uuid,
                 responsibility=StudyOwnerFunction.BUSINESS,
                 evidence_reference="EV-OWN-BUS",
                 effective_from=now - timedelta(hours=1),
@@ -936,18 +978,18 @@ class TestGovernanceLifecycleAndDestructiveGuards:
             org,
             admin_user.id,
             StudyOwnerAssignmentCreate(
-                user_uuid=regular_user.user_uuid,
+                user_uuid=independent_reviewer.user_uuid,
                 responsibility=StudyOwnerFunction.SAFEGUARDING,
                 evidence_reference="EV-OWN-SAFE",
                 effective_from=now - timedelta(hours=1),
             ),
         )
 
-        # First approval (BUSINESS) leaves D-01 in DRAFT because SAFEGUARDING is still required
+        # The first independent approval leaves D-01 in DRAFT.
         after_first = await approve_policy_version(
             db,
             org,
-            admin_user.id,
+            regular_user.id,
             draft.policy_uuid,
             StudyPolicyApprovalRequest(
                 responsibility=StudyOwnerFunction.BUSINESS,
@@ -958,11 +1000,11 @@ class TestGovernanceLifecycleAndDestructiveGuards:
         assert after_first.status == StudyPolicyStatus.DRAFT
         assert len(after_first.approvals) == 1
 
-        # Second approval (SAFEGUARDING) transitions D-01 to APPROVED
+        # The second owner completes D-01 approval.
         after_second = await approve_policy_version(
             db,
             org,
-            regular_user.id,
+            independent_reviewer.id,
             draft.policy_uuid,
             StudyPolicyApprovalRequest(
                 responsibility=StudyOwnerFunction.SAFEGUARDING,
@@ -991,7 +1033,7 @@ class TestGovernanceLifecycleAndDestructiveGuards:
         await approve_policy_version(
             db,
             org,
-            admin_user.id,
+            regular_user.id,
             overlapping_draft.policy_uuid,
             StudyPolicyApprovalRequest(
                 responsibility=StudyOwnerFunction.BUSINESS,
@@ -1003,7 +1045,7 @@ class TestGovernanceLifecycleAndDestructiveGuards:
             await approve_policy_version(
                 db,
                 org,
-                regular_user.id,
+                independent_reviewer.id,
                 overlapping_draft.policy_uuid,
                 StudyPolicyApprovalRequest(
                     responsibility=StudyOwnerFunction.SAFEGUARDING,

@@ -1060,7 +1060,15 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
                 "reason": "SERVICE_INTERRUPTION",
             }
-            adjusted = await client.post(deadline_path, headers=direct, json=extension)
+            stale_deadline = await client.post(
+                deadline_path, headers=direct, json=extension,
+                params={"expected_attempt_number": attempt.attempt_number + 1},
+            )
+            assert stale_deadline.status_code == 409
+            adjusted = await client.post(
+                deadline_path, headers=direct, json=extension,
+                params={"expected_attempt_number": attempt.attempt_number},
+            )
             assert adjusted.status_code == 200, adjusted.text
             assert (
                 await client.post(deadline_path, headers=direct, json=extension)
@@ -1363,7 +1371,9 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 "maximum_points",
                 "passed",
                 "evaluator_version",
+                "appeal",
             }
+            assert result["appeal"] is None
             assert (
                 result["score_points"],
                 result["maximum_points"],
@@ -1393,6 +1403,10 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
             assert "no-store" in opened.headers["cache-control"]
             assert opened.json()["status"] == "received"
             assert opened.json()["appealed_result_uuid"] == result["result_uuid"]
+            staff_evidence = await client.get(path, headers=direct)
+            assert staff_evidence.status_code == 200
+            assert staff_evidence.json()["appeal"] == opened.json()
+            assert (await client.get(path, headers=learner_headers)).status_code == 404
             replay = await client.post(
                 appeal_path, headers=learner_headers, json=payload
             )
@@ -1454,6 +1468,11 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                     json={**grant_body, "result_uuid": str(uuid4())},
                 )
                 assert stale_grant.status_code == 409
+                stale_attempt_grant = await client.post(
+                    grant_path, headers=direct, json=grant_body,
+                    params={"expected_attempt_number": attempt.attempt_number + 1},
+                )
+                assert stale_attempt_grant.status_code == 409
                 granted = await client.post(grant_path, headers=direct, json=grant_body)
                 assert granted.status_code == 200, granted.text
                 assert (
@@ -1518,7 +1537,7 @@ async def test_review_evidence_requires_direct_independent_authorized_reviewer(
                 historical_result = await client.get(
                     path, headers=direct, params={"attempt_number": 1}
                 )
-                assert historical_result.json() == result
+                assert historical_result.json() == {**result, "appeal": opened.json()}
                 corrected = await client.post(
                     correct_path,
                     headers=direct,

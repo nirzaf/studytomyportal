@@ -6,7 +6,7 @@ import type { SetupConfig } from '../types.js'
  * Generates docker-compose.yml with unique deployment ID.
  * External database/redis excluded. Auto SSL uses Caddy instead of nginx.
  */
-export function generateDockerCompose(config: SetupConfig, appImage?: string, existingDatabase?: PostgresComposeSettings): string {
+export function generateDockerCompose(config: SetupConfig, appImage?: string, existingDatabase?: PostgresComposeSettings, redisImage = REDIS_IMAGE): string {
   const image = appImage || APP_IMAGE
   const id = config.deploymentId
   const useLocalDb = !config.useExternalDb
@@ -115,7 +115,7 @@ ${dbPgDataEnvironment}    volumes:
   const redisService = useLocalRedis
     ? `
   redis:
-    image: ${REDIS_IMAGE}
+    image: ${redisImage}
     container_name: learnhouse-redis-${id}
     restart: unless-stopped
     command: redis-server --appendonly yes

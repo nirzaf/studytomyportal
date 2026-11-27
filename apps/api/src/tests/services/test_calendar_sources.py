@@ -228,22 +228,35 @@ async def test_sources_respect_the_feature_toggle(db, org, course, chapter, regu
     assignment.due_date = (START - timedelta(days=2)).date().isoformat()
     await db.commit()
     extension = NOW + timedelta(days=4)
+    release = SimpleNamespace(course_uuid=course.course_uuid, release_uuid="release_fixture", name="Managed")
+    page = SimpleNamespace(releases=[release], next_cursor=None)
+    lesson = SimpleNamespace(available=True, linked_assignment_activity_uuid=activity.activity_uuid)
+    index = SimpleNamespace(requires_first_use=False, lessons=[lesson, lesson])
+    projection = SimpleNamespace(
+        due_date=extension.isoformat(), title="Released deadline", release_conflict_uuid=None,
+        submission_status=None, past_due=False, assignment_uuid=assignment.assignment_uuid,
+    )
+    module = "src.services.calendar.sources.assignments"
     with (
-        patch("src.services.calendar.types.CalendarContext.can_read_course", new=AsyncMock(return_value=True)),
-        patch("src.services.calendar.types.CalendarContext.can_edit_course", new=AsyncMock(return_value=False)),
-        patch("src.services.calendar.sources.assignments.verify_activity_reader_access", new=AsyncMock()) as access,
-        patch("src.services.calendar.sources.assignments.effective_assignment_extension", new=AsyncMock(return_value=extension)) as reviewed,
+        patch(f"{module}.user_course_ids", new=AsyncMock(return_value=set())),
+        patch(f"{module}.list_my_managed_releases", new=AsyncMock(return_value=page)),
+        patch(f"{module}.list_managed_text_lessons", new=AsyncMock(return_value=index)),
+        patch(f"{module}.read_managed_linked_assignment", new=AsyncMock(return_value=projection)) as read,
     ):
         events = await _events(mock_request, org, regular_user, db)
         assert len(events) == 1
         assert datetime.fromisoformat(events[0].starts_at) == extension
         assert events[0].status == "open" and not events[0].all_day
-        reviewed.assert_awaited_once_with(db, assignment, regular_user.id)
+        assert events[0].title == "Released deadline"
+        assert events[0].url == "/account/learning"
+        read.assert_awaited_once()
+        assert read.await_args.args[2].id == regular_user.id
 
-        access.side_effect = HTTPException(403)
-        reviewed.reset_mock()
+        read.side_effect = HTTPException(404)
         assert await _events(mock_request, org, regular_user, db) == []
-        reviewed.assert_not_awaited()
+
+    # A leftover native enrollment must never supply a managed deadline.
+    assert await _events(mock_request, org, regular_user, db) == []
 
 
 def test_all_built_in_sources_are_registered():

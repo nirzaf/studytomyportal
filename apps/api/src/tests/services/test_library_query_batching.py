@@ -197,7 +197,7 @@ async def test_add_to_root_returns_none_when_the_item_is_hidden(db, org, admin_u
          patch.object(folders_service, "check_resource_access", new_callable=AsyncMock), \
          patch.object(folders_service, "require_org_create_permission", new_callable=AsyncMock), \
          patch.object(folders_service, "_authors_item", new_callable=AsyncMock, return_value=True), \
-         patch.object(folders_service, "_require_resource_in_org", new_callable=AsyncMock):
+         patch.object(folders_service, "_require_filing_access", new_callable=AsyncMock):
         assert await add_org_root_content(mock_request, org.id, "media_gone", admin_user, db) is None
 
 

@@ -18,6 +18,7 @@ from src.services.ai.editor import (
     editor_ai_send_message_stream,
 )
 from src.services.ai.base import ask_ai_stream, save_message_to_history, generate_follow_up_suggestions
+from src.services.ai.llm import AINotConfiguredError
 from src.services.ai.llm.errors import ai_error_message, log_ai_failure
 from src.services.ai.learning_generation import start_learning_surface
 from src.services.ai.learning_actions import apply_learning_action
@@ -209,6 +210,10 @@ async def activity_chat_event_generator(
         # (full_response empty), so a disconnect *after* a full response can't
         # be abused to get free AI. Re-raise so Starlette observes the cancel.
         raise
+    except AINotConfiguredError:
+        stream_failed = True
+        message = "Ask AI is unavailable because a text AI provider is not configured. Contact your administrator."
+        yield f"data: {json.dumps({'type': 'error', 'message': message})}\n\n"
     except Exception as e:
         stream_failed = True
         log_ai_failure(logger, e, "Error in activity_chat_event_generator")

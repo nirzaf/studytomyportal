@@ -87,7 +87,7 @@ COPY --from=node:26.13.0-alpine3.24 /usr/local/lib/node_modules/npm /usr/local/l
 # Apply the stable distribution's security updates at build time. The Python
 # image can be published before a newer package fix reaches Alpine's mirrors.
 RUN apk upgrade --no-cache \
-    && apk add --no-cache nginx curl netcat-openbsd ca-certificates bash libstdc++ libatomic \
+    && apk add --no-cache nginx curl netcat-openbsd ca-certificates bash libstdc++ libatomic ffmpeg \
     && ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && npm install -g pm2@7.1.0 \
     && rm -rf /root/.npm \
@@ -108,6 +108,7 @@ WORKDIR /app/api
 COPY ./apps/api/uv.lock ./apps/api/pyproject.toml ./
 RUN uv sync --frozen --no-dev --no-install-project --no-cache
 COPY ./apps/api ./
+COPY apps/labs/momentum-pilot/manifest.json /app/labs/momentum-pilot/manifest.json
 
 # Remove Enterprise Edition folder for public builds
 ARG LEARNHOUSE_PUBLIC=false
@@ -133,6 +134,21 @@ RUN chmod +x /app/api/docker-entrypoint.sh /app/start.sh /app/api/bin/learnhouse
 # that verifies clean against the signed manifest.
 ENV PORT=8000 LEARNHOUSE_PORT=9000 COLLAB_PORT=4000 HOSTNAME=0.0.0.0 LEARNHOUSE_OSS=true NEXT_PUBLIC_LEARNHOUSE_OSS=true PYTHONDONTWRITEBYTECODE=1
 
+RUN addgroup -S -g 1001 learnhouse \
+    && adduser -S -D -u 1001 -G learnhouse -h /home/learnhouse learnhouse \
+    && mkdir -p /app/api/content /app/api/logs /app/api/data /home/learnhouse/.pm2 \
+    && touch /app/web/runtime-config.json /app/web/public/runtime-config.js \
+    && chown -R learnhouse:learnhouse /app/api/content /app/api/logs /app/api/data \
+       /home/learnhouse /var/lib/nginx /var/log/nginx /run/nginx \
+    && chown learnhouse:learnhouse /app/web/runtime-config.json /app/web/public/runtime-config.js \
+    && sed -i '/^[[:space:]]*user[[:space:]]/d' /etc/nginx/nginx.conf
+
+ENV HOME=/home/learnhouse PM2_HOME=/home/learnhouse/.pm2
+USER 1001:1001
+
 EXPOSE 80 9000 4000
+HEALTHCHECK --interval=30s --timeout=8s --start-period=45s --retries=3 \
+  CMD curl --fail --silent --max-time 3 http://127.0.0.1/api/v1/health \
+      && curl --fail --silent --max-time 3 http://127.0.0.1/api/health || exit 1
 
 CMD ["sh", "/app/start.sh"]

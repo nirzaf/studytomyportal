@@ -4,8 +4,8 @@
 import { afterAll, describe, expect, mock, test } from "bun:test";
 import { NextRequest } from "next/server";
 
-mock.module("./services/config/config", () => ({ getAPIUrl: () => "http://api.test/" }));
-mock.module("@services/config/config", () => ({ getAPIUrl: () => "http://api.test/" }));
+mock.module("./services/config/config", () => ({ getAPIUrl: () => "http://api.test/", getServerAPIUrl: () => "http://api.test/" }));
+mock.module("@services/config/config", () => ({ getAPIUrl: () => "http://api.test/", getServerAPIUrl: () => "http://api.test/" }));
 mock.module("@ee/services/tenancy/resolveMulti.middleware", () => ({
   resolveMultiFromRequest: async () => ({ slug: "default", source: "default" }),
   isCustomDomain: () => false,

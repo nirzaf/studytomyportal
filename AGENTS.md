@@ -186,6 +186,8 @@ The existing [Studytomy website repository](https://github.com/nirzaf/studytomy-
 
 - **Architecture and agent navigation**: [Detailed architecture guide](docs/studytomy/AGENT-ARCHITECTURE-GUIDE.md), with dated source evidence, technical diagrams and explicit current-versus-planned boundaries.
 
+- **Virtual-lab source research**: [Candidate repository inventory and adoption checks](docs/studytomy/VIRTUAL-LAB-REPOSITORY-RESEARCH.md). Consult when a virtual-lab requirement makes external source reuse relevant. It is a research lead list, not permission to copy or integrate; verify the chosen immutable revision, code/content/asset licenses, dependencies, scientific validity, curriculum fit, and required educator, rights, safety, privacy, and safeguarding approvals first.
+
 - **Project intent and status**: root `README.md` in the approved Studytomy fork, plus explicitly approved requirements and decisions.
 - **Source code**: current checked-out Studytomy branch and SHA; do not treat plans as implemented.
 - **Upstream source**: [learnhouse/learnhouse](https://github.com/learnhouse/learnhouse); inspect specific tag/SHA and edition gates.

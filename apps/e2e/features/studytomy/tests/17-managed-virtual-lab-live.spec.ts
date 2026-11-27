@@ -31,6 +31,8 @@ type LiveScenario = {
   consentEventUuid?: string
   authoringReceipts?: {
     managedDraftStatus: number
+    browserAuthoredVersion: number
+    staleReviewStatus: number
     selfReviewDeniedStatus: number
     rightsEvidenceUuid: string
     accessibilityEvidenceUuid: string
@@ -83,6 +85,8 @@ test.describe('Managed Virtual Lab Live E2E (non-mocked PG/FastAPI/Next.js/Stati
     // Verify real-API teacher -> independent reviewer -> immutable release receipts (F-05)
     expect(sc.authoringReceipts).toBeTruthy()
     expect(sc.authoringReceipts!.managedDraftStatus).toBe(204)
+    expect(sc.authoringReceipts!.browserAuthoredVersion).toBeGreaterThan(1)
+    expect(sc.authoringReceipts!.staleReviewStatus).toBe(409)
     expect(sc.authoringReceipts!.selfReviewDeniedStatus).toBe(403)
     expect(sc.authoringReceipts!.rightsEvidenceUuid).toMatch(/^ev_[0-9a-f-]{36}$/)
     expect(sc.authoringReceipts!.accessibilityEvidenceUuid).toMatch(/^ev_[0-9a-f-]{36}$/)

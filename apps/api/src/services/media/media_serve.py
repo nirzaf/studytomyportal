@@ -75,17 +75,26 @@ def _serve_mime(media: Media, rel_key: str) -> str:
 async def _resolve_storage_key(db_session: AsyncSession, media: Media) -> str:
     """Return the relative storage key (under `content/`), randomized for new
     uploads (`media.storage_key`), or reconstructed for legacy rows."""
-    key = getattr(media, 'storage_key', None)
-    if key:
-        return key
-    if not media.file_id:
+    key = media.storage_key
+    if not key and not media.file_id:
         raise HTTPException(status_code=404, detail="File not found")
     org = (
         await db_session.execute(select(Organization).where(Organization.id == media.org_id))
     ).scalars().first()
     if not org:
         raise HTTPException(status_code=404, detail="File not found")
-    return f"orgs/{org.org_uuid}/media/{media.media_uuid}/{media.file_id}"
+    key = key or f"orgs/{org.org_uuid}/media/{media.media_uuid}/{media.file_id}"
+    parts = key.split("/")
+    if (
+        len(parts) != 5
+        or parts[:3] != ["orgs", org.org_uuid, "media"]
+        or parts[-1] != media.file_id
+        or any(part in ("", ".", "..") or "\\" in part for part in parts)
+    ):
+        # Native media links cannot bind a file to a managed course release,
+        # and the stored key must still identify this row's exact uploaded file.
+        raise HTTPException(status_code=404, detail="File not found")
+    return key
 
 
 def _download_filename(media: Media, rel_key: str) -> str:

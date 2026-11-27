@@ -112,3 +112,20 @@ async def test_media_response_closes_file_on_header_send_failure():
             )
 
         assert staged.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("start,status", [(0, 200), (1024, 206)])
+async def test_media_stream_stops_before_releasing_next_chunk_after_denial(start, status):
+    with TemporaryFile() as staged:
+        staged.write(b"x" * (140 * 1024))
+        revalidate = AsyncMock(side_effect=[None, HTTPException(status_code=404)])
+        media = access_policy.ManagedActivityMedia(
+            file=staged, media_type="application/pdf", filename="lesson.pdf",
+            size_bytes=140 * 1024, start=start, end=140 * 1024 - 1,
+            status_code=status, revalidate=revalidate,
+        )
+        chunks = [chunk async for chunk in media.stream()]
+        assert [len(chunk) for chunk in chunks] == [64 * 1024]
+        assert revalidate.await_count == 2
+        assert staged.closed

@@ -13,7 +13,7 @@ This summary reflects the current merged source. Dated checkpoints below retain 
 | Managed PDF topic check | The code supports a D-16-reviewed fractions check bound to the exact managed release and PDF, with a distinct recheck and scoped staff history. Availability depends on a matching, currently approved release; no live approved pilot record or complete signed-in author → independent review → publish → learner → staff acceptance has been verified. See the [topic learning loop](TOPIC-LEARNING-LOOP.md). |
 | Tutor action vocabulary | `LessonTutorAction` defines four action names in the learning-surface schema and unit tests validate those enum values. There is no production caller or four-action tutor route; the vocabulary is not an enabled tutor workflow. |
 | Guardian welcome and target study path | The family workspace route exists, but source inspection found no guardian welcome-message/study-path generation and one-time email workflow. Do not describe that requested flow as implemented. |
-| Legacy tutoring migration | `apps/api/scripts/studytomy_backfill.py` performs a read-only PostgreSQL inventory of legacy learner/submission mappings. It is not an idempotent tutoring-data migration and has no write or `--dry-run` mode. |
+| Legacy tutoring migration | `apps/api/scripts/studytomy_backfill.py` performs a read-only PostgreSQL inventory of legacy learner/submission mappings. It is not an idempotent tutoring-data migration and has no write mode. Running with `--dry-run` explicitly selects the default read-only behavior. |
 | Syllabus and Explore Topics | Approved PDF sources support independent search scope and syllabus comparison, citation pages, and source-limited follow-ups. Native course retrieval enforces bounded single-course activity prefiltering (at most 1,000 compatible chunks), skips embeddings when nothing is readable, keeps multi-course and >1,000-row searches on bounded approximate retrieval, and revalidates with `filter_readable_chunks()` on every path. Exact recovery for underfilled small single-course searches remains opt-in; iterative HNSW and hybrid RRF remain benchmark-only and disabled in runtime. [Syllabus library](SYLLABUS-KNOWLEDGE-LIBRARY.md) · [Retrieval evaluation](GROUNDED-RETRIEVAL-EVALUATION.md) |
 | Database | The source has one Alembic head, `2d6a1b7c9e40`. Verify the target database separately before migration. [Migration and rollback](MIGRATION-AND-ROLLBACK.md) |
 | GitHub | Build and repository-security workflows are configured. Check the Actions results for the exact merged commit before treating its checks as passed. The security workflow scans reachable Git history and tracked source and checks locked dependencies; see the [security policy](../../SECURITY.md). |
@@ -55,6 +55,7 @@ The live topic-check spec requires an isolated loopback stack, matching runtime/
 | Lessons, assignments, and quizzes | **Partial** | Native course/activity and assessment paths exist in the LearnHouse implementation and focused tests. A complete teacher-review → publish → learner-attempt journey was not rerun in this checkpoint. |
 | Diagnostics, mastery, personalized paths, and AI tutoring | **Partial** | Versioned diagnostic, evidence, mastery, recommendation, and tutor services are present under `apps/api/src/services/studytomy/`. Protected learner execution remains policy/consent gated; provider quality and full learner-browser acceptance are open. |
 | Parent/guardian progress and safeguarding | **Partial** | Guardian authority, consent, report review, publication, scoped sharing, and withdrawal paths exist locally. Owner-approved guardian evidence, consent notices, retention, and disclosure policies remain unapproved; no real learner or guardian journey was exercised. |
+| F05 private records and evidence controls | **Partial** | The local family workspace now offers policy-rechecked relationship restriction controls, content review verifies selected rights/accessibility evidence, and private managed-draft designation uses the existing review routes. Case evidence manifests now include the exact approval reference needed for restore replay; the retention workspace exposes hold/release, separately reviewed removal, and replay controls. Relationship request creation/withdrawal and learner sharing creation remain API-only until a safe learner-target selector and current server-approved scope projection exist. Evidence removal remains filesystem-only; S3/R2 version deletion is denied because the stored record has no exact object-version identity. No policy approval or real-record deletion was performed. |
 | Administrator governance and operational readiness | **Unverified** | Organization-scoped roles and policy controls are present, but this checkpoint did not exercise the full administrator journey, backup/restore, or deployment operations. This repository remains local-development only. |
 
 **Focused evidence for this checkpoint:** `apps/web` draft sync + course navigation tests: 13 passed / 60 assertions; web TypeScript: passed; scoped ESLint: 0 errors / 12 warnings; API course draft tests: 10 passed; `git diff --check`: passed. The Playwright spec `apps/e2e/features/studytomy/tests/18-create-course-draft-live.spec.ts` was not run because it deletes the configured account's existing draft and creates a persistent course; no isolated matching browser stack was established.
@@ -89,7 +90,8 @@ source-verified statements; `docs/studytomy/LOCAL-VERIFICATION.md`,
 20 November records; `apps/e2e/features/scorm/README.md` lists spec `04`; and
 `apps/api/src/services/demo/bundle/LICENSES.md` now states that the ten podcast
 `.mp3` clips come from a macOS system voice rather than Pillow authorship.
-Relative links and cross-file anchors resolve in all 47 files.
+Relative links and cross-file anchors resolved in all 47 files at that checkpoint.
+The checked-in demo fixture now has no podcast entries and no bundled audio recordings.
 
 Nothing here authorizes a pilot, a real learner flow, a deployment or a release.
 
@@ -321,3 +323,21 @@ Eligibility evidence download now checks the caller's authority before resolving
 Eligibility and course evidence uploads now read the stored object in bounded chunks and check its SHA-256 and byte count before marking the receipt ready. A synthetic same-length corruption returned 503, triggered pre-commit storage cleanup, and left the same idempotency key available for a successful retry. The Wave 1 and course evidence suite passed 98 tests with zero failures or skips, including the existing PostgreSQL checks. The disposable loopback PostgreSQL 16 instance was removed. Object storage was simulated. This verifies integrity before receipt creation; later changes to stored files remain outside this check.
 
 The course evidence HTTP regression now uses the configured filesystem adapter in a temporary directory. It verifies that same-length corruption returns 503 and removes the object, an identical retry writes the correct bytes, and an authenticated administrator gets 403 on the generic content URL while the scoped evidence endpoint returns the attachment. The first run asserted 404 for the generic URL. It was corrected to the explicit 403 contract in the local content router. The focused run passed 96 tests with two PostgreSQL cases deselected. Lint passed. Live S3 and post-upload checksum verification remain unverified.
+
+### Local audit maintenance checkpoint
+
+- The CI setup actions are pinned to the upstream commits resolving their
+  existing major tags. CI uses the uv version already pinned by both API images.
+- New Community CLI installs use the same Redis 8.6.1 image as the local
+  development Compose file. Reconfiguration retains an existing local Redis
+  image. A synthetic append-only record survived recreation on a fresh volume.
+- The E2E database guard has a focused `bun run test:database-guard` command.
+  Playwright discovers complete spec paths, so duplicate numeric prefixes remain.
+- The independent sharing resolver, mastery reducer, generic version and replay
+  helpers, and idempotency lease release helper were retained. Search found tests
+  for the sharing, mastery and concurrency helpers and no active service call
+  sites for these helpers in the reviewed checkout.
+- Legacy link-token cleanup requires evidence that older pods and still-valid
+  legacy links are gone. The older activity export TODO needs a defined quiz
+  export contract before changing behavior. The React package license TODO
+  remains pending maintainer confirmation.

@@ -438,6 +438,7 @@ async def check_course_access(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
+            Course.studytomy_managed.is_(False),
         )
     )).scalars().first()
     if not course:
@@ -479,6 +480,7 @@ async def enroll_user(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
+            Course.studytomy_managed.is_(False),
         )
     )).scalars().first()
     if not course:
@@ -613,7 +615,12 @@ async def get_user_enrollments(
         )
 
     trail_runs_raw = list((await db_session.execute(
-        select(TrailRun).where(TrailRun.trail_id == trail.id, TrailRun.user_id == user_id)
+        select(TrailRun).join(Course, Course.id == TrailRun.course_id).where(
+            Course.studytomy_managed.is_(False),
+            Course.org_id == token_user.org_id,
+            TrailRun.trail_id == trail.id,
+            TrailRun.user_id == user_id,
+        )
     )).scalars().all())
 
     return await _build_trail_read(trail, trail_runs_raw, db_session, user_id=user_id)
@@ -637,6 +644,7 @@ async def get_user_progress(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
+            Course.studytomy_managed.is_(False),
         )
     )).scalars().first()
     if not course:
@@ -687,7 +695,7 @@ async def complete_activity(
         raise HTTPException(status_code=404, detail="Activity not found")
 
     course = (await db_session.execute(select(Course).where(Course.id == activity.course_id))).scalars().first()
-    if not course or course.org_id != token_user.org_id:
+    if not course or course.org_id != token_user.org_id or course.studytomy_managed:
         raise HTTPException(status_code=404, detail="Activity not found")
 
     # Ensure trail exists
@@ -866,6 +874,7 @@ async def complete_course(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
+            Course.studytomy_managed.is_(False),
         )
     )).scalars().first()
     if not course:
@@ -1000,7 +1009,8 @@ async def get_all_user_progress(
     await _get_user_in_org(user_id, token_user.org_id, db_session)
 
     trail_runs = (await db_session.execute(
-        select(TrailRun).where(
+        select(TrailRun).join(Course, Course.id == TrailRun.course_id).where(
+            Course.studytomy_managed.is_(False), Course.org_id == token_user.org_id,
             TrailRun.user_id == user_id,
             TrailRun.org_id == token_user.org_id,
         )
@@ -1079,6 +1089,7 @@ async def get_user_trail_detail(
             select(Course).where(
                 Course.course_uuid == course_uuid,
                 Course.org_id == token_user.org_id,
+                Course.studytomy_managed.is_(False),
             )
         )).scalars().first()
         if not target_course:
@@ -1100,7 +1111,9 @@ async def get_user_trail_detail(
         "courses": [],
     }
 
-    tr_statement = select(TrailRun).where(
+    tr_statement = select(TrailRun).join(Course, Course.id == TrailRun.course_id).where(
+        Course.studytomy_managed.is_(False),
+        Course.org_id == token_user.org_id,
         TrailRun.user_id == user_id,
         TrailRun.org_id == token_user.org_id,
     )
@@ -1825,6 +1838,7 @@ async def bulk_enroll_users(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
+            Course.studytomy_managed.is_(False),
         )
     )).scalars().first()
     if not course:
@@ -1945,6 +1959,7 @@ async def list_course_enrollments(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
+            Course.studytomy_managed.is_(False),
         )
     )).scalars().first()
     if not course:
@@ -2615,6 +2630,7 @@ async def add_course_to_usergroup(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
+            Course.studytomy_managed.is_(False),
         )
     )).scalars().first()
     if not course:
@@ -3016,6 +3032,7 @@ async def get_course_analytics(
         select(Course).where(
             Course.course_uuid == course_uuid,
             Course.org_id == token_user.org_id,
+            Course.studytomy_managed.is_(False),
         )
     )).scalars().first()
     if not course:

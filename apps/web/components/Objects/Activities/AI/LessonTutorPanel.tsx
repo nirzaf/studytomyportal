@@ -14,6 +14,8 @@ type Options = {
   actions: Action[]
   reason: 'assessment_in_progress' | 'guidance_unavailable' | null
   practice_attempt_uuid: string | null
+  remaining_turns?: number | null
+  assistance_status?: 'available' | 'reviewed_only' | 'unavailable' | 'exhausted' | null
 }
 type Session = { uuid: string; activity_uuid: string; version: number; closed_at: string | null }
 type Operation = { operation_uuid: string; expected_version: number; action: Action }
@@ -57,7 +59,7 @@ export function useLessonTutor(
       requests.delete(client)
     }
   }, [client])
-  const { data, error } = useSWR<Options>(key && client ? ['lesson-tutor', key, client] : null,
+  const { data, error, mutate } = useSWR<Options>(key && client ? ['lesson-tutor', key, client] : null,
     async () => {
       if (!client) throw new Error('Lesson guidance is unavailable.')
       const controller = new AbortController()
@@ -81,7 +83,7 @@ export function useLessonTutor(
     },
     { shouldRetryOnError: false },
   )
-  return { client, key, options: error ? undefined : data, error: Boolean(error), release }
+  return { client, key, options: error ? undefined : data, error: Boolean(error), release, refreshOptions: mutate }
 }
 
 function loadStored(key: string, activityUuid: string): Stored | undefined {
@@ -98,7 +100,7 @@ export function LessonTutorContent({ tutor, activityUuid }: {
   activityUuid: string
 }) {
   const { t } = useTranslation()
-  const { options, client, key, error, release } = tutor
+  const { options, client, key, error, release, refreshOptions } = tutor
   if (!client || !key || !options || options.mode !== 'guided') {
     const assessment = options?.reason === 'assessment_in_progress'
     return <p role="status" className="text-sm">
@@ -108,12 +110,13 @@ export function LessonTutorContent({ tutor, activityUuid }: {
     </p>
   }
   const sessionKey = `lesson-tutor:${key}:${options.practice_attempt_uuid ?? ''}`
-  return <GuidedLesson key={sessionKey} {...{ client, activityUuid, options, sessionKey, release }} />
+  return <GuidedLesson key={sessionKey} {...{ client, activityUuid, options, sessionKey, release, refreshOptions }} />
 }
 
-function GuidedLesson({ client, activityUuid, options, sessionKey, release }: {
+function GuidedLesson({ client, activityUuid, options, sessionKey, release, refreshOptions }: {
   client: AdaptiveRequest; activityUuid: string; options: Options; sessionKey: string
   release?: ReleaseScope
+  refreshOptions: () => Promise<Options | undefined>
 }) {
   const { t } = useTranslation()
   const heading = useId()
@@ -142,6 +145,7 @@ function GuidedLesson({ client, activityUuid, options, sessionKey, release }: {
     setStatus('')
     if (receipt.state === 'running') return
     save({ session: { ...snapshot.session, version: receipt.session_version } })
+    void refreshOptions().catch(() => undefined)
   }
 
   async function execute(operation: (_signal: AbortSignal) => Promise<void>, recoverable: boolean) {
@@ -260,8 +264,23 @@ function GuidedLesson({ client, activityUuid, options, sessionKey, release }: {
       turn?.state === 'cancelled' || turn?.state === 'failed' ? t('ai.guided.unavailable', 'Lesson guidance is unavailable.') : '')
   return <section aria-labelledby={heading} className="min-h-0 flex-1 space-y-3 overflow-y-auto [overflow-wrap:anywhere]">
     <h2 id={heading} className="text-base font-semibold">{t('ai.guided.title', 'Guided lesson help')}</h2>
+    <div aria-live="polite" className="space-y-1 text-sm">
+      {typeof options.remaining_turns === 'number' && <p>{t(
+        'ai.guided.remaining', 'Guidance turns remaining in the last-24-hour allowance: {{count}}',
+        { count: options.remaining_turns },
+      )}</p>}
+      {options.assistance_status === 'reviewed_only' && <p>{t(
+        'ai.guided.reviewedOnly', 'Reviewed guidance is available.',
+      )}</p>}
+      {options.assistance_status === 'unavailable' && <p>{t(
+        'ai.guided.providerUnavailable', 'AI guidance is unavailable. You can continue with the lesson.',
+      )}</p>}
+      {options.assistance_status === 'exhausted' && <p>{t(
+        'ai.guided.allowanceExhausted', 'You have reached the guidance limit. You can continue with the lesson.',
+      )}</p>}
+    </div>
     <div className="flex flex-wrap gap-2">
-      {!stored && <Button className="min-h-11" disabled={busy} onClick={() => void start()}>
+      {!stored && options.actions.length > 0 && <Button className="min-h-11" disabled={busy} onClick={() => void start()}>
         {t('ai.guided.start', 'Start guidance')}
       </Button>}
       {stored && !stored.operation && options.actions.map(action =>

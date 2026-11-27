@@ -384,6 +384,11 @@ async def _exercise_authoring(
         )
         assert updated.status_code == 200
         assert updated.json()["version"] == 2
+        stale_metadata = await client.put(
+            detail_path, json=metadata | {"expected_version": 1}, headers=direct,
+        )
+        assert stale_metadata.status_code == 409
+        assert stale_metadata.json()["detail"]["code"] == "STALE_VERSION"
         assert (await client.post(path, json=body, headers=direct)).json() == draft
         duplicate = await client.post(
             path, json=body | {"subject": "Other"}, headers=direct
@@ -1888,7 +1893,8 @@ async def _exercise_native_items(
 
     source_path = f"{base}/item-sources/{task.assignment_task_uuid}"
     items_path = f"{base}/item-revisions"
-    assert (await client.get(source_path, headers=learner)).status_code == 403
+    learner_source = await client.get(source_path, headers=learner)
+    assert learner_source.status_code == 403, learner_source.text
     preview = await client.get(source_path, headers=author)
     assert preview.status_code == 200, preview.text
     snapshot = preview.json()
@@ -1928,6 +1934,13 @@ async def _exercise_native_items(
     )
     assert edit.status_code == 200, edit.text
     assert edit.json()["version"] == 2
+    stale_settings = await client.put(
+        f"{items_path}/{original['uuid']}",
+        json={"expected_version": 1, "difficulty": 4, "hint_ladder": ["Stale edit."]},
+        headers=author,
+    )
+    assert stale_settings.status_code == 409
+    assert stale_settings.json()["detail"]["code"] == "STALE_VERSION"
     task.contents = task.contents | {"correct_value": "19.25"}
     await db.commit()
     next_preview = await client.get(source_path, headers=author)
@@ -2210,9 +2223,12 @@ async def _exercise_publication(
     fixture_values = {
         StudyPolicyKey.D_10: {
             "learner_eligibility": "synthetic",
-            "supervision": "synthetic",
-            "materials": "synthetic",
-            "usage_limits": {"adaptive_guidance": {"max_turns_per_day": 10}},
+            "supervision": {"lesson_visual_practice": "independent"},
+            "materials": {"lesson_visual_practice": "reviewed_examples"},
+            "usage_limits": {
+                "adaptive_guidance": {"max_turns_per_day": 10},
+                "lesson_visual_practice": 1,
+            },
             "review": {
                 "lesson_visual_practice": {
                     "enabled": True,
@@ -3617,6 +3633,18 @@ async def _exercise_live_genui(
         assert "evaluation_basis" not in started.text
         provider.assert_awaited_once()
         reserve_credit.assert_awaited_once()
+        replayed = await client.post(start_path, json=start, headers=headers)
+        assert replayed.status_code == 200, replayed.text
+        assert json.loads(replayed.text.removeprefix("data: ").strip())["surface"] == surface
+        savepoint = await db.begin_nested()
+        exhausted = await client.post(
+            start_path, json=start | {"request_id": str(uuid4())}, headers=headers
+        )
+        assert exhausted.status_code == 429, exhausted.text
+        assert exhausted.json()["detail"]["code"] == "LEARNING_SURFACE_ALLOWANCE"
+        provider.assert_awaited_once()
+        reserve_credit.assert_awaited_once()
+        await savepoint.rollback()
 
         async def post_action(kind, revision, **extra):
             return await client.post(
@@ -3823,7 +3851,9 @@ async def _exercise_learner_attempt(
                 "progress_report_notifications": "authenticated_link_only"
             },
             "retention": {
-                "adaptive_guidance": {"result_hours": 2, "feedback_notes": True},
+                "adaptive_guidance": {
+                    "result_hours": 2, "feedback_notes": True, "feedback_review": True,
+                },
                 "lesson_visual_practice": {
                     "retention_hours": 24,
                     "retention_category": "lesson_visual_practice",
@@ -3970,6 +4000,8 @@ async def _exercise_learner_attempt(
     assert eligible.status_code == 200, eligible.text
     assert eligible.json()["mode"] == "guided"
     assert eligible.json()["actions"] == ["explain", "check_understanding"]
+    assert eligible.json()["remaining_turns"] == 10
+    assert eligible.json()["assistance_status"] == "reviewed_only"
     assert eligible.headers["Cache-Control"] == "private, no-store"
     ordinary = await client.get(tutor_options, params=tutor_params, headers=unrelated)
     assert ordinary.status_code == 200 and ordinary.json()["mode"] == "legacy"
@@ -4011,6 +4043,8 @@ async def _exercise_learner_attempt(
     assert first.status_code == 200, first.text
     assert first.json()["state"] == "completed" and first.json()["session_version"] == 2
     assert first.json()["result"]["fallback_used"]
+    updated_options = await client.get(tutor_options, params=tutor_params, headers=headers)
+    assert updated_options.json()["remaining_turns"] == 9
     assert "Synthetic learner message" not in first.text
     result_path = f"{turns}/{requested['operation_uuid']}"
     assert (await client.get(result_path, headers=headers)).json() == first.json()
@@ -4039,6 +4073,43 @@ async def _exercise_learner_attempt(
     assert feedback.status_code == 200, feedback.text
     assert feedback.headers["Cache-Control"] == "private, no-store"
     assert set(feedback.json()) == {"turn_uuid", "issue_code", "received_at"}
+    review_path = (
+        f"{base}/staff/learners/{profile.learner_uuid}/courses/{stored.course_uuid}/tutor-feedback"
+    )
+    course_scope = await _seed_staff_scope(
+        db, org.id, owner.id, StudytomyCapabilityName.ASSESSMENT_MODERATION,
+        "course", stored.course_uuid, owner.user_id,
+    )
+    assert (await client.get(review_path, headers=unrelated)).status_code == 404
+    feedback_curriculum = await db.get(StudyCurriculumRevision, stored.curriculum_revision_id)
+    assert (await client.get(
+        f"{base}/staff/learners/{profile.learner_uuid}/mastery",
+        params={"curriculum_revision_uuid": feedback_curriculum.uuid}, headers=unrelated,
+    )).status_code == 404
+    await _seed_staff_scope(
+        db, org.id, owner.id, StudytomyCapabilityName.ASSESSMENT_MODERATION,
+        "learner", profile.learner_uuid, owner.user_id,
+    )
+    queue = await client.get(review_path, headers=unrelated)
+    assert queue.status_code == 200, queue.text
+    assert queue.headers["Cache-Control"] == "private, no-store"
+    assert queue.json() == [feedback.json() | {
+        "session_uuid": stored.uuid, "disposition": None, "review_reference": None,
+    }]
+    assert "Synthetic review note" not in queue.text
+    review_body = {
+        "turn_uuid": requested["operation_uuid"], "session_uuid": stored.uuid,
+        "disposition": "confirmed", "evidence_reference": "case/fixture-01",
+    }
+    assert (await client.post(review_path, json=review_body, headers=headers)).status_code == 404
+    review = await client.post(review_path, json=review_body, headers=unrelated)
+    assert review.status_code == 200, review.text
+    assert review.json()["disposition"] == "confirmed"
+    assert review.json()["review_reference"]
+    assert (await client.post(review_path, json=review_body, headers=unrelated)).json() == review.json()
+    assert (await client.post(
+        review_path, json=review_body | {"disposition": "dismissed"}, headers=unrelated,
+    )).status_code == 409
     assert (
         await client.post(feedback_path, json=feedback_body, headers=headers)
     ).json() == feedback.json()
@@ -4105,6 +4176,52 @@ async def _exercise_learner_attempt(
             await client.post(turns, json=quota_unknown, headers=headers)
         ).json() == uncertain_quota.json()
         reservation.assert_awaited_once()
+        provider.assert_not_awaited()
+    denied_body = uncertain_body | {"operation_uuid": str(uuid4())}
+    with (
+        patch(
+            "src.services.studytomy.adaptive_turns._turn_policy",
+            new=AsyncMock(return_value=(10, timedelta(hours=2), "synthetic-provider")),
+        ),
+        patch(
+            "src.services.studytomy.adaptive_turns.reserve_ai_credit",
+            new=AsyncMock(side_effect=HTTPException(429)),
+        ) as reservation,
+        patch(
+            "src.services.studytomy.adaptive_turns.generate_teaching", new=AsyncMock()
+        ) as provider,
+    ):
+        denied = await client.post(turns, json=denied_body, headers=headers)
+        assert denied.status_code == 200, denied.text
+        assert denied.json()["state"] == "failed"
+        assert denied.json()["result"] is None
+        assert denied.json()["session_version"] == 2
+        assert (
+            await client.post(turns, json=denied_body, headers=headers)
+        ).json() == denied.json()
+        reservation.assert_awaited_once()
+        provider.assert_not_awaited()
+    stale_policy_body = uncertain_body | {"operation_uuid": str(uuid4())}
+    with (
+        patch(
+            "src.services.studytomy.adaptive_turns._turn_policy",
+            new=AsyncMock(side_effect=[
+                (10, timedelta(hours=2), "synthetic-provider"),
+                (10, timedelta(hours=2), None),
+            ]),
+        ),
+        patch(
+            "src.services.studytomy.adaptive_turns.reserve_ai_credit",
+            new=AsyncMock(return_value=1),
+        ),
+        patch(
+            "src.services.studytomy.adaptive_turns.generate_teaching", new=AsyncMock()
+        ) as provider,
+    ):
+        revoked = await client.post(turns, json=stale_policy_body, headers=headers)
+        assert revoked.status_code == 200, revoked.text
+        assert revoked.json()["state"] == "reconciliation_required"
+        assert revoked.json()["result"] is None
         provider.assert_not_awaited()
     late_body = uncertain_body | {"operation_uuid": str(uuid4())}
 
@@ -4271,6 +4388,18 @@ async def _exercise_learner_attempt(
     restricted = await client.post(tutor_path, json=tutor_body, headers=headers)
     assert restricted.status_code == 409, restricted.text
     assert restricted.json()["detail"]["code"] == "ASSESSMENT_IN_PROGRESS"
+    visual_restricted = await client.post(
+        "/api/v1/ai/stream/start/learning_surface",
+        json={
+            "schema_version": 1,
+            "request_id": str(uuid4()),
+            "activity_uuid": practice_activity_uuid,
+            "mode": "practice",
+        },
+        headers=headers,
+    )
+    assert visual_restricted.status_code == 409, visual_restricted.text
+    assert visual_restricted.json()["detail"]["code"] == "ASSESSMENT_IN_PROGRESS"
     restricted_options = await client.get(
         tutor_options, params=tutor_params, headers=headers
     )
@@ -4440,9 +4569,6 @@ async def _exercise_learner_attempt(
         await client.get(mastery_path, params=mastery_params, headers=unrelated)
     ).status_code == 404
     staff_path = f"{base}/staff/learners/{profile.learner_uuid}/mastery"
-    assert (
-        await client.get(staff_path, params=mastery_params, headers=unrelated)
-    ).status_code == 404
     curriculum = (
         await db.execute(
             select(StudyCurriculumRevision).where(
@@ -4450,27 +4576,6 @@ async def _exercise_learner_attempt(
             )
         )
     ).scalar_one()
-    course_scope = await _seed_staff_scope(
-        db,
-        org.id,
-        owner.id,
-        StudytomyCapabilityName.ASSESSMENT_MODERATION,
-        "course",
-        curriculum.owner_course_uuid,
-        owner.user_id,
-    )
-    assert (
-        await client.get(staff_path, params=mastery_params, headers=unrelated)
-    ).status_code == 404
-    await _seed_staff_scope(
-        db,
-        org.id,
-        owner.id,
-        StudytomyCapabilityName.ASSESSMENT_MODERATION,
-        "learner",
-        profile.learner_uuid,
-        owner.user_id,
-    )
     staff = await client.get(staff_path, params=mastery_params, headers=unrelated)
     assert staff.status_code == 200, staff.text
     assert staff.headers["Cache-Control"] == "private, no-store"
@@ -4531,11 +4636,12 @@ async def _exercise_learner_attempt(
         "expected_evidence_watermark": missing_projection.json()["evidence_watermark"],
         "expected_projection_version": 0,
     }
+    missing_repair_headers = unrelated | {"Idempotency-Key": f"mastery-seed-projection-{uuid4()}"}
     missing_repair = await client.post(
         f"{unassessed_path}/repair",
         params=unassessed_params,
         json=missing_repair_body,
-        headers=unrelated | {"Idempotency-Key": f"mastery-seed-projection-{uuid4()}"},
+        headers=missing_repair_headers,
     )
     assert missing_repair.status_code == 200, missing_repair.text
     assert missing_repair.json()["status"] == "repaired"
@@ -5094,7 +5200,7 @@ async def _exercise_learner_attempt(
         args = send.call_args.args
         assert f"/account/reports?report={report['uuid']}" in args[2]
         assert "37.42" not in args[2] and learner.first_name not in args[2]
-        assert send.call_args.kwargs == {"single_attempt": True}
+        assert send.call_args.kwargs == {"single_attempt": True, "provider_idempotency_key": "fixture-key"}
         send.return_value = {"id": None, "to": recipient_user.email}
         smtp_receipt = await send_report_delivery(db, delivery, current_auth, "fixture-key")
         assert smtp_receipt.accepted and smtp_receipt.message_reference is None
@@ -5472,6 +5578,11 @@ async def _exercise_learner_attempt(
         ] == []
     course_scope.status = "revoked"
     await db.commit()
+    forbidden_replay = await client.post(
+        f"{unassessed_path}/repair", params=unassessed_params, json=missing_repair_body,
+        headers=missing_repair_headers,
+    )
+    assert forbidden_replay.status_code == 404
     denied = await client.get(staff_path, params=mastery_params, headers=unrelated)
     unknown = await client.get(
         f"{base}/staff/learners/{uuid4()}/mastery",

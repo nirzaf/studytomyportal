@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import type { PlaygroundLearnerAdaptation } from '@services/playgrounds/generator'
+import GradeEightMathWidget, { GRADE_EIGHT_MATH_WIDGET } from './GradeEightMathWidget'
 import {
   buildSandboxedPlaygroundHtml,
   getAdaptiveWidgetOptions,
@@ -32,6 +33,8 @@ export default function SafePlaygroundFrame({
   const [selection, setSelection] = useState<AdaptivePreviewSelection | null>(null)
   const levelsKey = adaptation?.levels?.join('\u0000') ?? ''
   const skillsKey = adaptation?.target_skills?.join('\u0000') ?? ''
+  // The marker selects fixed app code. Its HTML and scripts never reach the widget.
+  const builtInPractice = !adaptation?.enabled && html?.startsWith(GRADE_EIGHT_MATH_WIDGET)
 
   useEffect(() => {
     const validateTimer = setTimeout(() => {
@@ -55,7 +58,7 @@ export default function SafePlaygroundFrame({
           : options.skills[0],
       }
     : null
-  const safeHtml = html
+  const safeHtml = html && !builtInPractice
     ? buildSandboxedPlaygroundHtml(
         html,
         adaptation,
@@ -65,6 +68,7 @@ export default function SafePlaygroundFrame({
 
   return (
     <div className={`flex min-h-0 flex-col ${className}`}>
+      {builtInPractice && <GradeEightMathWidget />}
       {options && selected && (
         <div
           className={`z-10 flex shrink-0 flex-wrap items-end gap-3 border-b border-gray-200 bg-white/95 px-3 py-2 ${controlsClassName}`}
@@ -110,7 +114,7 @@ export default function SafePlaygroundFrame({
         </div>
       )}
 
-      {html && (
+      {safeHtml && (
         <iframe
           srcDoc={safeHtml}
           sandbox={PLAYGROUND_IFRAME_SANDBOX}
@@ -120,7 +124,7 @@ export default function SafePlaygroundFrame({
         />
       )}
 
-      {html && (
+      {safeHtml && (
         <p className="shrink-0 border-t border-gray-200 bg-white/90 px-2 py-1 text-[11px] text-gray-600" role="note">
           {options && selected
             ? 'Level and skill choices update this activity locally. Generated scripts remain disabled.'

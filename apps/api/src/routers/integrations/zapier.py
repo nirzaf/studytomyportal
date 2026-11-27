@@ -24,6 +24,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.core.events.database import get_db_session
 from src.db.courses.courses import Course
 from src.db.organizations import Organization
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.usergroups import UserGroup
 from src.db.user_organizations import UserOrganization
 from src.db.users import APITokenUser, User
@@ -255,7 +256,7 @@ async def zapier_list_courses(
     _require_token_right(api_user, "courses")
     query = (
         select(Course)
-        .where(Course.org_id == api_user.org_id)
+        .where(Course.org_id == api_user.org_id, Course.studytomy_managed.is_(False))
         .order_by(col(Course.creation_date).desc())
         .limit(max(1, min(limit, 500)))
     )
@@ -286,7 +287,10 @@ async def zapier_list_users(
     query = (
         select(User)
         .join(UserOrganization, UserOrganization.user_id == User.id)  # type: ignore
-        .where(UserOrganization.org_id == api_user.org_id)
+        .where(
+            UserOrganization.org_id == api_user.org_id,
+            ~select(StudyLearnerProfile.id).where(StudyLearnerProfile.user_id == User.id).exists(),
+        )
         .limit(max(1, min(limit, 500)))
     )
     users = (await db_session.execute(query)).scalars().all()

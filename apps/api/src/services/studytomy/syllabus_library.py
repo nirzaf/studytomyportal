@@ -15,14 +15,17 @@ from uuid import uuid4
 
 from fastapi import HTTPException, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from redis.exceptions import RedisError
 from sqlalchemy import String, case, column, func, literal_column, or_, select, values
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from config.config import get_learnhouse_config
 from src.db.organizations import Organization
 from src.db.organization_config import OrganizationConfig
 from src.db.studytomy.adaptive import StudyConcept, StudyConceptActivity, StudyCurriculumRevision
+from src.db.studytomy.adaptive_evidence import StudyLearningAttempt
 from src.db.studytomy.family import StudyLearnerProfile
-from src.db.studytomy.governance import StudyPolicyKey
+from src.db.studytomy.governance import StudyPolicyBody, StudyPolicyKey
 from src.db.studytomy.privacy import StudyConsentPurpose
 from src.db.studytomy.syllabus import (
     StudySyllabusChunk,
@@ -49,7 +52,7 @@ from src.services.courses.transfer.storage_utils import (
     read_file_content,
     write_file_content,
 )
-from src.services.security.rate_limiting import enforce_ai_rate_limit
+from src.services.security.rate_limiting import enforce_ai_rate_limit, get_redis_connection
 from src.services.studytomy.business_events import append_business_event
 from src.services.studytomy.consents import has_current_consent_scope
 from src.services.studytomy.learners import _active_policy
@@ -260,6 +263,7 @@ class ExploreTopicRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=500)]
+    sources_only: bool = False
     context_question: Annotated[str | None, StringConstraints(strip_whitespace=True, max_length=500)] = None
     search_scope: Literal["all_approved", "selected_syllabus", "selected_subject"] = "all_approved"
     jurisdiction: Annotated[str | None, StringConstraints(strip_whitespace=True, max_length=120)] = None
@@ -1356,8 +1360,39 @@ async def _published_curriculum(
     return revision
 
 
+class _ExplorationApproval(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    supervision: Literal["independent"]
+    curriculum_uuid: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    source_version_uuids: Annotated[list[str], Field(min_length=1, max_length=100)]
+    max_requests_per_day: Annotated[int, Field(ge=1, le=1000)]
+    provider: Annotated[str, StringConstraints(min_length=1, max_length=32)]
+    model: Annotated[str, StringConstraints(min_length=1, max_length=120)]
+    base_url: Annotated[str, StringConstraints(min_length=1, max_length=300)] | None = None
+    embedding_space: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+
+def _consume_exploration_allowance(org_id: int, user_id: int, limit: int) -> bool:
+    # Redis executes the limit check, increment and first expiry together.
+    script = """
+    local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+    if used >= tonumber(ARGV[1]) then return 0 end
+    if used == 0 then
+        redis.call('SET', KEYS[1], 1, 'EX', 86400)
+    else
+        redis.call('INCR', KEYS[1])
+    end
+    return 1
+    """
+    return bool(get_redis_connection().eval(
+        script, 1, f"studytomy:syllabus-exploration:{org_id}:{user_id}", limit
+    ))
+
+
 async def _current_ai_consent(
-    db: AsyncSession, org: Organization, actor: PublicUser
+    db: AsyncSession, org: Organization, actor: PublicUser,
+    command: ExploreTopicRequest, *, consume_allowance: bool = False,
 ) -> tuple[bool, str | None]:
     """Require purpose-bound student consent and all active safeguards first."""
     if not await is_protected_studytomy_learner(db, actor.id):
@@ -1365,11 +1400,13 @@ async def _current_ai_consent(
     profile = (await db.execute(select(StudyLearnerProfile).where(
         StudyLearnerProfile.org_id == org.id,
         StudyLearnerProfile.user_id == actor.id,
+        StudyLearnerProfile.status == "active",
     ))).scalar_one_or_none()
     if profile is None:
         return False, "Student consent is not linked to this organization. Showing approved source excerpts only."
     try:
         now = datetime.now(UTC)
+        policies = {}
         for key in (
             StudyPolicyKey.D_01,
             StudyPolicyKey.D_02,
@@ -1378,12 +1415,55 @@ async def _current_ai_consent(
             StudyPolicyKey.D_13,
             StudyPolicyKey.D_16,
         ):
-            await _active_policy(db, org, key, now)
+            policies[key] = await _active_policy(db, org, key, now)
         if not await has_current_consent_scope(
             db, org, profile, StudyConsentPurpose.AI_ASSISTANCE, "syllabus_exploration", now=now
         ):
             return False, "Current syllabus-exploration consent is unavailable. Showing approved source excerpts only."
-    except HTTPException:
+        policy = StudyPolicyBody.model_validate(policies[StudyPolicyKey.D_10].body)
+
+        def rule(area: str):
+            value = policy.specified_value(area)
+            return value.get("syllabus_exploration") if isinstance(value, dict) else None
+
+        materials, review = rule("materials"), rule("review")
+        if (
+            not isinstance(materials, dict)
+            or set(materials) != {"curriculum_uuid", "source_version_uuids"}
+            or not isinstance(review, dict)
+            or not set(review).issubset({"provider", "model", "base_url", "embedding_space"})
+        ):
+            raise ValueError("Missing syllabus exploration policy")
+        approval = _ExplorationApproval.model_validate({
+            **materials, **review, "supervision": rule("supervision"),
+            "max_requests_per_day": rule("usage_limits"),
+        })
+        if (
+            command.search_scope != "selected_syllabus"
+            or command.selected_curriculum_uuid != approval.curriculum_uuid
+            or not command.source_version_uuids
+            or not set(command.source_version_uuids).issubset(approval.source_version_uuids)
+        ):
+            return False, "AI assistance requires explicitly approved syllabus sources. Showing approved source excerpts only."
+        attempt = StudyLearningAttempt
+        restricted = (await db.execute(select(attempt.id).where(
+            attempt.org_id == org.id,
+            attempt.learner_profile_id == profile.id,
+            attempt.kind.in_(("diagnostic", "assignment")),
+            attempt.status == "active",
+            attempt.expires_at > now,
+        ).limit(1))).scalar_one_or_none()
+        if restricted is not None:
+            return False, "AI assistance is unavailable during an active assessment."
+        config = get_learnhouse_config().ai_config
+        if (
+            config.provider != approval.provider
+            or (config.base_url or None) != approval.base_url
+            or embedding_provenance()[0] != approval.embedding_space
+            or await resolve_model_for_org(org.id, db, purpose="chat") != approval.model
+        ):
+            return False, "The approved syllabus AI provider is unavailable. Showing approved source excerpts only."
+    except (HTTPException, ValueError):
         return False, "Required learner-safeguarding approvals are not active. Showing approved source excerpts only."
     cfg_row = (await db.execute(select(OrganizationConfig.config).where(
         OrganizationConfig.org_id == org.id
@@ -1391,6 +1471,15 @@ async def _current_ai_consent(
     blocked = ai_block_reason(cfg_row, org.id)
     if blocked:
         return False, f"AI assistance is unavailable: {blocked}. Showing approved source excerpts only."
+    if consume_allowance:
+        try:
+            allowed = await asyncio.to_thread(
+                _consume_exploration_allowance, org.id, actor.id, approval.max_requests_per_day
+            )
+        except (HTTPException, RedisError):
+            return False, "Syllabus AI allowance is unavailable. Showing approved source excerpts only."
+        if not allowed:
+            return False, "The approved daily syllabus AI allowance has been reached. Showing approved source excerpts only."
     return True, None
 
 
@@ -2008,8 +2097,11 @@ async def _answer(
         model_name = await resolve_model_for_org(org.id, db, purpose="chat")
     except Exception:
         return None, "The AI provider is not configured or is unavailable. Read the approved source passages below."
-    enforce_ai_rate_limit(actor.id, org.id)
-    await reserve_ai_credit(org.id, db, amount=1)
+    try:
+        enforce_ai_rate_limit(actor.id, org.id)
+        await reserve_ai_credit(org.id, db, amount=1)
+    except (HTTPException, RedisError):
+        return None, "Syllabus AI allowance is unavailable. Read the approved source passages below."
     excerpts = [
         {"reference": index, "page": row["chunk"].page_number, "text": row["chunk"].chunk_text}
         for index, row in enumerate(candidates, 1)
@@ -2069,7 +2161,10 @@ async def explore_topic(
     selected = await _published_curriculum(db, org, command.selected_curriculum_uuid)
     if command.search_scope != "all_approved" and selected is None:
         raise HTTPException(422, "Select a published syllabus context before choosing a narrower search scope.")
-    ai_allowed, ai_reason = await _current_ai_consent(db, org, actor)
+    # Practice uses the approved text itself and needs no provider calls.
+    ai_allowed, ai_reason = (False, None) if command.sources_only else await _current_ai_consent(
+        db, org, actor, command, consume_allowance=True
+    )
     source_rows = await _retrieve(db, org, command, semantic=ai_allowed, selected=selected)
     curriculum_label = (
         f"{selected.subject} · {selected.level} · {selected.curriculum_key} v{selected.revision}"
@@ -2086,6 +2181,8 @@ async def explore_topic(
         )
     answer_reason = None
     if ai_allowed:
+        ai_allowed, ai_reason = await _current_ai_consent(db, org, actor, command)
+    if ai_allowed:
         blocks, answer_reason = await _answer(
             db,
             org,
@@ -2101,7 +2198,7 @@ async def explore_topic(
     if ai_allowed:
         # A reviewer can revoke consent or a source while a provider call is
         # in flight. Never return an AI explanation after that change.
-        consent_still_current, current_reason = await _current_ai_consent(db, org, actor)
+        consent_still_current, current_reason = await _current_ai_consent(db, org, actor, command)
         if not consent_still_current:
             blocks = None
             ai_reason = current_reason
@@ -2180,7 +2277,7 @@ async def explore_topic(
     else:
         unavailable_reason = ai_reason or answer_reason
         status = "ai_unavailable" if unavailable_reason else "sources_found"
-        explanation = unavailable_reason or (
+        explanation = None if command.sources_only else unavailable_reason or (
             "Approved PDF passages were found, but they did not produce a verifiable explanation. Review the cited passages below."
         )
     return ExploreTopicResponse(

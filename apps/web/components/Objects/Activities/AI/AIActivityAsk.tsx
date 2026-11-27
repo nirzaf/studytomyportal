@@ -6,7 +6,7 @@ import {
 } from '@services/ai/ai'
 import { AlertTriangle, BadgeInfo, NotebookTabs, Maximize2, Minimize2, PanelRightOpen, PanelRightClose, PanelTop } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
-import { FlaskConical, MessageCircle, X } from 'lucide-react'
+import { MessageCircle, X } from 'lucide-react'
 import Image from 'next/image'
 import studytomyIcon from 'public/studytomy-mini.png'
 import React, { useEffect, useRef } from 'react'
@@ -46,6 +46,44 @@ type AIActivityAskProps = {
   guidedOnly?: boolean
 }
 
+/** Open a lesson-scoped practice prompt without sending anything on the learner's behalf. */
+export function LessonKnowledgeCheck({ activity, orgUuid }: AIActivityAskProps) {
+  const { t } = useTranslation()
+  const tutor = useLessonTutor(orgUuid, activity.activity_uuid)
+  const available = useGetAIFeatures({ feature: 'activity_ask' })
+  const state = useAIChatBot() as AIChatBotStateTypes
+  const dispatch = useAIChatBotDispatch() as React.Dispatch<
+    { type: 'setSidePanelOpen' } | { type: 'setChatInputValue'; payload: string }
+  >
+  const { setMode } = useAIPanelMode()
+
+  if (!available || tutor.options?.mode !== 'legacy' || activity.activity_type === 'TYPE_ASSIGNMENT') return null
+
+  return (
+    <section className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 text-slate-900">
+      <div>
+        <h2 className="text-sm font-semibold">{t('ai.lesson_check.title', 'Check your understanding')}</h2>
+        <p className="mt-1 text-sm text-slate-600">{t('ai.lesson_check.description', 'Practise this lesson with an ungraded question and feedback.')}</p>
+      </div>
+      <button
+        type="button"
+        disabled={state.isStreaming || state.isWaitingForResponse}
+        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+        onClick={() => {
+          setMode('side')
+          dispatch({ type: 'setSidePanelOpen' })
+          dispatch({
+            type: 'setChatInputValue',
+            payload: t('ai.lesson_check.prompt', 'Check my understanding of this lesson. Use only this lesson’s content. Ask one short question at a time and wait for my answer before giving feedback. Explain any mistake and offer a retry. If this lesson does not contain enough information, say so. This is practice only, so do not assign grades.'),
+          })
+        }}
+      >
+        {t('ai.lesson_check.open', 'Practise with Ask AI')}
+      </button>
+    </section>
+  )
+}
+
 function AIActivityAsk(props: AIActivityAskProps) {
   const { t } = useTranslation()
   const tutor = useLessonTutor(props.orgUuid, props.activity.activity_uuid)
@@ -79,16 +117,12 @@ function AIActivityAsk(props: AIActivityAskProps) {
           <button
             type="button"
             onClick={handleOpenAI}
-            style={{
-              background:
-                'conic-gradient(from 32deg at 53.75% 50%, rgb(35, 40, 93) 4deg, rgba(20, 0, 52, 0.95) 59deg, rgba(164, 45, 238, 0.88) 281deg)',
-            }}
-            className="rounded-full px-5 drop-shadow-md flex  items-center space-x-1.5 p-2.5 text-sm text-white hover:cursor-pointer transition delay-150 duration-300 ease-in-out hover:scale-105"
+            className="flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm text-slate-900 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600"
           >
             {' '}
             <i>
               <Image
-                className="outline outline-1 outline-neutral-200/20 rounded-md"
+                className="outline outline-1 outline-slate-200 rounded-md"
                 width={20}
                 src={studytomyIcon}
                 alt=""
@@ -121,8 +155,8 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
 
   const isInputDisabled = aiChatBotState.isWaitingForResponse || aiChatBotState.isStreaming
   const inputClass = isInputDisabled
-    ? 'ring-1 ring-inset ring-white/10 bg-gray-950/40 w-full rounded-lg outline-hidden px-4 py-2 text-white text-sm placeholder:text-white/30 opacity-30 '
-    : 'ring-1 ring-inset ring-white/10 bg-gray-950/40 w-full rounded-lg outline-hidden px-4 py-2 text-white text-sm placeholder:text-white/30'
+    ? 'ring-1 ring-inset ring-slate-200 bg-slate-50 w-full rounded-lg outline-hidden px-4 py-2 text-slate-900 text-sm placeholder:text-slate-500 opacity-30 '
+    : 'ring-1 ring-inset ring-slate-200 bg-slate-50 w-full rounded-lg outline-hidden px-4 py-2 text-slate-900 text-sm placeholder:text-slate-500'
 
   useEffect(() => {
     if (!aiChatBotState.isModalOpen) return
@@ -168,12 +202,6 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
 
     // Streaming callbacks
     const callbacks: StreamCallbacks = {
-      onStart: (data) => {
-        // Set the chat UUID immediately when we get the start event
-        if (data.aichat_uuid) {
-          dispatchAIChatBot({ type: 'setAichat_uuid', payload: data.aichat_uuid })
-        }
-      },
       onChunk: (chunk) => {
         accumulatedContentRef.current += chunk
         dispatchAIChatBot({ type: 'appendStreamingContent', payload: chunk })
@@ -309,10 +337,8 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
             <div
               style={{
                 pointerEvents: 'auto',
-                background:
-                  'linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.2) 100%), radial-gradient(105.16% 105.16% at 50% -5.16%, rgba(255, 255, 255, 0.18) 0%, rgba(0, 0, 0, 0) 100%), rgb(2 1 25 / 98%)',
               }}
-              className={`bg-black z-[10000] shadow-lg ring-1 ring-inset ring-white/10 text-white p-4 backdrop-blur-md transition-all duration-300 flex flex-col rounded-2xl max-w-(--breakpoint-2xl) w-10/12 max-md:w-[calc(100%-16px)] mx-auto fixed bottom-4 max-md:bottom-[calc(var(--lh-mobile-nav-h)+8px)] left-1/2 transform -translate-x-1/2 ${
+              className={`bg-white z-[10000] shadow-lg ring-1 ring-inset ring-slate-200 text-slate-900 p-4 backdrop-blur-md transition-all duration-300 flex flex-col rounded-2xl max-w-(--breakpoint-2xl) w-10/12 max-md:w-[calc(100%-16px)] mx-auto fixed bottom-4 max-md:bottom-[calc(var(--lh-mobile-nav-h)+8px)] left-1/2 transform -translate-x-1/2 ${
                 aiChatBotState.isFullscreen
                   ? 'h-[80vh]'
                   : 'h-[350px]'
@@ -325,14 +351,14 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                       setMode('side')
                       dispatchAIChatBot({ type: 'switchToSideMode' })
                     }}
-                    className="text-white/50 hover:text-white/70 hover:cursor-pointer bg-white/10 p-1 rounded-full items-center transition-colors"
+                    className="text-slate-600 hover:text-slate-800 hover:cursor-pointer bg-slate-100 p-1 rounded-full items-center transition-colors"
                     title={t('ai.switch_to_side_mode')}
                   >
                     <PanelRightOpen size={18} />
                   </button>
                   <button
                     onClick={toggleFullscreen}
-                    className="text-white/50 hover:text-white/70 hover:cursor-pointer bg-white/10 p-1 rounded-full items-center transition-colors"
+                    className="text-slate-600 hover:text-slate-800 hover:cursor-pointer bg-slate-100 p-1 rounded-full items-center transition-colors"
                     title={aiChatBotState.isFullscreen ? t('ai.exit_fullscreen') : t('ai.fullscreen')}
                   >
                     {aiChatBotState.isFullscreen ? (
@@ -342,36 +368,30 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                     )}
                   </button>
                   <button type="button" aria-label={t('ai.guided.closePanel', 'Close AI panel')}
-                    className="inline-flex size-11 items-center justify-center rounded-full bg-white/10 text-white/70"
+                    className="inline-flex size-11 items-center justify-center rounded-full bg-slate-100 text-slate-800"
                     onClick={closeModal}>
                     <X size={18} aria-hidden="true" />
                   </button>
                 </div>
                 <div
-                  className={`flex space-x-2 items-center -ms-[100px] ${isInputDisabled ? 'animate-pulse' : ''
+                  className={`flex space-x-2 items-center ${isInputDisabled ? 'animate-pulse' : ''
                     }`}
                 >
                   <Image
-                    className={`outline outline-1 outline-neutral-200/20 rounded-lg ${isInputDisabled ? 'animate-pulse' : ''
+                    className={`outline outline-1 outline-slate-200 rounded-lg ${isInputDisabled ? 'animate-pulse' : ''
                       }`}
                     width={24}
                     src={studytomyIcon}
                     alt=""
                   />
-                  <span className="text-sm font-semibold text-white/70">
+                  <span className="text-sm font-semibold text-slate-800">
                     {' '}
                     AI
                   </span>
                 </div>
-                <div className="bg-white/5 text-white/40 py-0.5 px-3 flex space-x-1 rounded-full items-center">
-                  <FlaskConical size={14} />
-                  <span className="text-xs font-semibold antialiased ">
-                    {t('ai.experimental')}
-                  </span>
-                </div>
               </div>
               <div
-                className={`w-100 h-0.5 bg-white/5 rounded-full mx-auto mb-3 ${isInputDisabled ? 'animate-pulse' : ''
+                className={`w-100 h-0.5 bg-slate-100 rounded-full mx-auto mb-3 ${isInputDisabled ? 'animate-pulse' : ''
                   }`}
               ></div>
           {tutor.options?.mode === 'legacy' ? <>
@@ -481,20 +501,20 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             transition={{ duration: 0.2 }}
-                            className="flex justify-center items-center gap-1.5 text-white/30 text-xs py-2"
+                            className="flex justify-center items-center gap-1.5 text-slate-500 text-xs py-2"
                           >
                             <motion.span
-                              className="w-1 h-1 bg-white/40 rounded-full"
+                              className="w-1 h-1 bg-slate-400 rounded-full"
                               animate={{ opacity: [0.3, 0.8, 0.3] }}
                               transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
                             />
                             <motion.span
-                              className="w-1 h-1 bg-white/40 rounded-full"
+                              className="w-1 h-1 bg-slate-400 rounded-full"
                               animate={{ opacity: [0.3, 0.8, 0.3] }}
                               transition={{ duration: 1, repeat: Infinity, ease: "easeInOut", delay: 0.15 }}
                             />
                             <motion.span
-                              className="w-1 h-1 bg-white/40 rounded-full"
+                              className="w-1 h-1 bg-slate-400 rounded-full"
                               animate={{ opacity: [0.3, 0.8, 0.3] }}
                               transition={{ duration: 1, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
                             />
@@ -528,13 +548,13 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
               </div>
               {aiChatBotState.error.isError && (
                 <div className={`flex items-center justify-center ${aiChatBotState.isFullscreen ? 'flex-1' : 'h-[237px]'}`}>
-                  <div className="flex flex-col mx-auto w-full max-w-[600px] space-y-2 p-5 rounded-lg bg-red-500/20 outline outline-1 outline-red-500">
+                  <div className="flex flex-col mx-auto w-full max-w-[600px] space-y-2 p-5 rounded-lg bg-red-50 outline outline-1 outline-red-200">
                     <AlertTriangle size={20} className="text-red-500" />
                     <div className="flex flex-col">
-                      <h3 className="font-semibold text-red-200">
+                      <h3 className="font-semibold text-red-950">
                         {t('common.something_wrong_happened')}
                       </h3>
-                      <span className="text-red-100 text-sm ">
+                      <span className="text-red-900 text-sm ">
                         {aiChatBotState.error.error_message}
                       </span>
                     </div>
@@ -567,7 +587,7 @@ function ActivityChatMessageBox(props: ActivityChatMessageBoxProps) {
                 <div className="">
                   <MessageCircle
                     size={20}
-                    className={`text-white/50 ${isInputDisabled ? 'opacity-30 cursor-not-allowed' : 'hover:cursor-pointer hover:text-white/70'}`}
+                    className={`text-slate-600 ${isInputDisabled ? 'opacity-30 cursor-not-allowed' : 'hover:cursor-pointer hover:text-slate-800'}`}
                     onClick={() => !isInputDisabled && sendMessage(aiChatBotState.chatInputValue)}
                   />
                 </div>
@@ -609,12 +629,13 @@ function AIMessageComponent({ message, isAI, isStreaming = false }: AIMessageCom
           <div className="w-full">
             <AIMarkdownRenderer
               content={message.message}
+              theme="light"
               isStreaming={isStreaming}
             />
           </div>
         ) : (
-          <div className="inline-block bg-white/5 rounded-xl rounded-ss-sm px-3 py-2 max-w-[85%]">
-            <p className="text-white/90 text-sm leading-relaxed">
+          <div className="inline-block bg-slate-100 rounded-xl rounded-ss-sm px-3 py-2 max-w-[85%]">
+            <p className="text-slate-900 text-sm leading-relaxed">
               {message.message}
             </p>
           </div>
@@ -656,7 +677,7 @@ const AIMessagePlaceHolder = (props: {
               src={studytomyIcon}
               alt=""
             />
-            <p className="pt-3 text-2xl font-semibold text-white/70 flex justify-center space-x-2 items-center">
+            <p className="pt-3 text-2xl font-semibold text-slate-800 flex justify-center space-x-2 items-center">
               <span className="items-center">{t('common.hello')}</span>
               <span className="capitalize flex space-x-2 items-center">
                 <UserAvatar rounded="rounded-lg" border="border-2" width={35} shadow="shadow-none" />
@@ -716,11 +737,11 @@ const AIChatPredefinedQuestion = (props: {
   return (
     <div
       onClick={() => props.sendMessage(getQuestion(props.label))}
-      className="flex space-x-1.5 items-center bg-white/5 cursor-pointer px-4 py-1.5 rounded-xl outline outline-1 outline-neutral-100/10 text-xs font-semibold text-white/40 hover:text-white/60 hover:bg-white/10 hover:outline-neutral-200/40 delay-75 ease-linear transition-all"
+      className="flex space-x-1.5 items-center bg-slate-100 cursor-pointer px-4 py-1.5 rounded-xl outline outline-1 outline-slate-200 text-xs font-semibold text-slate-600 hover:text-slate-700 hover:bg-slate-100 hover:outline-slate-300 delay-75 ease-linear transition-all"
     >
       {props.label === 'about' && <BadgeInfo size={15} />}
       {props.label === 'flashcards' && <NotebookTabs size={15} />}
-      {props.label === 'examples' && <div className="text-white/50">Ex</div>}
+      {props.label === 'examples' && <div className="text-slate-600">Ex</div>}
       <span>{getQuestion(props.label)}</span>
     </div>
   )
@@ -746,8 +767,8 @@ function AISidePanelInline(props: AISidePanelProps) {
 
   const isInputDisabled = aiChatBotState?.isWaitingForResponse || aiChatBotState?.isStreaming
   const inputClass = isInputDisabled
-    ? 'ring-1 ring-inset ring-white/10 bg-gray-950/40 w-full rounded-lg outline-hidden px-4 py-2 text-white text-sm placeholder:text-white/30 opacity-30'
-    : 'ring-1 ring-inset ring-white/10 bg-gray-950/40 w-full rounded-lg outline-hidden px-4 py-2 text-white text-sm placeholder:text-white/30'
+    ? 'ring-1 ring-inset ring-slate-200 bg-slate-50 w-full rounded-lg outline-hidden px-4 py-2 text-slate-900 text-sm placeholder:text-slate-500 opacity-30'
+    : 'ring-1 ring-inset ring-slate-200 bg-slate-50 w-full rounded-lg outline-hidden px-4 py-2 text-slate-900 text-sm placeholder:text-slate-500'
 
   // Mark initial render complete after mount
   useEffect(() => {
@@ -831,11 +852,6 @@ function AISidePanelInline(props: AISidePanelProps) {
     await dispatchAIChatBot({ type: 'setChatInputValue', payload: '' })
 
     const callbacks: StreamCallbacks = {
-      onStart: (data) => {
-        if (data.aichat_uuid) {
-          dispatchAIChatBot({ type: 'setAichat_uuid', payload: data.aichat_uuid })
-        }
-      },
       onChunk: (chunk) => {
         accumulatedContentRef.current += chunk
         dispatchAIChatBot({ type: 'appendStreamingContent', payload: chunk })
@@ -926,8 +942,6 @@ function AISidePanelInline(props: AISidePanelProps) {
         duration: 0.4,
       }}
       style={{
-        background:
-          'linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.2) 100%), radial-gradient(105.16% 105.16% at 50% -5.16%, rgba(255, 255, 255, 0.18) 0%, rgba(0, 0, 0, 0) 100%), rgb(2 1 25 / 98%)',
         ...(isPhone
           ? { height: 'min(70dvh, 560px)' }
           : { height: panelHeight, top: topPosition }),
@@ -936,7 +950,7 @@ function AISidePanelInline(props: AISidePanelProps) {
         isPhone
           ? 'fixed inset-x-2 bottom-[calc(var(--lh-mobile-nav-h)+8px)] z-[9998] rounded-2xl'
           : 'sticky w-[380px] shrink-0 rounded-xl'
-      } nice-shadow ring-1 ring-inset ring-white/10 text-white p-4 backdrop-blur-md flex flex-col transition-all duration-300`}
+      } bg-white nice-shadow ring-1 ring-inset ring-slate-200 text-slate-900 p-4 backdrop-blur-md flex flex-col transition-all duration-300`}
     >
           {/* Header */}
           <div className="flex flex-row-reverse pb-3 justify-between items-center">
@@ -946,13 +960,13 @@ function AISidePanelInline(props: AISidePanelProps) {
                   setMode('hover')
                   dispatchAIChatBot({ type: 'switchToHoverMode' })
                 }}
-                className="text-white/50 hover:text-white/70 hover:cursor-pointer bg-white/10 p-1 rounded-full items-center transition-colors"
+                className="text-slate-600 hover:text-slate-800 hover:cursor-pointer bg-slate-100 p-1 rounded-full items-center transition-colors"
                 title={t('ai.switch_to_hover_mode')}
               >
                 <PanelTop size={18} />
               </button>
               <button type="button" aria-label={t('ai.guided.closePanel', 'Close AI panel')}
-                className="inline-flex size-11 items-center justify-center rounded-full bg-white/10 text-white/70"
+                className="inline-flex size-11 items-center justify-center rounded-full bg-slate-100 text-slate-800"
                 onClick={closeSidePanel}>
                 <X size={18} aria-hidden="true" />
               </button>
@@ -961,23 +975,17 @@ function AISidePanelInline(props: AISidePanelProps) {
               className={`flex space-x-2 items-center ${isInputDisabled ? 'animate-pulse' : ''}`}
             >
               <Image
-                className={`outline outline-1 outline-neutral-200/20 rounded-lg ${isInputDisabled ? 'animate-pulse' : ''}`}
+                className={`outline outline-1 outline-slate-200 rounded-lg ${isInputDisabled ? 'animate-pulse' : ''}`}
                 width={24}
                 src={studytomyIcon}
                 alt=""
               />
-              <span className="text-sm font-semibold text-white/70">AI</span>
-            </div>
-            <div className="bg-white/5 text-white/40 py-0.5 px-3 flex space-x-1 rounded-full items-center">
-              <FlaskConical size={14} />
-              <span className="text-xs font-semibold antialiased">
-                {t('ai.experimental')}
-              </span>
+              <span className="text-sm font-semibold text-slate-800">AI</span>
             </div>
           </div>
 
           <div
-            className={`w-full h-0.5 bg-white/5 rounded-full mx-auto mb-3 ${isInputDisabled ? 'animate-pulse' : ''}`}
+            className={`w-full h-0.5 bg-slate-100 rounded-full mx-auto mb-3 ${isInputDisabled ? 'animate-pulse' : ''}`}
           ></div>
 
           {tutor.options?.mode === 'legacy' ? <>
@@ -1084,20 +1092,20 @@ function AISidePanelInline(props: AISidePanelProps) {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="flex justify-center items-center gap-1.5 text-white/30 text-xs py-2"
+                        className="flex justify-center items-center gap-1.5 text-slate-500 text-xs py-2"
                       >
                         <motion.span
-                          className="w-1 h-1 bg-white/40 rounded-full"
+                          className="w-1 h-1 bg-slate-400 rounded-full"
                           animate={{ opacity: [0.3, 0.8, 0.3] }}
                           transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
                         />
                         <motion.span
-                          className="w-1 h-1 bg-white/40 rounded-full"
+                          className="w-1 h-1 bg-slate-400 rounded-full"
                           animate={{ opacity: [0.3, 0.8, 0.3] }}
                           transition={{ duration: 1, repeat: Infinity, ease: "easeInOut", delay: 0.15 }}
                         />
                         <motion.span
-                          className="w-1 h-1 bg-white/40 rounded-full"
+                          className="w-1 h-1 bg-slate-400 rounded-full"
                           animate={{ opacity: [0.3, 0.8, 0.3] }}
                           transition={{ duration: 1, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
                         />
@@ -1132,13 +1140,13 @@ function AISidePanelInline(props: AISidePanelProps) {
           {/* Error state */}
           {aiChatBotState.error.isError && (
             <div className="flex items-center justify-center flex-1">
-              <div className="flex flex-col mx-auto w-full space-y-2 p-4 rounded-lg bg-red-500/20 outline outline-1 outline-red-500">
+              <div className="flex flex-col mx-auto w-full space-y-2 p-4 rounded-lg bg-red-50 outline outline-1 outline-red-200">
                 <AlertTriangle size={20} className="text-red-500" />
                 <div className="flex flex-col">
-                  <h3 className="font-semibold text-red-200">
+                  <h3 className="font-semibold text-red-950">
                     {t('common.something_wrong_happened')}
                   </h3>
-                  <span className="text-red-100 text-sm">
+                  <span className="text-red-900 text-sm">
                     {aiChatBotState.error.error_message}
                   </span>
                 </div>
@@ -1171,7 +1179,7 @@ function AISidePanelInline(props: AISidePanelProps) {
             <div>
               <MessageCircle
                 size={20}
-                className={`text-white/50 ${isInputDisabled ? 'opacity-30 cursor-not-allowed' : 'hover:cursor-pointer hover:text-white/70'}`}
+                className={`text-slate-600 ${isInputDisabled ? 'opacity-30 cursor-not-allowed' : 'hover:cursor-pointer hover:text-slate-800'}`}
                 onClick={() => !isInputDisabled && sendMessage(aiChatBotState.chatInputValue)}
               />
             </div>
@@ -1212,7 +1220,7 @@ const AISidePanelPlaceholder = (props: {
               src={studytomyIcon}
               alt=""
             />
-            <p className="pt-3 text-lg font-semibold text-white/70 flex flex-col justify-center items-center">
+            <p className="pt-3 text-lg font-semibold text-slate-800 flex flex-col justify-center items-center">
               <span className="flex items-center space-x-2">
                 <span>{t('common.hello')}</span>
                 <UserAvatar rounded="rounded-lg" border="border-2" width={28} shadow="shadow-none" />

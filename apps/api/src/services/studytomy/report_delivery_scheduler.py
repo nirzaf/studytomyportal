@@ -37,6 +37,7 @@ _SAFE_FAILURE_CODES = frozenset(
         "PROVIDER_TEMPORARILY_UNAVAILABLE",
         "PROVIDER_OUTCOME_UNKNOWN",
         "REPORT_RECIPIENT_NOT_AUTHORIZED",
+        "RELATIONSHIP_AUTHORITY_CHANGED",
     }
 )
 _LOG_STATUS_LABELS = {
@@ -47,7 +48,7 @@ _task: asyncio.Task | None = None
 _worker_id: str | None = None
 
 
-async def _queue_summary(db_session: AsyncSession) -> dict:
+async def report_queue_summary(db_session: AsyncSession) -> dict:
     rows = (
         await db_session.execute(
             select(
@@ -101,7 +102,7 @@ async def _run_once() -> None:
         return
     async with _async_session_factory() as db_session:
         tally = await run_report_delivery_batch(db_session, worker_id=worker_id)
-        summary = await _queue_summary(db_session)
+        summary = await report_queue_summary(db_session)
 
     counts = summary["status_counts"]
     if (

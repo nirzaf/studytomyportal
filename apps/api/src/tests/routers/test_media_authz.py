@@ -153,7 +153,7 @@ async def _mk_media(db, org, *, name, storage_key="", file_format="pdf",
         public=public,
         org_id=org.id,
         media_uuid=f"media_{name}",
-        file_id="stored.bin",
+        file_id=Path(storage_key).name if storage_key else "stored.bin",
         storage_key=storage_key,
         file_format=file_format,
         file_mime=file_mime,
@@ -262,7 +262,7 @@ class TestServedDispositionIsClamped:
         body.read.return_value = FILE_BYTES
         body.close.return_value = None
         s3.get_object.return_value = {"Body": body}
-        m = await _mk_media(db, org, name="s3att", storage_key="orgs/x/media/r/f.xyz",
+        m = await _mk_media(db, org, name="s3att", storage_key=f"orgs/{org.org_uuid}/media/r/f.xyz",
                             file_format="xyz", file_mime="text/html")
         with patch("src.services.media.media_serve.get_content_delivery_type",
                    return_value="s3api"), \

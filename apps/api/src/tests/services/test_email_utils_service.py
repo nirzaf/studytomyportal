@@ -903,3 +903,18 @@ class TestSendEmailSenderName:
             mock_resend_send.call_args.args[0]["from"]
             == "Studytomy Portal <system@test.com>"
         )
+
+
+def test_resend_uses_provider_idempotency_option_for_report_delivery():
+    config = _config(email_provider="resend")
+    with (
+        patch("src.services.email.utils.get_learnhouse_config", return_value=config),
+        patch("src.services.email.utils.resend.Emails.send", return_value={"id": "fixture"}) as send,
+    ):
+        send_email(
+            "to@test.com", "Report available", "<p>Sign in</p>",
+            single_attempt=True, provider_idempotency_key="fixture-delivery",
+        )
+    send.assert_called_once()
+    assert send.call_args.args[1] == {"idempotency_key": "fixture-delivery"}
+    assert "idempotency_key" not in send.call_args.args[0]

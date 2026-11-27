@@ -106,6 +106,7 @@ async def test_check_content_directory_creates_directory_when_missing(monkeypatc
     calls = []
     monkeypatch.setattr(content.os.path, "exists", lambda path: False)
     monkeypatch.setattr(content.os, "makedirs", lambda path: calls.append(path))
+    monkeypatch.setattr(content, "_ensure_s3_bucket_sync", lambda: None)
 
     await content.check_content_directory()
 
@@ -117,6 +118,7 @@ async def test_check_content_directory_skips_existing_directory(monkeypatch):
     calls = []
     monkeypatch.setattr(content.os.path, "exists", lambda path: True)
     monkeypatch.setattr(content.os, "makedirs", lambda path: calls.append(path))
+    monkeypatch.setattr(content, "_ensure_s3_bucket_sync", lambda: None)
 
     await content.check_content_directory()
 

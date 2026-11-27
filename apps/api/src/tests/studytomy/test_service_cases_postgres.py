@@ -452,6 +452,7 @@ async def test_case_scope_and_accountable_owner_constraints(postgres_session_fac
             assert detail.json() == {
                 "case_uuid": str(reference), "status": "closed",
                 "version": 7, "assigned_to_me": True,
+                "can_assign": False, "allowed_transitions": [],
             }
             undeclared_field = await client.post(
                 f"{path}/transition",
@@ -490,6 +491,7 @@ async def test_case_scope_and_accountable_owner_constraints(postgres_session_fac
             assert claim.json() == {
                 "case_uuid": fresh_case.case_uuid, "status": "assigned",
                 "version": 2, "assigned_to_me": True,
+                "can_assign": True, "allowed_transitions": ["awaiting_information", "under_review"],
             }
             assert claim.headers["cache-control"] == "private, no-store"
             stale = await client.post(
@@ -772,6 +774,7 @@ async def test_case_scope_and_accountable_owner_constraints(postgres_session_fac
             assert triaged.status_code == 200
             assert triaged.json() == {
                 "case_uuid": queued_uuid, "version": 2, "status": "assigned", "assigned_to_me": False,
+                "can_assign": False, "allowed_transitions": [],
             }
             assert await db.get(
                 StudyServiceCaseExclusion, (first.id, queued_uuid, replacement.id),
@@ -953,6 +956,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                     "service_limits": "Synthetic service limits",
                     "internal_contact": "Private internal contact",
                     "guest_intake_enabled": True,
+                    "guest_verification_delivery": "email",
                 }},
                 "monitored_hours": {"public_safeguarding": "Synthetic hours", "public_support": "Synthetic support hours"},
                 "response_targets": {
@@ -970,6 +974,9 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                     "backup_owner_assignment_uuid": support_backup.owner_uuid,
                 }},
             },
+            StudyPolicyKey.D_12: {"information_uses": {
+                "guest_support_verification": ["requester_submitted_email"],
+            }},
             StudyPolicyKey.D_13: {"retention": {
                 "safeguarding_evidence_retention_category": "synthetic",
                 "safeguarding_evidence_holds": {
@@ -1023,6 +1030,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                 "monitored_hours": "Synthetic support hours",
                 "response_expectations": "Synthetic acknowledgement and review expectations",
                 "intake_available": False,
+                "guest_verification_available": False,
             }
             assert (await client.get("/api/v1/studytomy/orgs/org_other/support/public-contact")).status_code == 404
 
@@ -1060,6 +1068,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                 assert projected.json()["intake_available"] is False
             public = await client.get(f"/api/v1/studytomy/orgs/{org.org_uuid}/support/public-contact")
             assert public.json()["intake_available"] is True
+            assert public.json()["guest_verification_available"] is False
             created = await client.post(support_path, json=payload)
             assert created.status_code == 201
             assert created.headers["cache-control"] == "private, no-store"
@@ -1078,6 +1087,13 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
             staff_path = support_path.replace("/support/cases", "/support/staff/cases")
             staff_case = f"{staff_path}/{saved_support['case_uuid']}"
             assert (await client.get(staff_path)).status_code == 404
+            workspace_path = f"/api/v1/studytomy/orgs/{org.org_uuid}/me/staff-workspaces"
+            unassigned_workspaces = await client.get(workspace_path)
+            assert unassigned_workspaces.status_code == 200
+            assert unassigned_workspaces.json() == ["cases"]
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_reporter)
+            assert (await client.get(workspace_path)).json() == []
+            monkeypatch.setattr(auth, "get_authenticated_user", authenticate_other_member)
             command = {"expected_version": 1, "next_status": "under_review"}
             assert (await client.post(f"{staff_case}/transition", json=command)).status_code == 404
 
@@ -1085,6 +1101,10 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
                 return approver_actor
 
             monkeypatch.setattr(auth, "get_authenticated_user", authenticate_owner)
+            staff_workspaces = await client.get(workspace_path)
+            assert staff_workspaces.status_code == 200
+            assert staff_workspaces.headers["cache-control"] == "private, no-store"
+            assert "support-cases" in staff_workspaces.json()
             staff_receipt = {
                 **saved_support, "version": 1, "allowed_transitions": ["awaiting_information", "under_review"],
             }
@@ -1238,6 +1258,65 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
             ))
             await db.commit()
             monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_GUEST_SUPPORT_ENABLED", "true")
+            readiness = await client.get(support_path.replace("/cases", "/public-contact"))
+            assert readiness.json()["guest_verification_available"] is True
+
+            from src.routers.studytomy import support as support_router
+
+            guest_app = FastAPI()
+            guest_app.include_router(support_router.router)
+
+            async def guest_session():
+                async with postgres_session_factory() as session:
+                    yield session
+
+            guest_app.dependency_overrides[get_db_session] = guest_session
+            monkeypatch.setattr(support_router, "_allow_guest_redemption", lambda _: True)
+            monkeypatch.setattr(support_router, "_consume_guest_limit", lambda *_: True)
+            deliveries = []
+            monkeypatch.setattr(support_router, "deliver_guest_support_challenge",
+                                lambda email, token: deliveries.append((email, token)))
+            guest_path = f"/orgs/{org.org_uuid}/support/guest-challenges/redeem"
+
+            async with AsyncClient(
+                transport=ASGITransport(app=guest_app), base_url="http://test",
+            ) as guest_client:
+                issue_path = guest_path.removesuffix("/redeem")
+                email = "synthetic-support@example.com"
+                issued = await guest_client.post(issue_path, json={"email": email, "topic": "Orders"})
+                unsupported = await guest_client.post(issue_path, json={"email": email, "topic": "Unknown"})
+                invalid_email = await guest_client.post(issue_path, json={"email": "invalid", "topic": "Orders"})
+                assert all(reply.status_code == 202 and not reply.content
+                           for reply in (issued, unsupported, invalid_email))
+                assert len(deliveries) == 1
+                assert deliveries[0][0] == email
+                issued_token = deliveries[0][1]
+                stored = (await db.exec(select(StudyGuestSupportChallenge).where(
+                    StudyGuestSupportChallenge.org_id == org.id,
+                    StudyGuestSupportChallenge.token_digest == hashlib.sha256(issued_token.encode("ascii")).hexdigest(),
+                ))).one()
+                assert stored.contact_ciphertext != email
+                assert email not in stored.contact_ciphertext
+                assert stored.expires_at - stored.created_at == timedelta(minutes=10)
+                unknown = await guest_client.post(guest_path, json={"token": secrets.token_urlsafe(32)})
+                invalid_org = await guest_client.post(
+                    guest_path.replace(org.org_uuid, f"org_{uuid4()}"), json={"token": guest_token},
+                )
+                first_response, replay_response = await asyncio.wait_for(asyncio.gather(
+                    guest_client.post(guest_path, json={"token": guest_token}),
+                    guest_client.post(guest_path, json={"token": guest_token}),
+                ), timeout=10)
+                for reply in (unknown, invalid_org, first_response, replay_response):
+                    assert reply.status_code == 202
+                    assert reply.content == b""
+                    assert reply.headers["Cache-Control"] == "no-store"
+
+            consumed = (await db.exec(select(StudyGuestSupportChallenge.case_uuid).where(
+                StudyGuestSupportChallenge.org_id == org.id,
+                StudyGuestSupportChallenge.token_digest == hashlib.sha256(guest_token.encode("ascii")).hexdigest(),
+                StudyGuestSupportChallenge.consumed_at.is_not(None),
+            ))).one()
+            assert consumed is not None
 
             async def redeem():
                 async with postgres_session_factory() as redemption_db:
@@ -1248,6 +1327,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
             first, retry = await asyncio.wait_for(asyncio.gather(redeem(), redeem()), timeout=10)
             assert first == retry
             assert first.status == "assigned"
+            assert str(first.case_uuid) == consumed
             guest_event = (await db.exec(select(StudyBusinessEvent).where(
                 StudyBusinessEvent.org_id == org.id,
                 StudyBusinessEvent.resource_uuid == str(first.case_uuid),
@@ -1398,6 +1478,7 @@ async def test_report_routing_enforces_persisted_approval_and_exact_case_grant(p
         inventory = await safeguarding_retention_inventory(db, org, approver_actor, reference)
         assert inventory.model_dump(mode="json") == {
             "case_uuid": str(reference), "case_status": "acknowledged", "active_holds": [],
+            "hold_reason_codes": ["synthetic_review"], "release_reason_codes": ["synthetic_complete"],
             "categories": [{"category": "synthetic", "narrative_records": 1, "file_records": 1}],
         }
         with pytest.raises(HTTPException) as no_narrative_access:

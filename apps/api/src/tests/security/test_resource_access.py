@@ -5,6 +5,8 @@ This module tests the ResourceAccessChecker class and related functionality
 for the unified RBAC system.
 """
 
+from types import SimpleNamespace
+
 import pytest
 from unittest.mock import Mock, MagicMock, AsyncMock, patch
 from fastapi import HTTPException, Request
@@ -232,7 +234,9 @@ class TestResourceAccessChecker:
         assert decision.via_admin is True
         assert decision.user_id == 42
         assert checker._get_user_id() == 0
-        mock_db_session.execute.assert_not_called()
+        mock_db_session.execute.assert_awaited_once()
+        statement = mock_db_session.execute.await_args.args[0]
+        assert statement.column_descriptions[0]["entity"].__tablename__ == "course"
 
     @pytest.mark.asyncio
     async def test_check_access_empty_uuid(self, mock_request, mock_db_session, mock_public_user):
@@ -714,3 +718,21 @@ class TestRequestScopedChecker:
         result = await checker._resolve_parent_resource_uuid("chapter_xyz", config)
         assert result == "course_parent"
         mock_db_session.execute.assert_not_called()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", list(AccessAction))
+@pytest.mark.parametrize("resource_uuid", ["course_fixture", "chapter_fixture", "activity_fixture"])
+@pytest.mark.parametrize("token", [APITokenUser(org_id=11, rights={}), SuperadminAPITokenUser()])
+async def test_managed_course_resources_deny_tokens_before_permission_bypass(action, resource_uuid, token):
+    checker = ResourceAccessChecker(MagicMock(), AsyncMock(), token)
+    checker._get_resource = AsyncMock(return_value=SimpleNamespace(studytomy_managed=True))
+    checker._resolve_parent_resource_uuid = AsyncMock(return_value="course_fixture")
+    checker._managed_activity_course_uuid = AsyncMock(return_value="course_fixture")
+    checker._check_api_token_access = AsyncMock()
+
+    decision = await checker.check_access(resource_uuid, action, AccessContext.DASHBOARD)
+
+    assert not decision.allowed
+    assert decision.resource_uuid == resource_uuid
+    assert decision.reason == "User does not have access to this resource"
+    checker._check_api_token_access.assert_not_awaited()

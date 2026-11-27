@@ -5,8 +5,8 @@
 import { afterAll, describe, expect, mock, test } from "bun:test";
 import { NextRequest } from "next/server";
 
-mock.module("./services/config/config", () => ({ getAPIUrl: () => "http://api.test/" }));
-mock.module("@services/config/config", () => ({ getAPIUrl: () => "http://api.test/" }));
+mock.module("./services/config/config", () => ({ getAPIUrl: () => "http://api.test/", getServerAPIUrl: () => "http://api.test/" }));
+mock.module("@services/config/config", () => ({ getAPIUrl: () => "http://api.test/", getServerAPIUrl: () => "http://api.test/" }));
 
 // Host → tenant, the way the EE resolver answers for these fixtures.
 mock.module("@ee/services/tenancy/resolveMulti.middleware", () => ({

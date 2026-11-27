@@ -25,6 +25,7 @@ import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { signOut } from '@components/Contexts/AuthContext'
 import useAdminStatus from '@components/Hooks/useAdminStatus'
+import { useStudytomyStaffWorkspaces } from '@components/Hooks/useStudytomyStaffWorkspaces'
 import { useMessaging, useMessagingEnabled } from '@components/Messaging/MessagingProvider'
 import { useSiteCommandPalette } from '@components/Objects/Search/SiteCommandPaletteContext'
 import { getUriWithOrg } from '@services/config/config'
@@ -32,7 +33,7 @@ import { isFeatureAvailable } from '@services/plans/plans'
 import { DASHBOARD_MENU_ITEMS, DashboardMenuItem } from '@/lib/dashboard-menu-items'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
 import { activeOrgMenuItem, orgMenuPath } from '@/lib/org-menu-path'
-import { useOrgMenuItems, type OrgMenuItem } from './OrgMenuLinks'
+import { useOrgHelpItems, useOrgMenuItems, type OrgMenuItem } from './OrgMenuLinks'
 
 /** Fired by the header avatar to open the More sheet from outside the tab bar. */
 export const OPEN_MOBILE_MORE_EVENT = 'lh:open-mobile-more'
@@ -234,6 +235,9 @@ function MobileMoreSheet({
   activeItem?: OrgMenuItem
 }) {
   const { t } = useTranslation()
+  const pathname = usePathname()
+  const helpItems = useOrgHelpItems(orgslug)
+  const activeHelp = activeOrgMenuItem(helpItems, pathname)
   const session = useLHSession() as any
   const org = useOrg() as any
   const { rights } = useAdminStatus()
@@ -246,6 +250,7 @@ function MobileMoreSheet({
   const config = org?.config?.config
   const rf = config?.resolved_features
   const isAdmin = isAuthenticated && rights?.dashboard?.action_access
+  const staffWorkspaces = useStudytomyStaffWorkspaces(Boolean(isAdmin))
   const dashboardItems = DASHBOARD_MENU_ITEMS.filter((item: DashboardMenuItem) => {
     if (item.available && !item.available()) return false
     if (!item.featureKey) return true
@@ -299,6 +304,13 @@ function MobileMoreSheet({
             </SheetGroup>
           )}
 
+          <SheetGroup title={t('common.help')}>
+            {helpItems.map(item => (
+              <SheetRow key={item.key} href={item.href} Icon={item.Icon} label={item.label}
+                current={item === activeHelp} onClick={() => onOpenChange(false)} />
+            ))}
+          </SheetGroup>
+
           {isAuthenticated && (
             <SheetGroup title={t('mobile_nav.you', { defaultValue: 'You' })}>
               {messagingEnabled && (
@@ -323,6 +335,12 @@ function MobileMoreSheet({
               <SheetRow href={getUriWithOrg(orgslug, '/account/general')} Icon={User} label={t('user.user_settings')} />
             </SheetGroup>
           )}
+
+          {staffWorkspaces.length > 0 && <SheetGroup title={t('dashboard.studytomy.workspaces', 'Staff workspaces')}>
+            {staffWorkspaces.map(item => <SheetRow key={item.id} href={getUriWithOrg(orgslug, item.href)}
+              Icon={item.icon} label={t(item.labelKey, item.label)}
+              current={orgMenuPath(pathname) === item.href} onClick={() => onOpenChange(false)} />)}
+          </SheetGroup>}
 
           {isAdmin && (
             <SheetGroup title={t('common.dashboard')}>

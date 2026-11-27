@@ -76,11 +76,12 @@ def fs_file():
 
 async def _mk_media(
     db, org, storage_key="", public=True, media_type=MediaTypeEnum.UPLOAD, name="m",
-    file_format="pdf", file_mime="application/pdf",
+    file_format="pdf", file_mime="application/pdf", file_id=None,
 ):
+    exact_file_id = file_id or (storage_key.rsplit("/", 1)[-1] if storage_key else "testfile.pdf")
     m = Media(
         name=name, media_type=media_type, public=public, org_id=org.id,
-        media_uuid=f"media_{name}", file_id="testfile.pdf", storage_key=storage_key,
+        media_uuid=f"media_{name}", file_id=exact_file_id, storage_key=storage_key,
         file_format=file_format, file_mime=file_mime,
         creation_date=str(datetime.now()), update_date=str(datetime.now()),
     )
@@ -157,6 +158,15 @@ class TestServeFilesystem:
         res = await client.get(f"/api/v1/media/{m.media_uuid}/file")
         assert res.status_code == 404
 
+    async def test_storage_key_must_match_the_media_row_file_id(self, client, db, org):
+        m = await _mk_media(
+            db, org,
+            storage_key=f"orgs/{org.org_uuid}/media/random/another-file.pdf",
+            name="key_mismatch", file_id="testfile.pdf",
+        )
+        res = await client.get(f"/api/v1/media/{m.media_uuid}/file")
+        assert res.status_code == 404
+
     async def test_embed_media_has_no_file(self, client, db, org):
         m = await _mk_media(db, org, media_type=MediaTypeEnum.EMBED, name="embed")
         res = await client.get(f"/api/v1/media/{m.media_uuid}/file")
@@ -204,19 +214,19 @@ class TestServeS3:
             yield s3
 
     async def test_get_streams_from_s3(self, client, db, org):
-        m = await _mk_media(db, org, storage_key="orgs/x/media/r/f.pdf", name="s3full")
+        m = await _mk_media(db, org, storage_key=f"orgs/{org.org_uuid}/media/r/f.pdf", name="s3full")
         res = await client.get(f"/api/v1/media/{m.media_uuid}/file")
         assert res.status_code == 200, res.text
         assert res.content == PDF_BYTES
 
     async def test_head_s3(self, client, db, org):
-        m = await _mk_media(db, org, storage_key="orgs/x/media/r/f.pdf", name="s3head")
+        m = await _mk_media(db, org, storage_key=f"orgs/{org.org_uuid}/media/r/f.pdf", name="s3head")
         res = await client.head(f"/api/v1/media/{m.media_uuid}/file")
         assert res.status_code == 200, res.text
         assert int(res.headers["content-length"]) == len(PDF_BYTES)
 
     async def test_range_s3(self, client, db, org):
-        m = await _mk_media(db, org, storage_key="orgs/x/media/r/f.pdf", name="s3range")
+        m = await _mk_media(db, org, storage_key=f"orgs/{org.org_uuid}/media/r/f.pdf", name="s3range")
         res = await client.get(f"/api/v1/media/{m.media_uuid}/file", headers={"Range": "bytes=10-49"})
         assert res.status_code == 206, res.text
         assert res.headers["content-range"] == f"bytes 10-49/{len(PDF_BYTES)}"
@@ -225,7 +235,7 @@ class TestServeS3:
     async def test_s3_missing_key_404(self, client, db, org, _s3_mode):
         from botocore.exceptions import ClientError
         _s3_mode.head_object.side_effect = ClientError({"Error": {"Code": "NoSuchKey"}}, "HeadObject")
-        m = await _mk_media(db, org, storage_key="orgs/x/media/r/gone.pdf", name="s3miss")
+        m = await _mk_media(db, org, storage_key=f"orgs/{org.org_uuid}/media/r/gone.pdf", name="s3miss")
         res = await client.get(f"/api/v1/media/{m.media_uuid}/file")
         assert res.status_code == 404
 
@@ -310,7 +320,7 @@ class TestServeEdges:
 
 class TestServeS3Errors:
     async def _media(self, db, org):
-        m = await _mk_media(db, org, storage_key="orgs/x/media/r/f.pdf", name="s3err")
+        m = await _mk_media(db, org, storage_key=f"orgs/{org.org_uuid}/media/r/f.pdf", name="s3err")
         return m
 
     async def test_no_storage_client_500(self, client, db, org):
@@ -411,3 +421,19 @@ async def test_share_link_requires_sign_in_and_is_rate_limited(db, org):
             limited = await c.post(f"/api/v1/media/{m.media_uuid}/share-link")
     assert anon.status_code == 401
     assert limited.status_code == 429
+
+
+async def test_native_media_and_existing_share_reject_course_storage_key(client, db, org, fs_file):
+    media = await _mk_media(db, org, storage_key=fs_file, name="managed_reference")
+    url = f"/api/v1/media/{media.media_uuid}"
+    created = await client.post(f"{url}/share-link")
+    assert created.status_code == 200
+    token = created.json()["token"]
+
+    media.storage_key = f"orgs/{org.org_uuid}/courses/course_managed/activities/activity_test/lesson.pdf"
+    db.add(media)
+    await db.commit()
+
+    assert (await client.get(f"{url}/file")).status_code == 404
+    assert (await client.post(f"{url}/share-link")).status_code == 404
+    assert (await client.get(f"/api/v1/media/shared/{token}/file")).status_code == 404

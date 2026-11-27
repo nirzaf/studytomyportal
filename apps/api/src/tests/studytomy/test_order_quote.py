@@ -7,10 +7,11 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import select, text
 
+from src.db.studytomy.capacity import StudyCapacityHold
 from src.db.studytomy.commerce import StudyOffer, StudyOfferTerms, StudyOfferVersion
 from src.db.studytomy.family import StudyLearnerProfile
 from src.db.studytomy.governance import StudyPolicyKey
-from src.db.studytomy.orders import StudyOrder, StudyOrderLine
+from src.db.studytomy.orders import StudyOrder, StudyOrderAcceptance, StudyOrderLine
 from src.services.studytomy import orders
 from src.services.studytomy.offers import _terms_snapshot
 from src.tests.studytomy.test_studytomy_access import _seed_approved_policy
@@ -170,11 +171,12 @@ async def test_server_quote_uses_current_immutable_offer_and_exact_approved_pric
     assert incomplete.value.detail["code"] == "OFFER_TERMS_INCOMPLETE"
     monkeypatch.setattr(StudyOfferTerms, "completion_blockers", lambda self: [])
     monkeypatch.setattr(orders, "_snapshot_resource_titles", AsyncMock(return_value=terms))
-    accepted = await orders.accept_named_order(db, org, **confirmation, customer_ref=reference)
-    assert accepted.order_id == saved.id and accepted.confirmation_sha256 == preview.confirmation_sha256
-    assert accepted.policy_binding["D-17"]["uuid"] == pilot.policy_uuid
+    with pytest.raises(HTTPException) as not_ready:
+        await orders.accept_named_order(db, org, **confirmation, customer_ref=reference)
+    assert not_ready.value.detail["code"] == "OFFER_SALES_PAUSED"
+    assert await db.get(StudyOrderAcceptance, saved.id) is None
+    assert (await db.execute(select(StudyCapacityHold))).scalars().all() == []
     await db.commit()
-    assert await orders.accept_named_order(db, org, **confirmation, customer_ref=reference) == accepted
 
     overlap = preview.model_copy(update={"learners_with_overlap": named["learner_uuids"][:1]})
     monkeypatch.setattr(orders, "preview_named_order", AsyncMock(return_value=overlap))

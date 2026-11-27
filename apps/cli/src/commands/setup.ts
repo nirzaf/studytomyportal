@@ -12,6 +12,7 @@ import { promptDatabase } from '../prompts/database.js'
 import { promptOrganization } from '../prompts/organization.js'
 import { promptAdmin } from '../prompts/admin.js'
 import { promptFeatures } from '../prompts/features.js'
+import { LEGACY_REDIS_IMAGE } from '../constants.js'
 import { generateDockerCompose } from '../templates/docker-compose.js'
 import { generateEnvFile, type EnvSecrets } from '../templates/env.js'
 import { generateNginxConf } from '../templates/nginx.js'
@@ -78,6 +79,7 @@ interface ExistingInstall {
   externalRedis?: string
   /** Preserve the existing local PostgreSQL major and data path on reconfigure. */
   database?: PostgresComposeSettings
+  redisImage?: string
 }
 
 function composeImage(dir: string): string | undefined {
@@ -104,6 +106,11 @@ function readExistingInstall(dir: string): ExistingInstall | null {
   if (edition !== 'enterprise' && !image) {
     throw new Error(`Cannot safely reconfigure ${dir}: the learnhouse-app service or its image could not be read from docker-compose.yml. Preserve the current files and inspect them manually.`)
   }
+  const hasLocalRedis = hasComposeService(dir, 'redis')
+  const redisImage = readComposeServiceImage(compose, 'redis')
+  if (edition !== 'enterprise' && hasLocalRedis && !redisImage) {
+    throw new Error(`Cannot safely reconfigure ${dir}: the existing Redis image could not be read. Preserve the current files and inspect them manually.`)
+  }
   const envFile = fs.readFileSync(envPath, 'utf-8')
   let database: PostgresComposeSettings | undefined
   if (hasLocalDatabase) {
@@ -126,7 +133,9 @@ function readExistingInstall(dir: string): ExistingInstall | null {
     running: isDeploymentRunning(config.deploymentId),
     image,
     externalDb: hasComposeService(dir, 'db') ? undefined : readEnvVar(dir, 'LEARNHOUSE_SQL_CONNECTION_STRING'),
-    externalRedis: hasComposeService(dir, 'redis') ? undefined : readEnvVar(dir, 'LEARNHOUSE_REDIS_CONNECTION_STRING'),
+    externalRedis: hasLocalRedis ? undefined : readEnvVar(dir, 'LEARNHOUSE_REDIS_CONNECTION_STRING'),
+    // An existing install using external Redis can still own a previous local volume.
+    redisImage: redisImage ?? LEGACY_REDIS_IMAGE,
     database,
   }
 }
@@ -295,11 +304,11 @@ function summaryLines(config: SetupConfig): string {
   ].join('\n')
 }
 
-function writeInstallFiles(config: SetupConfig, appImage: string, secrets: Partial<EnvSecrets>, database?: PostgresComposeSettings): void {
+function writeInstallFiles(config: SetupConfig, appImage: string, secrets: Partial<EnvSecrets>, database?: PostgresComposeSettings, redisImage?: string): void {
   const dir = config.installDir
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
   fs.mkdirSync(path.join(dir, 'extra'), { recursive: true })
-  writeFileAtomic(path.join(dir, 'docker-compose.yml'), generateDockerCompose(config, appImage, database))
+  writeFileAtomic(path.join(dir, 'docker-compose.yml'), generateDockerCompose(config, appImage, database, redisImage))
   writeFileAtomic(path.join(dir, '.env'), generateEnvFile(config, secrets), 0o600)
   if (config.autoSsl) {
     writeFileAtomic(path.join(dir, 'extra', 'Caddyfile'), generateCaddyfile(config))
@@ -461,7 +470,7 @@ export async function setupCommand(rawOptions: SetupOptions) {
         ciFail(`could not move uploaded content into a persistent volume: ${(err as Error)?.message ?? err}. Nothing was changed.`)
       }
     }
-    writeInstallFiles(config, appImage, existing?.secrets ?? {}, existing?.database)
+    writeInstallFiles(config, appImage, existing?.secrets ?? {}, existing?.database, existing?.redisImage)
 
     console.log('Configuration files generated')
 
@@ -713,7 +722,7 @@ export async function setupCommand(rawOptions: SetupOptions) {
   const finalDir = config.installDir
   try {
     if (existing) preserveContent(finalDir, existing)
-    writeInstallFiles(config, appImage, existing?.secrets ?? {}, existing?.database)
+    writeInstallFiles(config, appImage, existing?.secrets ?? {}, existing?.database, existing?.redisImage)
   } catch (err: any) {
     s.stop('Failed to generate configuration files')
     p.log.error(err?.message ?? String(err))

@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from typer.testing import CliRunner
 
+import cli as portal_cli
 from src.services.studytomy import report_delivery_scheduler as scheduler
 from src.services.studytomy.report_notifications import _delivery_status_for_report
 
@@ -94,7 +96,7 @@ async def test_report_queue_summary_returns_only_aggregate_safe_fields():
         execute=AsyncMock(return_value=SimpleNamespace(all=lambda: rows)),
     )
 
-    summary = await scheduler._queue_summary(db_session)
+    summary = await scheduler.report_queue_summary(db_session)
 
     assert summary["status_counts"] == {
         "queued": 2,
@@ -132,3 +134,102 @@ async def test_empty_poll_logs_existing_unknown_outcome_without_private_values(m
     assert "'provider_outcome_unknown': 1" in caplog.text
     assert "oldest_unknown_delivery_age_seconds=" in caplog.text
     assert "recipient@example.invalid" not in caplog.text
+
+
+def _local_cli_config(database: str, *, provider: str = "smtp", smtp_host: str = "127.0.0.1"):
+    return SimpleNamespace(
+        database_config=SimpleNamespace(sql_connection_string=database),
+        mailing_config=SimpleNamespace(email_provider=provider, smtp_host=smtp_host),
+    )
+
+
+def test_report_outbox_drain_defaults_to_aggregate_dry_run(monkeypatch):
+    config = _local_cli_config("postgresql://localhost/studytomy_fixture_test")
+    monkeypatch.setattr(portal_cli, "get_learnhouse_config", lambda: config)
+    monkeypatch.setattr(
+        portal_cli, "_read_report_outbox_status",
+        lambda: asyncio.sleep(0, result={"status_counts": {"queued": 1}}),
+    )
+    drain = AsyncMock(return_value={"claimed": 0})
+    monkeypatch.setattr(portal_cli, "_drain_report_outbox", drain)
+
+    result = CliRunner().invoke(portal_cli.cli, ["report-outbox-drain", "--limit", "3"])
+
+    assert result.exit_code == 0, result.output
+    assert '"mode": "dry_run"' in result.stdout
+    assert '"changed": false' in result.stdout
+    drain.assert_not_awaited()
+
+
+def test_report_outbox_status_rejects_nonlocal_targets_before_reading(monkeypatch):
+    config = _local_cli_config("postgresql://db.example/studytomy_fixture_test")
+    monkeypatch.setattr(portal_cli, "get_learnhouse_config", lambda: config)
+    status = AsyncMock(return_value={"status_counts": {}})
+    monkeypatch.setattr(portal_cli, "_read_report_outbox_status", status)
+
+    result = CliRunner().invoke(portal_cli.cli, ["report-outbox-status"])
+
+    assert result.exit_code == 2
+    status.assert_not_awaited()
+
+
+def test_report_outbox_drain_executes_one_bounded_batch_only_to_local_sink(monkeypatch):
+    config = _local_cli_config("postgresql://localhost/studytomy_fixture_test")
+    monkeypatch.setattr(portal_cli, "get_learnhouse_config", lambda: config)
+    monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_REPORT_DELIVERY_ENABLED", "true")
+    drain = AsyncMock(return_value={"claimed": 2, "sent": 2, "suppressed": 0})
+    monkeypatch.setattr(portal_cli, "_drain_report_outbox", drain)
+
+    result = CliRunner().invoke(portal_cli.cli, ["report-outbox-drain", "--limit", "2", "--execute"])
+
+    assert result.exit_code == 0, result.output
+    assert '"mode": "executed"' in result.stdout
+    drain.assert_awaited_once_with(2)
+
+
+def test_report_outbox_drain_requires_exact_scheduler_opt_in(monkeypatch):
+    config = _local_cli_config("postgresql://localhost/studytomy_fixture_test")
+    monkeypatch.setattr(portal_cli, "get_learnhouse_config", lambda: config)
+    monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_REPORT_DELIVERY_ENABLED", "TRUE")
+    drain = AsyncMock(return_value={"claimed": 0})
+    monkeypatch.setattr(portal_cli, "_drain_report_outbox", drain)
+
+    result = CliRunner().invoke(portal_cli.cli, ["report-outbox-drain", "--execute"])
+
+    assert result.exit_code == 2
+    drain.assert_not_awaited()
+
+
+def test_report_outbox_drain_rejects_a_batch_over_the_bound(monkeypatch):
+    config = _local_cli_config("postgresql://localhost/studytomy_fixture_test")
+    monkeypatch.setattr(portal_cli, "get_learnhouse_config", lambda: config)
+    drain = AsyncMock(return_value={"claimed": 0})
+    monkeypatch.setattr(portal_cli, "_drain_report_outbox", drain)
+
+    result = CliRunner().invoke(portal_cli.cli, ["report-outbox-drain", "--limit", "26", "--execute"])
+
+    assert result.exit_code != 0
+    drain.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        _local_cli_config("postgresql://localhost/studytomy_fixture"),
+        _local_cli_config("postgresql://localhost/studytomy_fixture_test?host=remote.example"),
+        _local_cli_config("postgresql://db.example/studytomy_fixture_test"),
+        _local_cli_config("mysql://localhost/studytomy_fixture_test"),
+        _local_cli_config("postgresql://localhost/studytomy_fixture_test", provider="resend"),
+        _local_cli_config("postgresql://localhost/studytomy_fixture_test", smtp_host="mail.example"),
+    ],
+)
+def test_report_outbox_drain_rejects_nonlocal_targets_before_processing(monkeypatch, config):
+    monkeypatch.setattr(portal_cli, "get_learnhouse_config", lambda: config)
+    monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_REPORT_DELIVERY_ENABLED", "true")
+    drain = AsyncMock(return_value={"claimed": 0})
+    monkeypatch.setattr(portal_cli, "_drain_report_outbox", drain)
+
+    result = CliRunner().invoke(portal_cli.cli, ["report-outbox-drain", "--execute"])
+
+    assert result.exit_code == 2
+    drain.assert_not_awaited()

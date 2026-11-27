@@ -95,6 +95,16 @@ Investigate how total linear momentum ($P_{\text{total}} = m_1 v_1 + m_2 v_2$) a
 
 ---
 
+### Drafting a managed lab
+
+In the managed course editor, open an Embed activity and select a simulator build
+from the **Virtual science lab** panel. Save it as a draft. The API supplies
+choices from its reviewed manifests and configured origins and validates the
+descriptor again before saving. Existing linked assignment settings are kept
+when changing the pinned build. The saved draft goes through the existing
+independent review and release workflow. Learners open the released simulator
+from their learning account, where the sandbox allows fullscreen and downloads.
+
 ## 5. Educator Sign-Off Record *(Required Before Student Admission)*
 
 - [ ] Qualified Sri Lankan A/L Physics educator verified syllabus edition, objective alignment, and SI notation.

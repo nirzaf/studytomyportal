@@ -148,3 +148,38 @@ class TestFoldersService:
 
         assert result == {"detail": "Folder deleted"}
         assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_folder_saves_bare_playground_uuid_and_checks_visibility(
+    db, org, admin_user, mock_request,
+):
+    from uuid import uuid4
+
+    from src.db.playgrounds import Playground
+    from src.db.users import AnonymousUser
+    from src.services.folders.folders import search_library
+
+    playground = Playground(
+        playground_uuid=str(uuid4()), org_id=org.id, name="Grade 8 Playground",
+        created_by=admin_user.id, published=True, html_content="<p>Practice</p>",
+    )
+    db.add(playground)
+    await db.commit()
+
+    rbac, webhooks = _bypass()
+    with rbac, webhooks, patch(
+        "src.security.features_utils.dependencies.require_org_playgrounds_feature",
+        new_callable=AsyncMock,
+    ):
+        folder = await create_folder(mock_request, FolderCreate(name="Maths", org_id=org.id), admin_user, db)
+        added = await add_folder_content(mock_request, folder.folder_uuid, playground.playground_uuid, admin_user, db)
+        fetched = await get_folder(mock_request, folder.folder_uuid, admin_user, db)
+        searched = await search_library(mock_request, str(org.id), "Playground", admin_user, db)
+        anonymous = await get_folder(mock_request, folder.folder_uuid, AnonymousUser(), db)
+
+    assert added.items[0].resource_uuid == playground.playground_uuid
+    assert fetched.items[0].resource_type == "playgrounds"
+    assert "html_content" not in fetched.items[0].resource
+    assert searched["items"][0]["resource_uuid"] == playground.playground_uuid
+    assert anonymous.items == []

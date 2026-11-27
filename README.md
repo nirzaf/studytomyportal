@@ -109,6 +109,15 @@ The remaining product ambitions below are a roadmap, not a claim that all custom
 | AI marketing assistant | Draft creatives/copy, campaign recommendations, reviewed publishing workflow. | Planned / optional |
 | Subject and grade demand analysis | Evidence-labelled research into subject/grade demand using approved public data and Studytomy enquiry trends. | Planned / optional |
 
+### Phase 2 and separately approved work
+
+Course-wide tutoring, dedicated parent self-service and automatic updates, and
+personalized reminders are tracked as TASK-071–073. Syllabus-aligned exam
+generation, advanced marking, AI marketing and demand analysis, and virtual
+science lab phases P3–P6 also require separate scope, review and acceptance.
+The launch scope uses lesson-bound help, reviewed reports and approved service
+communications, and the existing momentum Pilot 01.
+
 ### Public website and legacy workflow separation
 
 The public website (`studytomy.com` / `www.studytomy.com`, [`nirzaf/studytomy-react`](https://github.com/nirzaf/studytomy-react)) is an independent application outside the LMS development and deployment scope, with its own deployment, authentication sessions, and data storage. There is no requirement to migrate the public website's Supabase database or connect its existing business workflows/APIs (lead intake, trial booking, recurring classes, attendance, payments, notifications, scheduling) to the LMS unless separately authorized.
@@ -746,6 +755,11 @@ uv sync --frozen
 ```
 
 Run commands in the component directory indicated, not as a single root script. Start required PostgreSQL/Redis services and configure supported environment variables before starting the API. To use the local development CLI from this checkout, build it with `bun --cwd apps/cli run build` and run `node apps/cli/dist/bin/learnhouse.js dev`. `npx learnhouse@latest setup` configures the published upstream runtime image; it does not build or deploy this checkout. The combined Dockerfile and CLI-generated Compose templates support local builds and runtime tests; they do not configure a hosted environment or deploy this project.
+
+For local container builds, run `docker build -t studytomy-local .` or
+`docker build -f apps/api/Dockerfile -t studytomy-api-local .` from the repository
+root. Both images run as UID/GID 1001. Provision existing writable mounts for
+that identity before starting a container.
 
 ### 2. Development commands
 

@@ -1670,6 +1670,17 @@ async def clone_activity(
     return new_activity
 
 
+def require_native_course_transfer(course: Course) -> None:
+    if course.studytomy_managed:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MANAGED_COURSE_PUBLICATION_REQUIRED",
+                "message": "Use the reviewed release workflow for this managed course.",
+            },
+        )
+
+
 async def clone_course(
     request: Request,
     course_uuid: str,
@@ -1717,6 +1728,7 @@ async def clone_course(
     # RBAC check - cloning copies drafts, paid/locked content and quiz answers,
     # so require edit rights on the source (same bar as export).
     await check_resource_access(request, db_session, current_user, original_course.course_uuid, AccessAction.UPDATE)
+    require_native_course_transfer(original_course)
 
     # Also check if user can create courses
     await check_resource_access(request, db_session, current_user, "course_x", AccessAction.CREATE)

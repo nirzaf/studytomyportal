@@ -28,6 +28,7 @@ from src.security.org_auth import is_org_admin, is_org_member
 from src.services.mcp import oauth
 from src.services.mcp.access import mcp_enabled_for_org, set_mcp_enabled_for_org
 from src.services.security.rate_limiting import check_rate_limit, get_client_ip
+from src.services.studytomy.privacy import require_studytomy_learner_ai_policy
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,7 @@ async def get_authorization_request(
     db_session: AsyncSession = Depends(get_db_session),
 ):
     user = _member(current_user)
+    await require_studytomy_learner_ai_policy(db_session, user)
     try:
         return await oauth.describe_authorization(request, user, db_session)
     except oauth.OAuthError as e:
@@ -213,6 +215,7 @@ async def post_authorization_decision(
     db_session: AsyncSession = Depends(get_db_session),
 ):
     user = _member(current_user)
+    await require_studytomy_learner_ai_policy(db_session, user)
     try:
         redirect_to = await oauth.decide_authorization(
             decision.request,

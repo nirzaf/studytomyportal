@@ -11,9 +11,7 @@ from sqlalchemy import select
 
 from src.db.courses.courses import Course
 from src.db.paths import Path, PathCourse, PathEnrollment
-from src.db.studytomy.adaptive import StudyCurriculumRevision
 from src.db.studytomy.family import (
-    StudyEligibilityDecision,
     StudyEligibilityDecisionCreate,
     StudyEligibilityKind,
     StudyEligibilityOutcome,
@@ -30,6 +28,7 @@ from src.db.studytomy.governance import (
     StudyPolicyApproval,
     StudyPolicyKey,
 )
+from src.db.studytomy.operations import StudyEvidenceFile
 from src.services.studytomy.policies import POLICY_REQUIRED_RESPONSIBILITIES
 from src.db.studytomy.operations import StudyOutboxPurpose, StudyOutboxRecord
 from src.db.studytomy.privacy import (
@@ -44,7 +43,6 @@ from src.security.studytomy_access import StudytomyCapabilityName
 from src.services.paths import paths as paths_service
 from src.services.studytomy import (
     adaptive_curriculum,
-    adaptive_curriculum_review,
     adaptive_guidance,
     adaptive_teaching,
     authority,
@@ -342,15 +340,67 @@ async def test_t04_t05_t06_t07_t08_t16_dependent_family_activation_consent_and_c
     assert unresolved_err.value.status_code == 409
 
     # Record eligible dependent learning decision
+    eligibility_policy_ids = [
+        int(policies[key].id)
+        for key in (
+            StudyPolicyKey.D_01,
+            StudyPolicyKey.D_03,
+            StudyPolicyKey.D_12,
+            StudyPolicyKey.D_13,
+            StudyPolicyKey.D_15,
+        )
+    ]
+    learner_uuid = profile.learner_uuid
+    profile_id = profile.id
+    org_id = org.id
+    org_uuid = org.org_uuid
+    admin_user_id = admin_user.id
+
+    async def add_eligibility_evidence(reference: str) -> str:
+        evidence = StudyEvidenceFile(
+            evidence_uuid=reference,
+            org_id=org_id,
+            uploaded_by_user_id=admin_user_id,
+            purpose="eligibility_evidence",
+            learner_profile_id=profile_id,
+            storage_reference=f"private/studytomy/{org_uuid}/eligibility/{reference}.pdf",
+            media_type="application/pdf",
+            size_bytes=1024,
+            content_sha256="a" * 64,
+            retention_category="family_evidence_7y",
+            upload_status="ready",
+            verified_at=datetime.now(UTC),
+            policy_version_ids=eligibility_policy_ids,
+        )
+        db.add(evidence)
+        await db.flush()
+        return evidence.evidence_uuid
+
+    with pytest.raises(HTTPException) as unbound_eligibility_evidence:
+        await learners.record_eligibility_decision(
+            db,
+            org,
+            admin_user,
+            learner_uuid,
+            StudyEligibilityDecisionCreate(
+                eligibility_kind=StudyEligibilityKind.LEARNING,
+                outcome=StudyEligibilityOutcome.ELIGIBLE,
+                evidence_reference="CASE-LK-001",
+                control_mode=StudyLearnerControlMode.DEPENDENT,
+            ),
+            "idem-elig-unbound-1",
+        )
+    assert unbound_eligibility_evidence.value.status_code == 422
+
     await learners.record_eligibility_decision(
         db,
         org,
         admin_user,
-        profile.learner_uuid,
+        learner_uuid,
         StudyEligibilityDecisionCreate(
             eligibility_kind=StudyEligibilityKind.LEARNING,
             outcome=StudyEligibilityOutcome.ELIGIBLE,
-            evidence_reference="CASE-LK-001",
+            evidence_reference=await add_eligibility_evidence("ev_eligibility_t04_000001"),
             control_mode=StudyLearnerControlMode.DEPENDENT,
         ),
         "idem-elig-dep-1",
@@ -407,7 +457,7 @@ async def test_t04_t05_t06_t07_t08_t16_dependent_family_activation_consent_and_c
         db,
         org,
         admin_user,
-        profile.learner_uuid,
+        learner_uuid,
         StudyLearnerActivationCreate(
             expected_access_version=profile.access_version,
             reason_code="DEPENDENT_ACTIVATED",
@@ -425,7 +475,7 @@ async def test_t04_t05_t06_t07_t08_t16_dependent_family_activation_consent_and_c
         StudyEligibilityDecisionCreate(
             eligibility_kind=StudyEligibilityKind.LEARNING,
             outcome=StudyEligibilityOutcome.ELIGIBLE,
-            evidence_reference="CASE-LK-002",
+            evidence_reference=await add_eligibility_evidence("ev_eligibility_t04_000002"),
         ),
         "idem-elig-renew-1",
     )
@@ -731,6 +781,7 @@ async def test_t06_relationship_decision_validates_bound_ev_evidence_file(
         content_sha256="c" * 64,
         retention_category="family_evidence_7y",
         upload_status="ready",
+        verified_at=now,
         policy_version_ids=evidence_policy_ids,
     )
     db.add(evidence)
@@ -874,6 +925,34 @@ async def test_t01_decide_relationship_omitted_valid_from_resolves_server_time_a
         )
     assert bad_end_exc.value.status_code == 422
 
+    from src.db.studytomy.operations import StudyEvidenceFile
+
+    evidence_policy_ids = [
+        int(policies[key].id) for key in (
+            StudyPolicyKey.D_01, StudyPolicyKey.D_03, StudyPolicyKey.D_12,
+            StudyPolicyKey.D_13, StudyPolicyKey.D_15,
+        )
+    ]
+    evidence = StudyEvidenceFile(
+        evidence_uuid="ev_valid_t01_immediate",
+        org_id=org.id,
+        uploaded_by_user_id=admin_user.id,
+        purpose="guardian_authority_evidence",
+        learner_profile_id=profile.id,
+        relationship_uuid=rel.relationship_uuid,
+        storage_reference=f"private/studytomy/{org.org_uuid}/guardian/test.pdf",
+        media_type="application/pdf",
+        size_bytes=1024,
+        content_sha256="c" * 64,
+        retention_category="family_evidence_7y",
+        upload_status="ready",
+        verified_at=now,
+        policy_version_ids=evidence_policy_ids,
+    )
+    db.add(evidence)
+    await db.commit()
+    await db.refresh(evidence)
+
     # Immediate acceptance omits valid_from; server resolves effective start atomically.
     immediate_cmd = StudyRelationshipDecisionCreate(
         expected_version=rel.authority_version,
@@ -881,7 +960,7 @@ async def test_t01_decide_relationship_omitted_valid_from_resolves_server_time_a
         approved_scopes=["consent_management"],
         valid_to=now + timedelta(days=30),
         reason_code="GUARDIAN_VERIFIED",
-        evidence_reference="case_valid_t01_immediate",
+        evidence_reference=evidence.evidence_uuid,
     )
     assert immediate_cmd.valid_from is None
     decided = await authority.decide_relationship_request(

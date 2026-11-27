@@ -7,6 +7,8 @@ import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
 import { StaffTopicTimeline } from '@components/Studytomy/ManagedPdfTopicCheck'
 import StaffReportReview from '@components/Studytomy/StaffReportReview'
+import StaffTutorFeedback from '@components/Studytomy/StaffTutorFeedback'
+import StaffMasteryReview from '@components/Studytomy/StaffMasteryReview'
 import {
   adaptiveRequest, type AdaptiveConfiguration as Catalog, type CurriculumReview, type Definition,
   type DefinitionKind, type DiagnosticReview, type ItemReview, type NativePreview, type Question,
@@ -60,7 +62,32 @@ function CurriculumEditor({ snapshot, catalog, courseUuid, busy, save }: {
   const concepts = snapshot.concepts.filter(concept => !concept.archived)
   const [mappingConcept, setMappingConcept] = useState('')
   const mappings = snapshot.mappings.filter(mapping => mapping.concept_uuid === mappingConcept && !mapping.archived)
+  const revision = snapshot.curriculum
   return <div className="grid gap-4">
+    <form key={revision.version} className={card} onSubmit={event => {
+      event.preventDefault()
+      const values = new FormData(event.currentTarget)
+      save(`curriculum-revisions/${revision.uuid}`, 'PUT', {
+        expected_version: revision.version,
+        subject: values.get('subject'), level: values.get('level'), language: values.get('language'),
+        jurisdiction: String(values.get('jurisdiction') ?? '').trim() || null,
+        source_reference: values.get('source_reference'), rights_reference: values.get('rights_reference'),
+        programme_metadata: revision.programme_metadata,
+      })
+    }}>
+      <h3 className="font-semibold">Edit curriculum draft details</h3>
+      <div className={grid}>
+        <Field name="subject" label="Subject" defaultValue={revision.subject} />
+        <Field name="level" label="Learner level" defaultValue={revision.level} />
+        <Field name="language" label="Language code" defaultValue={revision.language} />
+        <Field name="jurisdiction" label="Jurisdiction (optional)">
+          <Input name="jurisdiction" defaultValue={revision.jurisdiction ?? ''} className="min-h-11" />
+        </Field>
+        <Field name="source_reference" label="Curriculum source reference" defaultValue={snapshot.source_reference} />
+        <Field name="rights_reference" label="Rights reference" defaultValue={snapshot.rights_reference} />
+      </div>
+      <Button className="mt-4 min-h-11" disabled={busy}>Save draft details</Button>
+    </form>
     <form className={card} onSubmit={event => {
       event.preventDefault()
       const values = new FormData(event.currentTarget)
@@ -492,6 +519,31 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
         </>}
         {review.item && <>
           <Preview question={review.item.item.question} />
+          {catalog.can_author && review.row.status === 'draft' && <form key={`${review.row.uuid}:${review.item.item.version}`}
+            className="space-y-2 rounded-md border p-3" onSubmit={event => {
+              event.preventDefault()
+              const item = review.item?.item
+              if (!item) return
+              const values = new FormData(event.currentTarget)
+              const hintLadder = String(values.get('hints') ?? '').split('\n').map(value => value.trim()).filter(Boolean)
+              if (hintLadder.length > 5 || hintLadder.some(hint => hint.length > 500)) {
+                reportError(new Error('Enter up to five hints, each 500 characters or fewer.'))
+                return
+              }
+              save(`item-revisions/${review.row.uuid}`, 'PUT', {
+                expected_version: item.version,
+                difficulty: Number(values.get('difficulty')),
+                hint_ladder: hintLadder,
+                error_codes: item.error_codes,
+              }, 'Item draft updated.')
+            }}>
+            <h5 className="font-semibold">Edit item draft settings</h5>
+            <Field name="difficulty" label="Difficulty (1–5)" type="number" min={1} max={5} defaultValue={review.item.item.difficulty} />
+            <Field name="hints" label="Hints (one per line, optional)">
+              <Textarea name="hints" defaultValue={review.item.item.hint_ladder.join('\n')} maxLength={2504} />
+            </Field>
+            <Button className="min-h-11" disabled={busy}>Save item settings</Button>
+          </form>}
           <p className="break-words text-sm">{t('adaptive.fields.rights_reference', 'Rights reference')} · {review.item.rights_reference}</p>
           <p className="text-sm">{review.item.allowed_use === 'practice_only'
             ? t('adaptive.practiceOnly', 'Practice only') : t('adaptive.independent', 'Independent diagnostic')}</p>
@@ -534,5 +586,7 @@ export default function AdaptiveConfiguration({ orgUuid, courseUuid, accessToken
     </section>}
     <StaffTopicTimeline client={client} courseUuid={courseUuid} />
     <StaffReportReview client={client} courseUuid={courseUuid} curricula={catalog.curricula} />
+    <StaffTutorFeedback client={client} courseUuid={courseUuid} />
+    <StaffMasteryReview client={client} curricula={catalog.curricula} />
   </section>
 }

@@ -9,7 +9,7 @@ import { getAPIUrl } from '@services/config/config'
 import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/requests'
 
 type Receipt = { case_uuid: string; topic: string; status: string }
-type SupportProps = { orgUuid: string; topics: string[]; intakeAvailable: boolean }
+type SupportProps = { orgUuid: string; topics: string[]; intakeAvailable: boolean; guestAvailable?: boolean }
 const statuses = new Map<string, { label: string; nextStep: string }>([
   ['acknowledged', { label: 'Received', nextStep: 'Save your reference and check back for an assignment.' }],
   ['assigned', { label: 'Assigned for review', nextStep: 'Save your reference and check back for an update.' }],
@@ -30,11 +30,81 @@ export default function SupportCase(props: SupportProps) {
   const token = session?.data?.tokens?.access_token
   if (session?.status === 'loading') return <p role="status">Checking your session…</p>
   if (session?.status !== 'authenticated' || !token) {
-    return <Link href="/login?redirect=/help" className="font-semibold underline">Sign in to check a support case</Link>
+    return <div className="space-y-4">
+      <Link href="/login?redirect=/help" className="font-semibold underline">Sign in to check a support case</Link>
+      {props.guestAvailable && props.topics.length > 0 &&
+        <GuestSupportVerification key={props.orgUuid} orgUuid={props.orgUuid} topics={props.topics} />}
+    </div>
   }
   const user = session.data?.user
   const identity = getAuthenticatedSessionIdentity(user?.id ?? user?.user_uuid, session.data)
   return <SupportForms key={JSON.stringify([props.orgUuid, identity])} {...props} token={token} />
+}
+
+function GuestSupportVerification({ orgUuid, topics }: Pick<SupportProps, 'orgUuid' | 'topics'>) {
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ text: string; error?: boolean }>()
+  const pending = useRef<AbortController | null>(null)
+  useEffect(() => () => pending.current?.abort(), [])
+  const path = `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/support/guest-challenges`
+
+  async function submit(event: FormEvent<HTMLFormElement>, redeem: boolean) {
+    event.preventDefault()
+    if (pending.current) return
+    const form = event.currentTarget
+    const fields = new FormData(form)
+    const topic = String(fields.get('topic') ?? '')
+    const email = String(fields.get('email') ?? '').trim()
+    const token = String(fields.get('code') ?? '').trim()
+    if (redeem ? !/^[A-Za-z0-9_-]{43}$/.test(token) : !topics.includes(topic) || !email) return
+    const control = new AbortController()
+    pending.current = control
+    setBusy(true)
+    setMessage(undefined)
+    try {
+      const response = await secureFetch(path + (redeem ? '/redeem' : ''), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(redeem ? { token } : { email, topic }),
+        credentials: 'omit', redirect: 'error', cache: 'no-store', signal: control.signal,
+      })
+      if (response.status !== 202) throw new Error('Guest verification unavailable')
+      if (control.signal.aborted) return
+      form.reset()
+      setMessage({ text: redeem
+        ? 'Code submitted. If you still need help, use the approved contact instructions above.'
+        : 'If the request is eligible, a verification code will arrive by email. It expires after 10 minutes.' })
+    } catch {
+      if (!control.signal.aborted) setMessage({ error: true, text: 'Guest verification is unavailable. Try again or use the approved contact instructions.' })
+    } finally {
+      if (pending.current === control) pending.current = null
+      if (!control.signal.aborted) setBusy(false)
+    }
+  }
+
+  return <section aria-label="Guest support verification" className="space-y-3 rounded-lg border p-4">
+    <h2 className="font-semibold">Guest support verification</h2>
+    <form className="space-y-2" onSubmit={(event) => void submit(event, false)}>
+      <label className="grid gap-1 text-sm">Support topic
+        <select name="topic" required defaultValue="" className="rounded border bg-background p-2">
+          <option value="" disabled>Choose a topic</option>
+          {topics.map((topic) => <option key={topic} value={topic}>{topic}</option>)}
+        </select>
+      </label>
+      <label className="grid gap-1 text-sm">Email for verification
+        <input type="email" name="email" required maxLength={320} className="rounded border bg-background p-2" />
+      </label>
+      <Button type="submit" disabled={busy} variant="outline">Request verification email</Button>
+    </form>
+    <form className="space-y-2 border-t pt-3" onSubmit={(event) => void submit(event, true)}>
+      <label className="grid gap-1 text-sm">Verification code
+        <input name="code" required maxLength={43} minLength={43} autoComplete="one-time-code" spellCheck={false}
+          className="rounded border bg-background p-2" />
+      </label>
+      <Button type="submit" disabled={busy}>Submit verification code</Button>
+    </form>
+    {busy && <p role="status" className="text-sm">Submitting…</p>}
+    {message && <p role={message.error ? 'alert' : 'status'} className="text-sm">{message.text}</p>}
+  </section>
 }
 
 function SupportForms({ orgUuid, topics, intakeAvailable, token }: SupportProps & { token: string }) {

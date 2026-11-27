@@ -1,5 +1,6 @@
 """Metadata-only retention inventory for confidential safeguarding case evidence."""
 
+import re
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -39,6 +40,8 @@ class SafeguardingRetentionInventory(BaseModel):
     case_status: str
     categories: list[SafeguardingRetentionCategory]
     active_holds: list[UUID]
+    hold_reason_codes: list[str]
+    release_reason_codes: list[str]
 
 
 async def _safeguarding_retention_context(
@@ -84,7 +87,28 @@ async def safeguarding_retention_inventory(
     db: AsyncSession, org: Organization, actor: PublicUser, reference: UUID,
 ) -> SafeguardingRetentionInventory:
     """Return purpose-bound counts to a privacy reviewer assigned to this case."""
-    case, _ = await _safeguarding_retention_context(db, org, actor, reference)
+    case, policies = await _safeguarding_retention_context(db, org, actor, reference)
+    hold_rules = _policy_area_values(policies[1], "retention").get("safeguarding_evidence_holds")
+    market_rules = {}
+    try:
+        market, = await _current_policies(db, org, (StudyPolicyKey.D_18,), datetime.now(UTC))
+        market_rules = _policy_area_values(market, "selected_market_requirements")
+    except HTTPException as error:
+        if error.status_code != 409:
+            raise
+
+    def allowed_reasons(flag: str, field: str) -> list[str]:
+        if market_rules.get(flag) is not True or not isinstance(hold_rules, dict):
+            return []
+        if field == "reason_codes":
+            max_days = hold_rules.get("max_review_days")
+            if type(max_days) is not int or not 1 <= max_days <= 365:
+                return []
+        reasons = hold_rules.get(field)
+        if not isinstance(reasons, list):
+            return []
+        return sorted({reason for reason in reasons
+                       if isinstance(reason, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason)})
     history = await _hold_history(db, org.id, case.case_uuid)
     released = {event.operation_uuid for event in history if event.action == _RELEASED}
 
@@ -105,6 +129,8 @@ async def safeguarding_retention_inventory(
         categories.add(narrative_category)
     return SafeguardingRetentionInventory(
         case_uuid=reference, case_status=case.status,
+        hold_reason_codes=allowed_reasons("safeguarding_evidence_holds_enabled", "reason_codes"),
+        release_reason_codes=allowed_reasons("safeguarding_evidence_hold_release_enabled", "release_reason_codes"),
         active_holds=[
             UUID(event.resource_uuid) for event in history
             if event.action == _HELD and event.event_uuid not in released

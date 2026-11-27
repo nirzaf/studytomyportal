@@ -85,7 +85,7 @@ cd "$RUN/apps/api"
 .venv/bin/python cli.py migrate --status
 ```
 
-Do not use raw Alembic alone to bootstrap an empty database: the supported CLI coordinates initial model/schema creation. The historical 19 November run expected revision `9b7d4c2a1e6f`; this checkout's current single head is `b7c2e9a4d1f0`. Reread the current migration head after any code change. The command above uses the pinned `pgvector/pgvector:0.8.7-pg19` image. The API migration/startup tests and the synthetic live lab journey passed on isolated PG19; qualified educator/safeguarding/content-rights approval and hosted acceptance remain open in [the PostgreSQL 19 upgrade notes](studytomy/POSTGRESQL-19-UPGRADE.md).
+Do not use raw Alembic alone to bootstrap an empty database: the supported CLI coordinates initial model/schema creation. The historical 19 November run expected revision `9b7d4c2a1e6f`; the current rehearsal expects single head `2d6a1b7c9e40`. Verify it with `uv run --no-sync alembic heads` before starting. The command above uses the pinned `pgvector/pgvector:0.8.7-pg19` image. The API migration/startup tests and the synthetic live lab journey passed on isolated PG19; qualified educator/safeguarding/content-rights approval and hosted acceptance remain open in [the PostgreSQL 19 upgrade notes](studytomy/POSTGRESQL-19-UPGRADE.md).
 
 ## 3. Accounts and repeatable baseline
 
@@ -114,7 +114,7 @@ cd "$RUN/apps/api"
 .venv/bin/python ../../scripts/local_demo_seed.py --credentials "$DEMO_PRIVATE/accounts.json"
 ```
 
-The seed fails closed unless the URL is loopback PostgreSQL, has no routing query, and the database name matches `studytomy_demo_<name>_test`. It refuses any pre-existing user/organization and any existing credential output. It never updates existing accounts or publishes content. Credentials are random per fresh run, not default passwords. Labels and native role assignments are deterministic:
+The seed fails closed unless the URL is loopback PostgreSQL, has no routing query, and the database name matches `studytomy_demo_<name>_test`. It refuses any pre-existing user/organization and any existing credential output. It never updates existing accounts or publishes content. Admin, teacher and learner use fixed local fixture credentials. The reviewer password is generated per run. Labels and native role assignments are deterministic:
 
 | Account | Native role | Boundary |
 |---|---|---|
@@ -237,7 +237,7 @@ Keep stopped disposable data only while actively investigating. Do not run broad
 
 ## 9. Synthetic managed Virtual Lab browser journey
 
-Use a fresh disposable database, native account manifest and local API, web and static-lab servers from sections 2–4. Keep the manifest, scenario JSON, browser state and Playwright artifacts in an owner-only directory outside the checkout. The scenario helper refuses a non-loopback API/lab origin, a database outside its `*_test` guard, a reused output path, or credentials/output with permissive file or directory modes.
+Use a fresh disposable database, native account manifest and local API, web and static-lab servers from sections 2–4. Keep the manifest, scenario JSON, browser state and Playwright artifacts in an owner-only directory outside the checkout. The scenario helper refuses a non-loopback API/lab origin, a database outside its `*_test` guard, a reused output path, or credentials/output with permissive file or directory modes. It also checks that the static server’s manifest matches the checkout’s pinned build identity before creating records.
 
 The browser runner blocks non-loopback browser requests, but it does not control network access from the separate API process. Clear email-provider settings and block API outbound network access before a repeat; otherwise notification code may attempt external delivery during author/reviewer setup. Do not treat invalid provider credentials as an egress control.
 
@@ -248,6 +248,7 @@ chmod 700 "$DEMO_PRIVATE"
 
 python3 scripts/local_virtual_lab_e2e_scenario.py \
   --api http://127.0.0.1:1342 \
+  --web http://localhost:3000 \
   --lab http://127.0.0.1:4173 \
   --credentials "$DEMO_PRIVATE/accounts.json" \
   --output "$DEMO_PRIVATE/vlab-scenario.json" \
@@ -265,7 +266,7 @@ apps/e2e/node_modules/.bin/playwright test \
   --config apps/e2e/playwright.vlab-live.config.ts --project chromium
 ```
 
-Set `LEARNHOUSE_SQL_CONNECTION_STRING` to the same disposable database already migrated and seeded by `scripts/local_demo_seed.py`. The browser-state helper performs normal login and aborts non-loopback requests. The live Playwright case also enforces loopback-only HTTP and WebSocket traffic in its desktop and mobile contexts, blocks service workers, and fails if an external browser request is attempted. Neither guard restricts network access from the separate API process. The dedicated Playwright config runs only `17-managed-virtual-lab-live.spec.ts`, uses one worker, and keeps artifacts outside the checkout. All four accounts and product records are synthetic. The fixture grants synthetic approvals only to reach the product workflow; it does not satisfy educator, safeguarding, content-rights, curriculum or real release approval. Do not enable an AI provider for this run.
+Set `LEARNHOUSE_SQL_CONNECTION_STRING` to the same disposable database already migrated and seeded by `scripts/local_demo_seed.py`. The author/reviewer helper signs in through the browser, saves the pinned build in the managed editor, then uses the independent reviewer’s content review and release controls. The fixture prepares the linked assignment, synthetic policies, and evidence attachments. The learner browser-state helper performs normal login and aborts non-loopback requests. The live Playwright case also enforces loopback-only HTTP and WebSocket traffic in its desktop and mobile contexts, blocks service workers, and fails if an external browser request is attempted. Neither guard restricts network access from the separate API process. The dedicated Playwright config runs only `17-managed-virtual-lab-live.spec.ts`, uses one worker, and keeps artifacts outside the checkout. All four accounts and product records are synthetic. The fixture grants synthetic approvals only to reach the product workflow; it does not satisfy educator, safeguarding, content-rights, curriculum or real release approval. Do not enable an AI provider for this run.
 
 The loopback egress guard has a standalone synthetic Chromium check: `cd apps/e2e && bun run test:browser-egress`. It verifies external HTTP and WebSocket attempts are intercepted and recorded without contacting those hosts. This does not verify or restrict API-process egress.
 
@@ -671,3 +672,41 @@ The run used the dedicated Playwright config `apps/e2e/playwright.vlab-live.conf
 This is local synthetic acceptance only. It does not approve the lab's scientific model, Grade 12 syllabus mapping, educator-facing rubric, learner safeguarding policy or content rights, and it is not hosted or production acceptance.
 
 **Migrated-data follow-up (21 November 2026):** the same full Chromium journey also passed once after restoring the synthetic author/reviewer/release/consent/grant/order/assignment scenario from a separate PG16.16 source into a dedicated PG19.0 volume. The import matched all 137 public-table row fingerprints before the browser run, and the source PG16 snapshot remained unchanged. The original two evidence PDFs were copied with matching SHA-256 values into the PG19 filesystem-content directory. This confirms the local pilot-shaped migration path; guardian relationships, settled payments, populated outbox history, object storage and production rollback remain unverified. See the [PostgreSQL 19 migration record](studytomy/POSTGRESQL-19-UPGRADE.md) for image digests, archive hash, schema counts, egress limits and exact acceptance bounds.
+
+### Audit worktree momentum verification
+
+The local audit worktree based on `b7e57929eba1230577fe23767aac162fefccf80d`
+passed the existing `17-managed-virtual-lab-live.spec.ts` Chromium case
+against an isolated PostgreSQL 19 database, current FastAPI and Next.js
+sources, and the pinned loopback static build. The command from `apps/e2e`
+was `bun node_modules/@playwright/test/cli.js test --config=playwright.vlab-live.config.ts --project chromium`.
+Result: one passed, zero skipped. The API and browser process used a
+loopback-only network sandbox. Application email was pointed at an unused
+loopback port so the rehearsal could exercise product behavior without sending
+external mail.
+
+The fixture prepared the reviewed releases through actual HTTP APIs, and the
+browser exercised lab opening, evidence export, assignment submission, grading,
+feedback, mobile layout and access denials. Browser authoring, independent
+review and publication of a newly authored lab remain open. No real pilot
+approval or live notification delivery follows from this run.
+
+A follow-up extended the same disposable-stack rehearsal to the author and
+reviewer browser stages. The teacher selected and saved the pinned build in
+the managed activity editor and verified it after reload. A separate reviewer
+selected the synthetic evidence attachments, recorded approval, and recorded
+the immutable release in the browser. The fixture prepared native identities,
+scoped policy prerequisites, the linked assignment and attachments. The
+teacher's direct self-review was denied. The learner/staff Chromium case
+then passed again with one pass and zero skips. Course creation and evidence
+upload remain fixture operations, and this result establishes no real-world
+content approval.
+
+The stale-candidate follow-up passed on a fresh disposable stack. While the
+reviewer held an unapproved candidate, the teacher saved a new activity
+version through Chromium. The reviewer saw HTTP 409 `STALE_VERSION` and
+could not release the old revision. Reloading cleared the old evidence
+selections and confirmations. The reviewer uploaded two fresh synthetic
+evidence files in the browser, confirmed their findings, approved the new
+revision, and recorded its release. The learner and staff case then passed
+again with one pass and zero skips.

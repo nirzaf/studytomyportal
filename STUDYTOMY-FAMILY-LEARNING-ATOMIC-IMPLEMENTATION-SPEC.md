@@ -150,6 +150,11 @@ Approval record per decision: scope, selected policy, rationale, effective date,
 - [ ] <a id="task-072"></a>**TASK-072** Add dedicated parent self-service and automatic updates · Later
 - [ ] <a id="task-073"></a>**TASK-073** Offer evidence-based personalised reminders · Later
 
+Syllabus-aligned exam generation, advanced rubric-based marking, AI marketing and
+demand analysis, and virtual science lab phases P3–P6 are also outside launch
+scope. Any Phase 2 work requires separate authorization, applicable educator and
+privacy review, and its own acceptance criteria.
+
 ## 4. Acceptance scenarios — none executed end to end
 
 Task-level tests do not satisfy a scenario. Status values: `NOT_RUN`, `PASS`, `FAIL`, `BLOCKED`, `NOT_APPLICABLE` (approved reason required).

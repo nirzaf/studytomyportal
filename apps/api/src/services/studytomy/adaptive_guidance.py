@@ -82,6 +82,8 @@ class TutorOptions(BaseModel):
     )
     reason: Literal["assessment_in_progress", "guidance_unavailable"] | None = None
     practice_attempt_uuid: str | None = None
+    remaining_turns: int | None = None
+    assistance_status: Literal["available", "reviewed_only", "unavailable", "exhausted"] | None = None
 
 
 async def read_tutor_options(
@@ -126,7 +128,7 @@ async def read_tutor_options(
         )
     ).scalar_one_or_none()
     try:
-        await _binding(
+        bound = await _binding(
             request,
             db,
             org,
@@ -149,10 +151,22 @@ async def read_tutor_options(
             if code == "ASSESSMENT_IN_PROGRESS"
             else "guidance_unavailable",
         )
+    # Dispatch uses the same policy and allowance calculation.
+    from src.services.studytomy.adaptive_turns import read_guidance_allowance
+
+    remaining, assistance = await read_guidance_allowance(
+        db, org, bound.profile_id, now,
+        release_bound=bool(bound.source_binding_digest), use_provider=not bool(practice_uuid),
+    )
     return TutorOptions(
         mode="guided",
-        actions=["hint"] if practice_uuid else ["explain", "check_understanding"],
+        actions=(
+            (["hint"] if practice_uuid else ["explain", "check_understanding"])
+            if assistance in ("available", "reviewed_only") else []
+        ),
         practice_attempt_uuid=practice_uuid,
+        remaining_turns=remaining,
+        assistance_status=assistance,
     )
 
 

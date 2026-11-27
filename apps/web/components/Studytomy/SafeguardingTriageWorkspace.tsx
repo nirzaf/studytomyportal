@@ -5,6 +5,7 @@ import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { useOrg } from '@components/Contexts/OrgContext'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
+import SafeguardingCaseReview from './SafeguardingCaseReview'
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
 import {
   listSafeguardingTriage,
@@ -25,7 +26,10 @@ export default function SafeguardingTriageWorkspace() {
   if (!org?.org_uuid || session?.status !== 'authenticated' || !token || !identity) {
     return <p role="status">Triage is available to authorized safeguarding staff.</p>
   }
-  return <TriageQueue key={JSON.stringify([org.org_uuid, identity])} orgUuid={org.org_uuid} token={token} />
+  return <div key={JSON.stringify([org.org_uuid, identity])} className="space-y-5">
+    <TriageQueue orgUuid={org.org_uuid} token={token} />
+    <SafeguardingCaseReview orgUuid={org.org_uuid} token={token} />
+  </div>
 }
 
 function TriageQueue({ orgUuid, token }: { orgUuid: string; token: string }) {

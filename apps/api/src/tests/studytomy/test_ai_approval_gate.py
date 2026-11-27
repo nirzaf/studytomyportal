@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 
 from src.core.events.database import get_db_session
 from src.db.studytomy.family import StudyLearnerProfile
+from src.routers.boards.boards_playground import router as boards_playground_router
 from src.router import _require_studytomy_ai_policy, v1_router
 from src.services.auth.session import mint_session_tokens
 from src.services.studytomy.privacy import (
@@ -56,6 +57,15 @@ def test_playground_ai_generation_checks_studytomy_learner_policy():
         _require_studytomy_ai_policy in _dependency_calls(context)
         for context in generation_routers
     )
+
+
+def test_board_playground_ai_routes_check_studytomy_learner_policy():
+    contexts = [
+        context for context in _include_contexts()
+        if context.included_router is boards_playground_router
+    ]
+    assert len(contexts) == 1
+    assert _require_studytomy_ai_policy in _dependency_calls(contexts[0])
 
 
 async def test_protected_learner_ai_policy_returns_409_until_approved(

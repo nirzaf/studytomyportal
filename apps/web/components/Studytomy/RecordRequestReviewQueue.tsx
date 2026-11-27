@@ -4,6 +4,8 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import RecordCompletionRelease from './RecordCompletionRelease'
 import RetentionReview from './RetentionReview'
+import AssessmentArchiveRetention from './AssessmentArchiveRetention'
+import SafeguardingRetentionReview from './SafeguardingRetentionReview'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
@@ -130,6 +132,8 @@ function ReviewQueue({ orgUuid, token }: { orgUuid: string; token: string }) {
         <RecordCompletionRelease orgUuid={orgUuid} token={token} />
         <RetentionReview orgUuid={orgUuid} token={token} />
       </>}
+      <AssessmentArchiveRetention orgUuid={orgUuid} token={token} />
+      <SafeguardingRetentionReview orgUuid={orgUuid} token={token} />
     </main>
   )
 }

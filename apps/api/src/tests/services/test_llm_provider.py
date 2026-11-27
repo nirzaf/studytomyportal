@@ -153,8 +153,12 @@ def test_attachments_to_parts():
     assert attachments_to_parts(None) == []
 
 
-def test_model_for_tier_defaults():
+def test_model_for_tier_defaults(monkeypatch):
     # With no config overrides, the three tiers resolve to the Gemini 3 family defaults.
+    config = SimpleNamespace(model_fast=None, model_standard=None, model_pro=None)
+    monkeypatch.setattr(
+        tiers_mod, "get_learnhouse_config", lambda: SimpleNamespace(ai_config=config)
+    )
     assert model_for_tier("fast") == "gemini-3.1-flash-lite"
     assert model_for_tier("standard") == "gemini-3.5-flash"
     assert model_for_tier("pro") == "gemini-3.1-pro-preview"

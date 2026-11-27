@@ -1,13 +1,13 @@
 import { useOrg } from '@components/Contexts/OrgContext'
 import { getUriWithOrg } from '@services/config/config'
-import { Books, CaretDown, FolderSimple, ChatsCircle, Headphones, Cube, ShoppingBag, Steps, VideoCamera, Compass, DotsThree, TextAa } from '@phosphor-icons/react'
+import { Books, CaretDown, FolderSimple, ChatsCircle, Headphones, Cube, ShoppingBag, Steps, VideoCamera, Compass, DotsThree, TextAa, ChatCircleDots, ShieldWarning } from '@phosphor-icons/react'
 import { menuIcon } from '@components/Objects/Menus/menuIcons'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
 import { getMenuColorClasses } from '@services/utils/ts/colorUtils'
 import { sitePages } from '@/lib/site-search/registry'
-import { activeOrgMenuItem } from '@/lib/org-menu-path'
+import { activeOrgMenuItem, ORG_HELP_ROUTES } from '@/lib/org-menu-path'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@components/ui/tooltip'
 import { Keys } from '@components/Objects/Shortcuts/Kbd'
@@ -42,6 +42,18 @@ export type OrgMenuItem = {
   href: string
   external: boolean
   shortcut?: string
+}
+
+export function useOrgHelpItems(orgslug: string): OrgMenuItem[] {
+  const { t } = useTranslation()
+  return ORG_HELP_ROUTES.map(item => ({
+    ...item,
+    href: getUriWithOrg(orgslug, item.href),
+    label: item.key === 'support'
+      ? t('common.help_menu.contact_support', 'Contact support')
+      : t('common.help_menu.report_safety', 'Report a safety concern'),
+    Icon: item.key === 'support' ? ChatCircleDots : ShieldWarning,
+  }))
 }
 
 /**

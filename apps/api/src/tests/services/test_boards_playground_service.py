@@ -19,6 +19,7 @@ from src.services.boards.schemas.boards_playground import (
     BoardsPlaygroundMessage,
     BoardsPlaygroundSessionData,
 )
+from src.services.ai.llm import model_for_tier
 
 
 def _fake_stream(chunks, recorder=None, raise_exc=None):
@@ -188,14 +189,8 @@ class TestBoardsPlaygroundService:
             "src.services.boards.boards_playground.generate_stream",
             _fake_stream([], raise_exc=RuntimeError("boom")),
         ):
-            error_chunks = [
-                chunk
-                async for chunk in generate_boards_playground_stream(
-                    "Build it", session
-                )
-            ]
-
-        assert error_chunks == ["Error: boom"]
+            with pytest.raises(RuntimeError, match="boom"):
+                [chunk async for chunk in generate_boards_playground_stream("Build it", session)]
 
     @pytest.mark.asyncio
     async def test_generate_stream_iteration_branch_and_trim_history(self):
@@ -236,7 +231,7 @@ class TestBoardsPlaygroundService:
         assert len(session.message_history) == 12
         assert any(msg.content == "msg-12" for msg in session.message_history)
         # No explicit model -> resolves to the fast tier default (interactive widgets).
-        assert captured["model_name"] == "gemini-3.1-flash-lite"
+        assert captured["model_name"] == model_for_tier("fast")
         iteration_prompt = captured["user_prompt"]
         assert "CURRENT HTML CODE" in iteration_prompt
         assert "Update it" in iteration_prompt

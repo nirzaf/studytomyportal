@@ -16,8 +16,10 @@ import os
 from pathlib import Path
 from urllib.parse import unquote
 
+import anyio
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -27,7 +29,7 @@ from src.db.organizations import Organization
 from src.db.podcasts.episodes import PodcastEpisode
 from src.db.podcasts.podcasts import Podcast
 from src.db.users import AnonymousUser, PublicUser, APITokenUser
-from src.routers.content_files import content_cache_control
+from src.routers.content_files import content_cache_control, revalidate_managed_file
 from src.security.auth import get_current_user
 from src.services.courses.activities.access import verify_activity_reader_access_by_uuid
 from src.security.submission_file_access import (
@@ -41,6 +43,16 @@ from src.security.submission_file_access import (
 )
 
 router = APIRouter()
+
+
+class _ManagedLocalFileResponse(StreamingResponse):
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            with anyio.CancelScope(shield=True):
+                await self.body_iterator.aclose()
+
 
 CONTENT_DIR = Path("content")
 
@@ -328,6 +340,36 @@ async def serve_local_content(
 
     ext = os.path.splitext(safe_real)[1].lower()
     media_type = _MIME_TYPES.get(ext, 'application/octet-stream')
+
+    if not is_public and await enforce_managed_course_file_access(
+        split_content_path(canonical_rel), request, current_user, db_session,
+    ):
+        from src.services.studytomy.access_policy import _parse_media_range
+
+        size = os.path.getsize(safe_real)
+        start, end, status_code = _parse_media_range(request.headers.get("range"), size)
+
+        async def stream():
+            # Open lazily so a disconnected client cannot strand an open file.
+            async with await anyio.open_file(safe_real, "rb") as file:
+                await file.seek(start)
+                remaining = end - start + 1
+                while remaining > 0:
+                    data = await file.read(min(64 * 1024, remaining))
+                    if not data or not await revalidate_managed_file(canonical_rel, request, current_user):
+                        return
+                    remaining -= len(data)
+                    yield data
+
+        headers = {
+            "Cache-Control": content_cache_control(False),
+            "X-Content-Type-Options": "nosniff",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(end - start + 1),
+        }
+        if status_code == 206:
+            headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        return _ManagedLocalFileResponse(stream(), status_code=status_code, media_type=media_type, headers=headers)
 
     return FileResponse(
         path=safe_real,

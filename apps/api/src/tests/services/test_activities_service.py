@@ -138,6 +138,48 @@ class TestGetEditorBootstrap:
         assert result.course.org_uuid == org.org_uuid
 
     @pytest.mark.asyncio
+    async def test_managed_embed_editor_saves_only_validated_lab_descriptors(
+        self, mock_request, db, course, activity, admin_user, monkeypatch,
+    ):
+        monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_APPROVED_LAB_ORIGINS", "http://127.0.0.1:3099")
+        monkeypatch.delenv("LEARNHOUSE_STUDYTOMY_APPROVED_LAB_MANIFESTS", raising=False)
+        monkeypatch.delenv("LEARNHOUSE_STUDYTOMY_APPROVED_LAB_MANIFEST_FILE", raising=False)
+        native = await get_editor_bootstrap(mock_request, activity.activity_uuid, admin_user, db)
+        assert native.virtual_lab_options is None
+
+        course.studytomy_managed = True
+        course.public = course.published = False
+        activity.activity_sub_type = ActivitySubTypeEnum.SUBTYPE_DYNAMIC_EMBED
+        activity.published = False
+        db.add_all([course, activity])
+        await db.commit()
+
+        bootstrap = await get_editor_bootstrap(mock_request, activity.activity_uuid, admin_user, db)
+        [option] = bootstrap.virtual_lab_options
+        assert option["entry_url"].startswith("http://127.0.0.1:3099/conservation-momentum/")
+        version = bootstrap.activity.current_version
+        descriptor = {"virtual_lab": option}
+        for invalid in (
+            {"virtual_lab": {**option, "build_sha256": "0" * 64}},
+            {"virtual_lab": {**option, "entry_url": "https://example.invalid/index.html"}},
+            {**descriptor, "embed_url": "https://example.invalid/index.html"},
+        ):
+            with pytest.raises(HTTPException) as failure:
+                await update_activity(
+                    mock_request, ActivityUpdate(content=invalid, expected_current_version=version),
+                    activity.activity_uuid, admin_user, db,
+                )
+            assert failure.value.status_code == 409
+
+        saved = await update_activity(
+            mock_request, ActivityUpdate(content=descriptor, expected_current_version=version),
+            activity.activity_uuid, admin_user, db,
+        )
+        assert saved.content == descriptor
+        assert saved.current_version == version + 1
+        assert saved.published is False
+
+    @pytest.mark.asyncio
     async def test_grounded_sources_available_only_for_eligible_drafts(
         self, mock_request, db, course, activity, admin_user, monkeypatch,
     ):
@@ -154,6 +196,11 @@ class TestGetEditorBootstrap:
             monkeypatch.setenv("LEARNHOUSE_STUDYTOMY_GROUNDED_DRAFTS_ENABLED", "true")
             enabled = await get_editor_bootstrap(mock_request, activity.activity_uuid, admin_user, db)
             assert enabled.course.grounded_sources_available is True
+            activity.activity_type = ActivityTypeEnum.TYPE_ASSIGNMENT
+            activity.activity_sub_type = ActivitySubTypeEnum.SUBTYPE_ASSIGNMENT_ANY
+            await db.commit()
+            assignment = await get_editor_bootstrap(mock_request, activity.activity_uuid, admin_user, db)
+            assert assignment.course.grounded_sources_available is True
             activity.published = True
             await db.commit()
             published = await get_editor_bootstrap(mock_request, activity.activity_uuid, admin_user, db)

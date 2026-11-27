@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, Request
 from sqlmodel import and_, or_, select
@@ -158,6 +158,37 @@ def _resource_registry():
     }
 
 
+def _resource_prefix(resource_uuid: str, registry: dict) -> str | None:
+    for prefix in registry:
+        if resource_uuid.startswith(prefix):
+            return prefix
+    # Playgrounds use bare UUIDs in their API, routes and stored records.
+    try:
+        if str(UUID(resource_uuid)) == resource_uuid:
+            return "playground_"
+    except ValueError:
+        pass
+    return None
+
+
+async def _require_playground_library_access(request, current_user, db_session, resource) -> None:
+    from src.security.features_utils.dependencies import require_org_playgrounds_feature
+    from src.services.playgrounds.playgrounds import require_playground_read_access
+
+    await require_org_playgrounds_feature(resource.org_id, db_session)
+    await require_playground_read_access(request, resource, current_user, db_session)
+
+
+async def _can_read_playground(request, current_user, db_session, resource) -> bool:
+    if current_user is None:
+        return False
+    try:
+        await _require_playground_library_access(request, current_user, db_session, resource)
+    except HTTPException:
+        return False
+    return True
+
+
 def _public_resource_dump(resource) -> dict:
     """Serialize a resolved resource for the client.
 
@@ -171,6 +202,12 @@ def _public_resource_dump(resource) -> dict:
     from src.db.media.media import Media, MediaRead
     from src.services.communities.communities import community_read
 
+    from src.db.playgrounds import Playground
+
+    if isinstance(resource, Playground):
+        return resource.model_dump(include={
+            "playground_uuid", "name", "description", "thumbnail_image", "org_id", "creation_date",
+        })
     if isinstance(resource, Media):
         return MediaRead.model_validate(resource, from_attributes=True).model_dump()
     if isinstance(resource, Board):
@@ -314,10 +351,9 @@ async def _resolve_items(
     position_map: dict[str, int] = {}
     for row in content_rows:
         position_map[row.resource_uuid] = row.position
-        for prefix in registry:
-            if row.resource_uuid.startswith(prefix):
-                by_prefix.setdefault(prefix, []).append(row.resource_uuid)
-                break
+        prefix = _resource_prefix(row.resource_uuid, registry)
+        if prefix:
+            by_prefix.setdefault(prefix, []).append(row.resource_uuid)
 
     items: List[FolderContentItem] = []
     for prefix, uuids in by_prefix.items():
@@ -338,7 +374,10 @@ async def _resolve_items(
             # The per-item checks below reuse these rows and one authorship query.
             await prime_resource_access(request, db_session, current_user, rows, uuid_field)
         for resource in rows:
-            if not include_private and not getattr(resource, "public", False):
+            if resource_type == "playgrounds":
+                if not await _can_read_playground(request, current_user, db_session, resource):
+                    continue
+            elif not include_private and not getattr(resource, "public", False):
                 continue
             r_uuid = getattr(resource, uuid_field)
             if r_uuid in hidden:
@@ -938,26 +977,31 @@ async def reorder_folder_content(
 # Content management
 # ----------------------------------------------------------------------------
 
-async def _require_resource_in_org(
-    db_session: AsyncSession, resource_uuid: str, org_id: int
+async def _require_filing_access(
+    request, current_user, db_session: AsyncSession, resource_uuid: str, org_id: int,
 ) -> None:
-    """A folder may only hold resources of its own org. Read access alone isn't
-    enough: another tenant's public course is readable by anyone, and filing it
-    here would surface it in this org's library."""
+    """Require access to the resource and enforce the folder's tenant boundary."""
     registry = _resource_registry()
-    for prefix, (_, model, uuid_field) in registry.items():
-        if resource_uuid.startswith(prefix):
-            resource_org_id = (
-                await db_session.execute(
-                    select(model.org_id).where(getattr(model, uuid_field) == resource_uuid)
-                )
-            ).scalars().first()
-            if resource_org_id is None:
-                raise HTTPException(status_code=404, detail="Resource not found")
-            if resource_org_id != org_id:
-                raise HTTPException(status_code=400, detail="Resource is in another organization")
-            return
-    raise HTTPException(status_code=400, detail="Unsupported resource type")
+    prefix = _resource_prefix(resource_uuid, registry)
+    if prefix is None:
+        raise HTTPException(status_code=400, detail="Unsupported resource type")
+    _, model, uuid_field = registry[prefix]
+    if prefix == "playground_":
+        playground = (await db_session.execute(
+            select(model).where(getattr(model, uuid_field) == resource_uuid, model.org_id == org_id)
+        )).scalars().first()
+        if playground is None:
+            raise HTTPException(status_code=404, detail="Playground not found")
+        await _require_playground_library_access(request, current_user, db_session, playground)
+        return
+    await check_resource_access(request, db_session, current_user, resource_uuid, AccessAction.READ)
+    resource_org_id = (await db_session.execute(
+        select(model.org_id).where(getattr(model, uuid_field) == resource_uuid)
+    )).scalars().first()
+    if resource_org_id is None:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    if resource_org_id != org_id:
+        raise HTTPException(status_code=400, detail="Resource is in another organization")
 
 
 async def add_folder_content(
@@ -977,10 +1021,7 @@ async def add_folder_content(
     await check_resource_access(
         request, db_session, current_user, folder.folder_uuid, AccessAction.UPDATE
     )
-    await check_resource_access(
-        request, db_session, current_user, resource_uuid, AccessAction.READ
-    )
-    await _require_resource_in_org(db_session, resource_uuid, folder.org_id)
+    await _require_filing_access(request, current_user, db_session, resource_uuid, folder.org_id)
 
     existing = (
         await db_session.execute(
@@ -1004,7 +1045,10 @@ async def add_folder_content(
         await db_session.commit()
 
     await db_session.refresh(folder)
-    return await _folder_to_read(db_session, folder, include_private=True)
+    return await _folder_to_read(
+        db_session, folder, include_private=True, request=request,
+        current_user=current_user, viewer_id=resolve_acting_user_id(current_user),
+    )
 
 
 async def remove_folder_content(
@@ -1181,10 +1225,9 @@ async def search_library(
 
     by_prefix: dict[str, list] = {}
     for r in rows:
-        for prefix in registry:
-            if r.resource_uuid.startswith(prefix):
-                by_prefix.setdefault(prefix, []).append(r)
-                break
+        prefix = _resource_prefix(r.resource_uuid, registry)
+        if prefix:
+            by_prefix.setdefault(prefix, []).append(r)
 
     items: list = []
     seen: set[str] = set()
@@ -1211,7 +1254,10 @@ async def search_library(
             res = rmap.get(r.resource_uuid)
             if not res:
                 continue
-            if not include_private and not getattr(res, "public", False):
+            if rtype == "playgrounds":
+                if not await _can_read_playground(request, current_user, db_session, res):
+                    continue
+            elif not include_private and not getattr(res, "public", False):
                 continue
             if r.resource_uuid in hidden:
                 continue
@@ -1290,10 +1336,7 @@ async def add_org_root_content(
         await require_org_role_permission(
             current_user.id, int(org_id), db_session, "folders", "action_update"
         )
-    await check_resource_access(
-        request, db_session, current_user, resource_uuid, AccessAction.READ
-    )
-    await _require_resource_in_org(db_session, resource_uuid, int(org_id))
+    await _require_filing_access(request, current_user, db_session, resource_uuid, int(org_id))
 
     existing = (
         await db_session.execute(

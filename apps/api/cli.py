@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 # stdout/stderr reconfig must run before any other import that might print.
 import asyncio
+import json
 import os
 import sys
 from typing import Annotated
@@ -15,6 +16,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.engine import make_url
 from sqlmodel.ext.asyncio.session import AsyncSession
 import typer
 from config.config import get_learnhouse_config
@@ -85,6 +87,110 @@ def migrate(
     if strict and report.state == "stamped" and (report.reconciled or report.skipped):
         print("The models and the migrations disagree: add a migration for the changes above.")
         raise typer.Exit(code=1)
+
+
+@cli.command()
+def report_outbox_status() -> None:
+    """Show aggregate report delivery status without sending or changing records."""
+    if not _is_loopback_test_database(get_learnhouse_config()):
+        typer.echo("Refusing report outbox operation: a loopback PostgreSQL _test database is required.")
+        raise typer.Exit(code=2)
+    typer.echo(json.dumps(asyncio.run(_read_report_outbox_status()), sort_keys=True))
+
+
+@cli.command(name="report-outbox-drain")
+def report_outbox_drain(
+    limit: Annotated[int, typer.Option(min=1, max=25, help="Maximum queued reports to process in this one batch")] = 25,
+    execute: Annotated[bool, typer.Option("--execute", help="Process one bounded batch through a loopback SMTP sink")] = False,
+) -> None:
+    """Preview or explicitly drain a bounded local report-outbox batch.
+
+    Execution is restricted to a loopback PostgreSQL database whose name ends
+    in ``_test`` and an SMTP server bound to loopback. This keeps an operator
+    rehearsal from sending messages through a configured production gateway.
+    """
+    config = get_learnhouse_config()
+    if not _is_loopback_test_database(config):
+        typer.echo("Refusing report outbox operation: a loopback PostgreSQL _test database is required.")
+        raise typer.Exit(code=2)
+
+    if not execute:
+        typer.echo(json.dumps({
+            "mode": "dry_run",
+            "limit": limit,
+            "queue": asyncio.run(_read_report_outbox_status()),
+            "changed": False,
+        }, sort_keys=True))
+        return
+
+    if (
+        os.environ.get("LEARNHOUSE_STUDYTOMY_REPORT_DELIVERY_ENABLED") != "true"
+        or not _uses_loopback_smtp_sink(config)
+    ):
+        typer.echo(
+            "Refusing report outbox execution: explicitly enable report delivery and configure a loopback SMTP sink."
+        )
+        raise typer.Exit(code=2)
+
+    tally = asyncio.run(_drain_report_outbox(limit))
+    typer.echo(json.dumps({"mode": "executed", **tally}, sort_keys=True))
+
+
+def _is_loopback_test_database(config) -> bool:
+    connection = config.database_config.sql_connection_string
+    if not connection:
+        return False
+    try:
+        parsed = make_url(connection)
+    except Exception:
+        return False
+    return (
+        parsed.get_backend_name() == "postgresql"
+        and parsed.host in {"localhost", "127.0.0.1", "::1"}
+        and bool(parsed.database)
+        and parsed.database.endswith("_test")
+        and not parsed.query
+    )
+
+
+def _uses_loopback_smtp_sink(config) -> bool:
+    mailing = config.mailing_config
+    return (
+        mailing.email_provider == "smtp"
+        and mailing.smtp_host in {"localhost", "127.0.0.1", "::1"}
+    )
+
+
+async def _drain_report_outbox(limit: int) -> dict[str, int]:
+    from uuid import uuid4
+
+    from src.services.studytomy.report_notifications import run_report_delivery_batch
+
+    config = get_learnhouse_config()
+    engine = create_async_engine(
+        _to_async_url(config.database_config.sql_connection_string),
+        echo=False,
+        hide_parameters=True,
+    )
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            return await run_report_delivery_batch(
+                db, worker_id=f"local-cli-{uuid4().hex}", limit=limit,
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _read_report_outbox_status() -> dict:
+    from src.services.studytomy.report_delivery_scheduler import report_queue_summary
+
+    sql_url = get_learnhouse_config().database_config.sql_connection_string
+    engine = create_async_engine(_to_async_url(sql_url), echo=False, hide_parameters=True)
+    try:
+        async with AsyncSession(engine) as db:
+            return await report_queue_summary(db)
+    finally:
+        await engine.dispose()
 
 
 @cli.command()

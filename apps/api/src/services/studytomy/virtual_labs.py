@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
 
 from src.services.studytomy.errors import studytomy_http_error
@@ -123,6 +124,33 @@ class GovernedVirtualLabDescriptor(BaseModel):
     submission_formats_note: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
     ] | None = None
+
+
+def governed_virtual_lab_editor_options() -> list[GovernedVirtualLabDescriptor]:
+    """Build editor choices from the same manifests and origins used at release."""
+    options = []
+    for (lab_id, build_version), manifest in sorted(approved_virtual_lab_manifests().items()):
+        if lab_id not in APPROVED_LAB_IDS:
+            continue
+        upstream = manifest.get("upstream_source")
+        path = manifest.get("versioned_entry_path")
+        if not isinstance(upstream, dict) or not isinstance(path, str):
+            continue
+        for origin in sorted(approved_virtual_lab_origins()):
+            try:
+                options.append(validate_governed_virtual_lab_content({"virtual_lab": {
+                    "lab_id": lab_id,
+                    "experiment_id": manifest.get("experiment_id"),
+                    "build_version": build_version,
+                    "build_sha256": manifest.get("build_sha256"),
+                    "entry_url": f"{origin}/{path.lstrip('/')}",
+                    "source_repository": upstream.get("repository"),
+                    "source_commit": upstream.get("commit"),
+                }}))
+            except HTTPException:
+                # Incomplete or invalid manifests never become selectable drafts.
+                continue
+    return options
 
 
 def validate_governed_virtual_lab_content(

@@ -31,6 +31,25 @@ from src.services.analytics import events as analytics_events
 from src.services.analytics.analytics import track
 
 
+async def _protected_board_actor(current_user, db_session: AsyncSession) -> bool:
+    from src.services.studytomy.privacy import is_protected_studytomy_learner
+
+    actor_id = resolve_acting_user_id(current_user)
+    return actor_id > 0 and await is_protected_studytomy_learner(db_session, actor_id)
+
+
+async def _require_native_board_actor(current_user, db_session: AsyncSession) -> None:
+    if await _protected_board_actor(current_user, db_session):
+        raise HTTPException(status_code=403, detail="Board unavailable for this learner")
+
+
+async def _require_native_board_member(user_id: int, db_session: AsyncSession) -> None:
+    from src.services.studytomy.privacy import protected_studytomy_user_ids
+
+    if user_id in await protected_studytomy_user_ids(db_session):
+        raise HTTPException(status_code=403, detail="Board unavailable for this learner")
+
+
 async def create_board(
     request: Request,
     org_id: int,
@@ -38,6 +57,7 @@ async def create_board(
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
 ) -> BoardRead:
+    await _require_native_board_actor(current_user, db_session)
     await check_resource_access(request, db_session, current_user, "board_x", AccessAction.CREATE)
     await require_org_create_permission(current_user, org_id, db_session, "boards")
 
@@ -111,6 +131,7 @@ async def get_boards_by_org(
     current_user: PublicUser | AnonymousUser | APITokenUser,
     db_session: AsyncSession,
 ) -> List[BoardReadWithRole]:
+    await _require_native_board_actor(current_user, db_session)
     # Require org membership before listing boards; prevents unauthenticated
     # and cross-org enumeration of boards.
     await require_org_membership(resolve_acting_user_id(current_user), org_id, db_session)
@@ -168,6 +189,7 @@ async def update_board(
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
 ) -> BoardRead:
+    await _require_native_board_actor(current_user, db_session)
     board = await _get_board_or_404(board_uuid, db_session)
     await check_resource_access(request, db_session, current_user, board.board_uuid, AccessAction.UPDATE)
 
@@ -241,6 +263,7 @@ async def delete_board(
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
 ):
+    await _require_native_board_actor(current_user, db_session)
     board = await _get_board_or_404(board_uuid, db_session)
     await check_resource_access(request, db_session, current_user, board.board_uuid, AccessAction.DELETE)
 
@@ -257,6 +280,7 @@ async def add_board_member(
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
 ) -> BoardMemberRead:
+    await _require_native_board_actor(current_user, db_session)
     board = await _get_board_or_404(board_uuid, db_session)
     await check_resource_access(request, db_session, current_user, board.board_uuid, AccessAction.UPDATE)
 
@@ -270,6 +294,7 @@ async def add_board_member(
     # Otherwise a board manager could add users from *other* organizations,
     # leaking the board (and the foreign user's profile) across tenants.
     await require_org_membership(member_object.user_id, board.org_id, db_session)
+    await _require_native_board_member(member_object.user_id, db_session)
 
     # Check member limit (max 10 per board)
     member_count = (await db_session.execute(
@@ -318,8 +343,17 @@ async def add_board_members_batch(
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
 ) -> List[BoardMemberRead]:
+    await _require_native_board_actor(current_user, db_session)
     board = await _get_board_or_404(board_uuid, db_session)
     await check_resource_access(request, db_session, current_user, board.board_uuid, AccessAction.UPDATE)
+
+    # Validate the full target set before staging any new member rows so a
+    # mixed batch cannot partially attach a protected learner to a native board.
+    from src.services.studytomy.privacy import protected_studytomy_user_ids
+
+    protected_ids = await protected_studytomy_user_ids(db_session)
+    if any(member.user_id in protected_ids for member in batch_object.members):
+        raise HTTPException(status_code=403, detail="Board unavailable for this learner")
 
     # Current member count
     member_count = (await db_session.execute(
@@ -371,6 +405,7 @@ async def remove_board_member(
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
 ):
+    await _require_native_board_actor(current_user, db_session)
     board = await _get_board_or_404(board_uuid, db_session)
     await check_resource_access(request, db_session, current_user, board.board_uuid, AccessAction.UPDATE)
 
@@ -405,6 +440,7 @@ async def check_board_membership(
     current_user: PublicUser | AnonymousUser,
     db_session: AsyncSession,
 ) -> BoardMemberRead:
+    await _require_native_board_actor(current_user, db_session)
     # Single joined query: Board + BoardMember + User in one round-trip
     result = (await db_session.execute(
         select(BoardMember, User, Board.org_id)
@@ -512,6 +548,7 @@ async def update_board_thumbnail(
     db_session: AsyncSession,
     thumbnail_file: UploadFile | None = None,
 ) -> BoardRead:
+    await _require_native_board_actor(current_user, db_session)
     board = await _get_board_or_404(board_uuid, db_session)
     await check_resource_access(request, db_session, current_user, board.board_uuid, AccessAction.UPDATE)
 
@@ -625,6 +662,10 @@ async def _check_board_read(
     instead; authors and org admins/maintainers still get in through their own
     RBAC rules. Board members can always read their board.
     """
+    if await _protected_board_actor(current_user, db_session):
+        if raise_on_deny:
+            raise HTTPException(status_code=403, detail="Board unavailable for this learner")
+        return False
     decision = await check_resource_access(
         request, db_session, current_user, board.board_uuid, AccessAction.READ,
         raise_on_deny=False,

@@ -34,7 +34,10 @@ type ConceptDraft = { code: string; title: string; objective: string; sequence: 
 type Prerequisite = { concept_code: string; prerequisite_code: string }
 
 export type CurriculumReview = {
-  curriculum: { uuid: string; version: number }
+  curriculum: {
+    uuid: string; version: number; subject: string; level: string; language: string
+    jurisdiction: string | null; programme_metadata: Record<string, unknown> | null
+  }
   source_reference: string
   rights_reference: string
   concepts: (ConceptDraft & { uuid: string; archived: boolean })[]
@@ -82,7 +85,7 @@ export type NativePreview = {
 }
 
 export type ItemReview = {
-  item: { question: Question }
+  item: { question: Question; version: number; difficulty: number; hint_ladder: string[]; error_codes: Record<string, string> }
   content_digest: string
   rights_reference: string
   allowed_use: 'practice_only' | 'independent_diagnostic'

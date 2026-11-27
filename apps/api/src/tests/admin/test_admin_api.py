@@ -2801,3 +2801,50 @@ class TestCourseAnalytics:
         with pytest.raises(HTTPException) as exc:
             await get_course_analytics(token_user, "missing", db)
         assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_native_admin_hides_managed_enrollment_and_denies_mutation(
+    token_user, user, second_user, course, activity, usergroup, mock_request, db, mock_admin_side_effects,
+):
+    await enroll_user(mock_request, token_user, user.id, course.course_uuid, db)
+    course.public = False
+    course.published = False
+    course.studytomy_managed = True
+    db.add(course)
+    await db.commit()
+
+    assert (await get_user_enrollments(token_user, user.id, db)).runs == []
+    assert await get_all_user_progress(token_user, user.id, db) == []
+    assert (await get_user_trail_detail(token_user, user.id, db))["courses"] == []
+    with pytest.raises(HTTPException) as listed:
+        await list_course_enrollments(token_user, course.course_uuid, db)
+    assert listed.value.status_code == 404
+    with pytest.raises(HTTPException) as analytics:
+        await get_course_analytics(token_user, course.course_uuid, db)
+    assert analytics.value.status_code == 404
+
+    before_runs = (await db.execute(select(TrailRun).where(TrailRun.course_id == course.id))).scalars().all()
+    before_steps = (await db.execute(select(TrailStep).where(TrailStep.course_id == course.id))).scalars().all()
+    for operation in (
+        lambda: enroll_user(mock_request, token_user, user.id, course.course_uuid, db),
+        lambda: bulk_enroll_users(token_user, course.course_uuid, [user.id, second_user.id], mock_request, db),
+        lambda: complete_activity(mock_request, token_user, user.id, activity.activity_uuid, db),
+        lambda: complete_course(mock_request, token_user, user.id, course.course_uuid, db),
+        lambda: check_course_access(token_user, course.course_uuid, user.id, db),
+        lambda: get_user_progress(token_user, user.id, course.course_uuid, db),
+        lambda: add_course_to_usergroup(token_user, usergroup.usergroup_uuid, course.course_uuid, db),
+    ):
+        with pytest.raises(HTTPException) as error:
+            await operation()
+        assert error.value.status_code == 404
+
+    after_runs = (await db.execute(select(TrailRun).where(TrailRun.course_id == course.id))).scalars().all()
+    after_steps = (await db.execute(select(TrailStep).where(TrailStep.course_id == course.id))).scalars().all()
+    group_links = (await db.execute(
+        select(UserGroupResource).where(UserGroupResource.resource_uuid == course.course_uuid)
+    )).scalars().all()
+    assert after_runs == before_runs and after_steps == before_steps and group_links == []
+    assert not (await db.execute(
+        select(TrailRun).where(TrailRun.course_id == course.id, TrailRun.user_id == second_user.id)
+    )).scalars().first()

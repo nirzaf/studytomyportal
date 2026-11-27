@@ -34,8 +34,10 @@ watch a refresh land without waiting.
 docker compose -f .learnhouse/docker-compose.dev.yml up -d
 
 # Each following service uses a SEPARATE terminal from the repository root.
-# The scripts assume PostgreSQL localhost:5432 and Redis localhost:6379/0.
-# Check port conflicts and database ownership before starting.
+# The demo launch scripts use PostgreSQL localhost:5432 and Redis localhost:6379.
+# The tracked .learnhouse/docker-compose.pg19.yml exposes 5433 and 6380 instead.
+# If using that file, point local copies of both demo launch scripts at those
+# ports and confirm the services belong to this disposable demo.
 
 # 2. API (exports its own env; see the file for why)
 cd apps/api && bash run_demo_api.sh
@@ -96,9 +98,8 @@ Riverbend Academy, on the **pro** plan so every feature is visible:
 - 6 courses in 3 sections, 18 chapters, 54 activities, 6 assignments
 - 40 students with progress, submissions, grades and certificates
 - A community with 5 discussions, comments and votes
-- 3 boards with members, 2 working interactive playgrounds
-
-- 3 podcasts, 10 episodes with real audio
+- 3 boards with members and 2 playground entries. Generated scripts are disabled in the preview.
+- The checked-in demo bundle contains no podcasts or audio episodes.
 - A store: 5 offers (a subscription, two single courses, a bundle, one
   pay-what-you-want) and 18 enrolments
 
@@ -125,7 +126,7 @@ does not have, `/payments/*` returns 404 and the store page renders empty even
 though the offers are in the database.
 
 On a self-hosted **OSS** install, `sso`, `audit_logs`, `payments`,
-`analytics_advanced` and `scorm` stay hidden however the demo is configured.
+`analytics_advanced`, `scorm`, `lti`, `live_sessions`, and `messaging` stay unavailable.
 `resolve_feature` refuses them by deployment mode, which the demo neither can
 nor should override.
 

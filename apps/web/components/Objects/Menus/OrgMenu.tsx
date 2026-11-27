@@ -6,7 +6,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { getUriWithOrg } from '@services/config/config'
 import { HeaderProfileBox } from '@components/Security/HeaderProfileBox'
-import MenuLinks from './OrgMenuLinks'
+import MenuLinks, { useOrgHelpItems } from './OrgMenuLinks'
+import { activeOrgMenuItem } from '@/lib/org-menu-path'
 import { MobileTabBar, OPEN_MOBILE_MORE_EVENT } from './MobileNav'
 import UserAvatar from '@components/Objects/UserAvatar'
 import { getOrgLogoMediaDirectory } from '@services/media/media'
@@ -17,6 +18,7 @@ import { usePathname } from 'next/navigation'
 import { useLocalStorage, useMediaQuery } from 'usehooks-ts'
 import { useTranslation } from 'react-i18next'
 import useAdminStatus from '@components/Hooks/useAdminStatus'
+import { useStudytomyStaffWorkspaces } from '@components/Hooks/useStudytomyStaffWorkspaces'
 import {
   Question,
   Globe,
@@ -67,6 +69,10 @@ export const OrgMenu = (props: any) => {
   const pathname = usePathname()
   const { t } = useTranslation()
   const { rights } = useAdminStatus()
+  const helpItems = useOrgHelpItems(orgslug)
+  const activeHelp = activeOrgMenuItem(helpItems, pathname)
+  const staffFeedback = session?.status === 'authenticated' && rights?.dashboard?.action_access
+  const staffWorkspaces = useStudytomyStaffWorkspaces(Boolean(staffFeedback))
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
   // Mounted on first open and kept, so the close animation and draft survive.
   const [feedbackModalMounted, setFeedbackModalMounted] = useState(false)
@@ -316,8 +322,7 @@ export const OrgMenu = (props: any) => {
               </div>
             )}
 
-            {/* Help Dropdown - Only visible to admins/maintainers/instructors */}
-            {session?.status === 'authenticated' && rights?.dashboard?.action_access && (
+            {orgslug && (
               <div className="hidden lg:flex">
                 <DropdownMenu>
                   <TooltipProvider delayDuration={0}>
@@ -343,6 +348,27 @@ export const OrgMenu = (props: any) => {
                       <span>{t('common.help')}</span>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    {helpItems.map(item => (
+                      <DropdownMenuItem key={item.key} asChild>
+                        <Link href={item.href} aria-current={item === activeHelp ? 'page' : undefined}
+                          className="flex items-center gap-2">
+                          <item.Icon size={16} aria-hidden />
+                          <span>{item.label}</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    ))}
+                    {staffWorkspaces.length > 0 && <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>{t('dashboard.studytomy.workspaces', 'Staff workspaces')}</DropdownMenuLabel>
+                      {staffWorkspaces.map(item => <DropdownMenuItem key={item.id} asChild>
+                        <Link href={getUriWithOrg(orgslug, item.href)} className="flex items-center gap-2">
+                          <item.icon size={16} aria-hidden />
+                          {t(item.labelKey, item.label)}
+                        </Link>
+                      </DropdownMenuItem>)}
+                    </>}
+                    {staffFeedback && <>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                       <a
                         href="https://www.studytomy.com/"
@@ -365,6 +391,7 @@ export const OrgMenu = (props: any) => {
                       <ChatCircleDots size={16} weight="fill" />
                       <span>{t('common.help_menu.report_feedback')}</span>
                     </DropdownMenuItem>
+                    </>}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

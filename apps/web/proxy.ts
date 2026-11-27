@@ -2,6 +2,7 @@ import { getAPIUrl } from './services/config/config'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { isLocalhost as isLocalhostCheck } from './services/utils/ts/hostUtils'
+import { fetchInstanceMode } from './lib/instanceMode'
 import { isThirdPartyRelayPath, withoutCredentialHeaders } from './lib/thirdPartyRelay'
 
 // =============================================================================
@@ -298,6 +299,12 @@ export const config = {
   ],
 }
 
+function isEditionRestrictedPath(pathname: string): boolean {
+  const orgPath = pathname.replace(/^\/orgs\/[^/]+(?=\/)/, '')
+  return /^\/(?:live|messages|copilot|dash\/live-sessions)(?:\/|$)/.test(orgPath)
+    || /^\/auth\/sso\/callback\/?$/.test(pathname)
+}
+
 export default async function proxy(req: NextRequest) {
   // PostHog / Sentry relays: these are external rewrites that would otherwise
   // hand the browser's session cookies to a third party. Drop credentials and
@@ -306,8 +313,18 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.next({ request: { headers: withoutCredentialHeaders(req.headers) } })
   }
 
-  const instance = await getInstanceInfo()
   const { pathname, search } = req.nextUrl
+  if (isEditionRestrictedPath(pathname)) {
+    // Respond before rendering so a streamed shell cannot turn the 404 into a 200.
+    const mode = await fetchInstanceMode()
+    if (mode !== 'saas' && mode !== 'ee') {
+      return new NextResponse('Not found', {
+        status: 404,
+        headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' },
+      })
+    }
+  }
+  const instance = await getInstanceInfo()
   const fullhost = req.headers.get('host')
 
   // SEO: canonicalize mixed-case top-level route names (/Login → /login). Scoped

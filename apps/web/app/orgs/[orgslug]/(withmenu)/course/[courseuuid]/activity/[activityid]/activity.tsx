@@ -69,6 +69,7 @@ const AssignmentStudentActivity = lazy(() => import('@components/Objects/Activit
 // gating render on the lazy chunk would flash the wrong control.
 import { isAssignmentPastDue } from '@/lib/assignments/deadline'
 const AIActivityAsk = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk'))
+const LessonKnowledgeCheck = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk').then(mod => ({ default: mod.LessonKnowledgeCheck })))
 const AdaptiveAttemptPanel = lazy(() => import('@components/Objects/Activities/AdaptiveAttemptPanel'))
 const AISidePanelContentWrapper = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk').then(mod => ({ default: mod.AISidePanelContentWrapper })))
 const AISidePanelInline = lazy(() => import('@components/Objects/Activities/AI/AIActivityAsk').then(mod => ({ default: mod.AISidePanelInline })))
@@ -1190,6 +1191,24 @@ function ActivityClient(props: ActivityClientProps) {
                                 )}
                                 {activityContent}
                                 <ActivitySyllabusSources activityUuid={activity.activity_uuid} />
+                                <Suspense fallback={null}>
+                                  <LessonKnowledgeCheck activity={activity} orgUuid={org?.org_uuid} />
+                                </Suspense>
+                                {nextActivity?.activity_type === 'TYPE_ASSIGNMENT' && nextActivity.published && (
+                                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-900">{t('activities.next_assessment', 'Next assessment')}</p>
+                                      <p className="mt-1 text-sm text-slate-600">{nextActivity.name}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => navigateToActivity(nextActivity)}
+                                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                                    >
+                                      {t('activities.open_assessment', 'Open assessment')}
+                                    </button>
+                                  </div>
+                                )}
                                 <Suspense fallback={null}>
                                   <AdaptiveAttemptPanel orgUuid={org?.org_uuid} orgSlug={orgslug} activityUuid={activity.activity_uuid} />
                                 </Suspense>

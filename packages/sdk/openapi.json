@@ -104,6 +104,52 @@
         }
       }
     },
+    "/api/v1/studytomy/orgs/{org_uuid}/me/staff-workspaces": {
+      "get": {
+        "tags": [
+          "studytomy-governance"
+        ],
+        "summary": "Api My Staff Workspaces",
+        "operationId": "api_my_staff_workspaces_api_v1_studytomy_orgs__org_uuid__me_staff_workspaces_get",
+        "parameters": [
+          {
+            "name": "org_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Api My Staff Workspaces Api V1 Studytomy Orgs  Org Uuid  Me Staff Workspaces Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/studytomy/orgs/{org_uuid}/courses/{course_uuid}/readiness": {
       "get": {
         "tags": [
@@ -8170,6 +8216,106 @@
         }
       }
     },
+    "/api/v1/studytomy/orgs/{org_uuid}/support/guest-challenges": {
+      "post": {
+        "tags": [
+          "studytomy-support"
+        ],
+        "summary": "Request Guest Support Challenge",
+        "operationId": "request_guest_support_challenge_api_v1_studytomy_orgs__org_uuid__support_guest_challenges_post",
+        "parameters": [
+          {
+            "name": "org_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestSupportIssue"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/studytomy/orgs/{org_uuid}/support/guest-challenges/redeem": {
+      "post": {
+        "tags": [
+          "studytomy-support"
+        ],
+        "summary": "Redeem Guest Support",
+        "operationId": "redeem_guest_support_api_v1_studytomy_orgs__org_uuid__support_guest_challenges_redeem_post",
+        "parameters": [
+          {
+            "name": "org_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestSupportRedemption"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/studytomy/orgs/{org_uuid}/support/cases": {
       "post": {
         "tags": [
@@ -11754,6 +11900,23 @@
               "type": "string",
               "title": "Org Uuid"
             }
+          },
+          {
+            "name": "expected_attempt_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Attempt Number"
+            }
           }
         ],
         "requestBody": {
@@ -12037,6 +12200,23 @@
             "schema": {
               "type": "string",
               "title": "Org Uuid"
+            }
+          },
+          {
+            "name": "expected_attempt_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Attempt Number"
             }
           }
         ],
@@ -13654,6 +13834,158 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TutorFeedbackReceipt"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/studytomy/adaptive/orgs/{org_uuid}/staff/learners/{learner_uuid}/courses/{course_uuid}/tutor-feedback": {
+      "get": {
+        "tags": [
+          "studytomy-adaptive"
+        ],
+        "summary": "Api List Tutor Feedback",
+        "operationId": "api_list_tutor_feedback_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__courses__course_uuid__tutor_feedback_get",
+        "parameters": [
+          {
+            "name": "learner_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "title": "Learner Uuid"
+            }
+          },
+          {
+            "name": "course_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "title": "Course Uuid"
+            }
+          },
+          {
+            "name": "org_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TutorFeedbackReviewRead"
+                  },
+                  "title": "Response Api List Tutor Feedback Api V1 Studytomy Adaptive Orgs  Org Uuid  Staff Learners  Learner Uuid  Courses  Course Uuid  Tutor Feedback Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "studytomy-adaptive"
+        ],
+        "summary": "Api Review Tutor Feedback",
+        "operationId": "api_review_tutor_feedback_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__courses__course_uuid__tutor_feedback_post",
+        "parameters": [
+          {
+            "name": "learner_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "title": "Learner Uuid"
+            }
+          },
+          {
+            "name": "course_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "title": "Course Uuid"
+            }
+          },
+          {
+            "name": "org_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TutorFeedbackReviewCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TutorFeedbackReviewRead"
                 }
               }
             }
@@ -16789,6 +17121,215 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DiagnosticStaffRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/studytomy/adaptive/orgs/{org_uuid}/me/topic-check": {
+      "get": {
+        "tags": [
+          "studytomy-adaptive"
+        ],
+        "summary": "Api Read Topic Check",
+        "operationId": "api_read_topic_check_api_v1_studytomy_adaptive_orgs__org_uuid__me_topic_check_get",
+        "parameters": [
+          {
+            "name": "org_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Uuid"
+            }
+          },
+          {
+            "name": "course_uuid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "title": "Course Uuid"
+            }
+          },
+          {
+            "name": "course_release_uuid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^course_release_[0-9a-f-]{36}$",
+              "title": "Course Release Uuid"
+            }
+          },
+          {
+            "name": "activity_uuid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 89,
+              "title": "Activity Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicCheckView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "studytomy-adaptive"
+        ],
+        "summary": "Api Submit Topic Check",
+        "operationId": "api_submit_topic_check_api_v1_studytomy_adaptive_orgs__org_uuid__me_topic_check_post",
+        "parameters": [
+          {
+            "name": "org_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicSubmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicCheckView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/studytomy/adaptive/orgs/{org_uuid}/staff/learners/{learner_uuid}/topic-check": {
+      "get": {
+        "tags": [
+          "studytomy-adaptive"
+        ],
+        "summary": "Api Read Topic Timeline",
+        "operationId": "api_read_topic_timeline_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__topic_check_get",
+        "parameters": [
+          {
+            "name": "learner_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "title": "Learner Uuid"
+            }
+          },
+          {
+            "name": "org_uuid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Uuid"
+            }
+          },
+          {
+            "name": "course_uuid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "title": "Course Uuid"
+            }
+          },
+          {
+            "name": "course_release_uuid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^course_release_[0-9a-f-]{36}$",
+              "title": "Course Release Uuid"
+            }
+          },
+          {
+            "name": "activity_uuid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 89,
+              "title": "Activity Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicTimeline"
                 }
               }
             }
@@ -47108,6 +47649,16 @@
           "evaluator_version": {
             "type": "string",
             "title": "Evaluator Version"
+          },
+          "appeal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssessmentAppealReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -55581,6 +56132,21 @@
           },
           "org": {
             "$ref": "#/components/schemas/OrganizationRead"
+          },
+          "virtual_lab_options": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Virtual Lab Options"
           }
         },
         "type": "object",
@@ -56009,6 +56575,14 @@
             },
             "type": "object",
             "title": "Completed Removals"
+          },
+          "completed_removal_approvals": {
+            "additionalProperties": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "object",
+            "title": "Completed Removal Approvals"
           }
         },
         "type": "object",
@@ -56400,6 +56974,11 @@
             "maxLength": 500,
             "minLength": 2,
             "title": "Query"
+          },
+          "sources_only": {
+            "type": "boolean",
+            "title": "Sources Only",
+            "default": false
           },
           "context_question": {
             "anyOf": [
@@ -58410,6 +58989,43 @@
           "status"
         ],
         "title": "GroundedQuizSources"
+      },
+      "GuestSupportIssue": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 320,
+            "title": "Email"
+          },
+          "topic": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Topic"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "topic"
+        ],
+        "title": "GuestSupportIssue"
+      },
+      "GuestSupportRedemption": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "GuestSupportRedemption"
       },
       "HTTPValidationError": {
         "properties": {
@@ -66049,6 +66665,11 @@
           "intake_available": {
             "type": "boolean",
             "title": "Intake Available"
+          },
+          "guest_verification_available": {
+            "type": "boolean",
+            "title": "Guest Verification Available",
+            "default": false
           }
         },
         "type": "object",
@@ -68131,6 +68752,17 @@
           "assigned_to_me": {
             "type": "boolean",
             "title": "Assigned To Me"
+          },
+          "can_assign": {
+            "type": "boolean",
+            "title": "Can Assign"
+          },
+          "allowed_transitions": {
+            "items": {
+              "$ref": "#/components/schemas/SafeguardingReviewStatus"
+            },
+            "type": "array",
+            "title": "Allowed Transitions"
           }
         },
         "type": "object",
@@ -68138,7 +68770,9 @@
           "case_uuid",
           "status",
           "version",
-          "assigned_to_me"
+          "assigned_to_me",
+          "can_assign",
+          "allowed_transitions"
         ],
         "title": "SafeguardingCaseSummary"
       },
@@ -68240,6 +68874,20 @@
             },
             "type": "array",
             "title": "Active Holds"
+          },
+          "hold_reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hold Reason Codes"
+          },
+          "release_reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Release Reason Codes"
           }
         },
         "type": "object",
@@ -68247,7 +68895,9 @@
           "case_uuid",
           "case_status",
           "categories",
-          "active_holds"
+          "active_holds",
+          "hold_reason_codes",
+          "release_reason_codes"
         ],
         "title": "SafeguardingRetentionInventory"
       },
@@ -71794,6 +72444,13 @@
             },
             "type": "array",
             "title": "Approvals"
+          },
+          "required_responsibilities": {
+            "items": {
+              "$ref": "#/components/schemas/StudyOwnerFunction"
+            },
+            "type": "array",
+            "title": "Required Responsibilities"
           }
         },
         "type": "object",
@@ -73882,6 +74539,338 @@
         ],
         "title": "ThumbnailType"
       },
+      "TopicCheckView": {
+        "properties": {
+          "binding_id": {
+            "type": "string",
+            "title": "Binding Id"
+          },
+          "episode_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "default": 1
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "recheck",
+              "complete",
+              "needs_review"
+            ],
+            "title": "Phase"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicQuestion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reteaching": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reteaching"
+          },
+          "teaching_visual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicVisual"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pdf_page": {
+            "type": "integer",
+            "title": "Pdf Page"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "correct",
+                  "incorrect"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "assisted": {
+            "type": "boolean",
+            "title": "Assisted",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "binding_id",
+          "phase",
+          "pdf_page"
+        ],
+        "title": "TopicCheckView"
+      },
+      "TopicQuestion": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "title": "Prompt"
+          },
+          "visual": {
+            "$ref": "#/components/schemas/TopicVisual"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt",
+          "visual"
+        ],
+        "title": "TopicQuestion"
+      },
+      "TopicScope": {
+        "properties": {
+          "course_uuid": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Course Uuid"
+          },
+          "course_release_uuid": {
+            "type": "string",
+            "pattern": "^course_release_[0-9a-f-]{36}$",
+            "title": "Course Release Uuid"
+          },
+          "activity_uuid": {
+            "type": "string",
+            "maxLength": 89,
+            "minLength": 1,
+            "title": "Activity Uuid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "course_uuid",
+          "course_release_uuid",
+          "activity_uuid"
+        ],
+        "title": "TopicScope"
+      },
+      "TopicSubmission": {
+        "properties": {
+          "course_uuid": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Course Uuid"
+          },
+          "course_release_uuid": {
+            "type": "string",
+            "pattern": "^course_release_[0-9a-f-]{36}$",
+            "title": "Course Release Uuid"
+          },
+          "activity_uuid": {
+            "type": "string",
+            "maxLength": 89,
+            "minLength": 1,
+            "title": "Activity Uuid"
+          },
+          "operation_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Operation Uuid"
+          },
+          "binding_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Binding Id"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "maximum": 2,
+            "minimum": 1,
+            "title": "Expected Revision"
+          },
+          "answer": {
+            "type": "string",
+            "maxLength": 48,
+            "minLength": 1,
+            "title": "Answer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "course_uuid",
+          "course_release_uuid",
+          "activity_uuid",
+          "operation_uuid",
+          "binding_id",
+          "expected_revision",
+          "answer"
+        ],
+        "title": "TopicSubmission"
+      },
+      "TopicTimeline": {
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/TopicScope"
+          },
+          "concept_uuid": {
+            "type": "string",
+            "title": "Concept Uuid"
+          },
+          "activity_version": {
+            "type": "integer",
+            "title": "Activity Version"
+          },
+          "pdf_page": {
+            "type": "integer",
+            "title": "Pdf Page"
+          },
+          "episode_uuid": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Uuid"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TopicTimelineEvent"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "concept_uuid",
+          "activity_version",
+          "pdf_page",
+          "episode_uuid",
+          "complete",
+          "events"
+        ],
+        "title": "TopicTimeline"
+      },
+      "TopicTimelineEvent": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "initial",
+              "recheck"
+            ],
+            "title": "Kind"
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "correct",
+              "incorrect"
+            ],
+            "title": "Outcome"
+          },
+          "reteaching": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reteaching"
+          },
+          "teaching_visual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopicVisual"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assisted": {
+            "type": "boolean",
+            "title": "Assisted"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "prompt",
+          "outcome",
+          "assisted",
+          "at"
+        ],
+        "title": "TopicTimelineEvent"
+      },
+      "TopicVisual": {
+        "properties": {
+          "parts": {
+            "type": "integer",
+            "title": "Parts"
+          },
+          "selected": {
+            "type": "integer",
+            "title": "Selected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parts",
+          "selected"
+        ],
+        "title": "TopicVisual"
+      },
       "Trail": {
         "properties": {
           "org_id": {
@@ -74293,6 +75282,106 @@
         ],
         "title": "TutorFeedbackReceipt"
       },
+      "TutorFeedbackReviewCreate": {
+        "properties": {
+          "turn_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Turn Uuid"
+          },
+          "session_uuid": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Session Uuid"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "dismissed",
+              "escalated"
+            ],
+            "title": "Disposition"
+          },
+          "evidence_reference": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][-A-Za-z0-9_.:/]{0,119}$",
+            "title": "Evidence Reference"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "turn_uuid",
+          "session_uuid",
+          "disposition",
+          "evidence_reference"
+        ],
+        "title": "TutorFeedbackReviewCreate"
+      },
+      "TutorFeedbackReviewRead": {
+        "properties": {
+          "turn_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Turn Uuid"
+          },
+          "issue_code": {
+            "type": "string",
+            "enum": [
+              "inaccurate",
+              "unclear",
+              "unsafe"
+            ],
+            "title": "Issue Code"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Received At"
+          },
+          "session_uuid": {
+            "type": "string",
+            "title": "Session Uuid"
+          },
+          "disposition": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "confirmed",
+                  "dismissed",
+                  "escalated"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disposition"
+          },
+          "review_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Reference"
+          }
+        },
+        "type": "object",
+        "required": [
+          "turn_uuid",
+          "issue_code",
+          "received_at",
+          "session_uuid"
+        ],
+        "title": "TutorFeedbackReviewRead"
+      },
       "TutorOptions": {
         "properties": {
           "mode": {
@@ -74341,6 +75430,34 @@
               }
             ],
             "title": "Practice Attempt Uuid"
+          },
+          "remaining_turns": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining Turns"
+          },
+          "assistance_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "reviewed_only",
+                  "unavailable",
+                  "exhausted"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assistance Status"
           }
         },
         "type": "object",

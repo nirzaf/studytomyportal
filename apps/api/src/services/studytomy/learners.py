@@ -587,6 +587,11 @@ async def record_eligibility_decision(
         hide_existence_on_denial=True,
         now=now,
     )
+    if re.fullmatch(r"ev_[A-Za-z0-9_-]{16,80}", request.evidence_reference) is None:
+        raise HTTPException(
+            status_code=422,
+            detail="A verified eligibility evidence attachment is required.",
+        )
     await lock_users(db_session, [actor.id, profile.user_id])
 
     replay = await claim_idempotency(
@@ -649,39 +654,39 @@ async def record_eligibility_decision(
             (StudyPolicyKey.D_01, StudyPolicyKey.D_03, StudyPolicyKey.D_12),
             now,
         )
-    if request.evidence_reference.startswith("ev_"):
-        evidence_result = await db_session.execute(
-            select(StudyEvidenceFile).where(
-                StudyEvidenceFile.org_id == organization.id,
-                StudyEvidenceFile.learner_profile_id == profile.id,
-                StudyEvidenceFile.evidence_uuid == request.evidence_reference,
-                StudyEvidenceFile.purpose == "eligibility_evidence",
-                StudyEvidenceFile.upload_status == "ready",
-            )
+    evidence_result = await db_session.execute(
+        select(StudyEvidenceFile).where(
+            StudyEvidenceFile.org_id == organization.id,
+            StudyEvidenceFile.learner_profile_id == profile.id,
+            StudyEvidenceFile.evidence_uuid == request.evidence_reference,
+            StudyEvidenceFile.purpose == "eligibility_evidence",
+            StudyEvidenceFile.upload_status == "ready",
+            StudyEvidenceFile.verified_at.is_not(None),
+        ).with_for_update().execution_options(populate_existing=True)
+    )
+    evidence = evidence_result.scalars().first()
+    if evidence is None:
+        raise HTTPException(
+            status_code=422,
+            detail="The evidence reference is not a verified eligibility attachment for this learner.",
         )
-        evidence = evidence_result.scalars().first()
-        if evidence is None:
-            raise HTTPException(
-                status_code=422,
-                detail="The evidence reference is not a ready attachment for this learner.",
-            )
-        evidence_policies = await _current_policies(
-            db_session,
-            organization,
-            (
-                StudyPolicyKey.D_01,
-                StudyPolicyKey.D_03,
-                StudyPolicyKey.D_12,
-                StudyPolicyKey.D_13,
-                StudyPolicyKey.D_15,
-            ),
-            now,
+    evidence_policies = await _current_policies(
+        db_session,
+        organization,
+        (
+            StudyPolicyKey.D_01,
+            StudyPolicyKey.D_03,
+            StudyPolicyKey.D_12,
+            StudyPolicyKey.D_13,
+            StudyPolicyKey.D_15,
+        ),
+        now,
+    )
+    if evidence.policy_version_ids != [int(policy.id) for policy in evidence_policies]:
+        raise HTTPException(
+            status_code=409,
+            detail="The evidence attachment is governed by superseded policy versions.",
         )
-        if evidence.policy_version_ids != [int(policy.id) for policy in evidence_policies]:
-            raise HTTPException(
-                status_code=409,
-                detail="The evidence attachment is governed by superseded policy versions.",
-            )
     owner = await _reviewer_assignment(
         db_session,
         organization,

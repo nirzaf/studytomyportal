@@ -112,9 +112,10 @@ export interface StudyStaffScopeCreate {
   evidence_reference: string
 }
 
-export interface StudyStaffScopeRead extends StudyStaffScopeCreate {
+export interface StudyStaffScopeRead extends Omit<StudyStaffScopeCreate, 'scope_uuid'> {
   scope_record_uuid: string
   owner_uuid: string
+  scope_uuid: string | null
   status: 'active' | 'revoked'
   created_by_user_uuid: string
   created_at: string
@@ -126,6 +127,14 @@ export interface StudyStaffScopeRevoke {
 
 /** Returned only after server authorization; never accepted as proof of delegation. */
 export interface FinancialDelegationLimit {
+  currency: string
+  max_amount_minor: number
+  policy_version_id: number
+  evidence_reference: string
+}
+
+export interface StudyFinancialDelegationRead {
+  owner_uuid: string
   currency: string
   max_amount_minor: number
   policy_version_id: number
@@ -145,6 +154,80 @@ export interface StudyCourseReadiness {
   ready_to_sell: boolean
   blockers: StudyReadinessBlocker[]
   evaluated_at: string
+}
+
+export type StudyPolicyDecisionState = 'pending' | 'specified' | 'not_applicable'
+
+export interface StudyPolicyDecisionValue {
+  state: StudyPolicyDecisionState
+  value: unknown | null
+  rationale: string | null
+  evidence_reference: string | null
+}
+
+export interface StudyPolicyBody {
+  decision_items: Record<string, StudyPolicyDecisionValue>
+}
+
+export interface StudyPolicyApprovalRead {
+  responsibility: StudyOwnerFunction
+  approver_user_uuid: string
+  evidence_reference: string
+  rationale: string
+  approved_at: string
+}
+
+export interface StudyPolicyVersionRead {
+  policy_uuid: string
+  policy_key: StudyPolicyKey
+  scope_kind: string
+  scope_uuid: string
+  version: number
+  status: StudyPolicyStatus
+  body: StudyPolicyBody
+  evidence_reference: string
+  evidence_sha256: string | null
+  effective_from: string
+  effective_to: string | null
+  created_by_user_uuid: string
+  approved_at: string | null
+  supersedes_policy_uuid: string | null
+  created_at: string
+  approvals: StudyPolicyApprovalRead[]
+  required_responsibilities: StudyOwnerFunction[]
+}
+
+export interface StudyOwnerAssignmentRead {
+  owner_uuid: string
+  user_uuid: string
+  responsibility: StudyOwnerFunction
+  scope_kind: string
+  scope_uuid: string
+  status: 'active' | 'ended'
+  evidence_reference: string
+  effective_from: string
+  effective_to: string | null
+  assigned_by_user_uuid: string
+  ended_by_user_uuid: string | null
+  ended_at: string | null
+  end_evidence_reference: string | null
+  created_at: string
+  financial_limit_minor?: number | null
+  financial_limit_currency?: string | null
+  delegation_policy_version_id?: number | null
+}
+
+export interface StudyOfferDraftRead {
+  offer_uuid: string
+  offer_kind: StudyOfferKind
+  status: string
+  version_no: number
+  current_version: number
+  current_version_uuid: string
+  content_sha256: string
+  terms: Record<string, unknown>
+  validation_blockers: string[]
+  created_at: string
 }
 
 export interface StudyPrivacyStatus {

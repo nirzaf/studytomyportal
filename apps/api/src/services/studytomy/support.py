@@ -35,10 +35,32 @@ class PublicSupportGuidance(BaseModel):
     service_limits: _Guidance
     response_expectations: _Guidance | None
     intake_available: bool
+    guest_verification_available: bool = False
 
 
 def _support_intake_enabled() -> bool:
     return os.getenv("LEARNHOUSE_STUDYTOMY_SUPPORT_INTAKE_ENABLED") == "true"
+
+
+async def _guest_verification_available(
+    db: AsyncSession, org: Organization, service: StudyPolicyVersion, now: datetime,
+) -> bool:
+    if os.getenv("LEARNHOUSE_STUDYTOMY_GUEST_SUPPORT_ENABLED") != "true":
+        return False
+    contact = _policy_area_values(service, "support_routes").get("public_support")
+    if (
+        not isinstance(contact, dict) or contact.get("guest_intake_enabled") is not True
+        or contact.get("guest_verification_delivery") != "email"
+    ):
+        return False
+    try:
+        privacy, = await _current_policies(db, org, (StudyPolicyKey.D_12,), now)
+        purposes = _policy_area_values(privacy, "information_uses")
+    except HTTPException as error:
+        if error.status_code != 409:
+            raise
+        return False
+    return purposes.get("guest_support_verification") == ["requester_submitted_email"]
 
 
 class SupportStaffing(BaseModel):
@@ -116,7 +138,13 @@ async def _support_guidance(db: AsyncSession, org: Organization) -> tuple[Public
 
 
 async def public_support_guidance(db: AsyncSession, org: Organization) -> PublicSupportGuidance:
-    guidance, _, _ = await _support_guidance(db, org)
+    guidance, policy_ids, _ = await _support_guidance(db, org)
+    if guidance.intake_available and os.getenv("LEARNHOUSE_STUDYTOMY_GUEST_SUPPORT_ENABLED") == "true":
+        service = await db.get(StudyPolicyVersion, policy_ids[0])
+        if service is not None:
+            guidance.guest_verification_available = await _guest_verification_available(
+                db, org, service, datetime.now(UTC),
+            )
     return guidance
 
 

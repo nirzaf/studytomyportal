@@ -15,9 +15,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from config.config import get_learnhouse_config
 from src.db.organizations import Organization
 from src.db.studytomy.adaptive_guidance import StudyTutorSession, StudyTutorTurn
-from src.db.studytomy.governance import StudyPolicyKey
+from src.db.studytomy.family import StudyLearnerProfile
+from src.db.studytomy.governance import StudyBusinessEvent, StudyPolicyKey
 from src.db.users import PublicUser
-from src.security.features_utils.usage import reserve_ai_credit
+from src.security.features_utils.usage import check_ai_credits, reserve_ai_credit
+from src.security.studytomy_access import StudytomyCapabilityName, authorize_studytomy_staff_action
+from src.services.ai.llm import AINotConfiguredError
+from src.services.ai.llm.provider import build_model
 from src.services.studytomy.adaptive_diagnostics import _policy_body
 from src.services.studytomy.adaptive_guidance import load_guidance_context
 from src.services.studytomy.adaptive_teaching import (
@@ -26,6 +30,7 @@ from src.services.studytomy.adaptive_teaching import (
     generate_teaching,
     reviewed_explanation,
 )
+from src.services.studytomy.business_events import append_business_event
 from src.services.studytomy.errors import (
     POLICY_NOT_APPROVED,
     STALE_VERSION,
@@ -33,7 +38,7 @@ from src.services.studytomy.errors import (
 )
 from src.services.studytomy.idempotency import canonical_request_hash
 from src.services.studytomy.learners import _current_policies
-from src.services.studytomy.policies import _as_utc
+from src.services.studytomy.policies import _as_utc, lock_organization
 
 TurnState = Literal[
     "running", "completed", "failed", "reconciliation_required", "cancelled"
@@ -96,6 +101,7 @@ class _TurnRetention(BaseModel):
 
     result_hours: Annotated[int, Field(ge=1, le=720)]
     feedback_notes: bool = False
+    feedback_review: bool = False
 
 
 class _ProviderApproval(BaseModel):
@@ -107,12 +113,31 @@ class _ProviderApproval(BaseModel):
     base_url: Annotated[str, Field(min_length=1, max_length=300)] | None = None
 
 
+class _ProviderSupervision(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    mode: Literal["independent"]
+
+
+class _ProviderMaterials(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    scope: Literal["release_bound"]
+
+
 def _guidance_rules(body, area: str):
     value = body.specified_value(area)
     return value.get("adaptive_guidance") if isinstance(value, dict) else None
 
 
-async def _turn_policy(db: AsyncSession, org: Organization, now: datetime):
+async def _turn_policy(
+    db: AsyncSession,
+    org: Organization,
+    now: datetime,
+    *,
+    release_bound: bool,
+    use_provider: bool = True,
+):
     policies = await _current_policies(
         db, org, (StudyPolicyKey.D_10, StudyPolicyKey.D_13), now
     )
@@ -127,19 +152,64 @@ async def _turn_policy(db: AsyncSession, org: Organization, now: datetime):
             POLICY_NOT_APPROVED,
             "Reviewed guidance limits and retention are required.",
         ) from error
-    try:
-        approval = _ProviderApproval.model_validate(_guidance_rules(d10, "review"))
-    except ValidationError:
-        approval = None
     model = None
-    if approval:
+    review = _guidance_rules(d10, "review") if use_provider else None
+    if review is not None:
+        try:
+            approval = _ProviderApproval.model_validate(review)
+            _ProviderSupervision.model_validate(_guidance_rules(d10, "supervision"))
+            _ProviderMaterials.model_validate(_guidance_rules(d10, "materials"))
+        except ValidationError as error:
+            raise studytomy_http_error(
+                409,
+                POLICY_NOT_APPROVED,
+                "Provider guidance requires approved independent use and release-bound material.",
+            ) from error
+        if not release_bound:
+            raise studytomy_http_error(
+                409, POLICY_NOT_APPROVED, "Open guidance from the reviewed release."
+            )
         config = get_learnhouse_config().ai_config
-        if (
-            config.provider == approval.provider
-            and config.base_url == approval.base_url
-        ):
-            model = approval.model
+        if config.provider != approval.provider or config.base_url != approval.base_url:
+            raise HTTPException(503, "The approved guidance provider is unavailable.")
+        model = approval.model
     return limits.max_turns_per_day, timedelta(hours=retention.result_hours), model
+
+
+async def _guidance_turns_used(db: AsyncSession, org_id: int, learner_id: int, now: datetime) -> int:
+    return (await db.execute(
+        select(func.count(StudyTutorTurn.id))
+        .join(StudyTutorSession, StudyTutorSession.id == StudyTutorTurn.session_id)
+        .where(
+            StudyTutorTurn.org_id == org_id,
+            StudyTutorSession.org_id == org_id,
+            StudyTutorSession.learner_profile_id == learner_id,
+            StudyTutorTurn.created_at >= now - timedelta(days=1),
+        )
+    )).scalar_one()
+
+
+async def read_guidance_allowance(
+    db: AsyncSession, org: Organization, learner_id: int, now: datetime,
+    *, release_bound: bool, use_provider: bool,
+) -> tuple[int | None, Literal["available", "reviewed_only", "unavailable", "exhausted"]]:
+    try:
+        limit, _, model = await _turn_policy(
+            db, org, now, release_bound=release_bound, use_provider=use_provider
+        )
+    except HTTPException:
+        return None, "unavailable"
+    remaining = max(0, limit - await _guidance_turns_used(db, org.id, learner_id, now))
+    if remaining == 0:
+        return 0, "exhausted"
+    if model is None:
+        return remaining, "reviewed_only"
+    try:
+        await check_ai_credits(org.id, db)
+        build_model(model)
+    except (HTTPException, AINotConfiguredError, RedisError, ImportError, ValueError):
+        return remaining, "unavailable"
+    return remaining, "available"
 
 
 async def _maintain_turns(
@@ -273,19 +343,14 @@ async def create_tutor_turn(
         raise studytomy_http_error(
             409, "GUIDANCE_TURN_RUNNING", "Recover the current guidance turn first."
         )
-    limit, retention, model = await _turn_policy(db, org, now)
-    used = (
-        await db.execute(
-            select(func.count(StudyTutorTurn.id))
-            .join(StudyTutorSession, StudyTutorSession.id == StudyTutorTurn.session_id)
-            .where(
-                StudyTutorTurn.org_id == org.id,
-                StudyTutorSession.org_id == org.id,
-                StudyTutorSession.learner_profile_id == session.learner_profile_id,
-                StudyTutorTurn.created_at >= now - timedelta(days=1),
-            )
-        )
-    ).scalar_one()
+    limit, retention, model = await _turn_policy(
+        db,
+        org,
+        now,
+        release_bound=bool(session.source_binding_digest),
+        use_provider=body.action != "hint" and not context.practice_linked,
+    )
+    used = await _guidance_turns_used(db, org.id, session.learner_profile_id, now)
     if used >= limit:
         raise HTTPException(429, "The approved daily guidance limit has been reached.")
     turn = StudyTutorTurn(
@@ -341,8 +406,13 @@ async def create_tutor_turn(
         )
         if current.version != body.expected_version:
             raise HTTPException(409, "The guidance session changed.")
+        _, _, current_model = await _turn_policy(
+            db, org, datetime.now(UTC), release_bound=bool(current.source_binding_digest)
+        )
     except HTTPException:
         await db.rollback()
+        return await _mark_uncertain(db, org_id, session_id, body.operation_uuid)
+    if current_model != model:
         return await _mark_uncertain(db, org_id, session_id, body.operation_uuid)
     await db.commit()
 
@@ -379,7 +449,7 @@ async def _finish(
 ):
     org_id = org.id
     try:
-        session, context = await load_guidance_context(
+        session, _ = await load_guidance_context(
             request, db, org, actor, session_uuid
         )
     except HTTPException:
@@ -395,8 +465,11 @@ async def _finish(
         ):
             turn.state = "reconciliation_required"
             turn.finished_at = now
+        elif result is None:
+            turn.state = "failed"
+            turn.finished_at = now
         else:
-            _complete(session, turn, result or reviewed_explanation(context), now)
+            _complete(session, turn, result, now)
     response = _read(turn)
     await db.commit()
     return response
@@ -445,3 +518,101 @@ async def submit_tutor_feedback(
     )
     await db.commit()
     return receipt
+
+
+class TutorFeedbackReviewCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turn_uuid: UUID
+    session_uuid: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    disposition: Literal["confirmed", "dismissed", "escalated"]
+    evidence_reference: Annotated[
+        str, StringConstraints(pattern=r"^[A-Za-z0-9][-A-Za-z0-9_.:/]{0,119}$")
+    ]
+
+
+class TutorFeedbackReviewRead(TutorFeedbackReceipt):
+    session_uuid: str
+    disposition: Literal["confirmed", "dismissed", "escalated"] | None = None
+    review_reference: str | None = None
+
+
+_FEEDBACK_REVIEWED = "studytomy.guidance.feedback_reviewed"
+
+
+async def review_tutor_feedback(
+    db: AsyncSession,
+    org: Organization,
+    actor: PublicUser,
+    learner_uuid: str,
+    course_uuid: str,
+    *,
+    review: TutorFeedbackReviewCreate | None = None,
+    offset: int = 0,
+) -> list[TutorFeedbackReviewRead]:
+    if review is not None:
+        await lock_organization(db, org.id)
+    denied = HTTPException(404, "Tutor feedback review not found.")
+    now = datetime.now(UTC)
+    learner = await db.scalar(select(StudyLearnerProfile).where(
+        StudyLearnerProfile.org_id == org.id,
+        StudyLearnerProfile.learner_uuid == learner_uuid,
+    ))
+    if learner is None or learner.user_id == actor.id:
+        raise denied
+    for scope, resource in (("course", course_uuid), ("learner", learner_uuid)):
+        await authorize_studytomy_staff_action(
+            db, actor, org, StudytomyCapabilityName.ASSESSMENT_MODERATION,
+            target_scope_kind=scope, target_resource_uuid=resource,
+            subject_user_id=learner.user_id, hide_existence_on_denial=True, now=now,
+        )
+    policies = await _current_policies(db, org, (StudyPolicyKey.D_10, StudyPolicyKey.D_13), now)
+    retention = _guidance_rules(_policy_body(policies, StudyPolicyKey.D_13), "retention")
+    if not isinstance(retention, dict) or retention.get("feedback_review") is not True:
+        raise denied
+    turn, session = StudyTutorTurn, StudyTutorSession
+    event = StudyBusinessEvent
+    query = (
+        select(turn.id, session.uuid, turn.operation_uuid, turn.feedback_issue, turn.feedback_at, event)
+        .join(session, (session.id == turn.session_id) & (session.org_id == turn.org_id))
+        .outerjoin(event, (
+            (event.org_id == turn.org_id) & (event.action == _FEEDBACK_REVIEWED)
+            & (event.resource_uuid == session.uuid) & (event.operation_uuid == turn.operation_uuid)
+        ))
+        .where(
+            turn.org_id == org.id, session.learner_profile_id == learner.id,
+            session.course_uuid == course_uuid, turn.feedback_at.is_not(None),
+            turn.result_expires_at > now,
+        )
+    )
+    if review is not None:
+        query = query.where(session.uuid == review.session_uuid, turn.operation_uuid == str(review.turn_uuid))
+    rows = (await db.execute(query.order_by(turn.id.desc()).offset(offset).limit(20))).all()
+    if review is not None and len(rows) != 1:
+        raise denied
+    result = []
+    for turn_id, session_uuid, operation, issue, received_at, existing in rows:
+        if review is not None:
+            reason = review.disposition.upper()
+            if existing is not None and (
+                existing.reason != reason
+                or existing.after_state.get("evidence_reference") != review.evidence_reference
+            ):
+                raise studytomy_http_error(409, "IDEMPOTENCY_CONFLICT", "Tutor feedback was already reviewed.")
+            if existing is None:
+                existing = await append_business_event(
+                    db, org_id=org.id, actor_user_id=actor.id,
+                    actor_capacity="assessment_moderator", action=_FEEDBACK_REVIEWED,
+                    reason_code=reason, resource_kind="tutor_feedback", resource_uuid=session_uuid,
+                    operation_uuid=operation, policy_refs=[int(policy.id) for policy in policies],
+                    after_state={"evidence_reference": review.evidence_reference},
+                    dedupe_key=f"tutor_feedback_review:{org.id}:{turn_id}",
+                )
+        result.append(TutorFeedbackReviewRead(
+            turn_uuid=operation, session_uuid=session_uuid, issue_code=issue, received_at=_as_utc(received_at),
+            disposition=existing.reason.lower() if existing else None,
+            review_reference=existing.event_uuid if existing else None,
+        ))
+    if review is not None:
+        await db.commit()
+    return result

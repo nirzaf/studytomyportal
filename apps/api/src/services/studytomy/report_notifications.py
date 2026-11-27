@@ -636,7 +636,7 @@ async def send_report_delivery(
     db: AsyncSession,
     record: StudyOutboxRecord,
     authorization: DeliveryAuthorization,
-    _provider_idempotency_key: str,
+    provider_idempotency_key: str,
 ) -> ProviderReceipt:
     if not authorization.allowed:
         raise ProviderOutcomeUnknown
@@ -655,6 +655,7 @@ async def send_report_delivery(
                 "A progress report is available",
                 f'<p><a href="{escape(href, quote=True)}">Sign in to view the progress report</a>.</p>',
                 single_attempt=True,
+                provider_idempotency_key=provider_idempotency_key,
             ),
             timeout=_REPORT_SEND_TIMEOUT_SECONDS,
         )

@@ -67,7 +67,7 @@ The setup wizard walks through:
 
 1. **Install directory**: where files are generated
 2. **Domain**: hostname, port, HTTPS/SSL
-3. **Database & Redis**: local (Docker) or external
+3. **Database & Redis**: local (Docker) or external. New Community installs use Redis 8.6.1. Reconfiguration keeps the existing Redis image to avoid an implicit upgrade of persistent data.
 4. **Organization**: name for your instance
 5. **Admin account**: email and password
 6. **Features**: AI, email, S3, OAuth

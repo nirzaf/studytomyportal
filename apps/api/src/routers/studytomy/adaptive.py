@@ -195,10 +195,13 @@ from src.services.studytomy.adaptive_reports import (
 from src.services.studytomy.adaptive_turns import (
     TutorFeedbackCreate,
     TutorFeedbackReceipt,
+    TutorFeedbackReviewCreate,
+    TutorFeedbackReviewRead,
     TutorTurnCreate,
     TutorTurnRead,
     create_tutor_turn,
     read_tutor_turn,
+    review_tutor_feedback,
     submit_tutor_feedback,
 )
 from src.services.studytomy.privacy import is_protected_studytomy_learner
@@ -348,9 +351,11 @@ async def api_assessment_retry_grant(
     assignment_uuid: Annotated[str, Path(min_length=1, max_length=255)],
     submission_uuid: Annotated[str, Path(min_length=1, max_length=255)],
     body: AssessmentRetryGrant,
+    expected_attempt_number: Annotated[int | None, Query(ge=1)] = None,
 ) -> AssessmentDeadlineReceipt:
     return await record_assessment_retry_grant(
         db, org, actor, course_uuid, assignment_uuid, submission_uuid, body,
+        expected_attempt_number=expected_attempt_number,
     )
 
 
@@ -395,9 +400,11 @@ async def api_assessment_deadline_adjustment(
     assignment_uuid: Annotated[str, Path(min_length=1, max_length=255)],
     submission_uuid: Annotated[str, Path(min_length=1, max_length=255)],
     body: AssessmentDeadlineAdjustment,
+    expected_attempt_number: Annotated[int | None, Query(ge=1)] = None,
 ) -> AssessmentDeadlineReceipt:
     return await record_assessment_deadline_adjustment(
         db, org, actor, course_uuid, assignment_uuid, submission_uuid, body,
+        expected_attempt_number=expected_attempt_number,
     )
 
 
@@ -412,7 +419,8 @@ async def api_assessment_review_evidence(
     attempt_number: Annotated[int | None, Query(ge=1)] = None,
 ) -> AssessmentReviewEvidence:
     return await read_assessment_review_evidence(
-        db, org, actor, course_uuid, assignment_uuid, submission_uuid, attempt_number=attempt_number,
+        db, org, actor, course_uuid, assignment_uuid, submission_uuid,
+        attempt_number=attempt_number, include_appeal=True,
     )
 
 
@@ -700,6 +708,31 @@ async def api_submit_tutor_feedback(
     return await submit_tutor_feedback(request, db, org, actor, session_uuid, body)
 
 
+@router.get("/orgs/{org_uuid}/staff/learners/{learner_uuid}/courses/{course_uuid}/tutor-feedback")
+async def api_list_tutor_feedback(
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    learner_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    course_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    offset: Annotated[int, Query(ge=0, le=1000)] = 0,
+) -> list[TutorFeedbackReviewRead]:
+    return await review_tutor_feedback(db, org, actor, learner_uuid, course_uuid, offset=offset)
+
+
+@router.post("/orgs/{org_uuid}/staff/learners/{learner_uuid}/courses/{course_uuid}/tutor-feedback")
+async def api_review_tutor_feedback(
+    org: AdaptiveOrg,
+    actor: AdaptiveActor,
+    db: AdaptiveDB,
+    learner_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    course_uuid: Annotated[str, Path(min_length=1, max_length=100)],
+    body: TutorFeedbackReviewCreate,
+) -> TutorFeedbackReviewRead:
+    reviews = await review_tutor_feedback(db, org, actor, learner_uuid, course_uuid, review=body)
+    return reviews[0]
+
+
 @router.get("/orgs/{org_uuid}/me/mastery")
 async def api_read_learner_mastery(
     request: Request,
@@ -921,6 +954,7 @@ async def api_repair_mastery_projection(
     if replay is not None:
         if replay.response_projection is None:
             raise HTTPException(409, "The original repair response is unavailable.")
+        await reconcile_mastery(db, org, actor, learner_uuid, concept_uuid, policy_uuid)
         return replay.response_projection
 
     result = await reconcile_mastery(

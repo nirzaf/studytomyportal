@@ -9,7 +9,7 @@ COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
-FROM base AS builder
+FROM node:26.13.0-alpine3.24 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -27,10 +27,10 @@ RUN if [ "$LEARNHOUSE_PUBLIC" = "true" ] || { [ -L /app/ee ] && [ ! -e /app/ee ]
 # Optional explicit build identifier; see generateBuildId in next.config.js.
 ARG BUILD_ID
 ENV BUILD_ID=$BUILD_ID
-RUN bun run build
+RUN npm run build
 
-# Production image: the Next.js standalone server runs on Bun
-FROM oven/bun:1.4.5-alpine AS runner
+# Match the combined image’s Node runtime for the Next.js standalone server.
+FROM node:26.13.0-alpine3.24 AS runner
 WORKDIR /app
 
 RUN apk upgrade --no-cache && apk add --no-cache curl
@@ -61,6 +61,9 @@ USER nextjs
 
 EXPOSE 3000
 
-ENV PORT=3000
+ENV PORT=3000 HOSTNAME=0.0.0.0
+
+HEALTHCHECK --interval=30s --timeout=8s --start-period=30s --retries=3 \
+  CMD curl --fail --silent --max-time 5 "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

@@ -611,11 +611,11 @@ async def test_report_delivery_batch_rechecks_authority_and_tracks_provider_outc
     monkeypatch.setattr(report_notifications, "send_report_delivery", recording_send)
 
     async with rows.session_factory() as session:
-        before_summary = await report_delivery_scheduler._queue_summary(session)
+        before_summary = await report_delivery_scheduler.report_queue_summary(session)
         tally = await report_notifications.run_report_delivery_batch(
             session, worker_id=f"report-{rows.token[:16]}", limit=10,
         )
-        after_summary = await report_delivery_scheduler._queue_summary(session)
+        after_summary = await report_delivery_scheduler.report_queue_summary(session)
 
     async with rows.session_factory() as session:
         persisted = {

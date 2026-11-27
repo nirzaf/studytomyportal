@@ -1,3 +1,4 @@
+# Build from the repository root: docker build -f apps/api/Dockerfile .
 FROM python:3.14.7-alpine3.24
 
 # Install curl and netcat for health checks and service waiting, plus ffmpeg
@@ -24,11 +25,12 @@ WORKDIR /app
 # Dependencies first, in their own layer. Previously the whole project was copied
 # before `uv sync`, so any source change invalidated the ~340MB venv layer and every
 # commit produced a fresh multi-hundred-MB layer for nodes to pull.
-COPY pyproject.toml uv.lock ./
+COPY apps/api/pyproject.toml apps/api/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project --no-cache
 
 # Copy the project into the image
-COPY . /app
+COPY apps/api/ /app/
+COPY apps/labs/momentum-pilot/manifest.json /labs/momentum-pilot/manifest.json
 
 # Remove Enterprise Edition folder for public builds
 ARG LEARNHOUSE_PUBLIC=false
@@ -38,7 +40,7 @@ RUN if [ "$LEARNHOUSE_PUBLIC" = "true" ]; then rm -rf /app/ee; fi
 RUN uv sync --frozen --no-dev --no-cache
 
 # Copy entrypoint script
-COPY docker-entrypoint.sh ./
+COPY apps/api/docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
 # LMS course converter CLI (`learnhouse-lms-import --help`)
@@ -56,12 +58,13 @@ RUN addgroup -S -g 1001 learnhouse \
     && chown -R learnhouse:learnhouse /app/content /app/logs /app/data
 USER 1001:1001
 
-# Expose port
+# Match the combined image: the health probe uses loopback inside the container.
+ENV HOSTNAME=0.0.0.0
 EXPOSE 9000
 
 # Health check endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:9000/api/v1/health || exit 1
+  CMD curl --fail --silent --max-time 5 "http://127.0.0.1:${LEARNHOUSE_PORT:-9000}/api/v1/health" || exit 1
 
 # Use entrypoint script
 ENTRYPOINT ["./docker-entrypoint.sh"]

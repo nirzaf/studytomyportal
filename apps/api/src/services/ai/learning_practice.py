@@ -16,6 +16,7 @@ from src.db.courses.courses import Course
 from src.db.organization_config import OrganizationConfig
 from src.db.organizations import Organization
 from src.db.studytomy.adaptive import StudyConcept, StudyConceptActivity, StudyCurriculumRevision
+from src.db.studytomy.adaptive_evidence import StudyLearningAttempt
 from src.db.studytomy.governance import StudyPolicyBody, StudyPolicyKey, StudyPolicyVersion
 from src.db.studytomy.practice import StudyLearningAction, StudyLearningSurface
 from src.db.studytomy.privacy import StudyConsentPurpose
@@ -185,6 +186,9 @@ class _ApprovedPracticePolicy(BaseModel):
 
     assistance: _PracticeAssistance
     provider: _PracticeProviderApproval
+    supervision: Literal["independent"]
+    materials: Literal["reviewed_examples"]
+    max_starts_per_day: Annotated[int, Field(ge=1, le=1000)]
     retention: _PracticeRetentionPolicy
     removal: _PracticeRemovalPolicy
 
@@ -210,6 +214,7 @@ class PracticeSource:
     allow_explore: bool = False
     allow_practice: bool = False
     approved_model: str | None = None
+    max_starts_per_day: int | None = None
     retention_policy_id: int | None = None
     retention_category: str | None = None
     retention_hours: int | None = None
@@ -223,6 +228,7 @@ class PracticePermission:
     allow_explore: bool = False
     allow_practice: bool = False
     approved_model: str | None = None
+    max_starts_per_day: int | None = None
     retention_policy_id: int | None = None
     retention_category: str | None = None
     retention_hours: int | None = None
@@ -368,6 +374,20 @@ async def require_learning_practice_policy(
     ):
         raise studytomy_http_error(403, POLICY_NOT_APPROVED, "Current learner consent for lesson visual practice is required.")
 
+    attempt = StudyLearningAttempt
+    restricted = (await db.execute(select(attempt.id).where(
+        attempt.org_id == org.id,
+        attempt.learner_profile_id == profile.id,
+        attempt.status == "active",
+        attempt.expires_at > now,
+        (attempt.kind == "diagnostic")
+        | ((attempt.kind == "assignment") & (attempt.source_activity_uuid == source.activity_uuid)),
+    ).limit(1))).scalar_one_or_none()
+    if restricted is not None:
+        raise studytomy_http_error(
+            409, "ASSESSMENT_IN_PROGRESS", "Finish the assessment before opening visual practice."
+        )
+
     policies = await _current_policies(
         db, org,
         (StudyPolicyKey.D_02, StudyPolicyKey.D_08, StudyPolicyKey.D_10, StudyPolicyKey.D_13, StudyPolicyKey.D_16),
@@ -401,8 +421,10 @@ async def require_learning_practice_policy(
         assistance = d08.specified_value("assistance")
         assistance = assistance.get("lesson_visual_practice") if isinstance(assistance, dict) else None
         d10 = StudyPolicyBody.model_validate(current[StudyPolicyKey.D_10.value].body)
-        provider = d10.specified_value("review")
-        provider = provider.get("lesson_visual_practice") if isinstance(provider, dict) else None
+        def practice_rule(area: str):
+            value = d10.specified_value(area)
+            return value.get("lesson_visual_practice") if isinstance(value, dict) else None
+
         retention_policy = StudyPolicyBody.model_validate(current[StudyPolicyKey.D_13.value].body)
         retention = retention_policy.specified_value("retention")
         retention = retention.get("lesson_visual_practice") if isinstance(retention, dict) else None
@@ -410,7 +432,10 @@ async def require_learning_practice_policy(
         removal = removal_policy.get("lesson_visual_practice") if isinstance(removal_policy, dict) else None
         approved = _ApprovedPracticePolicy(
             assistance=_PracticeAssistance.model_validate(assistance),
-            provider=_PracticeProviderApproval.model_validate(provider),
+            provider=_PracticeProviderApproval.model_validate(practice_rule("review")),
+            supervision=practice_rule("supervision"),
+            materials=practice_rule("materials"),
+            max_starts_per_day=practice_rule("usage_limits"),
             retention=_PracticeRetentionPolicy.model_validate(retention),
             removal=_PracticeRemovalPolicy.model_validate(removal),
         )
@@ -442,6 +467,7 @@ async def require_learning_practice_policy(
         allow_explore=approved.assistance.visual_exploration,
         allow_practice=practice_enabled,
         approved_model=approved.provider.model,
+        max_starts_per_day=approved.max_starts_per_day,
         retention_policy_id=int(current[StudyPolicyKey.D_13.value].id),
         retention_category=approved.retention.retention_category,
         retention_hours=approved.retention.retention_hours,
@@ -535,6 +561,7 @@ async def _authorize_source(
         allow_explore=permission.allow_explore,
         allow_practice=permission.allow_practice,
         approved_model=permission.approved_model,
+        max_starts_per_day=permission.max_starts_per_day,
         retention_policy_id=permission.retention_policy_id,
         retention_category=permission.retention_category,
         retention_hours=permission.retention_hours,

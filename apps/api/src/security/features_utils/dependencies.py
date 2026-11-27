@@ -350,9 +350,6 @@ async def require_playgrounds_feature(
 
     Checks in order: playground_uuid (path), org_id (path), org_id (query)
     """
-    from src.security.features_utils.plan_check import get_org_plan
-    from src.security.features_utils.plans import plan_meets_requirement
-
     path_params = request.path_params
     org_id = None
 
@@ -381,7 +378,13 @@ async def require_playgrounds_feature(
     if org_id is None:
         return True
 
-    # Check feature flag
+    return await require_org_playgrounds_feature(org_id, db_session)
+
+
+async def require_org_playgrounds_feature(org_id: int, db_session: AsyncSession) -> bool:
+    from src.security.features_utils.plan_check import get_org_plan
+    from src.security.features_utils.plans import plan_meets_requirement
+
     await _check_feature_enabled("playgrounds", org_id, db_session)
 
     # Check plan (Personal+ or non-SaaS mode)

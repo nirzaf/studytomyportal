@@ -22,7 +22,7 @@ function AIFollowUpSuggestions({
 
   return (
     <div className="flex flex-col items-center gap-2 mt-3 mb-2">
-      <div className="flex items-center gap-1.5 text-white/40 text-xs">
+      <div className="flex items-center gap-1.5 text-slate-600 text-xs">
         <Sparkles size={12} />
         <span>{t('ai.follow_up_suggestions')}</span>
       </div>
@@ -45,12 +45,12 @@ function AIFollowUpSuggestions({
               disabled={disabled}
               className={`
                 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
-                bg-white/5 border border-white/10 text-white/60
+                bg-slate-50 border border-slate-200 text-slate-700
                 transition-all duration-200 ease-out
                 ${
                   disabled
                     ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:bg-white/10 hover:text-white/80 hover:border-white/20 cursor-pointer hover:scale-[1.02]'
+                    : 'hover:bg-slate-100 hover:text-slate-900 hover:border-slate-300 cursor-pointer hover:scale-[1.02]'
                 }
               `}
             >

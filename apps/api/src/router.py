@@ -498,7 +498,11 @@ v1_router.include_router(
     boards_playground.router,
     prefix="/boards",
     tags=["boards", "boards-playground"],
-    dependencies=[Depends(require_authenticated_user), Depends(require_plan_for_boards("personal", "Boards"))]
+    dependencies=[
+        Depends(require_authenticated_user),
+        Depends(_require_studytomy_ai_policy),
+        Depends(require_plan_for_boards("personal", "Boards")),
+    ],
 )
 v1_router.include_router(
     playgrounds_router_module.router,

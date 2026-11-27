@@ -13,6 +13,7 @@ type SupportGuidance = {
   service_limits: string
   response_expectations: string | null
   intake_available: boolean
+  guest_verification_available?: boolean
 }
 
 async function getGuidance(orgUuid: string): Promise<SupportGuidance | null> {
@@ -44,7 +45,8 @@ export default async function HelpPage({ params }: { params: Promise<{ orgslug: 
         </section>
       ) : <p>Online support instructions are currently unavailable for this organization.</p>}
       <SupportCase orgUuid={organization.org_uuid} topics={[...new Set(guidance?.categories ?? [])]}
-        intakeAvailable={guidance?.intake_available === true} />
+        intakeAvailable={guidance?.intake_available === true}
+        guestAvailable={guidance?.guest_verification_available === true} />
       <Link className="font-semibold underline" href="/help/report">Report a safety concern</Link>
     </main>
   )

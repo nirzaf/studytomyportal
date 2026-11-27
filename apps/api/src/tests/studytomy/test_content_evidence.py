@@ -575,6 +575,17 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         assert released.status_code == 201, released.text
         assert released.json()["revision_sha256"] == revision
         assert (await client.post(release_path)).json() == released.json()
+        from src.services.studytomy.readiness import evaluate_course_offer_readiness
+
+        thumbnail.write_bytes(PDF)
+        await db.refresh(org)
+        readiness = await evaluate_course_offer_readiness(db, org, course_uuid)
+        codes = {blocker.code for blocker in readiness.blockers}
+        assert "COURSE_NOT_PUBLISHED" not in codes
+        assert "COURSE_REVIEW_EVIDENCE_MISSING" not in codes
+        assert {"SUPPORT_CAPACITY_EVIDENCE_MISSING", "PILOT_ACCEPTANCE_EVIDENCE_MISSING"} <= codes
+        assert not readiness.ready_to_sell
+        thumbnail.write_bytes(PDF.replace(b"1.4", b"1.5"))
         stale_media = await client.post(preflight_path)
         assert stale_media.status_code == 409
         assert stale_media.json()["detail"]["code"] == "REVIEW_MEDIA_CHANGED"
@@ -661,6 +672,9 @@ async def test_private_course_evidence_is_scoped_replayable_and_revision_bound(
         stale_release = await client.post(preflight_path)
         assert stale_release.status_code == 409
         assert stale_release.json()["detail"]["code"] == "CURRENT_COURSE_REVIEW_REQUIRED"
+        await db.refresh(org)
+        stale_readiness = await evaluate_course_offer_readiness(db, org, course_uuid)
+        assert "COURSE_REVIEW_EVIDENCE_MISSING" in {blocker.code for blocker in stale_readiness.blockers}
         assert (await client.post(release_path)).json() == released.json()
         stale_selection = await client.post(verification, json=selection)
         assert stale_selection.status_code == 409
@@ -960,6 +974,12 @@ async def test_postgres_grant_first_use_serializes_and_preserves_independent_sou
         assert await release_access_population(
             first, org_id=org.id, course_uuid=release.course_uuid,
             release_uuid=f"course_release_{uuid4()}", as_of=now,
+        ) == empty
+        assert await release_access_population(
+            first, **report_scope, as_of=now - timedelta(days=2),
+        ) == empty
+        assert await release_access_population(
+            first, **(report_scope | {"org_id": org.id + 1_000_000}), as_of=now,
         ) == empty
         with pytest.raises(DBAPIError, match="revocation cannot be rewritten"):
             async with second.begin_nested():

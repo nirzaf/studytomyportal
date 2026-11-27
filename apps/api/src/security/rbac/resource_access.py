@@ -201,6 +201,22 @@ class ResourceAccessChecker:
                 decision.resource_uuid = resource_uuid
                 return decision
 
+        if isinstance(self.current_user, (APITokenUser, SuperadminAPITokenUser)):
+            managed_course_uuid = None
+            if config.resource_type == "courses" and not resource_uuid.endswith("_x"):
+                managed_course_uuid = resource_uuid
+            elif config.resource_type == "coursechapters":
+                managed_course_uuid = await self._resolve_parent_resource_uuid(resource_uuid, config)
+            elif config.resource_type == "activities" and action != AccessAction.READ:
+                managed_course_uuid = await self._managed_activity_course_uuid(resource_uuid, config)
+            if managed_course_uuid is not None:
+                course = await self._get_resource(managed_course_uuid, RESOURCE_CONFIGS["courses"])
+                if getattr(course, "studytomy_managed", False) is True:
+                    return AccessDecision(
+                        allowed=False, reason="User does not have access to this resource",
+                        resource_uuid=resource_uuid, action=action.value, context=context.value,
+                    )
+
         # Superadmin API tokens are cross-org by design and re-check at auth
         # time that their minter is still a superadmin. Their id is the token
         # row id, so they must never fall through to the user-id based checks

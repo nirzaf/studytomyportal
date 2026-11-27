@@ -2,8 +2,9 @@
 
 Run with apps/api/.venv/bin/python from an isolated archive. No courses, policies,
 reviews, releases, grants, guardian authority or external notifications are created.
-Credentials are generated per run, saved outside the checkout with mode 0600,
-and never printed. Reset means replacing the owned disposable database, not
+The admin, teacher and learner use fixed synthetic fixture credentials. The
+reviewer credential is generated per run. Credentials are saved outside the
+checkout with mode 0600 and never printed. Reset means replacing the owned disposable database, not
 rewriting account or immutable learning history.
 """
 import argparse

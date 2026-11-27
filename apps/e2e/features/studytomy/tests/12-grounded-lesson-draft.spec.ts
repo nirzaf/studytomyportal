@@ -48,16 +48,30 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   }))
   const path = `**/studytomy/orgs/${orgUuid}/courses/${courseUuid}/lessons/${activityUuid}`
   let uploaded = false
+  let revoked = false
+  let revocationAttempts = 0
   await page.route(`${path}/draft-sources`, route => {
     if (route.request().method() === 'POST') {
       expect(route.request().headers()['content-type']).toContain('multipart/form-data')
       uploaded = true
       return route.fulfill({ status: 201, json: source })
     }
-    return route.fulfill({ json: { sources: uploaded ? [source] : [], next_cursor: null } })
+    return route.fulfill({ json: { sources: uploaded && !revoked ? [source] : [], next_cursor: null } })
+  })
+  await page.route(`${path}/draft-sources/${source.source_uuid}/revoke`, route => {
+    expect(route.request().method()).toBe('POST')
+    if (++revocationAttempts === 1) {
+      return route.fulfill({ status: 503, json: { detail: 'Revocation temporarily unavailable.' } })
+    }
+    revoked = true
+    return route.fulfill({ status: 204 })
   })
   await page.route(`${path}/grounded-lesson-sources`, route =>
-    route.fulfill({ json: { status: saved ? 'current' : 'none', current_version: version, citations: saved ? [citation] : [] } }),
+    route.fulfill({ json: {
+      status: revoked ? 'stale' : saved ? 'current' : 'none',
+      current_version: version,
+      citations: saved && !revoked ? [citation] : [],
+    } }),
   )
   await page.route(`${path}/grounded-lesson-preview`, route => {
     const body = route.request().postDataJSON()
@@ -151,4 +165,17 @@ test('review a grounded lesson draft, preserve stale edits, and reload after a s
   await expect(page.getByText('Teacher-edited paragraph.', { exact: true })).toBeVisible()
   await sources.click()
   await expect(dialog.getByRole('region', { name: 'Saved citations' }).getByText(citation.quote)).toBeVisible()
+  await pdf.check()
+  await dialog.getByRole('button', { name: /Revoke source/ }).click()
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(revocationAttempts).toBe(0)
+  await dialog.getByRole('button', { name: /Revoke source/ }).click()
+  await dialog.getByRole('button', { name: 'Confirm revocation' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Revocation temporarily unavailable.')
+  await expect(pdf).toBeChecked()
+  await dialog.getByRole('button', { name: 'Confirm revocation' }).click()
+  await expect(dialog.getByText('PDF source revoked. Review any affected citations.')).toBeVisible()
+  await expect(pdf).toHaveCount(0)
+  await expect(dialog.getByText('0 of 5 sources selected')).toBeVisible()
+  await expect(dialog.getByText('The sources no longer match this lesson version or are unavailable.')).toBeVisible()
 })

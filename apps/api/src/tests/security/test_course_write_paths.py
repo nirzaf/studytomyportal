@@ -433,6 +433,25 @@ def _clone_patches():
 
 class TestCloneAndCreateScope:
     @pytest.mark.asyncio
+    async def test_managed_course_cannot_be_cloned_by_native_flow(
+        self, db, course, admin_user, mock_request
+    ):
+        course.studytomy_managed = True
+        course.public = False
+        course.published = False
+        db.add(course)
+        await db.commit()
+
+        p = _clone_patches()
+        with p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]:
+            with pytest.raises(HTTPException) as exc:
+                await clone_course(mock_request, course.course_uuid, admin_user, db)
+
+        assert exc.value.status_code == 409
+        assert exc.value.detail["code"] == "MANAGED_COURSE_PUBLICATION_REQUIRED"
+        assert len((await db.execute(select(Course))).scalars().all()) == 1
+
+    @pytest.mark.asyncio
     async def test_regular_user_cannot_clone_public_course(self, db, org, course, regular_user, mock_request):
         # Even with the create check out of the way, READ on a public course isn't enough.
         p = _clone_patches()

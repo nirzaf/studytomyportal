@@ -22,6 +22,7 @@ from src.services.playgrounds.adaptive_widget_contract import (
     remove_adaptive_runtime,
     validate_and_install_adaptive_runtime,
 )
+from src.services.ai.llm.tiers import model_for_tier
 from src.services.playgrounds.schemas.playgrounds_generator import (
     LearnerAdaptationContext,
     PlaygroundContext,
@@ -521,7 +522,7 @@ class TestPlaygroundsGeneratorService:
             "```html\n<div>updated</div>\n```"
         )
         # No explicit model -> resolves to the fast tier default (interactive widgets).
-        assert captured["model_name"] == "gemini-3.1-flash-lite"
+        assert captured["model_name"] == model_for_tier("fast")
         assert "CURRENT HTML CODE:" in captured["user_prompt"]
         save_session.assert_called_once()
 

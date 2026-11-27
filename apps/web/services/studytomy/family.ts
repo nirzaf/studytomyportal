@@ -155,6 +155,64 @@ export async function fetchRelationshipEvidenceContent(
   return { blob, mediaType: response.headers.get('content-type') || blob.type || 'application/octet-stream' }
 }
 
+export async function listEligibilityEvidence(
+  orgUuid: string,
+  learnerUuid: string,
+  accessToken: string
+): Promise<StudyEvidenceFileItem[]> {
+  const response = await secureFetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learners/${encodeURIComponent(learnerUuid)}/evidence-files`,
+    { ...RequestBodyWithAuthHeader('GET', null, null, accessToken), cache: 'no-store' }
+  )
+  return parseResponse(response, 'Unable to load current learner eligibility evidence.')
+}
+
+export async function uploadEligibilityEvidence(
+  orgUuid: string,
+  learnerUuid: string,
+  file: File,
+  accessToken: string,
+  idempotencyKey: string
+): Promise<StudyEvidenceFileItem> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await secureFetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learners/${encodeURIComponent(learnerUuid)}/evidence-files`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: form,
+    }
+  )
+  return parseResponse(response, 'Unable to upload private learner eligibility evidence.')
+}
+
+export async function fetchEligibilityEvidenceContent(
+  orgUuid: string,
+  learnerUuid: string,
+  evidenceUuid: string,
+  accessToken: string
+): Promise<{ blob: Blob; mediaType: string }> {
+  const response = await secureFetch(
+    `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learners/${encodeURIComponent(learnerUuid)}/evidence-files/${encodeURIComponent(evidenceUuid)}/content`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: 'no-store',
+    }
+  )
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    const detail = payload && typeof payload.detail === 'string' ? payload.detail : 'Unable to open the original eligibility evidence file.'
+    throw new Error(detail)
+  }
+  const blob = await response.blob()
+  return { blob, mediaType: response.headers.get('content-type') || blob.type || 'application/octet-stream' }
+}
+
 export interface StudyEligibilityDecisionItem {
   decision_uuid: string
   eligibility_kind: 'participation_eligibility' | 'independent_control_eligibility'
@@ -262,4 +320,28 @@ export async function decideRelationship(
   options.headers = headers
   const response = await secureFetch(url, options)
   return parseResponse(response, 'Unable to record this family authority decision.')
+}
+
+export type RelationshipRestrictionAction = 'restrict' | 'dispute' | 'revoke'
+
+export async function restrictRelationshipAuthority(
+  orgUuid: string,
+  learnerUuid: string,
+  relationshipUuid: string,
+  accessToken: string,
+  idempotencyKey: string,
+  command: {
+    action: RelationshipRestrictionAction
+    expected_version: number
+    evidence_reference: string
+    reason_code: string
+  }
+): Promise<StudyRelationshipRead> {
+  const url = `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learners/${encodeURIComponent(learnerUuid)}/relationships/${encodeURIComponent(relationshipUuid)}/restrictions`
+  const options = RequestBodyWithAuthHeader('POST', command, null, accessToken)
+  const headers = new Headers(options.headers)
+  headers.set('Idempotency-Key', idempotencyKey)
+  options.headers = headers
+  const response = await secureFetch(url, options)
+  return parseResponse(response, 'Unable to record the relationship restriction.')
 }

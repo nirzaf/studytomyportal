@@ -26,7 +26,7 @@ class _FakeRedis:
     """
 
     def __init__(self):
-        self._store: dict[str, int] = {}
+        self._store: dict[str, int | str] = {}
 
     def get(self, key: str):
         val = self._store.get(key)
@@ -45,6 +45,7 @@ class _FakeRedis:
     def register_script(self, src: str):
         fake = self
         is_reserve = "INCRBY" in src and "ARGV[4]" in src
+        is_idempotent_refund = '"NX"' in src and "KEYS[2]" in src
 
         class _Script:
             def __call__(self, keys, args):
@@ -64,6 +65,16 @@ class _FakeRedis:
                         return -1
                     fake._store[used_key] = used + amount
                     return fake._store[used_key]
+                if is_idempotent_refund:
+                    used_key, operation_key = keys
+                    if operation_key in fake._store:
+                        return fake._store.get(used_key, 0)
+                    fake._store[operation_key] = "1"
+                    decrement = int(args[0])
+                    current = int(fake._store.get(used_key, 0))
+                    new_val = max(0, current - decrement)
+                    fake._store[used_key] = new_val
+                    return new_val
                 # refund script
                 used_key = keys[0]
                 decrement = int(args[0])
@@ -146,6 +157,27 @@ def test_refund_clamps_at_zero(patched_usage, fake_redis):
     assert fake_redis._store["ai_credits_used:1"] == 0
 
 
+def test_idempotent_refund_applies_once_for_same_operation(patched_usage, fake_redis):
+    fake_redis.set("ai_credits_used:1", 8)
+
+    first = usage.refund_ai_credit(1, amount=3, idempotency_key="reservation-a")
+    replay = usage.refund_ai_credit(1, amount=3, idempotency_key="reservation-a")
+
+    assert first == replay == 5
+    assert fake_redis._store["ai_credits_used:1"] == 5
+
+
+def test_idempotent_refund_keys_are_scoped_by_organization(patched_usage, fake_redis):
+    fake_redis.set("ai_credits_used:1", 8)
+    fake_redis.set("ai_credits_used:2", 8)
+
+    usage.refund_ai_credit(1, amount=3, idempotency_key="reservation-a")
+    usage.refund_ai_credit(2, amount=3, idempotency_key="reservation-a")
+
+    assert fake_redis._store["ai_credits_used:1"] == 5
+    assert fake_redis._store["ai_credits_used:2"] == 5
+
+
 async def test_refund_then_reserve_roundtrip(patched_usage, fake_redis):
     fake_redis.set("ai_credits_used:1", 9)
 
@@ -158,6 +190,57 @@ async def test_refund_then_reserve_roundtrip(patched_usage, fake_redis):
     await usage.reserve_ai_credit(org_id=1, db_session=MagicMock(), amount=1)
     assert fake_redis._store["ai_credits_used:1"] == 10
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("fails", "expected_used"), [(False, 8), (True, 5)])
+async def test_playground_stream_settles_reserved_counter_once(
+    patched_usage, fake_redis, fails, expected_used
+):
+    """The SSE response owns the reservation until persistence completes."""
+    from src.routers.boards.boards_playground import event_generator
+    from src.routers.playgrounds.credit_stream import PlaygroundCreditReservation
+
+    org_id = 42
+    used_key = f"ai_credits_used:{org_id}"
+    fake_redis.set(used_key, 5)
+    await usage.reserve_ai_credit(org_id, MagicMock(), amount=3)
+    assert fake_redis._store[used_key] == 8
+
+    async def generated_content():
+        yield "generated"
+        if fails:
+            raise RuntimeError("provider or persistence failed")
+
+    reservation = PlaygroundCreditReservation(org_id)
+    with reservation.setup():
+        response = reservation.response(
+            event_generator(generated_content(), "session", reservation),
+            media_type="text/event-stream",
+        )
+
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    async def receive():
+        pytest.fail("ASGI 2.4 send errors handle client disconnects")
+
+    await response(
+        {"type": "http", "asgi": {"spec_version": "2.4"}},
+        receive,
+        send,
+    )
+    reservation.close()
+
+    body = b"".join(message.get("body", b"") for message in sent)
+    assert fake_redis._store[used_key] == expected_used
+    if fails:
+        assert b'"type": "error"' in body
+        assert b'"type": "done"' not in body
+    else:
+        assert b'"type": "done"' in body
+        assert b'"type": "error"' not in body
 
 def test_refund_no_op_on_zero_or_negative_amount(patched_usage, fake_redis):
     fake_redis.set("ai_credits_used:1", 5)

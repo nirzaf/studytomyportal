@@ -27,10 +27,10 @@ Store and organize PDFs, worksheets, textbooks, images, videos, audio, courses, 
 - **Studytomy example**: Create *Grade 12 → Chemistry* under the Sri Lankan National School Syllabus and organize approved syllabus documents, revision notes, diagrams, and practical worksheets.
 
 ### 4. Podcasts — Audio-based learning
-Create educational podcast channels, upload episodes, and publish audio lessons. Students can listen through the platform. Podcast episodes can also be embedded in courses and distributed through RSS feeds.
+The platform includes podcast authoring and listening workflows. The checked-in demo bundle currently has no podcast episodes or bundled audio, so an empty podcast area is expected until an authorized educator adds material.
 
-- **Studytomy example**: Publish *Year 12 Biology — 10-minute revision*, with short episodes about genetics, photosynthesis, and cellular respiration.
-- **Note**: The platform also provides AI audio-generation tools within supported content workflows.
+- **Studytomy example**: Add an audio lesson only when the source and recording rights are clear.
+- **Note**: Availability of audio-generation tools depends on the configured provider and current organization permissions.
 
 ### 5. Communities — Student discussions and collaboration
 Create subject-specific or course-specific discussion forums. Students can post questions, reply, react, and vote. Administrators can configure membership restrictions and moderation rules.
@@ -38,17 +38,16 @@ Create subject-specific or course-specific discussion forums. Students can post 
 - **Studytomy example**: A *Grade 13 Chemistry Discussion Group* where students discuss difficult topics and tutors clarify misconceptions.
 - **Note**: Communities are discussion forums; private direct messaging is a separate Enterprise feature.
 
-### 6. Playgrounds — AI-generated interactive learning experiences
-Particularly relevant for interactive concept demonstrations and proposed virtual laboratories. Describe an interactive activity to AI, which generates an HTML-based experience. You can preview, refine, save, publish, restrict access, and embed it in courses.
+### 6. Playgrounds — sandboxed activities and learner practice
+The learner Playgrounds page provides the Practice Studio and any playgrounds available to the learner. The Studio has built-in Grade 8 mathematics practice for equivalent fractions, rectangle perimeter, and square numbers. For another topic it searches approved passages; when no passage can support practice, it offers guided recall so the learner can review notes rather than inventing source-free answers.
 
-- **Studytomy examples**: An interactive Ohm's Law calculator, a graph of projectile motion, a mathematical function visualizer, or a simple chemistry demonstration.
-- **Note**: Generated simulations must be scientifically validated before being used for formal practical assessments.
+Existing generated playgrounds render in a sandbox. Scripts and inline event handlers are disabled, so JavaScript-dependent calculators, graphs, and recording controls will not work. Use static HTML/CSS diagrams, labels, worked examples, and explanatory text for generated activities. The momentum simulator is a separate governed build and release path; a generic playground is not a validated science laboratory.
 
 ---
 
-## 2. Icons on the right side of the navigation
+## 2. Main navigation
 
-These shortcuts appear after the search bar in [apps/web/components/Objects/Menus/OrgMenu.tsx](apps/web/components/Objects/Menus/OrgMenu.tsx):
+The local learner course view was checked in the built-in browser. Its top bar showed Courses, Explore Topics, Paths, More, Search, Progress, Calendar, Boards, and Profile. The additional links exposed by More and Profile depend on the signed-in user's permissions; do not assume every role sees the same destinations.
 
 | Icon | Actual function | What you can do |
 |---|---|---|
@@ -56,9 +55,8 @@ These shortcuts appear after the search bar in [apps/web/components/Objects/Menu
 | **Progress / Trail** | Student learning history | Review enrolled courses, completion percentages, and earned certificates. |
 | **Calendar** | Personal learning schedule | View assignment deadlines, scheduled chapter releases, course dates, and relevant events. |
 | **Boards** | Collaborative whiteboards | Draw, write notes, add diagrams, and collaborate in real time. |
-| **Dashboard** | Administration | Access course management, assignments, users, groups, organization configuration, and developer tools. |
-| **Help** | Support resources | Open website and feedback options. |
-| **Admin profile** | Account menu | Access permitted account and session actions. |
+| **More** | Additional navigation | Open the destinations available to the current role. |
+| **Profile** | Account menu | Access permitted account and session actions. |
 
 > [!NOTE]
 > The **Dashboard** and **Help** controls are permission-dependent; learners do not necessarily see the same options as administrators.
@@ -74,14 +72,18 @@ To test it:
 2. Give it a name and select **AI Knowledge** or an existing course as its source.
 3. Describe the activity you want. The application will generate a preview, which you can refine and save before publishing.
 
-### Example AI Playground prompt for Studytomy
+### Example prompt for a sandboxed playground
 
 ```text
-Create an interactive educational simulation of Ohm's Law for Grade 10 (G.C.E. Ordinary Level) Science students under the Sri Lankan National School Syllabus. Include adjustable voltage and resistance, an illustrated circuit, live current readings calculated using I = V/R, a measurement table, a graph, and three concept-check questions. Provide Start, Reset, and Record Measurement controls. Explain the ideal-circuit assumptions and make the layout responsive.
+Create a Grade 10 Ohm’s Law study card using static HTML and CSS. Show a
+labelled circuit diagram, explain voltage, resistance, and current, and include
+three worked examples plus a short prediction question. Make it readable on a
+phone. Do not use JavaScript, inline event handlers, or external requests.
 ```
 
-> [!IMPORTANT]
-> The generated activity is useful for explaining concepts interactively, but it does not automatically provide persistent experiment marks, scientifically validated 3D simulation, or integration with diagnostic mastery tracking.
+Generated scripts are disabled in the preview, so script-driven calculators,
+graphs and recording controls are unavailable. The governed momentum simulator
+uses a separate reviewed, pinned build and release workflow.
 
 ---
 

@@ -2,6 +2,7 @@
 import React, { useState } from 'react'
 import { WarningCircle, Globe, FloppyDisk, SpinnerGap, ArrowSquareOut } from '@phosphor-icons/react'
 import { updateActivity } from '@services/courses/activities'
+import { useAuth } from '@components/Contexts/AuthContext'
 import { useLHSession } from '@components/Contexts/LHSessionContext'
 import toast from 'react-hot-toast'
 import { toEmbedUrl } from '@/lib/media/embedUrl'
@@ -13,13 +14,84 @@ import { useTranslation } from 'react-i18next'
 // a taller frame, which matters on a portrait phone.
 const VIDEO_EMBED = /(youtube(-nocookie)?\.com|youtu\.be|vimeo\.com|loom\.com|wistia\.(com|net)|dailymotion\.com)/i
 
+type GovernedLab = {
+  build_version: string
+  build_sha256: string
+  entry_url: string
+  linked_assignment_activity_uuid?: string | null
+  submission_formats_note?: string | null
+}
+
 interface EmbedActivityProps {
   activity: any
   editable?: boolean
   style?: React.CSSProperties
+  virtualLabOptions?: GovernedLab[] | null
 }
 
-function EmbedActivity({ activity, editable = false, style }: EmbedActivityProps) {
+function GovernedLabEditor({ activity, options }: { activity: any; options: GovernedLab[] }) {
+  const { t } = useTranslation()
+  const { accessToken } = useAuth()
+  const [saved, setSaved] = useState<GovernedLab | undefined>(activity.content?.virtual_lab)
+  const [version, setVersion] = useState(activity.current_version || 1)
+  const [choice, setChoice] = useState('')
+  const [saving, setSaving] = useState(false)
+  const selected = choice ? options[Number(choice)] : undefined
+
+  async function save() {
+    if (!selected || !accessToken) return
+    setSaving(true)
+    try {
+      const response = await updateActivity({
+        content: { virtual_lab: {
+          ...selected,
+          linked_assignment_activity_uuid: saved?.linked_assignment_activity_uuid ?? null,
+          submission_formats_note: saved?.submission_formats_note ?? null,
+        } },
+        expected_current_version: version,
+      }, activity.activity_uuid, accessToken)
+      if (!response.success || !response.data?.content?.virtual_lab) {
+        throw new Error('Lab draft update failed')
+      }
+      setSaved(response.data.content.virtual_lab)
+      setVersion(response.data.current_version)
+      setChoice('')
+      toast.success('Lab draft saved')
+    } catch {
+      toast.error('Could not save the lab draft. Reload the editor and try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="mx-auto max-w-xl space-y-4 rounded-xl border bg-white p-5">
+      <h2 className="text-lg font-semibold">Virtual science lab</h2>
+      <p className="text-sm text-gray-600">Save a reviewed simulator build to the draft. Learners receive it through the course review and release workflow.</p>
+      {saved && <p className="text-sm">Saved build: {saved.build_version}</p>}
+      {options.length ? (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium" htmlFor="virtual-lab-build">Simulator build</label>
+          <select id="virtual-lab-build" value={choice} onChange={event => setChoice(event.target.value)}
+            disabled={saving} className="w-full rounded-lg border bg-white px-3 py-2 text-sm">
+            <option value="">Select a build</option>
+            {options.map((option, index) => (
+              <option key={option.entry_url} value={index}>
+                Conservation of momentum · {option.build_version} · {new URL(option.entry_url).host}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={save} disabled={!selected || !accessToken || saving}
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+            {saving ? 'Saving…' : t('common.save')}
+          </button>
+        </div>
+      ) : <p className="text-sm" role="status">No reviewed simulator builds are configured.</p>}
+    </section>
+  )
+}
+
+function UrlEmbedActivity({ activity, editable = false, style }: EmbedActivityProps) {
   const { t } = useTranslation()
   const session = useLHSession() as any
   const access_token = session?.data?.tokens?.access_token
@@ -37,7 +109,7 @@ function EmbedActivity({ activity, editable = false, style }: EmbedActivityProps
     }
     setSaving(true)
     try {
-      await updateActivity(
+      const response = await updateActivity(
         {
           content: { embed_url: validatedUrl },
           expected_current_version: activity.current_version || 1,
@@ -45,6 +117,7 @@ function EmbedActivity({ activity, editable = false, style }: EmbedActivityProps
         activity.activity_uuid,
         access_token
       )
+      if (!response.success) throw new Error('Embed update failed')
       toast.success(t('activities.embed_activity.updated'))
       setError(false)
     } catch {
@@ -131,4 +204,9 @@ function EmbedActivity({ activity, editable = false, style }: EmbedActivityProps
   )
 }
 
-export default EmbedActivity
+export default function EmbedActivity(props: EmbedActivityProps) {
+  if (props.editable && Array.isArray(props.virtualLabOptions)) {
+    return <GovernedLabEditor key={props.activity.activity_uuid} activity={props.activity} options={props.virtualLabOptions} />
+  }
+  return <UrlEmbedActivity {...props} />
+}

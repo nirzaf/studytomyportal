@@ -185,16 +185,15 @@ async def generate_boards_playground_stream(
     model_name: str = "",
     current_html: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
-    try:
-        system_prompt = build_boards_playground_system_prompt(session.context)
+    system_prompt = build_boards_playground_system_prompt(session.context)
 
-        history = [
-            {"role": msg.role, "content": msg.content}
-            for msg in session.message_history
-        ]
+    history = [
+        {"role": msg.role, "content": msg.content}
+        for msg in session.message_history
+    ]
 
-        if current_html and session.iteration_count > 0:
-            user_prompt = f"""The user wants to modify the existing interactive element.
+    if current_html and session.iteration_count > 0:
+        user_prompt = f"""The user wants to modify the existing interactive element.
 
 CURRENT HTML CODE:
 ```html
@@ -205,36 +204,38 @@ USER REQUEST:
 {prompt}
 
 Please modify the HTML code above according to the user's request. Output ONLY the complete updated HTML code, starting with <!DOCTYPE html> and ending with </html>. Do not include any explanations."""
-        else:
-            user_prompt = prompt
+    else:
+        user_prompt = prompt
 
-        full_response = ""
-        async for chunk in generate_stream(
-            model_name=model_name or model_for_tier("fast"),
-            user_prompt=user_prompt,
-            system_prompt=system_prompt,
-            history=history,
-            timeout=300.0,
-        ):
-            full_response += chunk
-            yield chunk
+    full_response = ""
+    async for chunk in generate_stream(
+        model_name=model_name or model_for_tier("fast"),
+        user_prompt=user_prompt,
+        system_prompt=system_prompt,
+        history=history,
+        timeout=300.0,
+    ):
+        full_response += chunk
+        yield chunk
 
-        session.message_history.append(
-            BoardsPlaygroundMessage(role="user", content=prompt)
-        )
-        session.message_history.append(
-            BoardsPlaygroundMessage(role="model", content=full_response)
-        )
-        session.current_html = extract_html_from_response(full_response)
-        session.iteration_count += 1
+    html = extract_html_from_response(full_response)
+    if not html:
+        raise ValueError("Board playground generation returned no content")
 
-        if len(session.message_history) > 12:
-            session.message_history = session.message_history[-12:]
+    session.message_history.append(
+        BoardsPlaygroundMessage(role="user", content=prompt)
+    )
+    session.message_history.append(
+        BoardsPlaygroundMessage(role="model", content=full_response)
+    )
+    session.current_html = html
+    session.iteration_count += 1
 
-        save_boards_playground_session(session)
+    if len(session.message_history) > 12:
+        session.message_history = session.message_history[-12:]
 
-    except Exception as e:
-        yield f"Error: {str(e)}"
+    if not save_boards_playground_session(session):
+        raise RuntimeError("Could not persist generated board playground")
 
 
 def extract_html_from_response(response: str) -> str:

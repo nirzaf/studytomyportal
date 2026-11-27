@@ -745,3 +745,4 @@ class StudyPolicyVersionRead(BaseModel):
     supersedes_policy_uuid: Optional[str]
     created_at: datetime
     approvals: list[StudyPolicyApprovalRead] = PydanticField(default_factory=list)
+    required_responsibilities: list[StudyOwnerFunction] = PydanticField(default_factory=list)

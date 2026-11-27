@@ -6,10 +6,12 @@ not real educator, safeguarding, commercial, or curriculum decisions.
 """
 
 import argparse
+import base64
 import copy
 import json
 import os
 import secrets
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -32,14 +34,21 @@ from src.tests.services.rag_helpers import make_pdf  # noqa: E402
 
 
 API_PREFIX = "/api/v1"
-PILOT_BUILD = {
-    "lab_id": "conservation-momentum",
-    "experiment_id": "conservation-momentum",
-    "build_version": "1.0.0-pilot.1",
-    "build_sha256": "e5b013fc9943ba82be536ba49b6aa12b2c0f8c9672fe094dc50320fe00448c7f",
-    "source_repository": "https://github.com/danielw-sudo/agentuto",
-    "source_commit": "697025a14aabbd391072fbedc522d1d68bebcbc4",
-}
+def current_pilot_build(lab_origin: str) -> dict:
+    manifest = json.loads((ROOT / "apps/labs/momentum-pilot/manifest.json").read_text())
+    keys = ("lab_id", "experiment_id", "build_version", "build_sha256", "versioned_entry_path", "artifact_sha256")
+    with httpx.Client(timeout=5, trust_env=False) as static_lab:
+        response = static_lab.get(f"{lab_origin}/manifest.json")
+        response.raise_for_status()
+        serving = response.json()
+    if any(serving.get(key) != manifest[key] for key in keys):
+        raise ValueError("The local static lab does not serve the checkout's pinned momentum build")
+    return {
+        **{key: manifest[key] for key in keys[:4]},
+        "entry_url": f"{lab_origin}/{manifest['versioned_entry_path']}",
+        "source_repository": manifest["upstream_source"]["repository"],
+        "source_commit": manifest["upstream_source"]["commit"],
+    }
 
 
 def loopback_origin(raw: str, label: str) -> str:
@@ -101,9 +110,29 @@ def synthetic_policy_items(key: StudyPolicyKey, specified: dict) -> dict:
     return items
 
 
+def run_browser_phase(web_origin: str, phase: str, account: dict, **scenario) -> dict:
+    result = subprocess.run(
+        ["node", str(ROOT / "apps/e2e/scripts/live-vlab-author-review.mjs")],
+        input=json.dumps({
+            "web": web_origin, "phase": phase,
+            "account": {key: account[key] for key in ("email", "password")},
+            **scenario,
+        }),
+        text=True, capture_output=True, timeout=150,
+    )
+    if result.returncode:
+        message = next(
+            (line for line in result.stderr.splitlines() if line.startswith("Synthetic momentum browser failed at:")),
+            f"Synthetic browser phase {phase} failed.",
+        )
+        raise RuntimeError(message)
+    return json.loads(result.stdout)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api", required=True, help="Bare loopback API origin, e.g. http://127.0.0.1:1342")
+    parser.add_argument("--web", required=True, help="Bare loopback web origin")
     parser.add_argument("--lab", required=True, help="Bare loopback static lab origin, e.g. http://127.0.0.1:4173")
     parser.add_argument("--credentials", required=True, type=Path, help="Private native-account manifest")
     parser.add_argument("--output", required=True, type=Path, help="New private E2E scenario JSON path")
@@ -113,6 +142,8 @@ def main() -> None:
     db_url = validate_target(os.environ["LEARNHOUSE_SQL_CONNECTION_STRING"])
     api_origin = loopback_origin(args.api, "API origin")
     lab_origin = loopback_origin(args.lab, "lab origin")
+    web_origin = loopback_origin(args.web, "Web origin")
+    pilot_build = current_pilot_build(lab_origin)
     output = private_output(args.output)
     fixture = json.loads(private_credentials(args.credentials).read_text())
     if fixture.get("scenario") != "native-accounts-v1" or fixture.get("database") != db_url.database:
@@ -420,16 +451,7 @@ def main() -> None:
                 "activity_type": "TYPE_DYNAMIC",
                 "activity_sub_type": "SUBTYPE_DYNAMIC_EMBED",
                 "chapter_id": chapter["id"],
-                "content": {
-                    "virtual_lab": {
-                        "schema_version": "studytomy_virtual_lab_v1",
-                        **PILOT_BUILD,
-                        "entry_url": f"{lab_origin}/conservation-momentum/1.0.0-pilot.1/index.html",
-                        "units_system": "SI",
-                        "linked_assignment_activity_uuid": asg_activity["activity_uuid"],
-                        "submission_formats_note": "Synthetic report: export and include the SI CSV in PDF or ZIP.",
-                    }
-                },
+                "content": {},
                 "published": True,
             },
         )
@@ -445,8 +467,7 @@ def main() -> None:
                 "content": {
                     "virtual_lab": {
                         "schema_version": "studytomy_virtual_lab_v1",
-                        **PILOT_BUILD,
-                        "entry_url": f"{lab_origin}/conservation-momentum/1.0.0-pilot.1/index.html",
+                        **pilot_build,
                         "units_system": "SI",
                         "linked_assignment_activity_uuid": expired_activity["activity_uuid"],
                         "submission_formats_note": "Synthetic deadline-guard fixture only.",
@@ -470,6 +491,24 @@ def main() -> None:
             "mastery_gate": {"separate": True},
         })
         call("reviewer", "put", f"{ids['org_path']}/courses/{ids['course_uuid']}/managed-draft", expected=204)
+
+        authored = run_browser_phase(
+            web_origin, "author", accounts["teacher"],
+            courseUuid=ids["course_uuid"], activityUuid=ids["lab_activity_uuid"],
+            buildVersion=pilot_build["build_version"], labHost=urlsplit(lab_origin).netloc,
+        )
+        descriptor = authored["content"]["virtual_lab"]
+        if any(descriptor.get(key) != value for key, value in pilot_build.items()):
+            raise RuntimeError("Browser saved an unexpected momentum lab descriptor")
+        # Linked assessment data is fixture setup. The descriptor itself is saved in the browser.
+        call("teacher", "put", f"{API_PREFIX}/activities/{ids['lab_activity_uuid']}", json={
+            "content": {"virtual_lab": {
+                **descriptor,
+                "linked_assignment_activity_uuid": asg_activity["activity_uuid"],
+                "submission_formats_note": "Synthetic report: export and include the SI CSV in PDF or ZIP.",
+            }},
+            "expected_current_version": authored["current_version"],
+        })
 
         def assignment(activity: dict, title: str, due_date: str) -> tuple[dict, list[dict]]:
             row = post(
@@ -560,33 +599,31 @@ def main() -> None:
         if self_review.status_code != 403:
             raise RuntimeError(f"Teacher self-review should be denied (403), got {self_review.status_code}")
         evidence = {}
+        evidence_pdf = {}
         for purpose, text in (
             ("content_rights", "Synthetic rights-review fixture only; not a legal clearance."),
             ("content_accessibility", "Synthetic accessibility-review fixture only; not a certification."),
         ):
+            evidence_pdf[purpose] = make_pdf([text])
             evidence[purpose] = post(
                 "reviewer",
                 cp + "/evidence-files",
                 expected=201,
                 data={"purpose": purpose, "revision_sha256": candidate["revision_sha256"]},
-                files={"file": ("synthetic-evidence.pdf", make_pdf([text]), "application/pdf")},
+                files={"file": ("synthetic-evidence.pdf", evidence_pdf[purpose], "application/pdf")},
             )["evidence_uuid"]
-        review = post(
-            "reviewer",
-            cp + "/content-review-decisions",
-            expected=201,
-            json={
-                "revision_sha256": candidate["revision_sha256"],
-                "rights_evidence_uuid": evidence["content_rights"],
-                "accessibility_evidence_uuid": evidence["content_accessibility"],
-                "decision": "approved",
-                "accessibility_confirmed": True,
-                "assessment_confirmed": True,
-            },
+        reviewed = run_browser_phase(
+            web_origin, "review", accounts["reviewer"], courseUuid=ids["course_uuid"],
+            rights=evidence["content_rights"], accessibility=evidence["content_accessibility"],
+            oldDigest=candidate["revision_sha256"],
+            teacher={key: accounts["teacher"][key] for key in ("email", "password")},
+            activityUuid=ids["lab_activity_uuid"], buildVersion=pilot_build["build_version"],
+            labHost=urlsplit(lab_origin).netloc,
+            pdf={purpose: base64.b64encode(data).decode() for purpose, data in evidence_pdf.items()},
         )
+        review, release = reviewed["review"], reviewed["release"]
+        evidence = reviewed["currentEvidence"]
         review_route = cp + f"/content-review-decisions/{review['uuid']}"
-        preflight = call("reviewer", "post", review_route + "/release-preflight")
-        release = call("reviewer", "post", review_route + "/release", expected=201)
         if call("reviewer", "post", review_route + "/release", expected=201) != release:
             raise RuntimeError("Immutable release replay did not return the same receipt")
         if clients["learner"].post(review_route + "/release").status_code != 403:
@@ -779,6 +816,8 @@ def main() -> None:
             "consentEventUuid": consent["event_uuid"],
             "authoringReceipts": {
                 "managedDraftStatus": 204,
+                "browserAuthoredVersion": authored["current_version"],
+                "staleReviewStatus": reviewed["staleStatus"],
                 "selfReviewDeniedStatus": self_review.status_code,
                 "rightsEvidenceUuid": evidence["content_rights"],
                 "accessibilityEvidenceUuid": evidence["content_accessibility"],

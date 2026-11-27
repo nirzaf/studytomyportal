@@ -307,12 +307,13 @@ function CourseOverviewPage(props: { params: Promise<CourseOverviewParams> }) {
             {!rightsLoading && params.subpage == 'general' && hasPermission('update') ? (
               <>
                 <EditCourseGeneral orgslug={params.orgslug} />
-                {canManageOrg && org?.org_uuid && session?.data?.tokens?.access_token ? (
+                {hasPermission('update') && org?.org_uuid && session?.data?.tokens?.access_token ? (
                   <div className="mx-auto w-full max-w-6xl px-4 pb-8 sm:px-10">
                     <ReadinessPanel
                       orgUuid={org.org_uuid}
                       courseUuid={courseuuid}
                       accessToken={session.data.tokens.access_token}
+                      adminMode={canManageOrg}
                     />
                   </div>
                 ) : null}

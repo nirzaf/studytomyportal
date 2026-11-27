@@ -525,6 +525,7 @@ def send_email(
     sender_name: Optional[str] = None,
     *,
     single_attempt: bool = False,
+    provider_idempotency_key: str | None = None,
 ):
     """Send one HTML email.
 
@@ -583,6 +584,12 @@ def send_email(
         return None
 
     transport = _send_email_smtp if mailing.email_provider == "smtp" else _send_email_resend
+    if provider_idempotency_key and mailing.email_provider != "smtp":
+        return _send_email_resend(
+            sender, to_addr, subject, body, mailing, headers,
+            single_attempt=single_attempt,
+            provider_idempotency_key=provider_idempotency_key,
+        )
     if single_attempt:
         return transport(sender, to_addr, subject, body, mailing, headers, single_attempt=True)
     return transport(sender, to_addr, subject, body, mailing, headers)
@@ -635,6 +642,7 @@ def _send_email_resend(
     headers: Optional[dict[str, str]] = None,
     *,
     single_attempt: bool = False,
+    provider_idempotency_key: str | None = None,
 ):
     from fastapi import HTTPException
     resend.api_key = mailing.resend_api_key
@@ -646,11 +654,16 @@ def _send_email_resend(
     }
     if headers:
         payload["headers"] = dict(headers)
-    if single_attempt:
+    def send():
+        if provider_idempotency_key:
+            return resend.Emails.send(payload, {"idempotency_key": provider_idempotency_key})
         return resend.Emails.send(payload)
+
+    if single_attempt:
+        return send()
     for attempt in range(_RESEND_RETRIES + 1):
         try:
-            return resend.Emails.send(payload)
+            return send()
         except Exception as e:
             if attempt < _RESEND_RETRIES and _is_transient_email_error(e):
                 logger.warning("Resend email to %s failed (%s), retrying once", to, e)

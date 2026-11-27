@@ -112,3 +112,44 @@ test('reach support after learning access is denied and retry a missing acknowle
   await expect(receipt).toContainText('Awaiting information')
   await expect(receipt).toContainText('Give your case reference when you contact support')
 })
+
+test('staff reload current case details before retrying a stale transition', async ({ browser }) => {
+  const staffState = process.env.E2E_STUDYTOMY_SUPPORT_REPORT_STAFF_STATE
+  test.skip(!staffState, 'Requires a synthetic support staff session.')
+  const staff = await browser.newContext({ storageState: staffState })
+  try {
+    const page = await staff.newPage()
+    const id = randomUUID()
+    const base = '**/studytomy/orgs/*/support/staff/cases'
+    const row = { case_uuid: id, topic: 'Account access', status: 'assigned', allowed_transitions: ['under_review'] }
+    let version = 2
+    await page.route(`${base}?*`, route => route.fulfill({ json: { cases: [{ ...row, version: 1 }], next_cursor: null } }))
+    await page.route(`${base}/${id}`, route => route.fulfill({ json: { ...row, version } }))
+    await page.route(`${base}/${id}/transition`, async route => {
+      const command = route.request().postDataJSON()
+      if (version === 2) {
+        expect(command).toEqual({ expected_version: 2, next_status: 'under_review' })
+        version = 3
+        return route.fulfill({ status: 409 })
+      }
+      expect(command).toEqual({ expected_version: 3, next_status: 'under_review' })
+      return route.fulfill({ json: { ...row, status: 'under_review', allowed_transitions: [], version: 4 } })
+    })
+    await page.goto('/studytomy/support-cases', { waitUntil: 'domcontentloaded' })
+    const entry = page.getByRole('listitem').filter({ hasText: id })
+    await expect(entry.getByRole('button', { name: 'Update case' })).toHaveCount(0)
+    await entry.getByRole('button', { name: 'Open case details' }).click()
+    await expect(entry.getByText('Case version 2')).toBeVisible()
+    await entry.getByLabel('Next status').selectOption('under_review')
+    await entry.getByRole('button', { name: 'Update case' }).click()
+    await expect(entry.getByRole('alert')).toContainText('Reload the case')
+    await expect(entry.getByRole('button', { name: 'Update case' })).toHaveCount(0)
+    await entry.getByRole('button', { name: 'Open case details' }).click()
+    await expect(entry.getByText('Case version 3')).toBeVisible()
+    await entry.getByLabel('Next status').selectOption('under_review')
+    await entry.getByRole('button', { name: 'Update case' }).click()
+    await expect(entry.getByText('Case version 4')).toBeVisible()
+  } finally {
+    await staff.close()
+  }
+})

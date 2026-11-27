@@ -12,6 +12,7 @@
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
     "install-browsers": "playwright install chromium",
+    "test:database-guard": "bun test core/testDatabase.test.ts",
     "test:browser-egress": "bun test core/browser-egress-guard.test.ts",
     "typecheck": "tsc --noEmit",
     "test:identity": "bun test core/studytomyIdentity.test.mjs"

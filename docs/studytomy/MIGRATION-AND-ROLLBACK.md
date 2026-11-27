@@ -145,7 +145,7 @@ At `661294ca8a2365937713753c4299d9eef5e4e4a9`, the TASK-069 outbox and report de
 
 The read-only inventory also checks finalized managed native submission rows for a frozen response event matching the organization and exact current attempt identity. At `fc966faeb7ec36f0262a218382b762bda7c99388`, two invocations on the disposable older-app clone returned identical output. Six of 18 submitted, graded or late rows lacked that evidence. The CLI rejected malformed, remote, non-test and query-routed targets. The inventory counts missing evidence without printing identifiers or responses. An event's presence alone does not establish that its contents are still valid. Earlier attempts and cleared responses are outside this count.
 
-For TASK-068, `python scripts/studytomy_backfill.py` from `apps/api` reports aggregate mapping counts against the explicit `STUDYTOMY_TEST_DATABASE_URL`. It requires a numeric loopback host, a database ending in `_test`, and no URL query options. All queries run in a read-only transaction. Memberships without a profile are counted as distinct organization and user pairs, including staff. These counts do not identify eligible learners or authorize creating profiles. On the disposable older-app clone at `b91d2f6a08c3`, the inventory reported 304 managed courses, 84 native courses, 354 existing profiles and 669 memberships without a profile. The approved mapping and historical evidence rules are still needed before a write-capable backfill can be rehearsed.
+For TASK-068, `python scripts/studytomy_backfill.py --dry-run` (also the default without arguments) from `apps/api` reports aggregate mapping counts against the explicit `STUDYTOMY_TEST_DATABASE_URL`. It requires a numeric loopback host, a database ending in `_test`, and no URL query options. All queries run in a read-only transaction. Memberships without a profile are counted as distinct organization and user pairs, including staff. These counts do not identify eligible learners or authorize creating profiles. On the disposable older-app clone at `b91d2f6a08c3`, the inventory reported 304 managed courses, 84 native courses, 354 existing profiles and 669 memberships without a profile. The approved mapping and historical evidence rules are still needed before a write-capable backfill can be rehearsed.
 
 An older-code probe used an archived copy of `69e2e562baf7ce0c741d3d04cf565a11ddc8fd49`, the parent of the commit that added `b91d2f6a08c3`. On a separate disposable clone of the synthetic restore, `ensure_schema` with the explicit compatibility option reported `forward-compatible`, preserved `b91d2f6a08c3`, and reconciled zero items. The older `Course` model read an existing course, flushed and refreshed a synthetic description edit, and rolled the edit back. The initial probe stopped after schema startup because it read the wrong report attribute. The corrected probe checked `state` and `after` and passed. Afterward, the clone and its source matched on row counts and row fingerprints across 137 public tables, all 42 public user trigger definitions, and SHA-256 fingerprints of schema-only dumps after excluding the dump session delimiters. This covers one native ORM write path. HTTP authorization and broader product compatibility still need rehearsal.
 
@@ -158,3 +158,28 @@ An older-code probe used an archived copy of `69e2e562baf7ce0c741d3d04cf565a11dd
   identity, consent, guardian, purchase, or assessment data.
 - Keep production activation, destructive recovery, and release authorization as
   separate decisions from code review and local test success.
+
+### Edition boundaries in the shared schema
+
+Retain the shared upstream migration chain in Community Edition, including payments
+(`0314ec7791e1`, `f2a3b4c5d6e7`), analytics (`f5a8b3d0c2e4`), LTI
+(`bea69132ae0f`), documents (`j0e1f2a3b4c5`), and SSO (`a1b2c3d4e5f6`).
+Their tables are schema compatibility artifacts. Feature access is determined by
+the installed edition, server-side feature checks, and resource authorization.
+Keep these migrations and their tables in backup, restore, and upgrade rehearsals.
+
+### Populated PostgreSQL 19 rehearsal
+
+The opt-in `test_populated_pre_studytomy_upgrade_and_restore` test in
+`apps/api/src/tests/core/test_migrations_postgres.py` uses the historical
+application at `4f3346af99b516bab2d422217905d078096d55ac` to create the
+`f5a8b3d0c2e4` fixture. It requires that commit locally and server-compatible
+`pg_dump` and `pg_restore` on PATH. Run it with the same disposable
+`STUDYTOMY_TEST_DATABASE_URL` used by the other migration tests.
+
+The local PostgreSQL 19 run restored a custom-format backup into a separate
+empty database. Both copies upgraded to the single head `2d6a1b7c9e40`, retained
+the same synthetic organization, user, published course and completed trail,
+and had the course-release digest constraint after upgrade. The complete
+migration PostgreSQL module passed five tests. This exercise used no production
+snapshot or business records.

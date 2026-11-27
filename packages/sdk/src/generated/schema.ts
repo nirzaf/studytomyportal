@@ -27,6 +27,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/studytomy/orgs/{org_uuid}/me/staff-workspaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Api My Staff Workspaces */
+        get: operations["api_my_staff_workspaces_api_v1_studytomy_orgs__org_uuid__me_staff_workspaces_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/studytomy/orgs/{org_uuid}/courses/{course_uuid}/readiness": {
         parameters: {
             query?: never;
@@ -1928,6 +1945,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/studytomy/orgs/{org_uuid}/support/guest-challenges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Guest Support Challenge */
+        post: operations["request_guest_support_challenge_api_v1_studytomy_orgs__org_uuid__support_guest_challenges_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studytomy/orgs/{org_uuid}/support/guest-challenges/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Redeem Guest Support */
+        post: operations["redeem_guest_support_api_v1_studytomy_orgs__org_uuid__support_guest_challenges_redeem_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/studytomy/orgs/{org_uuid}/support/cases": {
         parameters: {
             query?: never;
@@ -3242,6 +3293,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/studytomy/adaptive/orgs/{org_uuid}/staff/learners/{learner_uuid}/courses/{course_uuid}/tutor-feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Api List Tutor Feedback */
+        get: operations["api_list_tutor_feedback_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__courses__course_uuid__tutor_feedback_get"];
+        put?: never;
+        /** Api Review Tutor Feedback */
+        post: operations["api_review_tutor_feedback_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__courses__course_uuid__tutor_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/studytomy/adaptive/orgs/{org_uuid}/me/mastery": {
         parameters: {
             query?: never;
@@ -3973,6 +4042,41 @@ export interface paths {
         };
         /** Api Read Diagnostic */
         get: operations["api_read_diagnostic_api_v1_studytomy_adaptive_orgs__org_uuid__diagnostic_revisions__revision_uuid__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studytomy/adaptive/orgs/{org_uuid}/me/topic-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Api Read Topic Check */
+        get: operations["api_read_topic_check_api_v1_studytomy_adaptive_orgs__org_uuid__me_topic_check_get"];
+        put?: never;
+        /** Api Submit Topic Check */
+        post: operations["api_submit_topic_check_api_v1_studytomy_adaptive_orgs__org_uuid__me_topic_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/studytomy/adaptive/orgs/{org_uuid}/staff/learners/{learner_uuid}/topic-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Api Read Topic Timeline */
+        get: operations["api_read_topic_timeline_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__topic_check_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -13261,6 +13365,7 @@ export interface components {
             passed: boolean;
             /** Evaluator Version */
             evaluator_version: string;
+            appeal?: components["schemas"]["AssessmentAppealReceipt"] | null;
         };
         /**
          * AssignmentCreate
@@ -16369,6 +16474,10 @@ export interface components {
             activity: components["schemas"]["ActivityRead"];
             course: components["schemas"]["EditorBootstrapCourse"];
             org: components["schemas"]["OrganizationRead"];
+            /** Virtual Lab Options */
+            virtual_lab_options?: {
+                [key: string]: unknown;
+            }[] | null;
         };
         /** EditorTemplateCreate */
         EditorTemplateCreate: {
@@ -16538,6 +16647,10 @@ export interface components {
             completed_removals: {
                 [key: string]: string;
             };
+            /** Completed Removal Approvals */
+            completed_removal_approvals?: {
+                [key: string]: string;
+            };
         };
         /** EvidenceRemovalApprovalCommand */
         EvidenceRemovalApprovalCommand: {
@@ -16685,6 +16798,11 @@ export interface components {
         ExploreTopicRequest: {
             /** Query */
             query: string;
+            /**
+             * Sources Only
+             * @default false
+             */
+            sources_only?: boolean;
             /** Context Question */
             context_question?: string | null;
             /**
@@ -17428,6 +17546,18 @@ export interface components {
             citations?: {
                 [key: string]: components["schemas"]["DraftCitation"];
             };
+        };
+        /** GuestSupportIssue */
+        GuestSupportIssue: {
+            /** Email */
+            email: string;
+            /** Topic */
+            topic: string;
+        };
+        /** GuestSupportRedemption */
+        GuestSupportRedemption: {
+            /** Token */
+            token: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -20368,6 +20498,11 @@ export interface components {
             response_expectations: string | null;
             /** Intake Available */
             intake_available: boolean;
+            /**
+             * Guest Verification Available
+             * @default false
+             */
+            guest_verification_available?: boolean;
         };
         /** PublishedReportRead */
         PublishedReportRead: {
@@ -21234,6 +21369,10 @@ export interface components {
             version: number;
             /** Assigned To Me */
             assigned_to_me: boolean;
+            /** Can Assign */
+            can_assign: boolean;
+            /** Allowed Transitions */
+            allowed_transitions: components["schemas"]["SafeguardingReviewStatus"][];
         };
         /** SafeguardingReport */
         SafeguardingReport: {
@@ -21279,6 +21418,10 @@ export interface components {
             categories: components["schemas"]["SafeguardingRetentionCategory"][];
             /** Active Holds */
             active_holds: string[];
+            /** Hold Reason Codes */
+            hold_reason_codes: string[];
+            /** Release Reason Codes */
+            release_reason_codes: string[];
         };
         /**
          * SafeguardingReviewStatus
@@ -22565,6 +22708,8 @@ export interface components {
             created_at: string;
             /** Approvals */
             approvals?: components["schemas"]["StudyPolicyApprovalRead"][];
+            /** Required Responsibilities */
+            required_responsibilities?: components["schemas"]["StudyOwnerFunction"][];
         };
         /** StudyPrivacyStatusRead */
         StudyPrivacyStatusRead: {
@@ -23369,6 +23514,119 @@ export interface components {
          * @enum {string}
          */
         ThumbnailType: "image" | "video" | "both";
+        /** TopicCheckView */
+        TopicCheckView: {
+            /** Binding Id */
+            binding_id: string;
+            /** Episode Uuid */
+            episode_uuid?: string | null;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision?: number;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "initial" | "recheck" | "complete" | "needs_review";
+            question?: components["schemas"]["TopicQuestion"] | null;
+            /** Reteaching */
+            reteaching?: string | null;
+            teaching_visual?: components["schemas"]["TopicVisual"] | null;
+            /** Pdf Page */
+            pdf_page: number;
+            /** Outcome */
+            outcome?: ("correct" | "incorrect") | null;
+            /**
+             * Assisted
+             * @default false
+             */
+            assisted?: boolean;
+        };
+        /** TopicQuestion */
+        TopicQuestion: {
+            /** Prompt */
+            prompt: string;
+            visual: components["schemas"]["TopicVisual"];
+        };
+        /** TopicScope */
+        TopicScope: {
+            /** Course Uuid */
+            course_uuid: string;
+            /** Course Release Uuid */
+            course_release_uuid: string;
+            /** Activity Uuid */
+            activity_uuid: string;
+        };
+        /** TopicSubmission */
+        TopicSubmission: {
+            /** Course Uuid */
+            course_uuid: string;
+            /** Course Release Uuid */
+            course_release_uuid: string;
+            /** Activity Uuid */
+            activity_uuid: string;
+            /**
+             * Operation Uuid
+             * Format: uuid
+             */
+            operation_uuid: string;
+            /** Binding Id */
+            binding_id: string;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Answer */
+            answer: string;
+        };
+        /** TopicTimeline */
+        TopicTimeline: {
+            scope: components["schemas"]["TopicScope"];
+            /** Concept Uuid */
+            concept_uuid: string;
+            /** Activity Version */
+            activity_version: number;
+            /** Pdf Page */
+            pdf_page: number;
+            /** Episode Uuid */
+            episode_uuid: string | null;
+            /** Complete */
+            complete: boolean;
+            /** Events */
+            events: components["schemas"]["TopicTimelineEvent"][];
+        };
+        /** TopicTimelineEvent */
+        TopicTimelineEvent: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "initial" | "recheck";
+            /** Prompt */
+            prompt: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "correct" | "incorrect";
+            /** Reteaching */
+            reteaching?: string | null;
+            teaching_visual?: components["schemas"]["TopicVisual"] | null;
+            /** Assisted */
+            assisted: boolean;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+        };
+        /** TopicVisual */
+        TopicVisual: {
+            /** Parts */
+            parts: number;
+            /** Selected */
+            selected: number;
+        };
         /** Trail */
         Trail: {
             /** Org Id */
@@ -23520,6 +23778,47 @@ export interface components {
              */
             received_at: string;
         };
+        /** TutorFeedbackReviewCreate */
+        TutorFeedbackReviewCreate: {
+            /**
+             * Turn Uuid
+             * Format: uuid
+             */
+            turn_uuid: string;
+            /** Session Uuid */
+            session_uuid: string;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "confirmed" | "dismissed" | "escalated";
+            /** Evidence Reference */
+            evidence_reference: string;
+        };
+        /** TutorFeedbackReviewRead */
+        TutorFeedbackReviewRead: {
+            /**
+             * Turn Uuid
+             * Format: uuid
+             */
+            turn_uuid: string;
+            /**
+             * Issue Code
+             * @enum {string}
+             */
+            issue_code: "inaccurate" | "unclear" | "unsafe";
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Session Uuid */
+            session_uuid: string;
+            /** Disposition */
+            disposition?: ("confirmed" | "dismissed" | "escalated") | null;
+            /** Review Reference */
+            review_reference?: string | null;
+        };
         /** TutorOptions */
         TutorOptions: {
             /**
@@ -23533,6 +23832,10 @@ export interface components {
             reason?: ("assessment_in_progress" | "guidance_unavailable") | null;
             /** Practice Attempt Uuid */
             practice_attempt_uuid?: string | null;
+            /** Remaining Turns */
+            remaining_turns?: number | null;
+            /** Assistance Status */
+            assistance_status?: ("available" | "reviewed_only" | "unavailable" | "exhausted") | null;
         };
         /** TutorSessionRead */
         TutorSessionRead: {
@@ -24345,6 +24648,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_my_staff_workspaces_api_v1_studytomy_orgs__org_uuid__me_staff_workspaces_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -28696,6 +29030,76 @@ export interface operations {
             };
         };
     };
+    request_guest_support_challenge_api_v1_studytomy_orgs__org_uuid__support_guest_challenges_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuestSupportIssue"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    redeem_guest_support_api_v1_studytomy_orgs__org_uuid__support_guest_challenges_redeem_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuestSupportRedemption"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     submit_support_case_api_v1_studytomy_orgs__org_uuid__support_cases_post: {
         parameters: {
             query?: never;
@@ -30640,7 +31044,9 @@ export interface operations {
     };
     api_assessment_retry_grant_api_v1_studytomy_adaptive_orgs__org_uuid__courses__course_uuid__assignments__assignment_uuid__submissions__submission_uuid__retry_grants_post: {
         parameters: {
-            query?: never;
+            query?: {
+                expected_attempt_number?: number | null;
+            };
             header?: never;
             path: {
                 course_uuid: string;
@@ -30778,7 +31184,9 @@ export interface operations {
     };
     api_assessment_deadline_adjustment_api_v1_studytomy_adaptive_orgs__org_uuid__courses__course_uuid__assignments__assignment_uuid__submissions__submission_uuid__deadline_adjustments_post: {
         parameters: {
-            query?: never;
+            query?: {
+                expected_attempt_number?: number | null;
+            };
             header?: never;
             path: {
                 course_uuid: string;
@@ -31556,6 +31964,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TutorFeedbackReceipt"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_list_tutor_feedback_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__courses__course_uuid__tutor_feedback_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                learner_uuid: string;
+                course_uuid: string;
+                org_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TutorFeedbackReviewRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_review_tutor_feedback_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__courses__course_uuid__tutor_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                learner_uuid: string;
+                course_uuid: string;
+                org_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TutorFeedbackReviewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TutorFeedbackReviewRead"];
                 };
             };
             /** @description Validation Error */
@@ -33144,6 +33624,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiagnosticStaffRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_read_topic_check_api_v1_studytomy_adaptive_orgs__org_uuid__me_topic_check_get: {
+        parameters: {
+            query: {
+                course_uuid: string;
+                course_release_uuid: string;
+                activity_uuid: string;
+            };
+            header?: never;
+            path: {
+                org_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicCheckView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_submit_topic_check_api_v1_studytomy_adaptive_orgs__org_uuid__me_topic_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicSubmission"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicCheckView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_read_topic_timeline_api_v1_studytomy_adaptive_orgs__org_uuid__staff_learners__learner_uuid__topic_check_get: {
+        parameters: {
+            query: {
+                course_uuid: string;
+                course_release_uuid: string;
+                activity_uuid: string;
+            };
+            header?: never;
+            path: {
+                learner_uuid: string;
+                org_uuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicTimeline"];
                 };
             };
             /** @description Validation Error */

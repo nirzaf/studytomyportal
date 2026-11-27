@@ -608,3 +608,106 @@ class TestBoardsService:
             )
         assert membership.role == BoardMemberRole.VIEWER
         assert membership.id == 0
+
+
+@pytest.mark.asyncio
+async def test_protected_learner_board_membership_is_denied_before_member_shortcut(
+    db, org, regular_user, admin_user, mock_request,
+):
+    from src.db.studytomy.family import StudyLearnerProfile
+
+    db.add(StudyLearnerProfile(
+        org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id,
+    ))
+    await db.commit()
+    with pytest.raises(HTTPException) as error:
+        await check_board_membership(mock_request, "board_fixture", regular_user, db)
+    assert error.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_protected_learner_cannot_mutate_native_board_paths(
+    db, org, regular_user, admin_user, mock_request,
+):
+    from src.db.studytomy.family import StudyLearnerProfile
+
+    board = await _make_board(db, org, admin_user, board_uuid="board_native_write_denied")
+    db.add(StudyLearnerProfile(
+        org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id,
+    ))
+    await db.commit()
+
+    operations = (
+        update_board(mock_request, board.board_uuid, BoardUpdate(name="changed"), regular_user, db),
+        delete_board(mock_request, board.board_uuid, regular_user, db),
+        add_board_member(
+            mock_request, board.board_uuid,
+            BoardMemberCreate(user_id=admin_user.id, role=BoardMemberRole.VIEWER),
+            regular_user, db,
+        ),
+        add_board_members_batch(
+            mock_request, board.board_uuid,
+            BoardMemberBatchCreate(members=[
+                BoardMemberCreate(user_id=admin_user.id, role=BoardMemberRole.VIEWER),
+            ]),
+            regular_user, db,
+        ),
+        remove_board_member(mock_request, board.board_uuid, admin_user.id, regular_user, db),
+        update_board_thumbnail(mock_request, board.board_uuid, regular_user, db),
+    )
+    for operation in operations:
+        with pytest.raises(HTTPException) as denied:
+            await operation
+        assert denied.value.status_code == 403
+
+    await db.refresh(board)
+    assert board.name == "Board"
+    assert board.ydoc_state is None
+    assert (await db.execute(select(BoardMember))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_native_board_cannot_add_protected_learner_even_by_staff(
+    db, org, regular_user, admin_user, mock_request,
+):
+    from src.db.studytomy.family import StudyLearnerProfile
+
+    board = await _make_board(db, org, admin_user, board_uuid="board_no_protected_member")
+    db.add(StudyLearnerProfile(
+        org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id,
+    ))
+    await db.commit()
+
+    with pytest.raises(HTTPException) as denied:
+        await add_board_member(
+            mock_request, board.board_uuid,
+            BoardMemberCreate(user_id=regular_user.id, role=BoardMemberRole.VIEWER),
+            admin_user, db,
+        )
+    assert denied.value.status_code == 403
+    assert (await db.execute(select(BoardMember))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_mixed_board_member_batch_rejects_before_any_write(
+    db, org, regular_user, admin_user, mock_request,
+):
+    from src.db.studytomy.family import StudyLearnerProfile
+
+    board = await _make_board(db, org, admin_user, board_uuid="board_no_mixed_batch")
+    db.add(StudyLearnerProfile(
+        org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id,
+    ))
+    await db.commit()
+
+    with pytest.raises(HTTPException) as denied:
+        await add_board_members_batch(
+            mock_request, board.board_uuid,
+            BoardMemberBatchCreate(members=[
+                BoardMemberCreate(user_id=admin_user.id, role=BoardMemberRole.VIEWER),
+                BoardMemberCreate(user_id=regular_user.id, role=BoardMemberRole.VIEWER),
+            ]),
+            admin_user, db,
+        )
+    assert denied.value.status_code == 403
+    assert (await db.execute(select(BoardMember))).scalars().all() == []

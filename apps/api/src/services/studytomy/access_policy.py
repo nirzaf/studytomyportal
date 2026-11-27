@@ -3,7 +3,7 @@
 import asyncio
 import hashlib
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import aclosing
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -15,6 +15,7 @@ from typing import Any, BinaryIO, Literal
 from fastapi import HTTPException, UploadFile
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import Select, and_, case, or_
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -166,6 +167,7 @@ class ManagedActivityMedia:
     start: int
     end: int
     status_code: int
+    revalidate: Callable[[], Awaitable[None]] | None = None
 
     async def stream(self) -> AsyncIterator[bytes]:
         remaining = self.end - self.start + 1
@@ -177,6 +179,11 @@ class ManagedActivityMedia:
                 )
                 if not chunk:
                     break
+                if self.revalidate is not None:
+                    try:
+                        await self.revalidate()
+                    except HTTPException:
+                        return
                 remaining -= len(chunk)
                 yield chunk
         finally:
@@ -1013,6 +1020,10 @@ async def read_managed_activity_media(
     start_first_use: bool = False,
     caption_code: str | None = None,
 ) -> ManagedActivityMedia:
+    bind = db.bind
+    stream_engine = bind.engine if isinstance(bind, AsyncConnection) else bind
+    if not isinstance(stream_engine, AsyncEngine):
+        raise _unavailable()
     org_id = org.id
     org_uuid = org.org_uuid
     org = await lock_organization(db, org_id)
@@ -1113,6 +1124,41 @@ async def read_managed_activity_media(
         if not staged.closed:
             staged.close()
         raise
+    async def revalidate() -> None:
+        # A fresh transaction observes revocations without changing the request's database.
+        async with AsyncSession(stream_engine) as fresh_db:
+            current_org = await fresh_db.get(Organization, org_id)
+            if current_org is None:
+                raise _unavailable()
+            now = datetime.now(UTC)
+            authority = await resolve_managed_release_authority(
+                fresh_db, current_org, actor, course_uuid, release_uuid, now=now,
+            )
+            if (
+                authority.profile.id != profile_id
+                or authority.release.id != release_id
+                or authority.release.snapshot_sha256 != release_digest
+                or authority.progression_policy.id != progression_id
+            ):
+                raise _unavailable()
+            current_policy = (await _current_policies(
+                fresh_db, current_org, (StudyPolicyKey.D_15,), now
+            ))[0]
+            if current_policy.id != policy_id:
+                raise _unavailable()
+            pass_verified, _ = await _assessed_pass_delivery(
+                fresh_db, authority.release, authority.progression_policy,
+                actor.id, activity_uuid,
+            )
+            current_source, current_media, current_type = _project_authorized_media(
+                authority.release, authority.progression_policy, current_policy,
+                activity_uuid, caption_code, assessed_pass_verified=pass_verified,
+            )
+            if (current_source, current_media, current_type) != (
+                source_reference, media_snapshot, media_type,
+            ):
+                raise _unavailable()
+
     return ManagedActivityMedia(
         file=staged,
         media_type=media_type,
@@ -1121,6 +1167,7 @@ async def read_managed_activity_media(
         start=start,
         end=end,
         status_code=status_code,
+        revalidate=revalidate,
     )
 
 

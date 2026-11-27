@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@components/ui/button'
 import { getUriWithOrg } from '@services/config/config'
-import type { AdaptiveReleaseScope, AdaptiveRequest } from '@services/studytomy/adaptive'
+import { AdaptiveRequestError, type AdaptiveReleaseScope, type AdaptiveRequest } from '@services/studytomy/adaptive'
 
 type Concept = {
   concept_uuid: string
@@ -15,7 +15,17 @@ type Concept = {
   assisted_count: number
   review_due: boolean
 }
-type MasteryPage = { concepts: Concept[]; next_offset: number | null }
+type MasteryPage = { curriculum_revision_uuid?: string; concepts: Concept[]; next_offset: number | null }
+type MasteryFailure = 'disabled' | 'approval' | 'no_record' | 'temporary'
+
+function masteryFailure(error: unknown): MasteryFailure {
+  if (error instanceof AdaptiveRequestError) {
+    if (error.status === 403 && error.code === 'ADAPTIVE_DISABLED') return 'disabled'
+    if ([403, 409].includes(error.status) && error.code === 'POLICY_NOT_APPROVED') return 'approval'
+    if (error.status === 404) return 'no_record'
+  }
+  return 'temporary'
+}
 export type LessonRecommendation = {
   activity_uuid: string
   course_uuid: string
@@ -39,8 +49,12 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
   const [available, setAvailable] = useState(false)
   const [open, setOpen] = useState(false)
   const [offset, setOffset] = useState(0)
-  const [pageResult, setPageResult] = useState<{ queryKey: string; page: MasteryPage } | null>(null)
-  const [failedPageQuery, setFailedPageQuery] = useState<string | null>(null)
+  const [curriculumView, setCurriculumView] = useState<{
+    client: AdaptiveRequest; lessonScope: string; revision: string
+  } | null>(null)
+  const [pageResult, setPageResult] = useState<{ client: AdaptiveRequest; queryKey: string; page: MasteryPage } | null>(null)
+  const [failedPage, setFailedPage] = useState<{ queryKey: string; reason: MasteryFailure } | null>(null)
+  const [masteryRetry, setMasteryRetry] = useState(0)
   const [recommendationResult, setRecommendationResult] = useState<{
     queryKey: string; recommendations: Recommendation[]
   } | null>(null)
@@ -48,16 +62,20 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
   const [recommendationRetry, setRecommendationRetry] = useState(0)
   const [openingActivity, setOpeningActivity] = useState<string | null>(null)
   const [recommendationNotice, setRecommendationNotice] = useState('')
+  const lessonScope = JSON.stringify([activityUuid, release?.course_uuid, release?.course_release_uuid])
+  const curriculumRevision = curriculumView?.client === client && curriculumView.lessonScope === lessonScope
+    ? curriculumView.revision : undefined
   const pageQueryKey = JSON.stringify([
-    activityUuid, offset, open, refreshKey, release?.course_uuid ?? null,
-    release?.course_release_uuid ?? null,
+    activityUuid, offset, open, refreshKey, masteryRetry, release?.course_uuid ?? null,
+    release?.course_release_uuid ?? null, curriculumRevision,
   ])
   const recommendationQueryKey = JSON.stringify([
     activityUuid, open, refreshKey, recommendationRetry, orgSlug ?? null, release?.course_uuid ?? null,
     release?.course_release_uuid ?? null,
   ])
-  const page = pageResult?.queryKey === pageQueryKey ? pageResult.page : null
-  const error = failedPageQuery === pageQueryKey
+  const page = pageResult?.client === client && pageResult.queryKey === pageQueryKey ? pageResult.page : null
+  const failure = failedPage?.queryKey === pageQueryKey ? failedPage.reason : null
+  const setupUnavailable = failure !== null && failure !== 'temporary'
   const recommendations = recommendationResult?.queryKey === recommendationQueryKey
     ? recommendationResult.recommendations
     : null
@@ -65,23 +83,30 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
 
   useEffect(() => {
     const controller = new AbortController()
-    const params = new URLSearchParams({ activity_uuid: activityUuid, offset: String(offset), ...release })
-    client<MasteryPage>(`me/lesson-mastery?${params}`, 'GET', undefined, undefined, controller.signal)
+    const params = curriculumRevision
+      ? new URLSearchParams({ curriculum_revision_uuid: curriculumRevision, offset: String(offset) })
+      : new URLSearchParams({ activity_uuid: activityUuid, offset: String(offset), ...release })
+    const endpoint = curriculumRevision ? 'me/mastery' : 'me/lesson-mastery'
+    client<MasteryPage>(`${endpoint}?${params}`, 'GET', undefined, undefined, controller.signal)
       .then(result => {
         if (controller.signal.aborted) return
+        if (curriculumRevision && result.curriculum_revision_uuid !== curriculumRevision) {
+          setFailedPage({ queryKey: pageQueryKey, reason: 'no_record' })
+          return
+        }
         setAvailable(true)
-        setPageResult({ queryKey: pageQueryKey, page: result })
-        setFailedPageQuery(current => current === pageQueryKey ? null : current)
+        setPageResult({ client, queryKey: pageQueryKey, page: result })
+        setFailedPage(current => current?.queryKey === pageQueryKey ? null : current)
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (controller.signal.aborted) return
-        setFailedPageQuery(pageQueryKey)
+        setFailedPage({ queryKey: pageQueryKey, reason: masteryFailure(error) })
       })
     return () => controller.abort()
-  }, [activityUuid, client, offset, open, pageQueryKey, release])
+  }, [activityUuid, client, curriculumRevision, offset, open, pageQueryKey, release])
 
   useEffect(() => {
-    if (!open || (!release && !orgSlug)) return
+    if (!open || !available || setupUnavailable || (!release && !orgSlug)) return
     const controller = new AbortController()
     const params = new URLSearchParams({ activity_uuid: activityUuid, ...release })
     client<Recommendation[]>(`me/recommendations?${params}`, 'GET', undefined, undefined, controller.signal)
@@ -94,13 +119,14 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
         if (!controller.signal.aborted) setFailedRecommendationQuery(recommendationQueryKey)
       })
     return () => controller.abort()
-  }, [activityUuid, client, open, orgSlug, recommendationQueryKey, release])
+  }, [activityUuid, available, client, open, orgSlug, recommendationQueryKey, release, setupUnavailable])
 
   function requestPage(next: number) {
     setOffset(next)
   }
 
   function toggle() {
+    setCurriculumView(null)
     requestPage(0)
     setRecommendationNotice('')
     setOpeningActivity(null)
@@ -127,7 +153,14 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
     }
   }
 
-  if (!available && !error) return null
+  if (!available && !failure && !open) return null
+  const masteryNotAvailable = {
+    disabled: t('adaptiveProgress.disabled', 'Concept tracking is not enabled for this organization.'),
+    approval: t('adaptiveProgress.approvalRequired', 'Concept tracking requires current learning approval and consent.'),
+    no_record: curriculumRevision
+      ? t('adaptiveProgress.noCurriculumRecord', 'No concept progress record is available for this curriculum and account.')
+      : t('adaptiveProgress.noRecord', 'No concept progress record is available for this lesson and account.'),
+  }
   const states = {
     not_assessed: t('adaptiveProgress.notAssessed', 'Not yet assessed'),
     insufficient_evidence: t('adaptiveProgress.insufficient', 'More evidence needed'),
@@ -149,9 +182,33 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
       {t('adaptiveProgress.title', 'Concept progress')}
     </Button>
     <div id={contentId} role="region" aria-labelledby={buttonId} hidden={!open} className="space-y-4 pt-3">
-      {error ? <p role="status">{t('adaptiveProgress.unavailable', 'Concept progress is unavailable.')}</p>
+      {(curriculumRevision || page?.curriculum_revision_uuid) && <Button type="button" variant="outline"
+        className="min-h-11" onClick={() => {
+          setOffset(0)
+          setCurriculumView(curriculumRevision || !page?.curriculum_revision_uuid
+            ? null : { client, lessonScope, revision: page.curriculum_revision_uuid })
+        }}>
+        {curriculumRevision
+          ? t('adaptiveProgress.lessonConcepts', 'View lesson concepts')
+          : t('adaptiveProgress.curriculumConcepts', 'View curriculum concepts')}
+      </Button>}
+      {failure === 'temporary' ? <div className="space-y-2">
+        <p role="status">{t('adaptiveProgress.unavailable', 'Concept progress is unavailable.')}</p>
+        <Button type="button" variant="outline" className="min-h-11" onClick={() => setMasteryRetry(current => current + 1)}>
+          {t('adaptiveProgress.retryMastery', 'Retry concept progress')}
+        </Button>
+      </div>
+        : failure ? <div className="space-y-2">
+          <p role="status">{masteryNotAvailable[failure]}</p>
+          {orgSlug && <Link href={getUriWithOrg(orgSlug, '/trail')} className="inline-flex min-h-11 items-center text-sm font-medium underline">
+            {t('adaptiveProgress.courseProgress', 'View course progress')}
+          </Link>}
+        </div>
         : !page ? <p role="status">{t('adaptiveProgress.loading', 'Loading concept progress…')}</p>
         : <>
+          {page.concepts.length === 0 && <p role="status">
+            {t('adaptiveProgress.noConcepts', 'There are no tracked concepts on this page.')}
+          </p>}
           <ul className="space-y-3">
             {page.concepts.map(concept => <li key={concept.concept_uuid} className="border-b pb-3 [overflow-wrap:anywhere]">
               <p className="font-semibold"><bdi>{concept.title}</bdi></p>
@@ -176,7 +233,7 @@ export default function AdaptiveLessonProgress({ client, activityUuid, orgSlug, 
               {t('adaptiveProgress.next', 'Next concepts')}
             </Button>}
           </div>}
-          {(release || orgSlug) && <section>
+          {!curriculumRevision && (release || orgSlug) && <section>
             <h3 className="font-semibold">{t('adaptiveProgress.suggestions', 'Suggested activities')}</h3>
             {recommendationError ? <div className="space-y-2">
               <p role="status">{t('adaptiveProgress.suggestionsUnavailable', 'Suggested activities are unavailable.')}</p>

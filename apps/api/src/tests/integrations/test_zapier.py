@@ -536,3 +536,27 @@ class TestZapierSubscriptions:
                     ctx=(token_user, db),
                 )
         assert exc.value.status_code == 404
+
+
+async def test_list_filters_protected_records_before_limit(db, org, other_org, token_user, user, other_user, course, role):
+    from src.db.studytomy.family import StudyLearnerProfile
+
+    db.add(StudyLearnerProfile(
+        org_id=other_org.id, user_id=user.id, created_by_user_id=user.id,
+    ))
+    db.add(Course(
+        org_id=org.id, course_uuid="course_managed", name="Managed",
+        public=False, published=False, open_to_contributors=False,
+        studytomy_managed=True, creation_date="9999-01-01",
+    ))
+    await db.commit()
+
+    assert await zapier_list_users(limit=1, ctx=(token_user, db)) == []
+    assert (await zapier_list_courses(limit=1, ctx=(token_user, db)))[0].course_uuid == course.course_uuid
+
+    db.add(UserOrganization(
+        org_id=org.id, user_id=other_user.id, role_id=role.id,
+        creation_date=str(datetime.now()), update_date=str(datetime.now()),
+    ))
+    await db.commit()
+    assert [item.id for item in await zapier_list_users(limit=1, ctx=(token_user, db))] == [other_user.id]

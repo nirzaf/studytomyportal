@@ -1224,18 +1224,54 @@ redis.call("SET", KEYS[1], new_val)
 return new_val
 """
 
+_IDEMPOTENT_REFUND_LUA = """
+local applied = redis.call("SET", KEYS[2], "1", "NX", "EX", ARGV[2])
+if not applied then
+    return tonumber(redis.call("GET", KEYS[1]) or "0")
+end
+local current = tonumber(redis.call("GET", KEYS[1]) or "0")
+local decrement = tonumber(ARGV[1])
+local new_val = current - decrement
+if new_val < 0 then new_val = 0 end
+redis.call("SET", KEYS[1], new_val)
+return new_val
+"""
 
-def refund_ai_credit(org_id: int, amount: int = 1) -> int:
+# Match the existing 30-day engineering replay window; this is not a retention-policy decision.
+_REFUND_IDEMPOTENCY_TTL_SECONDS = 30 * 24 * 60 * 60
+
+
+def refund_ai_credit(
+    org_id: int,
+    amount: int = 1,
+    *,
+    idempotency_key: str | None = None,
+) -> int:
     """
     Refund ``amount`` previously-reserved AI credits. Callers that use
     :func:`reserve_ai_credit` before dispatching to the model should refund on
     downstream failure so a transient AI outage does not consume the org's
     quota. The decrement is clamped at zero so accidental double-refunds do
-    not mint free credits.
+    not mint free credits. Callers that may retry an ambiguous Redis result
+    can supply a unique operation key; Redis then suppresses duplicate refunds
+    while the bounded marker remains present.
     """
     if amount <= 0:
         return 0
     r = _get_redis_client()
+    if idempotency_key is not None:
+        if not idempotency_key or len(idempotency_key) > 128:
+            raise ValueError("idempotency_key must contain between 1 and 128 characters")
+        script = r.register_script(_IDEMPOTENT_REFUND_LUA)
+        return int(
+            script(
+                keys=[
+                    f"ai_credits_used:{org_id}",
+                    f"ai_credit_refund:{org_id}:{idempotency_key}",
+                ],
+                args=[str(int(amount)), str(_REFUND_IDEMPOTENCY_TTL_SECONDS)],
+            )
+        )
     script = r.register_script(_REFUND_LUA)
     return int(script(keys=[f"ai_credits_used:{org_id}"], args=[str(int(amount))]))
 

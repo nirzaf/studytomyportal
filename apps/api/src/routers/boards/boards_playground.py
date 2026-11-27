@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from contextlib import aclosing
+
+from src.routers.playgrounds.credit_stream import PlaygroundCreditReservation
 from sqlmodel import select
 import json
 import logging
@@ -34,14 +36,17 @@ from src.services.boards.schemas.boards_playground import (
 router = APIRouter()
 
 
-async def event_generator(generator, session_uuid: str):
+async def event_generator(generator, session_uuid: str, reservation=None):
     """Convert async generator to SSE format"""
     try:
-        async for chunk in generator:
-            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        async with aclosing(generator):
+            async for chunk in generator:
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+        if reservation is not None:
+            reservation.complete()
         yield f"data: {json.dumps({'type': 'done', 'session_uuid': session_uuid})}\n\n"
     except Exception:
-        logging.exception("Error in boards playground event stream for session %s", session_uuid)
+        logging.warning("Error in boards playground event stream for session %s", session_uuid)
         yield f"data: {json.dumps({'type': 'error', 'message': 'An internal error occurred.'})}\n\n"
 
 
@@ -101,32 +106,33 @@ async def start_boards_playground_session(
     from src.services.security.rate_limiting import enforce_ai_rate_limit
     enforce_ai_rate_limit(start_acting_user_id, org.id)
     await reserve_ai_credit(org.id, db_session, amount=3)
+    reservation = PlaygroundCreditReservation(org.id)
+    with reservation.setup():
+        ai_model = await get_org_ai_model(org.id, db_session)
 
-    ai_model = await get_org_ai_model(org.id, db_session)
+        session = create_boards_playground_session(
+            block_uuid=session_request.block_uuid,
+            board_uuid=session_request.board_uuid,
+            context=session_request.context,
+            user_id=start_acting_user_id,
+        )
 
-    session = create_boards_playground_session(
-        block_uuid=session_request.block_uuid,
-        board_uuid=session_request.board_uuid,
-        context=session_request.context,
-        user_id=start_acting_user_id,
-    )
+        # Generate with streaming
+        stream = generate_boards_playground_stream(
+            prompt=session_request.prompt,
+            session=session,
+            model_name=ai_model,
+        )
 
-    # Generate with streaming
-    stream = generate_boards_playground_stream(
-        prompt=session_request.prompt,
-        session=session,
-        model_name=ai_model,
-    )
-
-    return StreamingResponse(
-        event_generator(stream, session.session_uuid),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+        return reservation.response(
+            event_generator(stream, session.session_uuid, reservation),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
 
 @router.post(
@@ -202,27 +208,28 @@ async def iterate_boards_playground_session(
     from src.services.security.rate_limiting import enforce_ai_rate_limit
     enforce_ai_rate_limit(iterate_acting_user_id, org.id)
     await reserve_ai_credit(org.id, db_session, amount=3)
+    reservation = PlaygroundCreditReservation(org.id)
+    with reservation.setup():
+        ai_model = await get_org_ai_model(org.id, db_session)
 
-    ai_model = await get_org_ai_model(org.id, db_session)
+        html_to_iterate = message_request.current_html or session.current_html
 
-    html_to_iterate = message_request.current_html or session.current_html
+        stream = generate_boards_playground_stream(
+            prompt=message_request.message,
+            session=session,
+            model_name=ai_model,
+            current_html=html_to_iterate,
+        )
 
-    stream = generate_boards_playground_stream(
-        prompt=message_request.message,
-        session=session,
-        model_name=ai_model,
-        current_html=html_to_iterate,
-    )
-
-    return StreamingResponse(
-        event_generator(stream, session.session_uuid),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+        return reservation.response(
+            event_generator(stream, session.session_uuid, reservation),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
 
 @router.get(

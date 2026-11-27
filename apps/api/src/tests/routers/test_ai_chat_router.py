@@ -77,6 +77,21 @@ async def _drain(gen):
     return [chunk async for chunk in gen]
 
 
+async def test_activity_chat_reports_unconfigured_text_provider_and_refunds():
+    async def missing_provider():
+        raise ai_router.AINotConfiguredError("provider configuration details")
+        yield  # pragma: no cover
+
+    with patch("src.security.features_utils.usage.refund_ai_credit") as refund:
+        events = await _drain(ai_router.activity_chat_event_generator(
+            missing_provider(), "chat_1", "act_1", "question", "lesson", "model", org_id=3,
+        ))
+
+    assert "a text AI provider is not configured" in events[-1]
+    assert "provider configuration details" not in events[-1]
+    refund.assert_called_once_with(3, 1)
+
+
 class TestEditorChatEventGeneratorRefund:
     async def test_refund_called_when_stream_raises(self):
         """Upstream stream raises -> error event emitted and refund issued."""

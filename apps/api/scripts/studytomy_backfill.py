@@ -1,5 +1,6 @@
 """Inventory legacy mappings and assessment evidence on disposable PostgreSQL."""
 
+import argparse
 import json
 import os
 import sys
@@ -37,6 +38,10 @@ def managed_submission_counts(connection) -> dict[str, int]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dry-run", action="store_true", help="Report inventory without writing (the default).")
+    parser.parse_args()
+
     raw_url = os.environ.get("STUDYTOMY_TEST_DATABASE_URL")
     if not raw_url:
         raise SystemExit("Set STUDYTOMY_TEST_DATABASE_URL to a disposable PostgreSQL database.")

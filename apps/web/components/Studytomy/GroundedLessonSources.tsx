@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } 
 import { getAPIUrl } from '@services/config/config'
 import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/requests'
 import GroundedLessonDraftForm from './GroundedLessonDraftForm'
+import GroundedQuizDraftForm, { type QuizDestination } from './GroundedQuizDraftForm'
 
 type Citation = { source_uuid: string; label: string; page: number; quote: string }
 type SourceState = { status: 'current' | 'stale' | 'none'; current_version: number; citations: Citation[] }
@@ -16,25 +17,28 @@ type DraftSource = {
   pages_without_readable_text?: number[]
 }
 type DraftSourcePage = { sources: DraftSource[]; next_cursor: string | null }
-type Props = { orgUuid: string; courseUuid: string; activityUuid: string; version: number; token: string }
+type Props = { orgUuid: string; courseUuid: string; activityUuid: string; version: number; token: string; quiz?: QuizDestination }
 
-export default function GroundedLessonSources({ orgUuid, courseUuid, activityUuid, version, token }: Props) {
+export default function GroundedLessonSources({ orgUuid, courseUuid, activityUuid, version, token, quiz }: Props) {
   const [open, setOpen] = useState(false)
+  const [citationRevision, setCitationRevision] = useState(0)
   const route = `studytomy/orgs/${encodeURIComponent(orgUuid)}/courses/${encodeURIComponent(courseUuid)}/lessons/${encodeURIComponent(activityUuid)}`
+  const title = quiz ? 'Grounded quiz sources' : 'Lesson sources'
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline">Lesson sources</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm" variant="outline">{title}</Button></DialogTrigger>
       <DialogContent className="max-h-[80vh] overflow-y-auto">
-        <DialogTitle>Lesson sources</DialogTitle>
-        <DialogDescription>Manage PDF sources for this lesson and check saved citations before review.</DialogDescription>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{quiz ? 'Manage assignment PDFs and review citations for quiz drafts.' : 'Manage PDF sources for this lesson and check saved citations before review.'}</DialogDescription>
         {open && (
           <>
-            <DraftMaterials key={`${route}:${version}`} route={route} token={token} version={version} />
-            <section className="space-y-2 border-t pt-4" aria-label="Saved citations">
+            <DraftMaterials key={`${route}:${version}`} route={route} token={token} version={version} quiz={quiz}
+              onSourceRevoked={() => setCitationRevision((value) => value + 1)} />
+            {!quiz && <section className="space-y-2 border-t pt-4" aria-label="Saved citations">
               <h3 className="text-sm font-medium">Saved citations</h3>
-              <SourceList key={`${route}:${version}`} route={route + '/grounded-lesson-sources'} token={token} version={version} />
-            </section>
+              <SourceList key={`${route}:${version}:${citationRevision}`} route={route + '/grounded-lesson-sources'} token={token} version={version} />
+            </section>}
           </>
         )}
       </DialogContent>
@@ -42,13 +46,16 @@ export default function GroundedLessonSources({ orgUuid, courseUuid, activityUui
   )
 }
 
-function DraftMaterials({ route, token, version }: { route: string; token: string; version: number }) {
+function DraftMaterials({ route, token, version, onSourceRevoked, quiz }: {
+  route: string; token: string; version: number; onSourceRevoked: () => void; quiz?: QuizDestination
+}) {
   const materialRoute = route + '/draft-sources'
   const [cursor, setCursor] = useState<string>()
   const [revision, setRevision] = useState(0)
   const [loaded, setLoaded] = useState<{ token: string; page: DraftSourcePage | 'error' }>()
   const [uploadState, setUploadState] = useState<{ token: string; busy: boolean; message?: string; error?: boolean }>()
   const [selection, setSelection] = useState<{ token: string; sources: string[] }>()
+  const [confirmRevocation, setConfirmRevocation] = useState<{ token: string; uuid: string }>()
   const selected = selection?.token === token ? selection.sources : []
   const upload = useRef<AbortController | null>(null)
   const page = loaded?.token === token ? loaded.page : undefined
@@ -136,6 +143,40 @@ function DraftMaterials({ route, token, version }: { route: string; token: strin
   function showPage(after?: string) {
     setLoaded(undefined)
     setCursor(after)
+  }
+
+  async function revokeSource(uuid: string) {
+    if (upload.current || confirmRevocation?.token !== token || confirmRevocation.uuid !== uuid) return
+    const controller = new AbortController()
+    upload.current = controller
+    setUploadState({ token, busy: true, message: 'Revoking PDF source…' })
+    try {
+      const response = await secureFetch(`${getAPIUrl()}${materialRoute}/${encodeURIComponent(uuid)}/revoke`, {
+        ...RequestBodyWithAuthHeader('POST', null, null, token),
+        cache: 'no-store',
+        redirect: 'error',
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(typeof payload?.detail === 'string' ? payload.detail : 'The PDF source could not be revoked.')
+      }
+      if (controller.signal.aborted) return
+      setSelection((current) => current?.token === token
+        ? { token, sources: current.sources.filter((source) => source !== uuid) }
+        : current)
+      setConfirmRevocation(undefined)
+      showPage()
+      setRevision((value) => value + 1)
+      onSourceRevoked()
+      setUploadState({ token, busy: false, message: 'PDF source revoked. Review any affected citations.' })
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setUploadState({ token, busy: false, error: true, message: error instanceof Error ? error.message : 'The PDF source could not be revoked.' })
+      }
+    } finally {
+      if (upload.current === controller) upload.current = null
+    }
   }
 
   return (
@@ -232,6 +273,18 @@ function DraftMaterials({ route, token, version }: { route: string; token: strin
                     )}
                   </span>
                 </label>
+                {confirmRevocation?.token === token && confirmRevocation.uuid === source.source_uuid ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <p className="basis-full text-sm">Revoking this source makes any saved citations that use it stale.</p>
+                    <Button type="button" size="sm" variant="destructive" disabled={state?.busy}
+                      onClick={() => void revokeSource(source.source_uuid)}>Confirm revocation</Button>
+                    <Button type="button" size="sm" variant="outline" disabled={state?.busy}
+                      onClick={() => setConfirmRevocation(undefined)}>Cancel</Button>
+                  </div>
+                ) : <Button type="button" size="sm" variant="ghost" disabled={state?.busy}
+                  onClick={() => setConfirmRevocation({ token, uuid: source.source_uuid })}>
+                  Revoke source<span className="sr-only"> {source.label}</span>
+                </Button>}
               </li>
             ))}
           </ul>
@@ -244,7 +297,9 @@ function DraftMaterials({ route, token, version }: { route: string; token: strin
         </>
       )}
       <p className="text-sm">{selected.length} of 5 sources selected</p>
-      <GroundedLessonDraftForm route={route} token={token} version={version} selected={selected} />
+      {quiz
+        ? <GroundedQuizDraftForm key={`${revision}:${selected.join(':')}`} route={route} token={token} selected={selected} destination={quiz} />
+        : <GroundedLessonDraftForm route={route} token={token} version={version} selected={selected} />}
     </section>
   )
 }

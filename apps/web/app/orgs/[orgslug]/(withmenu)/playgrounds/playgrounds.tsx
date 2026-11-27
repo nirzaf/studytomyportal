@@ -11,6 +11,7 @@ import { queryKeys } from '@/lib/query/keys'
 import GeneralWrapperStyled from '@components/Objects/StyledElements/Wrappers/GeneralWrapper'
 import TypeOfContentTitle from '@components/Objects/StyledElements/Titles/TypeOfContentTitle'
 import PlaygroundCard from '@components/Playground/PlaygroundCard'
+import PracticeStudio from '@components/Playground/PracticeStudio'
 import ListShortcuts from '@components/Objects/Shortcuts/ListShortcuts'
 import { Playground, createPlayground } from '@services/playgrounds/playgrounds'
 import { useLHAnalytics, AnalyticsEvent } from '@services/analytics'
@@ -115,6 +116,8 @@ export default function PlaygroundsClient({
                 </button>
               )}
             </div>
+
+            {session?.status === 'authenticated' && <PracticeStudio orgslug={orgslug} />}
 
             {/* Search */}
             {playgrounds.length > 0 && (

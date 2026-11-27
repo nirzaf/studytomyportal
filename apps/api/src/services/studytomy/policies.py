@@ -1039,6 +1039,17 @@ async def approve_policy_version(
             },
         )
 
+    # Policy authors must not approve the same decision, even if they also
+    # hold an owner assignment for one of its required responsibilities.
+    if policy.created_by_user_id == actor_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "CONFLICT_OF_INTEREST_EXCLUDED",
+                "message": "The policy author cannot approve their own policy version.",
+            },
+        )
+
     replay = await claim_idempotency(
         db_session,
         org_id=organization.id,
@@ -1377,4 +1388,8 @@ async def get_policy_version_read(
         supersedes_policy_uuid=previous.policy_uuid if previous else None,
         created_at=policy.created_at,
         approvals=approvals,
+        required_responsibilities=sorted(
+            POLICY_REQUIRED_RESPONSIBILITIES[StudyPolicyKey(policy.policy_key)],
+            key=lambda responsibility: responsibility.value,
+        ),
     )

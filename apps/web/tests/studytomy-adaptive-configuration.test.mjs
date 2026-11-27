@@ -60,3 +60,20 @@ test('the course dashboard includes a labelled staff report lookup without priva
   expect(markup).not.toContain('Approve reviewed version')
   expect(markup).not.toContain('Withdraw report')
 })
+
+test('staff can open a learner-scoped feedback lookup before any review controls appear', () => {
+  const markup = render(false, true)
+  expect(markup).toContain('Tutor feedback review')
+  expect(markup).toContain('name="learner"')
+  expect(markup).toContain('Load feedback')
+  expect(markup).not.toContain('Record review')
+  expect(markup).not.toContain('synthetic-token')
+})
+
+test('staff mastery review requires a published revision and a preview before repair', () => {
+  const markup = render(false, true)
+  expect(markup).toContain('Learner mastery review')
+  expect(markup).toContain('Choose a published revision')
+  expect(markup).toContain('Load mastery')
+  expect(markup).not.toContain('Rebuild projection from evidence')
+})

@@ -36,6 +36,7 @@ export type EvidenceRetentionManifest = {
   files: { evidence_reference: string; disposition: 'held' | 'case_open' | 'unverified' | 'retained' | 'candidate'; eligible_at: string | null }[]
   snapshot_sha256: string
   completed_removals: Record<string, string>
+  completed_removal_approvals?: Record<string, string>
 }
 
 export type EvidenceRemovalApproval = {
@@ -44,6 +45,8 @@ export type EvidenceRemovalApproval = {
   candidate_count: number
   approved_at: string
 }
+export type EvidenceHoldReceipt = { hold_reference: string; review_due_at: string }
+export type EvidenceRemovalReceipt = { evidence_reference: string; removal_receipt: string; removed_at: string }
 
 function recordRequestUrl(orgUuid: string) {
   return `${getAPIUrl()}studytomy/orgs/${encodeURIComponent(orgUuid)}/learners/me/record-requests`
@@ -146,6 +149,48 @@ export async function approveEvidenceRetention(
     }, null, token), cache: 'no-store', signal,
   })
   if (!response.ok) throw new Error('Removal approval unavailable.')
+  return response.json()
+}
+
+export async function placeRecordEvidenceHold(
+  orgUuid: string, token: string, requestReference: string, holdReference: string,
+  command: { reason_code: string; review_due_at: string }, signal: AbortSignal,
+): Promise<EvidenceHoldReceipt> {
+  const response = await secureFetch(`${staffRecordRequestUrl(orgUuid, requestReference)}/evidence-holds/${encodeURIComponent(holdReference)}`, {
+    ...RequestBodyWithAuthHeader('PUT', command, null, token), cache: 'no-store', signal,
+  })
+  if (!response.ok) throw new Error('The evidence hold is unavailable under current policy.')
+  return response.json()
+}
+
+export async function releaseRecordEvidenceHold(
+  orgUuid: string, token: string, requestReference: string, holdReference: string,
+  reasonCode: string, signal: AbortSignal,
+): Promise<{ hold_reference: string; released_at: string }> {
+  const response = await secureFetch(`${staffRecordRequestUrl(orgUuid, requestReference)}/evidence-holds/${encodeURIComponent(holdReference)}/release`, {
+    ...RequestBodyWithAuthHeader('PUT', { reason_code: reasonCode }, null, token), cache: 'no-store', signal,
+  })
+  if (!response.ok) throw new Error('The evidence hold could not be released under current policy.')
+  return response.json()
+}
+
+export async function removeApprovedRecordEvidence(
+  orgUuid: string, token: string, requestReference: string, approvalReference: string,
+  evidenceReference: string, signal: AbortSignal,
+): Promise<EvidenceRemovalReceipt> {
+  const url = `${staffRecordRequestUrl(orgUuid, requestReference)}/evidence-retention/approvals/${encodeURIComponent(approvalReference)}/files/${encodeURIComponent(evidenceReference)}`
+  const response = await secureFetch(url, { ...RequestBodyWithAuthHeader('PUT', null, null, token), cache: 'no-store', signal })
+  if (!response.ok) throw new Error('Approved evidence removal could not be confirmed for this storage or policy.')
+  return response.json()
+}
+
+export async function replayApprovedRecordEvidenceRemoval(
+  orgUuid: string, token: string, requestReference: string, approvalReference: string,
+  evidenceReference: string, replayReference: string, signal: AbortSignal,
+): Promise<EvidenceRemovalReceipt> {
+  const url = `${staffRecordRequestUrl(orgUuid, requestReference)}/evidence-retention/approvals/${encodeURIComponent(approvalReference)}/files/${encodeURIComponent(evidenceReference)}/restore-replays/${encodeURIComponent(replayReference)}`
+  const response = await secureFetch(url, { ...RequestBodyWithAuthHeader('PUT', null, null, token), cache: 'no-store', signal })
+  if (!response.ok) throw new Error('Removal replay is unavailable under current policy or storage configuration.')
   return response.json()
 }
 

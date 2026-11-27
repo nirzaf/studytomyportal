@@ -12,15 +12,20 @@ import {
   activateLearnerProfile,
   createLearnerProfile,
   decideRelationship,
+  fetchEligibilityEvidenceContent,
   fetchRelationshipEvidenceContent,
   getFamilyReviewQueue,
   getLearnerProfile,
+  listEligibilityEvidence,
   getRelationshipForReview,
   listRelationshipEvidence,
   recordLearnerEligibilityDecision,
+  restrictRelationshipAuthority,
   uploadRelationshipEvidence,
+  uploadEligibilityEvidence,
   type StudyEvidenceFileItem,
   type StudyLearnerProfileItem,
+  type RelationshipRestrictionAction,
 } from '@services/studytomy/family'
 import type {
   StudyFamilyReviewQueueItem,
@@ -139,6 +144,14 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
     selectedSubjectKey !== null && reviewResult?.subjectKey === selectedSubjectKey ? reviewResult : null
   const review = currentReviewResult?.review ?? null
   const evidenceFiles = currentReviewResult?.evidenceFiles ?? []
+  const verifiedRelationshipEvidence = evidenceFiles.filter((file) =>
+    file.purpose === 'guardian_authority_evidence' && file.upload_status === 'ready' && Boolean(file.verified_at)
+  )
+  const availableRestrictionActions: RelationshipRestrictionAction[] = review?.status === 'accepted'
+    ? ['restrict', 'dispute', 'revoke']
+    : review?.status === 'restricted'
+      ? ['dispute', 'revoke']
+      : review?.status === 'disputed' ? ['revoke'] : []
   const evidenceError = currentReviewResult?.evidenceError ?? null
   const reviewError = currentReviewResult?.error ?? null
   const reviewLoading = selectedSubjectKey !== null && currentReviewResult === null
@@ -195,6 +208,64 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
 
     return () => { current = false }
   }, [orgUuid, accessToken, selectedLearnerUuid, selectedRelationshipUuid])
+
+  async function submitRelationshipRestriction(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!orgUuid || !accessToken || !review || !selectedLearnerUuid || !selectedRelationshipUuid || decisionBusy) return
+    const fields = new FormData(event.currentTarget)
+    const action = String(fields.get('action')) as RelationshipRestrictionAction
+    const reasonCode = String(fields.get('reason_code') ?? '').trim().toUpperCase()
+    const evidenceReference = String(fields.get('evidence_reference') ?? '').trim()
+    if (!availableRestrictionActions.includes(action) || !/^[A-Z][A-Z0-9_]{2,63}$/.test(reasonCode)) return
+    if (!verifiedRelationshipEvidence.some((file) => file.evidence_uuid === evidenceReference)) return
+    const confirmation = action === 'revoke'
+      ? 'Revoke this guardian authority? All current sharing scopes will end immediately.'
+      : `Record ${action} for this guardian authority? All current sharing scopes will end immediately.`
+    if (!window.confirm(confirmation)) return
+
+    const learnerUuid = selectedLearnerUuid
+    const relationshipUuid = selectedRelationshipUuid
+    const requestSubjectKey = `${orgUuid}|${accessToken}|${learnerUuid}|${relationshipUuid}`
+    const requestOrgSession = `${orgUuid}|${accessToken}`
+    setDecisionBusy(true)
+    setDecisionError(null)
+    setDecisionNotice(null)
+    try {
+      const updated = await restrictRelationshipAuthority(
+        orgUuid,
+        learnerUuid,
+        relationshipUuid,
+        accessToken,
+        crypto.randomUUID(),
+        {
+          action,
+          expected_version: review.authority_version,
+          evidence_reference: evidenceReference,
+          reason_code: reasonCode,
+        },
+      )
+      if (orgSessionRef.current === requestOrgSession) {
+        setItems((prev) => prev.map((row) =>
+          row.learner_uuid === learnerUuid && row.relationship_uuid === relationshipUuid
+            ? { ...row, status: updated.status, approved_scopes: updated.approved_scopes, authority_version: updated.authority_version, updated_at: updated.updated_at }
+            : row
+        ))
+      }
+      if (selectedSubjectKeyRef.current !== requestSubjectKey) return
+      const refreshed = await getRelationshipForReview(orgUuid, learnerUuid, relationshipUuid, accessToken)
+      if (selectedSubjectKeyRef.current !== requestSubjectKey) return
+      setReviewResult((previous) => previous && previous.subjectKey === requestSubjectKey
+        ? { ...previous, review: refreshed }
+        : previous)
+      setDecisionNotice(`Authority updated: ${STATUS_LABELS[refreshed.status]}. Sharing scopes are inactive until a new authorized decision.`)
+    } catch (error) {
+      if (selectedSubjectKeyRef.current === requestSubjectKey) {
+        setDecisionError(error instanceof Error ? error.message : 'Unable to record the authority restriction.')
+      }
+    } finally {
+      if (selectedSubjectKeyRef.current === requestSubjectKey) setDecisionBusy(false)
+    }
+  }
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -623,6 +694,39 @@ export default function FamilyWorkspace({ orgUuid, accessToken }: FamilyWorkspac
                       This relationship is {STATUS_LABELS[review.status].toLowerCase()}. Keep it in the assigned review process; no sharing scope is active while it is restricted or disputed.
                     </p>
                   ) : null}
+                  {availableRestrictionActions.length > 0 && (
+                    verifiedRelationshipEvidence.length > 0 ? (
+                      <form onSubmit={submitRelationshipRestriction} className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-4">
+                        <h3 className="text-sm font-semibold text-amber-950">Restrict, dispute or revoke authority</h3>
+                        <p className="text-xs leading-5 text-amber-900">Each action immediately disables current sharing scopes. Enter a stable reason code only; do not enter learner names or narrative details.</p>
+                        <label className="block text-xs font-medium text-gray-800">
+                          Action
+                          <select name="action" required disabled={decisionBusy} className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm">
+                            {availableRestrictionActions.map((action) => <option key={action} value={action}>{action.replaceAll('_', ' ')}</option>)}
+                          </select>
+                        </label>
+                        <label className="block text-xs font-medium text-gray-800">
+                          Verified relationship evidence
+                          <select name="evidence_reference" required defaultValue={selectedEvidence || verifiedRelationshipEvidence[0].evidence_uuid} disabled={decisionBusy}
+                            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm">
+                            {verifiedRelationshipEvidence.map((file) => <option key={file.evidence_uuid} value={file.evidence_uuid}>{file.evidence_uuid} ({file.media_type})</option>)}
+                          </select>
+                        </label>
+                        <label className="block text-xs font-medium text-gray-800">
+                          Reason code
+                          <input name="reason_code" required minLength={3} maxLength={64} pattern="[A-Za-z][A-Za-z0-9_]{2,63}" autoComplete="off" disabled={decisionBusy}
+                            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm uppercase" />
+                        </label>
+                        <button type="submit" disabled={decisionBusy} className="rounded-md border border-amber-700 bg-white px-3 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100 disabled:opacity-50">
+                          {decisionBusy ? 'Recording…' : 'Confirm authority restriction'}
+                        </button>
+                      </form>
+                    ) : (
+                      <p className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="status">
+                        Upload and verify bound relationship evidence before recording a restriction.
+                      </p>
+                    )
+                  )}
                 </div>
               ) : (
                 <p className="py-6 text-sm text-gray-700">Select an assigned relationship to review its current status.</p>
@@ -661,6 +765,10 @@ function LearnerLifecyclePanel({
 }) {
   const [lookupUuid, setLookupUuid] = useState(initialLearnerUuid ?? '')
   const [profile, setProfile] = useState<StudyLearnerProfileItem | null>(null)
+  const [eligibilityEvidence, setEligibilityEvidence] = useState<StudyEvidenceFileItem[]>([])
+  const [selectedEligibilityEvidence, setSelectedEligibilityEvidence] = useState('')
+  const [eligibilityEvidenceError, setEligibilityEvidenceError] = useState<string | null>(null)
+  const [eligibilityEvidenceBusy, setEligibilityEvidenceBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -674,6 +782,17 @@ function LearnerLifecyclePanel({
       const loaded = await getLearnerProfile(orgUuid, learnerUuid.trim(), accessToken)
       setProfile(loaded)
       setLookupUuid(loaded.learner_uuid)
+      setEligibilityEvidence([])
+      setSelectedEligibilityEvidence('')
+      setEligibilityEvidenceError(null)
+      try {
+        const files = await listEligibilityEvidence(orgUuid, loaded.learner_uuid, accessToken)
+        setEligibilityEvidence(files.filter((file) =>
+          file.purpose === 'eligibility_evidence' && file.upload_status === 'ready' && Boolean(file.verified_at)
+        ))
+      } catch (e) {
+        setEligibilityEvidenceError(e instanceof Error ? e.message : 'Unable to load verified eligibility evidence.')
+      }
     } catch (err) {
       setProfile(null)
       setError(err instanceof Error ? err.message : 'Unable to load learner profile.')
@@ -806,6 +925,72 @@ function LearnerLifecyclePanel({
             )}
           </div>
 
+          <section aria-label="Learner eligibility evidence" className="space-y-3 rounded border border-gray-200 bg-white p-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Verified eligibility evidence</h3>
+              <p className="mt-1 text-xs text-gray-600">Upload and inspect the learner-bound source before recording an eligibility decision. Evidence stays private and is checked again by the API.</p>
+            </div>
+            <form className="flex flex-wrap items-end gap-2" onSubmit={async (event) => {
+              event.preventDefault()
+              if (eligibilityEvidenceBusy) return
+              const form = event.currentTarget
+              const fileInput = form.elements.namedItem('eligibility_evidence_file') as HTMLInputElement | null
+              const file = fileInput?.files?.[0]
+              if (!file) return
+              setEligibilityEvidenceBusy(true)
+              setEligibilityEvidenceError(null)
+              try {
+                const uploaded = await uploadEligibilityEvidence(
+                  orgUuid, profile.learner_uuid, file, accessToken, crypto.randomUUID()
+                )
+                const files = await listEligibilityEvidence(orgUuid, profile.learner_uuid, accessToken)
+                const verifiedFiles = files.filter((item) =>
+                  item.purpose === 'eligibility_evidence' && item.upload_status === 'ready' && Boolean(item.verified_at)
+                )
+                setEligibilityEvidence(verifiedFiles)
+                setSelectedEligibilityEvidence(uploaded.evidence_uuid)
+                form.reset()
+              } catch (e) {
+                setEligibilityEvidenceError(e instanceof Error ? e.message : 'Unable to upload verified eligibility evidence.')
+              } finally {
+                setEligibilityEvidenceBusy(false)
+              }
+            }}>
+              <label className="grid gap-1 text-xs font-medium text-gray-700">Evidence file (PDF or image)
+                <input type="file" name="eligibility_evidence_file" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" required disabled={eligibilityEvidenceBusy || profile.status === 'closed'} />
+              </label>
+              <button type="submit" disabled={eligibilityEvidenceBusy || profile.status === 'closed'} className="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                {eligibilityEvidenceBusy ? 'Uploading…' : 'Upload private evidence'}
+              </button>
+            </form>
+            {eligibilityEvidenceError && <p role="alert" className="text-xs text-red-800">{eligibilityEvidenceError}</p>}
+            {eligibilityEvidence.length === 0 ? <p role="status" className="text-xs text-gray-600">No current verified evidence files are available.</p> : (
+              <ul className="space-y-2" aria-label="Verified eligibility evidence files">
+                {eligibilityEvidence.map((file) => <li key={file.evidence_uuid} className="flex flex-wrap items-center justify-between gap-2 rounded bg-gray-50 p-2 text-xs">
+                  <span className="break-all font-mono">{file.evidence_uuid}</span>
+                  <span>{file.media_type} · {file.size_bytes} bytes</span>
+                  <button type="button" disabled={eligibilityEvidenceBusy} className="underline" onClick={async () => {
+                    setEligibilityEvidenceBusy(true)
+                    setEligibilityEvidenceError(null)
+                    try {
+                      const content = await fetchEligibilityEvidenceContent(orgUuid, profile.learner_uuid, file.evidence_uuid, accessToken)
+                      const url = URL.createObjectURL(content.blob)
+                      const link = document.createElement('a')
+                      link.href = url
+                      link.download = `eligibility-evidence-${file.evidence_uuid}`
+                      link.click()
+                      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+                    } catch (e) {
+                      setEligibilityEvidenceError(e instanceof Error ? e.message : 'Unable to open the verified evidence file.')
+                    } finally {
+                      setEligibilityEvidenceBusy(false)
+                    }
+                  }}>Inspect original file</button>
+                </li>)}
+              </ul>
+            )}
+          </section>
+
           <form
             className="grid gap-2 rounded border border-gray-200 bg-white p-3 sm:grid-cols-2"
             onSubmit={async (event) => {
@@ -815,10 +1000,10 @@ function LearnerLifecyclePanel({
               const fd = new FormData(form)
               const eligibility_kind = String(fd.get('eligibility_kind')) as 'participation_eligibility' | 'independent_control_eligibility'
               const outcome = String(fd.get('outcome')) as 'eligible' | 'ineligible' | 'renewal_required'
-              const evidence_reference = String(fd.get('evidence_reference') ?? '').trim()
+              const evidence_reference = selectedEligibilityEvidence
               const control_mode_raw = String(fd.get('control_mode') ?? '').trim()
               const control_mode = control_mode_raw === 'dependent' || control_mode_raw === 'independent' ? control_mode_raw : null
-              if (!evidence_reference) return
+              if (!evidence_reference || !eligibilityEvidence.some((file) => file.evidence_uuid === evidence_reference)) return
               setBusy(true)
               setError(null)
               setNotice(null)
@@ -837,6 +1022,7 @@ function LearnerLifecyclePanel({
                 )
                 const refreshed = await getLearnerProfile(orgUuid, profile.learner_uuid, accessToken)
                 setProfile(refreshed)
+                setSelectedEligibilityEvidence('')
                 form.reset()
                 setNotice('Eligibility decision recorded and learner profile refreshed.')
               } catch (err) {
@@ -873,11 +1059,14 @@ function LearnerLifecyclePanel({
               </select>
             </label>
             <label className="text-xs font-medium text-gray-700">
-              Evidence reference
-              <input name="evidence_reference" required maxLength={500} placeholder="ev_... or case_..." className="mt-1 block w-full rounded border border-gray-300 px-2 py-1.5 text-sm" />
+              Verified evidence file
+              <select value={selectedEligibilityEvidence} onChange={(event) => setSelectedEligibilityEvidence(event.target.value)} required disabled={busy || eligibilityEvidence.length === 0} className="mt-1 block w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm">
+                <option value="" disabled>Select verified evidence</option>
+                {eligibilityEvidence.map((file) => <option key={file.evidence_uuid} value={file.evidence_uuid}>{file.evidence_uuid} · {file.media_type}</option>)}
+              </select>
             </label>
             <div className="sm:col-span-2">
-              <button type="submit" disabled={busy} className="rounded-md bg-sky-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-900 disabled:opacity-50">
+              <button type="submit" disabled={busy || !selectedEligibilityEvidence || !eligibilityEvidence.some((file) => file.evidence_uuid === selectedEligibilityEvidence)} className="rounded-md bg-sky-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-900 disabled:opacity-50">
                 Record eligibility decision
               </button>
             </div>

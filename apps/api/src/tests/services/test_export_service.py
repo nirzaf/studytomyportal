@@ -743,3 +743,22 @@ class TestLibraryExport:
             # Already-compressed formats are stored as-is
             bundle = zf.getinfo("courses/course-1/library/media_z/media_z.zip")
             assert bundle.compress_type == zipfile.ZIP_STORED and zf.read(bundle) == b"PK56"
+
+
+@pytest.mark.asyncio
+async def test_batch_export_denies_managed_course_before_serialization(db, org, admin_user, mock_request):
+    ordinary = await _make_course(db, org, id=901, course_uuid="course_export_ordinary", name="Ordinary")
+    managed = await _make_course(db, org, id=902, course_uuid="course_export_managed", name="Managed", public=False, published=False)
+    managed.studytomy_managed = True
+    db.add(managed)
+    await db.commit()
+
+    with (
+        patch("src.services.courses.transfer.export_service.check_resource_access", new_callable=AsyncMock),
+        patch("src.services.courses.transfer.export_service._load_course_export_data", new_callable=AsyncMock) as load,
+        pytest.raises(HTTPException) as error,
+    ):
+        await export_courses_batch(mock_request, [ordinary.course_uuid, managed.course_uuid], admin_user, db)
+
+    assert error.value.detail["code"] == "MANAGED_COURSE_PUBLICATION_REQUIRED"
+    load.assert_not_awaited()

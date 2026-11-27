@@ -4,7 +4,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.core.ee_hooks import notify_ee_course_content_changed
 from src.db.courses.courses import Course
 from src.db.courses.chapters import Chapter
-from src.db.courses.activities import ActivityCreate, Activity, ActivityRead, ActivitySubTypeEnum, ActivityUpdate
+from src.db.courses.activities import ActivityCreate, Activity, ActivityRead, ActivitySubTypeEnum, ActivityTypeEnum, ActivityUpdate
 from src.db.courses.assignments import Assignment
 from src.db.courses.chapter_activities import ChapterActivity
 from src.db.organizations import Organization, OrganizationRead
@@ -208,6 +208,7 @@ class EditorBootstrapResponse(BaseModel):
     activity: ActivityRead
     course: EditorBootstrapCourse
     org: OrganizationRead
+    virtual_lab_options: list[dict] | None = None
 
 
 async def get_editor_bootstrap(
@@ -267,8 +268,15 @@ async def get_editor_bootstrap(
         request, _build_org_read_with_resolved(org, org_config), current_user, db_session
     )
 
+    virtual_lab_options = None
+    if course.studytomy_managed and activity.activity_sub_type == "SUBTYPE_DYNAMIC_EMBED":
+        from src.services.studytomy.virtual_labs import governed_virtual_lab_editor_options
+
+        virtual_lab_options = [option.model_dump(mode="json") for option in governed_virtual_lab_editor_options()]
+
     return EditorBootstrapResponse(
         activity=activity_read,
+        virtual_lab_options=virtual_lab_options,
         course=EditorBootstrapCourse(
             course_uuid=course.course_uuid,
             name=course.name,
@@ -281,7 +289,10 @@ async def get_editor_bootstrap(
                 and course.studytomy_managed is True
                 and course.public is False and course.published is False
                 and course.open_to_contributors is False and activity.published is False
-                and activity.activity_sub_type == "SUBTYPE_DYNAMIC_PAGE"
+                and (
+                    activity.activity_sub_type == "SUBTYPE_DYNAMIC_PAGE"
+                    or activity.activity_type == ActivityTypeEnum.TYPE_ASSIGNMENT
+                )
             ),
         ),
         org=org_read,
@@ -534,6 +545,18 @@ async def update_activity(
             expected_version=expected_current_version,
             current_version=activity.current_version or 1,
         )
+
+    content = update_data.get("content")
+    if isinstance(content, dict) and "virtual_lab" in content:
+        from src.services.studytomy.virtual_labs import validate_governed_virtual_lab_content
+
+        if (
+            not course.studytomy_managed
+            or update_data.get("activity_sub_type", activity.activity_sub_type) != "SUBTYPE_DYNAMIC_EMBED"
+            or "embed_url" in content
+        ):
+            raise HTTPException(409, "A governed lab requires a managed embed activity.")
+        validate_governed_virtual_lab_content(content)
 
     # Create a version snapshot before updating content
     # This preserves the current state for version history.

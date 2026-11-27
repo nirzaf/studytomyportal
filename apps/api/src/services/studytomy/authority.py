@@ -8,9 +8,10 @@ grant.
 
 import re
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.organizations import Organization
@@ -799,6 +800,102 @@ async def get_relationship_for_review(
     )
 
 
+async def _require_guardian_authority_evidence(
+    db_session: AsyncSession, organization: Organization, reviewer: PublicUser,
+    profile: StudyLearnerProfile, relationship: StudyRelationship, reference: str, now: datetime,
+) -> str | None:
+    """Resolve either relationship-bound evidence or a learner-reported case attachment."""
+    from src.db.studytomy.operations import StudyEvidenceFile
+    from src.services.studytomy.learners import _current_policies
+
+    evidence_policy_ids: list[int]
+    linked_case_uuid: str | None = None
+    if reference.startswith("case_"):
+        try:
+            linked_case_uuid = str(UUID(reference.removeprefix("case_")))
+        except ValueError:
+            linked_case_uuid = None
+        if linked_case_uuid is None:
+            raise HTTPException(status_code=422, detail="The case evidence reference is invalid.")
+
+        # A case reference is accepted only for an authorized case reported by
+        # this learner, with the actual private evidence attachment bound to it.
+        from src.services.studytomy.cases import _require_case_review
+
+        try:
+            case, case_access = await _require_case_review(
+                db_session, organization, reviewer, UUID(linked_case_uuid),
+            )
+        except HTTPException:
+            raise HTTPException(status_code=422, detail="The linked safeguarding case is unavailable.") from None
+        if case.reporter_user_id != profile.user_id:
+            raise HTTPException(status_code=422, detail="The safeguarding case is not bound to this learner.")
+        d15, = await _current_policies(db_session, organization, (StudyPolicyKey.D_15,), now)
+        evidence_policy_ids = [*case_access.policy_version_ids, int(d15.id)]
+        case_evidence = (
+            await db_session.execute(
+                select(StudyEvidenceFile).where(
+                    StudyEvidenceFile.org_id == organization.id,
+                    StudyEvidenceFile.safeguarding_case_uuid == linked_case_uuid,
+                    StudyEvidenceFile.purpose == "safeguarding_case_evidence",
+                    StudyEvidenceFile.upload_status == "ready",
+                    StudyEvidenceFile.verified_at.is_not(None),
+                ).with_for_update().execution_options(populate_existing=True)
+            )
+        ).scalars().all()
+        # `case_<uuid>` is the established client reference. Resolve it to the
+        # actual private attachment only when that case has exactly one eligible
+        # file; choosing the first of several files would make the evidence link
+        # ambiguous and could bind the authority decision to unrelated material.
+        if len(case_evidence) != 1:
+            raise HTTPException(
+                status_code=422,
+                detail="The evidence reference must resolve to one verified attachment for this learner and authority decision.",
+            )
+        evidence = case_evidence[0]
+    else:
+        evidence_policy_ids = [
+            int(policy.id)
+            for policy in await _current_policies(
+                db_session,
+                organization,
+                (
+                    StudyPolicyKey.D_01,
+                    StudyPolicyKey.D_03,
+                    StudyPolicyKey.D_12,
+                    StudyPolicyKey.D_13,
+                    StudyPolicyKey.D_15,
+                ),
+                now,
+            )
+        ]
+        evidence = (
+            await db_session.execute(
+                select(StudyEvidenceFile).where(
+                    StudyEvidenceFile.org_id == organization.id,
+                    StudyEvidenceFile.learner_profile_id == profile.id,
+                    StudyEvidenceFile.relationship_uuid == relationship.relationship_uuid,
+                    StudyEvidenceFile.evidence_uuid == reference,
+                    StudyEvidenceFile.purpose == "guardian_authority_evidence",
+                    StudyEvidenceFile.upload_status == "ready",
+                    StudyEvidenceFile.verified_at.is_not(None),
+                ).with_for_update().execution_options(populate_existing=True)
+            )
+        ).scalars().first()
+
+    if evidence is None:
+        raise HTTPException(
+            status_code=422,
+            detail="The evidence reference is not a verified attachment for this learner and authority decision.",
+        )
+    if evidence.policy_version_ids != evidence_policy_ids:
+        raise HTTPException(
+            status_code=409,
+            detail="The evidence attachment is governed by superseded policy versions.",
+        )
+    return linked_case_uuid
+
+
 async def decide_relationship_request(
     db_session: AsyncSession,
     organization: Organization,
@@ -923,8 +1020,8 @@ async def decide_relationship_request(
             },
         )
 
-    resolved_valid_from: Optional[datetime] = None
-    resolved_valid_to: Optional[datetime] = None
+    resolved_valid_from: datetime | None = None
+    resolved_valid_to: datetime | None = None
     if request.outcome == StudyRelationshipDecisionOutcome.ACCEPT:
         assert request.valid_to is not None
         resolved_valid_to = _as_utc(request.valid_to)
@@ -988,44 +1085,9 @@ async def decide_relationship_request(
                     },
                 )
 
-    if request.evidence_reference.startswith("ev_"):
-        from src.db.studytomy.operations import StudyEvidenceFile
-        from src.services.studytomy.learners import _current_policies
-
-        evidence = (
-            await db_session.execute(
-                select(StudyEvidenceFile).where(
-                    StudyEvidenceFile.org_id == organization.id,
-                    StudyEvidenceFile.learner_profile_id == profile.id,
-                    StudyEvidenceFile.relationship_uuid == relationship.relationship_uuid,
-                    StudyEvidenceFile.evidence_uuid == request.evidence_reference,
-                    StudyEvidenceFile.purpose == "guardian_authority_evidence",
-                    StudyEvidenceFile.upload_status == "ready",
-                )
-            )
-        ).scalars().first()
-        if evidence is None:
-            raise HTTPException(
-                status_code=422,
-                detail="The evidence reference is not a ready guardian-authority attachment for this relationship.",
-            )
-        evidence_policies = await _current_policies(
-            db_session,
-            organization,
-            (
-                StudyPolicyKey.D_01,
-                StudyPolicyKey.D_03,
-                StudyPolicyKey.D_12,
-                StudyPolicyKey.D_13,
-                StudyPolicyKey.D_15,
-            ),
-            now,
-        )
-        if evidence.policy_version_ids != [int(policy.id) for policy in evidence_policies]:
-            raise HTTPException(
-                status_code=409,
-                detail="The evidence attachment is governed by superseded policy versions.",
-            )
+    evidence_case_uuid = await _require_guardian_authority_evidence(
+        db_session, organization, reviewer, profile, relationship, request.evidence_reference, now,
+    )
 
     owner_assignment = await _reviewer_owner_assignment(
         db_session,
@@ -1086,6 +1148,7 @@ async def decide_relationship_request(
             "valid_to": relationship.valid_to.isoformat() if relationship.valid_to else None,
             "authority_version": relationship.authority_version,
             "learner_access_version": profile.access_version,
+            **({"evidence_case_uuid": evidence_case_uuid} if evidence_case_uuid else {}),
         },
         policy_refs=current_policy_ids,
         dedupe_key=f"studytomy:relationship:{relationship.relationship_uuid}:v{relationship.authority_version}",
@@ -1206,44 +1269,9 @@ async def restrict_relationship_authority(
             },
         )
 
-    if request.evidence_reference.startswith("ev_"):
-        from src.db.studytomy.operations import StudyEvidenceFile
-        from src.services.studytomy.learners import _current_policies
-
-        evidence = (
-            await db_session.execute(
-                select(StudyEvidenceFile).where(
-                    StudyEvidenceFile.org_id == organization.id,
-                    StudyEvidenceFile.learner_profile_id == profile.id,
-                    StudyEvidenceFile.relationship_uuid == relationship.relationship_uuid,
-                    StudyEvidenceFile.evidence_uuid == request.evidence_reference,
-                    StudyEvidenceFile.purpose == "guardian_authority_evidence",
-                    StudyEvidenceFile.upload_status == "ready",
-                )
-            )
-        ).scalars().first()
-        if evidence is None:
-            raise HTTPException(
-                status_code=422,
-                detail="The evidence reference is not a ready guardian-authority attachment for this relationship.",
-            )
-        evidence_policies = await _current_policies(
-            db_session,
-            organization,
-            (
-                StudyPolicyKey.D_01,
-                StudyPolicyKey.D_03,
-                StudyPolicyKey.D_12,
-                StudyPolicyKey.D_13,
-                StudyPolicyKey.D_15,
-            ),
-            now,
-        )
-        if evidence.policy_version_ids != [int(policy.id) for policy in evidence_policies]:
-            raise HTTPException(
-                status_code=409,
-                detail="The evidence attachment is governed by superseded policy versions.",
-            )
+    evidence_case_uuid = await _require_guardian_authority_evidence(
+        db_session, organization, reviewer, profile, relationship, request.evidence_reference, now,
+    )
 
     owner_assignment = await _reviewer_owner_assignment(
         db_session,
@@ -1272,6 +1300,26 @@ async def restrict_relationship_authority(
     profile.updated_at = now
     db_session.add(relationship)
     db_session.add(profile)
+    from src.db.studytomy.operations import StudyOutboxRecord, StudyOutboxStatus
+
+    # Leased records require send-time authorization; their provider outcome
+    # can be uncertain and must not be overwritten here.
+    await db_session.execute(
+        update(StudyOutboxRecord)
+        .where(
+            StudyOutboxRecord.org_id == organization.id,
+            StudyOutboxRecord.recipient_user_id == relationship.adult_user_id,
+            StudyOutboxRecord.authority_reference_uuid == relationship.relationship_uuid,
+            StudyOutboxRecord.status.in_((StudyOutboxStatus.QUEUED, StudyOutboxStatus.RETRY)),
+        )
+        .values(
+            status=StudyOutboxStatus.SUPPRESSED,
+            last_error_code="RELATIONSHIP_AUTHORITY_CHANGED",
+            version=StudyOutboxRecord.version + 1,
+            completed_at=now,
+            updated_at=now,
+        )
+    )
     await db_session.flush()
     invalidate_protected_studytomy_user_ids(db_session)
     await append_business_event(
@@ -1298,6 +1346,7 @@ async def restrict_relationship_authority(
             "approved_scopes": relationship.approved_scopes,
             "authority_version": relationship.authority_version,
             "access_version": profile.access_version,
+            **({"evidence_case_uuid": evidence_case_uuid} if evidence_case_uuid else {}),
         },
         policy_refs=current_policy_ids,
         dedupe_key=f"studytomy:relationship:{relationship.relationship_uuid}:v{relationship.authority_version}",

@@ -81,6 +81,31 @@ class CheckoutLearnerChoice(BaseModel):
     label: str
 
 
+async def _course_offer_ready_for_sale(
+    db: AsyncSession, org: Organization, terms: StudyOfferTerms,
+) -> bool:
+    """Require current F07 readiness for every course in an offer.
+
+    A pilot-policy version allowlist is necessary but is not a substitute for
+    current course review, support-capacity evidence, and recorded pilot
+    acceptance. Until those records exist, checkout remains closed.
+    """
+    from src.services.studytomy.readiness import evaluate_course_offer_readiness
+
+    course_uuids = sorted({
+        resource.resource_uuid
+        for resource in terms.resources or []
+        if getattr(resource.kind, "value", resource.kind) == "course"
+    })
+    if not course_uuids:
+        return False
+    for course_uuid in course_uuids:
+        readiness = await evaluate_course_offer_readiness(db, org, course_uuid)
+        if not readiness.ready_to_sell:
+            return False
+    return True
+
+
 async def list_checkout_offers(db: AsyncSession, org: Organization) -> list[CheckoutOfferChoice]:
     """List only the immutable offer versions explicitly opened by the pilot policy."""
     pilot = await _active_policy(db, org, StudyPolicyKey.D_17, datetime.now(UTC))
@@ -112,6 +137,8 @@ async def list_checkout_offers(db: AsyncSession, org: Organization) -> list[Chec
         except ValidationError:
             continue
         if terms.completion_blockers():
+            continue
+        if not await _course_offer_ready_for_sale(db, org, terms):
             continue
         title = version.terms.get("title") if isinstance(version.terms, dict) else None
         choices.append(
@@ -411,11 +438,22 @@ async def accept_named_order(
     )
     if _terms_snapshot(current, offer.offer_kind)[1] != quote.offer_sha256:
         raise studytomy_http_error(409, "ORDER_QUOTE_CHANGED", "The referenced offer content changed.")
+    sale_open = (
+        _pilot_offer_versions(pilot).get(offer_uuid) == version.version_uuid
+        and await _course_offer_ready_for_sale(db, locked, current)
+    )
+    if not sale_open:
+        raise studytomy_http_error(
+            409,
+            "OFFER_SALES_PAUSED",
+            "This offer is not currently cleared by course readiness and pilot policy.",
+        )
     if terms.capacity_is_limited:
         limit, duration = await resolve_finite_capacity_terms(db, locked, offer_uuid, terms, now)
         await reserve_offer_capacity(
             db, org_id=locked.id, offer_id=version.offer_id, request_uuid=customer_ref,
-            places=quote.learner_count, approved_limit=limit, approved_hold_duration=duration, sales_open=True,
+            places=quote.learner_count, approved_limit=limit, approved_hold_duration=duration,
+            sales_open=sale_open,
         )
     acceptance = StudyOrderAcceptance(
         org_id=locked.id, order_id=order.id, purchaser_user_id=purchaser_id,

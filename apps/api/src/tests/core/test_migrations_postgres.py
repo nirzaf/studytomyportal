@@ -7,8 +7,14 @@ database configuration and never run against a production or development DB.
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+import io
 import ipaddress
 import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tarfile
 from uuid import uuid4
 
 import pytest
@@ -36,7 +42,7 @@ def _test_database_url():
         loopback = ipaddress.ip_address(url.host).is_loopback
     except ValueError:
         loopback = url.host == "localhost"
-    if not loopback or not url.database or not url.database.lower().endswith("_test"):
+    if not loopback or not url.database or not url.database.lower().endswith("_test") or url.query:
         pytest.fail("Migration rehearsals require a loopback PostgreSQL database ending in _test.")
     if url.drivername not in {"postgresql", "postgresql+psycopg2"}:
         pytest.fail("Migration rehearsals require the declared synchronous PostgreSQL driver.")
@@ -48,6 +54,7 @@ def _isolated_database():
     base_url = _test_database_url()
     database = f"st_aud19_{uuid4().hex}_test"
     admin_engine = create_engine(base_url)
+    created = False
     try:
         with admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
             exists = connection.execute(
@@ -57,13 +64,17 @@ def _isolated_database():
             if exists:
                 pytest.fail("Refusing to reuse an existing AUD-19 database.")
             connection.execute(text(f'CREATE DATABASE "{database}" TEMPLATE template0'))
+            created = True
 
         database_url = base_url.set(database=database).render_as_string(hide_password=False)
         yield database_url, database
     finally:
-        with admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
-            connection.execute(text(f'DROP DATABASE IF EXISTS "{database}"'))
-        admin_engine.dispose()
+        try:
+            if created:
+                with admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+                    connection.execute(text(f'DROP DATABASE "{database}"'))
+        finally:
+            admin_engine.dispose()
 
 
 @pytest.mark.studytomy_postgres
@@ -352,3 +363,122 @@ def test_lossy_downgrade_of_dependent_and_provenance_revision_is_refused():
                 assert kept == 1
         finally:
             engine.dispose()
+
+
+@pytest.mark.studytomy_postgres
+def test_populated_pre_studytomy_upgrade_and_restore(tmp_path):
+    _test_database_url()
+    tools_container = os.environ.get("STUDYTOMY_TEST_PG_TOOLS_CONTAINER")
+    if not tools_container and not (shutil.which("pg_dump") and shutil.which("pg_restore")):
+        pytest.skip("Add PostgreSQL pg_dump and pg_restore matching the server version to PATH.")
+
+    # The initial migration assumes an existing native schema. Use the actual
+    # historical application bootstrap rather than stamping today's models.
+    baseline = "4f3346af99b516bab2d422217905d078096d55ac"
+    repo = Path(__file__).resolve().parents[5]
+    archive = subprocess.run(
+        ["git", "archive", baseline, "apps/api"], cwd=repo, capture_output=True,
+    )
+    if archive.returncode:
+        pytest.skip(f"Fetch historical Studytomy bootstrap commit {baseline} for this rehearsal.")
+    with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as snapshot:
+        snapshot.extractall(tmp_path, filter="data")
+
+    with (
+        _isolated_database() as (source_url, source_db),
+        _isolated_database() as (restore_url, restore_db),
+    ):
+        historical_api = tmp_path / "apps/api"
+        fixture = subprocess.run(
+            [sys.executable, "-c", """
+import os
+from sqlalchemy import create_engine
+from sqlmodel import Session
+from src.core.migrations import ensure_schema
+from src.db.courses.courses import Course
+from src.db.organizations import Organization
+from src.db.users import User
+from src.db.trails import Trail
+from src.db.trail_runs import StatusEnum, TrailRun
+
+url = os.environ["STUDYTOMY_TEST_DATABASE_URL"]
+assert ensure_schema(url).after == ["f5a8b3d0c2e4"]
+engine = create_engine(url)
+with Session(engine) as session:
+    org = Organization(name="Synthetic school", slug="audit-school", org_uuid="org_audit", email="school@example.invalid")
+    user = User(username="audit-learner", first_name="Synthetic", last_name="Learner",
+                email="learner@example.invalid", user_uuid="user_audit")
+    session.add_all([org, user])
+    session.flush()
+    course = Course(name="Synthetic physics", org_id=org.id, course_uuid="course_audit",
+                    public=True, published=True, open_to_contributors=False)
+    trail = Trail(org_id=org.id, user_id=user.id, trail_uuid="trail_audit")
+    session.add_all([course, trail])
+    session.flush()
+    session.add(TrailRun(trail_id=trail.id, course_id=course.id, org_id=org.id, user_id=user.id,
+                         status=StatusEnum.STATUS_COMPLETED, creation_date="2026-01-01", update_date="2026-01-01"))
+    session.commit()
+engine.dispose()
+"""],
+            env={**os.environ, "STUDYTOMY_TEST_DATABASE_URL": source_url, "PYTHONPATH": str(historical_api)},
+            cwd=historical_api, capture_output=True, text=True,
+        )
+        assert fixture.returncode == 0, "Historical application failed to provision the synthetic fixture."
+
+        connection = make_url(source_url)
+        pg_env = {
+            **{key: value for key, value in os.environ.items() if not key.startswith("PG")},
+            "PGHOST": connection.host,
+            "PGPORT": str(connection.port or 5432),
+            "PGUSER": connection.username,
+            "PGPASSWORD": connection.password or "",
+        }
+        prefix = []
+        if tools_container:
+            # Use client binaries from the same disposable server image in CI.
+            pg_env.update(PGHOST="127.0.0.1", PGPORT="5432")
+            prefix = [
+                "docker", "exec", "-i", "-e", "PGHOST", "-e", "PGPORT",
+                "-e", "PGUSER", "-e", "PGPASSWORD", tools_container,
+            ]
+        backup = tmp_path / "pre-studytomy.dump"
+        with backup.open("wb") as output:
+            subprocess.run(
+                [*prefix, "pg_dump", "--no-password", "--format=custom", source_db],
+                env=pg_env, check=True, stdout=output, stderr=subprocess.PIPE,
+            )
+        with backup.open("rb") as source:
+            subprocess.run(
+                [*prefix, "pg_restore", "--no-password", "--exit-on-error", "--single-transaction",
+                 "--dbname", restore_db],
+                env=pg_env, check=True, stdin=source, capture_output=True,
+            )
+
+        expected_rows = [("org_audit", "user_audit", "course_audit", True, True, "trail_audit", "STATUS_COMPLETED")]
+        current_heads = head_revisions()
+        assert len(current_heads) == 1
+        for url in (source_url, restore_url):
+            engine = create_engine(url)
+            try:
+                for expected_head in (["f5a8b3d0c2e4"], current_heads):
+                    with engine.connect() as reader:
+                        assert migrations.current_revisions(reader) == expected_head
+                        assert reader.execute(text("""
+                            SELECT o.org_uuid, u.user_uuid, c.course_uuid, c.public, c.published, t.trail_uuid, e.status
+                            FROM trailrun e
+                            JOIN organization o ON o.id = e.org_id
+                            JOIN "user" u ON u.id = e.user_id
+                            JOIN course c ON c.id = e.course_id AND c.org_id = o.id
+                            JOIN trail t ON t.id = e.trail_id AND t.user_id = u.id AND t.org_id = o.id
+                        """)).all() == expected_rows
+                        if expected_head == current_heads:
+                            assert reader.execute(text(
+                                "SELECT studytomy_managed FROM course WHERE course_uuid = 'course_audit'"
+                            )).scalar_one() is False
+                            assert "ck_st_course_release_digest" in {
+                                c["name"] for c in inspect(reader).get_check_constraints("st_course_release")
+                            }
+                    if expected_head != current_heads:
+                        assert ensure_schema(url).after == current_heads
+            finally:
+                engine.dispose()

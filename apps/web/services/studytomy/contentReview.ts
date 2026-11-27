@@ -8,6 +8,12 @@ export type CourseEvidence = {
   verified_at: string
 }
 
+export type CourseReviewEvidenceSelection = {
+  revision_sha256: string
+  rights_evidence_uuid: string
+  accessibility_evidence_uuid: string
+}
+
 export type CourseReviewCandidate = {
   revision_sha256: string
   evidence: CourseEvidence[]
@@ -73,6 +79,16 @@ export function courseReviewClient(orgUuid: string, courseUuid: string, token: s
         headers: { 'Idempotency-Key': key },
         body,
       })).json()
+    },
+    async verifyEvidence(selection: CourseReviewEvidenceSelection, signal: AbortSignal): Promise<CourseEvidence[]> {
+      return (await request('content-review-candidate/verify-evidence', signal, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selection),
+      })).json()
+    },
+    async designateManagedDraft(signal: AbortSignal): Promise<void> {
+      await request('managed-draft', signal, { method: 'PUT' })
     },
     async attachment(id: string, signal: AbortSignal): Promise<Blob> {
       return (await request(`evidence-files/${encodeURIComponent(id)}/content`, signal)).blob()

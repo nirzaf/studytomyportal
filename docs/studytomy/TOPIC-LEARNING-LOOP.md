@@ -46,7 +46,7 @@ Local API tests covered transitions, authorization branches, and PostgreSQL jour
 
 The [live Playwright test](../../apps/e2e/features/studytomy/tests/21-managed-pdf-topic-check-live.spec.ts) uses real HTTP responses and browser sessions. Use a disposable loopback stack with the standard Studytomy test runtime identity and database settings. Create and publish a synthetic managed PDF lesson through the existing independent review flow, bind its exact release and PDF hash to a reviewed fractions topic, and grant the synthetic learner access and the required consent. Use a fresh learner episode for each run.
 
-Set `E2E_STUDYTOMY_TOPIC_CHECK_FIXTURE` to a local JSON manifest outside Git. It requires `orgSlug`, `orgUuid`, `learnerUuid`, `courseUuid`, `releaseUuid`, `activityUuid`, `courseName`, `pdfName`, `pdfPage`, `wrongAnswer` and `recheckAnswer`. The `states` object contains Playwright storage-state file paths for `learner`, `admin`, `author`, `unrelatedTeacher` and `otherLearner`. Keep storage-state files private. The administrator and author identities both need current course and learner scope. The other two identities must be signed in and lack access to that learner's timeline.
+Set `E2E_STUDYTOMY_TOPIC_CHECK_FIXTURE` to a local JSON manifest outside Git. It requires `orgSlug`, `orgUuid`, `learnerUuid` (learner profile), `learnerUserUuid` (signed-in user), `courseUuid`, `releaseUuid`, `activityUuid`, `courseName`, `pdfName`, `pdfPage`, `wrongAnswer` and `recheckAnswer`. The `states` object contains Playwright storage-state file paths for `learner`, `admin`, `author`, `unrelatedTeacher` and `otherLearner`. Use absolute paths, owner-only files, and owner-only parent directories outside the checkout for the manifest and all browser states. The administrator and author identities both need current course and learner scope. The other two identities must be signed in and lack access to that learner's timeline.
 
 Run from `apps/e2e`:
 
@@ -54,9 +54,17 @@ Run from `apps/e2e`:
 bun run test features/studytomy/tests/21-managed-pdf-topic-check-live.spec.ts --project=chromium --reporter=list
 ```
 
-The scenario opens the already published PDF, submits a wrong answer, replays the submission, reloads and answers the distinct recheck. It checks the timeline through both authorized staff views and verifies that the two unrelated identities cannot read it. The scenario starts after publication, so separately record the author and independent reviewer actions used to provision the fixture.
+The scenario opens the already published PDF, types a wrong answer, reloads to recover the unsent browser draft, verifies that recovery sent no submission, then submits the answer. It replays the submission, reloads, and answers the distinct recheck. It checks the timeline through both authorized staff views and verifies that the two unrelated identities cannot read it. The scenario starts after publication, so separately record the author and independent reviewer actions used to provision the fixture.
 
 Local verification discovered the scenario and passed E2E TypeScript checking. Playwright stopped in global setup because no test-only admin password was configured. The guarded PostgreSQL topic-check suite passed 14 tests, including the persistence fixture with an injected binding and the managed PDF author-attribution regression.
+
+The test-only `scripts/local_pdf_topic_check_e2e_evidence.py` helper builds
+the D-16 review payload for the fixture from an exact course candidate
+snapshot, the current candidate digest, the curriculum binding and the
+retained PDF. The helper rejects a stale snapshot, replaced PDF, ambiguous
+activity or missing physical page. It performs no writes. The remaining
+fixture setup still needs to create, approve and release the records through
+the guarded workflow and establish the signed-in browser roles.
 
 ### Recovering an unsubmitted topic-check answer
 

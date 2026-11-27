@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from src.core.events.database import get_db_session
 from src.db.organization_config import OrganizationConfig
+from src.db.studytomy.family import StudyLearnerProfile
 from src.db.users import AnonymousUser, APITokenUser
 from src.routers import mcp_oauth
 from src.security.auth import get_current_user
@@ -253,3 +254,27 @@ async def test_approval_decided_elsewhere_or_store_down(app, client, org, admin_
     assert resp.status_code == 404 and "expired" in resp.json()["detail"]
     with patch.object(approvals, "decide", side_effect=approvals.ApprovalUnavailable()):
         assert (await client.post(path, json={"approve": True})).status_code == 503
+
+@pytest.mark.asyncio
+async def test_protected_learner_cannot_authorize_mcp_grant(
+    app, client, db, org, admin_user, regular_user,
+):
+    db.add(StudyLearnerProfile(
+        org_id=org.id, user_id=regular_user.id, created_by_user_id=admin_user.id,
+    ))
+    await db.commit()
+    as_user(app, regular_user)
+    url = "/api/v1/mcp/oauth/authorize"
+
+    with patch.object(mcp_oauth.oauth, "describe_authorization", new_callable=AsyncMock) as describe, patch.object(
+        mcp_oauth.oauth, "decide_authorization", new_callable=AsyncMock,
+    ) as decide:
+        for response in (
+            await client.get(url, params={"request": "pending-request"}),
+            await client.post(url, json={"request": "pending-request", "approve": True, "org_id": org.id}),
+        ):
+            assert response.status_code == 409
+            assert response.json()["detail"]["code"] == "POLICY_NOT_APPROVED"
+
+    describe.assert_not_awaited()
+    decide.assert_not_awaited()

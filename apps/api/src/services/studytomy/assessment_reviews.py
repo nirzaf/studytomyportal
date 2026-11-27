@@ -54,6 +54,7 @@ class AssessmentReviewEvidence(BaseModel):
     maximum_points: int
     passed: bool
     evaluator_version: str
+    appeal: "AssessmentAppealReceipt | None" = None
 
 
 class ArchivedAssessmentResponses(BaseModel):
@@ -137,6 +138,8 @@ async def record_assessment_retry_grant(
     assignment_uuid: str,
     submission_uuid: str,
     body: AssessmentRetryGrant,
+    *,
+    expected_attempt_number: int | None = None,
 ) -> AssessmentDeadlineReceipt:
     await lock_organization(db, org.id)
     evidence = await read_assessment_review_evidence(
@@ -164,6 +167,8 @@ async def record_assessment_retry_grant(
         assignment_uuid,
         submission_uuid,
     )
+    if expected_attempt_number is not None and submission.attempt_number != expected_attempt_number:
+        raise HTTPException(409, "The current assessment attempt changed.")
     await verified_retry_response_archive(db, assignment, submission)
     key = f"assessment_retry_grant:{evidence.round_uuid}"
     prior = await db.scalar(
@@ -343,6 +348,8 @@ async def record_assessment_deadline_adjustment(
     assignment_uuid: str,
     submission_uuid: str,
     body: AssessmentDeadlineAdjustment,
+    *,
+    expected_attempt_number: int | None = None,
 ) -> AssessmentDeadlineReceipt:
     await lock_organization(db, org.id)
     course, assignment, submission, profile = await _review_subject(
@@ -370,6 +377,8 @@ async def record_assessment_deadline_adjustment(
             now=now,
         )
     policies = await _current_policies(db, org, REVIEW_POLICIES, now)
+    if expected_attempt_number is not None and submission.attempt_number != expected_attempt_number:
+        raise HTTPException(409, "The current assessment attempt changed.")
     if submission.submission_status not in (
         AssignmentUserSubmissionStatus.PENDING,
         AssignmentUserSubmissionStatus.NOT_SUBMITTED,
@@ -497,6 +506,7 @@ async def read_assessment_review_evidence(
     *,
     lock_attempt: bool = False,
     attempt_number: int | None = None,
+    include_appeal: bool = False,
 ) -> AssessmentReviewEvidence:
     unavailable = HTTPException(404, "Assessment review evidence not found.")
     row = await _review_subject(
@@ -539,6 +549,21 @@ async def read_assessment_review_evidence(
         raise unavailable
 
     state = result.after_state
+    appeal = None
+    if include_appeal:
+        request = await db.scalar(
+            select(StudyBusinessEvent)
+            .where(
+                StudyBusinessEvent.org_id == org.id,
+                StudyBusinessEvent.actor_user_id == profile.user_id,
+                StudyBusinessEvent.action == "studytomy.assessment.appeal_requested",
+                StudyBusinessEvent.operation_uuid == result.resource_uuid,
+            )
+            .order_by(StudyBusinessEvent.id.desc())
+            .limit(1)
+        )
+        if request is not None:
+            appeal = await _appeal_receipt(db, request)
     return AssessmentReviewEvidence(
         round_uuid=result.resource_uuid,
         result_uuid=result.event_uuid,
@@ -547,6 +572,7 @@ async def read_assessment_review_evidence(
         maximum_points=state["maximum_points"],
         passed=state["passed"],
         evaluator_version=state["evaluator_version"],
+        appeal=appeal,
     )
 
 

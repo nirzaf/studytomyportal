@@ -506,3 +506,90 @@ def test_mapping_uniqueness_applies_only_while_pending_or_approved():
     )
     assert index.unique is True
     assert str(index.dialect_options["postgresql"]["where"]) == "status IN ('pending_review', 'approved')"
+
+
+@pytest.mark.asyncio
+async def test_sources_only_explore_search_keeps_membership_gate_and_skips_providers(monkeypatch):
+    from src.services.studytomy import syllabus_library as library
+
+    checks = []
+
+    async def require_membership(actor_id, org_id, db):
+        checks.append(("membership", actor_id, org_id))
+
+    async def published_curriculum(db, org, revision):
+        return None
+
+    async def retrieve(db, org, command, *, semantic, selected):
+        assert not semantic
+        assert selected is None
+        checks.append(("retrieve", org.id, command.query))
+        return []
+
+    async def unexpected_ai_call(*args, **kwargs):
+        pytest.fail("Sources-only practice must not call AI services")
+
+    monkeypatch.setattr(library, "require_org_membership", require_membership)
+    monkeypatch.setattr(library, "_published_curriculum", published_curriculum)
+    monkeypatch.setattr(library, "_retrieve", retrieve)
+    monkeypatch.setattr(library, "_current_ai_consent", unexpected_ai_call)
+    monkeypatch.setattr(library, "_answer", unexpected_ai_call)
+    response = await library.explore_topic(
+        None, SimpleNamespace(id=7), SimpleNamespace(id=12),
+        ExploreTopicRequest(query="photosynthesis", sources_only=True),
+    )
+
+    assert checks == [("membership", 12, 7), ("retrieve", 7, "photosynthesis")]
+    assert response.status == "insufficient_evidence"
+    assert response.sources == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("denial", [None, "supervised", "source", "assessment", "model", "exhausted"])
+async def test_syllabus_ai_requires_exact_policy_and_available_allowance(monkeypatch, denial):
+    from unittest.mock import AsyncMock, Mock
+
+    from src.services.studytomy import syllabus_library as library
+
+    fingerprint = "a" * 64
+    rules = {
+        "supervision": "supervised_only" if denial == "supervised" else "independent",
+        "materials": {"curriculum_uuid": "revision-1", "source_version_uuids": ["source-1"]},
+        "usage_limits": 3,
+        "review": {"provider": "google", "model": "approved-model", "embedding_space": fingerprint},
+    }
+    policy = SimpleNamespace(specified_value=lambda area: {"syllabus_exploration": rules[area]})
+    monkeypatch.setattr(library, "StudyPolicyBody", SimpleNamespace(model_validate=lambda _: policy))
+    monkeypatch.setattr(library, "_active_policy", AsyncMock(return_value=SimpleNamespace(body={})))
+    monkeypatch.setattr(library, "has_current_consent_scope", AsyncMock(return_value=True))
+    monkeypatch.setattr(library, "is_protected_studytomy_learner", AsyncMock(return_value=True))
+    monkeypatch.setattr(library, "ai_block_reason", lambda *_: None)
+    monkeypatch.setattr(library, "get_learnhouse_config", lambda: SimpleNamespace(
+        ai_config=SimpleNamespace(provider="google", base_url=None)
+    ))
+    monkeypatch.setattr(library, "embedding_provenance", lambda: (fingerprint, {}))
+    monkeypatch.setattr(library, "resolve_model_for_org", AsyncMock(
+        return_value="other-model" if denial == "model" else "approved-model"
+    ))
+    consume = Mock(return_value=denial != "exhausted")
+    monkeypatch.setattr(library, "_consume_exploration_allowance", consume)
+    db = SimpleNamespace(execute=AsyncMock(side_effect=[
+        SimpleNamespace(scalar_one_or_none=lambda: SimpleNamespace(id=42)),
+        SimpleNamespace(scalar_one_or_none=lambda: 17 if denial == "assessment" else None),
+        SimpleNamespace(scalar_one_or_none=lambda: {}),
+    ]))
+    command = ExploreTopicRequest(
+        query="Equivalent fractions",
+        search_scope="selected_syllabus",
+        selected_curriculum_uuid="revision-1",
+        source_version_uuids=["outside-approval" if denial == "source" else "source-1"],
+    )
+    allowed, reason = await library._current_ai_consent(
+        db, SimpleNamespace(id=7), SimpleNamespace(id=12), command, consume_allowance=True
+    )
+    assert allowed is (denial is None)
+    assert (reason is None) is allowed
+    if denial in (None, "exhausted"):
+        consume.assert_called_once_with(7, 12, 3)
+    else:
+        consume.assert_not_called()

@@ -1,6 +1,6 @@
 """Organization-scoped endpoints for explicit Studytomy governance decisions."""
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -9,6 +9,8 @@ from src.db.organizations import Organization
 from src.db.user_organizations import UserOrganization
 from src.db.studytomy.governance import (
     StudyOwnerAssignmentCreate,
+    StudyOwnerAssignment,
+    StudyStaffScope,
     StudyOwnerAssignmentRead,
     StudyPolicyApprovalRequest,
     StudyPolicyProposal,
@@ -41,6 +43,9 @@ from src.services.studytomy.readiness import (
     evaluate_course_offer_readiness,
 )
 from src.security.rbac.constants import ADMIN_OR_MAINTAINER_ROLE_IDS
+from src.security.studytomy_access import StudytomyCapabilityName, evaluate_studytomy_staff_access
+from src.services.studytomy.cases import _require_safeguarding_triage
+from src.services.studytomy.support import _staff_context
 
 
 router = APIRouter()
@@ -82,6 +87,56 @@ async def _resolve_org(
             detail="Organization administration is required for this action",
         )
     return organization
+
+
+@router.get("/orgs/{org_uuid}/me/staff-workspaces")
+async def api_my_staff_workspaces(
+    org_uuid: str, response: Response,
+    current_user: PublicUser = Depends(get_authenticated_non_api_token_user),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> list[str]:
+    org = await _resolve_org(org_uuid, current_user, db_session, admin_only=False)
+    response.headers["Cache-Control"] = "private, no-store"
+    workspaces = set()
+    for workspace, authority in (("cases", _require_safeguarding_triage), ("support-cases", _staff_context)):
+        try:
+            await authority(db_session, org, current_user)
+        except HTTPException as error:
+            if error.status_code not in (403, 404, 409):
+                raise
+        else:
+            workspaces.add(workspace)
+    capability = StudytomyCapabilityName
+    mappings = {
+        (capability.FAMILY_AUTHORITY_REVIEW, "learner"): "families",
+        (capability.SAFEGUARDING_CASE_REVIEW, "case"): "cases",
+        (capability.FINANCIAL_RECONCILIATION, "collection"): "finance",
+        (capability.REFUND_APPROVAL, "order"): "finance",
+        (capability.PRIVACY_RETENTION_REVIEW, "case"): "privacy-reviews",
+        (capability.SUPPORT_OPERATING_REPORT, "function"): "support-cases",
+    }
+    names = {name.value for name, _ in mappings}
+    rows = (await db_session.execute(
+        select(StudyStaffScope.capability, StudyStaffScope.scope_kind, StudyStaffScope.scope_uuid)
+        .join(StudyOwnerAssignment, StudyOwnerAssignment.id == StudyStaffScope.assignment_id)
+        .where(
+            StudyStaffScope.org_id == org.id, StudyOwnerAssignment.org_id == org.id,
+            StudyOwnerAssignment.user_id == current_user.id, StudyOwnerAssignment.status == "active",
+            StudyStaffScope.status == "active", StudyStaffScope.is_exclusion.is_(False),
+            StudyStaffScope.capability.in_(names | {f"studytomy.{name}" for name in names}),
+        ).distinct()
+    )).all()
+    for name, kind, reference in rows:
+        name = capability(name.removeprefix("studytomy."))
+        workspace = mappings.get((name, kind))
+        if workspace is None or workspace in workspaces:
+            continue
+        decision = await evaluate_studytomy_staff_access(
+            db_session, current_user, org, name, target_scope_kind=kind, target_resource_uuid=reference,
+        )
+        if decision.allowed:
+            workspaces.add(workspace)
+    return sorted(workspaces)
 
 
 @router.get(

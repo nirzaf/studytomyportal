@@ -3,7 +3,7 @@ import Modal from '@components/Objects/StyledElements/Modal/Modal';
 import { Code2, FileUp, GripVertical, Hash, ListTodo, Pencil, Plus, Sparkles, Type } from 'lucide-react';
 import React, { useEffect } from 'react'
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import NewTaskModal from './Modals/NewTaskModal';
 import GenerateTasksAIModal from './Modals/GenerateTasksAIModal';
@@ -14,6 +14,15 @@ import { queryKeys } from '@/lib/query/keys'
 import { moveTask, sortTasksByOrder } from '@/lib/assignments/taskOrder'
 import { reorderAssignmentTasks } from '@services/courses/assignments'
 import { BTN_PRIMARY, BTN_SECONDARY } from '../../_components/assignmentUi'
+import GroundedLessonSources from '@components/Studytomy/GroundedLessonSources'
+import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope'
+import { getAPIUrl } from '@services/config/config'
+import { RequestBodyWithAuthHeader, secureFetch } from '@services/utils/ts/requests'
+
+type GroundedBootstrap = {
+    course: { org_uuid: string; course_uuid: string; grounded_sources_available: boolean }
+    activity: { activity_uuid: string; current_version: number }
+}
 
 // The API caps an assignment at this many tasks; past it the add actions hide.
 export const MAX_TASKS = 10
@@ -86,6 +95,23 @@ function AssignmentTasks({ assignment_uuid }: any) {
     const queryClient = useQueryClient()
     const session = useLHSession() as any
     const access_token = session?.data?.tokens?.access_token
+    const activityUuid: string | undefined = assignments?.activity_object?.activity_uuid
+    const unpublished = assignments?.assignment_object?.published === false
+    const identity = getAuthenticatedSessionIdentity(session?.data?.user?.id ?? session?.data?.user?.user_uuid, session?.data)
+    const { data: grounding } = useQuery({
+        queryKey: ['assignment-grounded-editor', identity, activityUuid, assignment_uuid],
+        enabled: Boolean(activityUuid && access_token && unpublished),
+        retry: false,
+        queryFn: async ({ signal }): Promise<GroundedBootstrap> => {
+            const response = await secureFetch(`${getAPIUrl()}activities/${encodeURIComponent(activityUuid ?? '')}/editor-bootstrap`, {
+                ...RequestBodyWithAuthHeader('GET', null, null, access_token),
+                redirect: 'error',
+                signal,
+            })
+            if (!response.ok) throw new Error('Grounded assignment drafting is unavailable.')
+            return response.json()
+        },
+    })
 
     async function setSelectTask(task_uuid: string) {
         assignmentTaskHook({ type: 'setSelectedAssignmentTaskUUID', payload: task_uuid })
@@ -143,6 +169,25 @@ function AssignmentTasks({ assignment_uuid }: any) {
                 </div>
                 {assignments && tasks.length < MAX_TASKS && (
                     <TaskCreateActions assignment_uuid={assignment_uuid} />
+                )}
+                {unpublished && access_token && grounding?.course.grounded_sources_available
+                    && grounding.activity.activity_uuid === activityUuid
+                    && grounding.course.course_uuid === assignments?.course_object?.course_uuid && (
+                    <GroundedLessonSources
+                        key={`${identity}:${assignment_uuid}`}
+                        orgUuid={grounding.course.org_uuid}
+                        courseUuid={grounding.course.course_uuid}
+                        activityUuid={grounding.activity.activity_uuid}
+                        version={grounding.activity.current_version}
+                        token={access_token}
+                        quiz={{
+                            assignmentUuid: assignment_uuid,
+                            tasks: tasks.filter((task) => task.assignment_type === 'QUIZ')
+                                .map((task) => ({ uuid: task.assignment_task_uuid, title: task.title })),
+                            canAddTask: tasks.length < MAX_TASKS,
+                            onSaved: () => void queryClient.invalidateQueries({ queryKey: queryKeys.assignments.tasks(assignment_uuid) }),
+                        }}
+                    />
                 )}
                 {assignments && tasks.length >= MAX_TASKS && (
                     <p className='text-xs text-neutral-500'>{t('dashboard.assignments.editor.max_tasks_reached', { max: MAX_TASKS })}</p>

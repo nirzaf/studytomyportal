@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
 
@@ -54,9 +54,10 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           python-version: "3.14.7"
+          version: "0.12.13"
 
       - name: Sync dependencies
         run: uv sync --frozen --no-dev
@@ -77,7 +78,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
 
@@ -86,6 +87,32 @@ jobs:
 
       - name: Build application
         run: bun run build
+
+  test-momentum-pilot:
+    name: Verify Momentum Pilot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "26.13.0"
+
+      - name: Build, verify and test the momentum pilot
+        working-directory: apps/labs/momentum-pilot
+        run: |
+          bun run build
+          bun run verify
+          bun run test
 
   build-packages:
     name: Build Packages (SDK, React, Vue)
@@ -100,7 +127,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
 
@@ -111,8 +138,20 @@ jobs:
       - name: Install package dependencies
         run: bun install --frozen-lockfile
 
+      - name: Set up uv for offline OpenAPI generation
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          python-version: "3.14.7"
+          version: "0.12.13"
+
       - name: Build packages
         run: bun run build
+
+      - name: Run package tests
+        run: bun run test
+
+      - name: Check generated packages
+        run: bun run check
 
   build-cli:
     name: Build CLI
@@ -127,14 +166,45 @@ jobs:
           persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build CLI
+      - name: Typecheck CLI
+        run: bun run typecheck
+
+      - name: Build and test CLI
+        run: bun run test
+
+  build-docs:
+    name: Build and Test Documentation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install documentation dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check documentation snippets
+        run: bun run test:snippets
+
+      - name: Build documentation
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
         run: bun run build
 
   test-api:
@@ -151,12 +221,16 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           python-version: "3.14.7"
+          version: "0.12.13"
 
       - name: Sync dependencies
         run: uv sync --frozen
+
+      - name: Lint API application code
+        run: uv run --no-sync ruff check src --exclude src/tests
 
       - name: Run isolated API test suite
         env:
@@ -164,7 +238,7 @@ jobs:
           PYTHON_DOTENV_DISABLED: "true"
           LEARNHOUSE_DISABLE_EE: "1"
           LEARNHOUSE_DEMO_ENABLED: "0"
-          LEARNHOUSE_REDIS_URL: "redis://127.0.0.1:1/0"
+          LEARNHOUSE_REDIS_CONNECTION_STRING: "redis://127.0.0.1:1/0"
         run: uv run --no-sync pytest -n auto -q -m "not studytomy_postgres and not ollama" --tb=short
 
   test-web:
@@ -181,12 +255,15 @@ jobs:
           persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Lint web application
+        run: bun run lint
 
       - name: Run web unit tests
         run: bun run test
@@ -212,7 +289,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
 
@@ -225,6 +302,92 @@ jobs:
       - name: Build collaboration service
         run: bun run build
 
+  test-e2e-guards:
+    name: Typecheck E2E and test safety guards
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/e2e
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install E2E dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck E2E suite
+        run: bun run typecheck
+
+      - name: Test local safety guards
+        run: |
+          bun run test:database-guard
+          bun run test:browser-egress
+          bun run test:identity
+
+  test-container-images:
+    name: Build and smoke-test ${{ matrix.image }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: combined
+            dockerfile: Dockerfile
+            context: .
+          - image: api
+            dockerfile: apps/api/Dockerfile
+            context: .
+          - image: web
+            dockerfile: apps/web/Dockerfile
+            context: apps/web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build local OSS image
+        env:
+          IMAGE: ${{ matrix.image }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          CONTEXT: ${{ matrix.context }}
+        run: docker build --build-arg LEARNHOUSE_PUBLIC=true -t "studytomy-ci:${IMAGE}" -f "${DOCKERFILE}" "${CONTEXT}"
+
+      - name: Smoke-test packaged runtime
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --entrypoint sh "studytomy-ci:${IMAGE}" -ec '
+            test "$(id -u)" -ne 0
+            command -v curl
+            case "$1" in
+              combined)
+                command -v ffmpeg
+                test -r /app/labs/momentum-pilot/manifest.json
+                test -w /app/api/content
+                test -r /app/web/server.js
+                ;;
+              api)
+                command -v ffmpeg
+                test -r /labs/momentum-pilot/manifest.json
+                test -w /app/content
+                ;;
+              web)
+                test -r /app/server.js
+                test -r /app/server-wrapper.js
+                ;;
+            esac
+          ' sh "${IMAGE}"
+
   test-postgres:
     name: Test PostgreSQL
     runs-on: ubuntu-latest
@@ -235,23 +398,26 @@ jobs:
     env:
       POSTGRES_IMAGE: pgvector/pgvector:0.8.7-pg19@sha256:89879f41d564f67b0c1462a491d16fcbc6de39ac10db17e7a4bba2138a5e0ba5
       POSTGRES_CONTAINER: studytomy-ci-postgres
+      POSTGRES_VOLUME: studytomy-ci-postgres-data
       POSTGRES_DB: studytomy_ci_test
       POSTGRES_USER: studytomy_ci
       TESTING: "true"
       PYTHON_DOTENV_DISABLED: "true"
       LEARNHOUSE_DISABLE_EE: "1"
       LEARNHOUSE_DEMO_ENABLED: "0"
-      LEARNHOUSE_REDIS_URL: "redis://127.0.0.1:1/0"
+      LEARNHOUSE_REDIS_CONNECTION_STRING: "redis://127.0.0.1:1/0"
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           python-version: "3.14.7"
+          version: "0.12.13"
 
       - name: Sync dependencies
         run: uv sync --frozen
@@ -267,23 +433,37 @@ jobs:
           echo "::add-mask::${jwt_secret}"
           echo "::add-mask::${db_url}"
 
-          docker run -d \
-            --name "${POSTGRES_CONTAINER}" \
-            -p 127.0.0.1:5432:5432 \
-            -e POSTGRES_USER="${POSTGRES_USER}" \
-            -e POSTGRES_PASSWORD="${pg_password}" \
-            -e POSTGRES_DB="${POSTGRES_DB}" \
-            "${POSTGRES_IMAGE}"
+          start_postgres() {
+            docker run -d \
+              --name "${POSTGRES_CONTAINER}" \
+              --mount "type=volume,source=${POSTGRES_VOLUME},target=/var/lib/postgresql" \
+              -p 127.0.0.1:5432:5432 \
+              -e POSTGRES_USER="${POSTGRES_USER}" \
+              -e POSTGRES_PASSWORD="${pg_password}" \
+              -e POSTGRES_DB="${POSTGRES_DB}" \
+              "${POSTGRES_IMAGE}"
 
-          deadline=$((SECONDS + 60))
-          until docker exec "${POSTGRES_CONTAINER}" pg_isready -h 127.0.0.1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"; do
-            if [ "${SECONDS}" -ge "${deadline}" ]; then
-              echo "::error::PostgreSQL did not become ready within 60 seconds."
-              docker logs "${POSTGRES_CONTAINER}"
-              exit 1
-            fi
-            sleep 1
-          done
+            deadline=$((SECONDS + 60))
+            until docker exec "${POSTGRES_CONTAINER}" pg_isready -h 127.0.0.1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"; do
+              if [ "${SECONDS}" -ge "${deadline}" ]; then
+                echo "::error::PostgreSQL did not become ready within 60 seconds."
+                docker logs "${POSTGRES_CONTAINER}"
+                exit 1
+              fi
+              sleep 1
+            done
+          }
+
+          export STUDYTOMY_TEST_DATABASE_URL="${db_url}"
+          export LEARNHOUSE_AUTH_JWT_SECRET_KEY="${jwt_secret}"
+          export STUDYTOMY_PG19_PERSISTENCE_ID
+          STUDYTOMY_PG19_PERSISTENCE_ID=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+          start_postgres
+          STUDYTOMY_PG19_PERSISTENCE_PHASE=seed uv run --no-sync pytest -q src/tests/core/test_pg19_volume_persistence_postgres.py -m studytomy_postgres --tb=short
+          docker stop "${POSTGRES_CONTAINER}"
+          docker rm "${POSTGRES_CONTAINER}"
+          start_postgres
+          STUDYTOMY_PG19_PERSISTENCE_PHASE=verify uv run --no-sync pytest -q src/tests/core/test_pg19_volume_persistence_postgres.py -m studytomy_postgres --tb=short
 
           {
             echo "STUDYTOMY_TEST_DATABASE_URL=${db_url}"
@@ -327,6 +507,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export STUDYTOMY_TEST_PG_TOOLS_CONTAINER="${POSTGRES_CONTAINER}"
           report_path="${RUNNER_TEMP}/junit-migrations-postgres.xml"
           uv run --no-sync pytest -q src/tests/core/test_migrations_postgres.py -m studytomy_postgres --junitxml="${report_path}" --tb=short
           uv run --no-sync python -c '
@@ -370,4 +551,7 @@ jobs:
           set -euo pipefail
           if docker ps -a --format '{{.Names}}' | grep -qx "${POSTGRES_CONTAINER}"; then
             docker rm -f "${POSTGRES_CONTAINER}"
+          fi
+          if docker volume inspect "${POSTGRES_VOLUME}" >/dev/null 2>&1; then
+            docker volume rm "${POSTGRES_VOLUME}"
           fi

@@ -1,5 +1,6 @@
 import { getAuthenticatedSessionIdentity } from '@/lib/auth/sessionScope';
 import AssessmentIntegrityReview from '@components/Studytomy/AssessmentIntegrityReview';
+import AssessmentModeration from '@components/Studytomy/AssessmentModeration';
 import { useAssignments } from '@components/Contexts/Assignments/AssignmentContext';
 import { BookOpenCheck, Check, ClipboardCheck, Download, Info, MessageSquare, RotateCcw, UserCheck, X } from 'lucide-react';
 import Link from 'next/link';
@@ -289,8 +290,10 @@ function EvaluateAssignment({
 
             {session?.status === 'authenticated' && access_token && org?.org_uuid && assignments?.course_object?.course_uuid &&
                 assignmentUuid && submission?.assignmentusersubmission_uuid && (
-                    <AssessmentIntegrityReview
+                    <React.Fragment
                         key={JSON.stringify([org.org_uuid, sessionIdentity, assignmentUuid, submission.assignmentusersubmission_uuid, attempt])}
+                    >
+                    <AssessmentIntegrityReview
                         orgUuid={org.org_uuid}
                         token={access_token}
                         courseUuid={assignments.course_object.course_uuid}
@@ -298,6 +301,22 @@ function EvaluateAssignment({
                         submissionUuid={submission.assignmentusersubmission_uuid}
                         attempt={attempt}
                     />
+                    <AssessmentModeration
+                        orgUuid={org.org_uuid}
+                        token={access_token}
+                        courseUuid={assignments.course_object.course_uuid}
+                        assignmentUuid={assignmentUuid}
+                        submissionUuid={submission.assignmentusersubmission_uuid}
+                        attempt={attempt}
+                        onDecision={() => {
+                            const id = assignmentUuid.replace(/^assignment_/, '')
+                            void queryClient.invalidateQueries({ queryKey: queryKeys.assignments.submission(id) })
+                            void queryClient.invalidateQueries({ queryKey: queryKeys.assignments.allSubmissions(id) })
+                            void queryClient.invalidateQueries({ queryKey: queryKeys.assignments.analytics(id) })
+                        }}
+                        openAttempt={['PENDING', 'NOT_SUBMITTED'].includes(submission.submission_status)}
+                    />
+                    </React.Fragment>
                 )}
 
             <div className='grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start'>

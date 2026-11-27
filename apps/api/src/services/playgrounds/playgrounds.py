@@ -308,6 +308,16 @@ async def get_playground(
     if not playground:
         raise HTTPException(status_code=404, detail="Playground not found")
 
+    await require_playground_read_access(request, playground, current_user, db_session)
+    return await _playground_to_read(playground, db_session)
+
+
+async def require_playground_read_access(
+    request: Request,
+    playground: Playground,
+    current_user: PublicUser | AnonymousUser | APITokenUser,
+    db_session: AsyncSession,
+) -> None:
     await _check_read_access(playground, current_user, db_session)
     from src.core.ee_hooks import require_ee_resource_paid_access
     await require_ee_resource_paid_access(request, db_session, current_user, _sold_as(playground))
@@ -318,8 +328,6 @@ async def get_playground(
         )
 
     await _check_draft_access(playground, current_user, db_session)
-
-    return await _playground_to_read(playground, db_session)
 
 
 async def list_org_playgrounds(

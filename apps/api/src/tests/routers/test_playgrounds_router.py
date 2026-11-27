@@ -23,6 +23,7 @@ from src.routers.playgrounds.playgrounds_generator import (
 )
 from src.security.auth import get_current_user
 from src.security.features_utils.dependencies import require_playgrounds_feature
+from src.services.ai.llm.tiers import model_for_tier
 
 
 async def _single_chunk_stream():
@@ -182,14 +183,14 @@ class TestPlaygroundsRouter:
             "src.services.ai.llm.tiers.plan_meets_requirement",
             return_value=True,
         ):
-            assert await get_playground_org_ai_model(org.id, db) == "gemini-3.1-flash-lite"
+            assert await get_playground_org_ai_model(org.id, db) == model_for_tier("fast")
 
         with patch(
             "src.services.ai.llm.tiers.get_org_plan",
             new_callable=AsyncMock,
             side_effect=RuntimeError("boom"),
         ):
-            assert await get_playground_org_ai_model(org.id, db) == "gemini-3.1-flash-lite"
+            assert await get_playground_org_ai_model(org.id, db) == model_for_tier("fast")
 
         with patch(
             "src.services.ai.llm.tiers.get_org_plan",
@@ -199,7 +200,7 @@ class TestPlaygroundsRouter:
             "src.services.ai.llm.tiers.plan_meets_requirement",
             return_value=False,
         ):
-            assert await get_playground_org_ai_model(org.id, db) == "gemini-3.1-flash-lite"
+            assert await get_playground_org_ai_model(org.id, db) == model_for_tier("fast")
 
         course = Course(
             id=10,
