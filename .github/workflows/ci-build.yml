@@ -322,6 +322,9 @@ jobs:
       - name: Install E2E dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install Chromium for browser egress guard
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+
       - name: Typecheck E2E suite
         run: bun run typecheck
 

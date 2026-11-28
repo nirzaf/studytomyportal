@@ -57,6 +57,7 @@ dependencies = [
 ]
 
 [tool.ruff]
+lint.select = ["E4", "E7", "E9", "F"]
 lint.ignore = ["E501", "E712"]
 
 [tool.pytest.ini_options]
@@ -92,4 +93,9 @@ exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
     "if __name__",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.17.6",
 ]
