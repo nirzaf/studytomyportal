@@ -1,0 +1,12 @@
+{
+  "block_uuid": "block_e19b2d5f-4cfc-5a6b-8914-bbb655c79a0b",
+  "block_type": "BLOCK_IMAGE",
+  "content": {
+    "file_id": "d808a44e-22d9-50a1-a720-ceb3cf2926da",
+    "file_format": "png",
+    "file_name": "bilateral.png",
+    "file_size": 26092,
+    "file_type": "image/png",
+    "activity_uuid": "activity_a50f4352-d3b6-5f41-bbb7-c4908508df23"
+  }
+}

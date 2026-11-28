@@ -1,0 +1,306 @@
+{
+  "activity_uuid": "activity_ce61bdf9-61d6-505e-9b6f-1fd988f1d05c",
+  "name": "12.4 Exterior angles of quadrilaterals",
+  "activity_type": "TYPE_DYNAMIC",
+  "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE",
+  "content": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 1
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Exterior angles of quadrilaterals"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Learning objective: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Use the 360° exterior-angle sum and the supplementary interior/exterior relationship."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Understand the concept"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "For a convex quadrilateral, one exterior angle at each vertex, taken consistently, sums to 360°. There are four interior/exterior pairs, each totalling 180°. Thus the combined total is 720°; subtract the 360° interior sum to obtain 360° for the exterior angles."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Always determine which angles are interior and exterior before calculating. An angle formed by extending a line may be a straight-line supplement, not an interior angle."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Worked examples"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 1: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Three exterior angles are 72°, 98° and 110°. Find the fourth."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "360 − 72 − 98 − 110 = 80°."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 2: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "A convex quadrilateral has exterior angles 2x°, 3x°, 3x° and 4x°."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "12x = 360; x = 30. The angles are 60°, 90°, 90°, 120°."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Independent practice"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Work these out in your notebook before looking at the self-check below."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "An exterior angle is 85°. Find the interior angle at that vertex."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Find the missing exterior angle if the others are 65°, 100° and 105°."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Self-check"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Compare your method and answer. If you are unsure, revisit the relevant worked example before taking the chapter checkpoint."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "95°."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "90°."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Source reference"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Grade 8 Mathematics, Part I, Educational Publications Department (2019 print), printed pp. 139–143. Competency level 23.1. Original lesson content."
+          }
+        ]
+      }
+    ]
+  },
+  "details": {},
+  "published": false,
+  "order": 3,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "139–143",
+      "competency_level": "23.1",
+      "term": 2,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required"
+    }
+  }
+}

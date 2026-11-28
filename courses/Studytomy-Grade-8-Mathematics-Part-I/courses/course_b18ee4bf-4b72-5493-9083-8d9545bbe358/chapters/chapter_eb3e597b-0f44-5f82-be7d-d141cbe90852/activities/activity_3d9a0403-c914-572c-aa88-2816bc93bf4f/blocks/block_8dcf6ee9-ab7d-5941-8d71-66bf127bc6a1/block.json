@@ -1,0 +1,12 @@
+{
+  "block_uuid": "block_8dcf6ee9-ab7d-5941-8d71-66bf127bc6a1",
+  "block_type": "BLOCK_IMAGE",
+  "content": {
+    "file_id": "1aac3395-d763-54b0-8939-5c5f286eecfe",
+    "file_format": "png",
+    "file_name": "rotation.png",
+    "file_size": 20204,
+    "file_type": "image/png",
+    "activity_uuid": "activity_3d9a0403-c914-572c-aa88-2816bc93bf4f"
+  }
+}

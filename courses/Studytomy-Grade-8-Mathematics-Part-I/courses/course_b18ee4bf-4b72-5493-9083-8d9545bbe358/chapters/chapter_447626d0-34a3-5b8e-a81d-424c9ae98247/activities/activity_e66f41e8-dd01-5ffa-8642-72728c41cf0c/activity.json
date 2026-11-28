@@ -1,0 +1,312 @@
+{
+  "activity_uuid": "activity_e66f41e8-dd01-5ffa-8642-72728c41cf0c",
+  "name": "8.2 Square roots using prime factors",
+  "activity_type": "TYPE_DYNAMIC",
+  "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE",
+  "content": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 1
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Square roots using prime factors"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Learning objective: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Find positive square roots by pairing prime factors."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Understand the concept"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "The square root of a positive perfect square is the positive number whose square equals it. The symbol √ indicates the principal square root, not both solutions of an equation."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Write the perfect square as a product of primes. Pair equal primes and take one from every pair. Multiply the selected primes; check by squaring the answer."
+          }
+        ]
+      },
+      {
+        "type": "blockMathEquation",
+        "attrs": {
+          "math_equation": "\\sqrt{196}=\\sqrt{2^2\\times7^2}=2\\times7=14"
+        }
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Worked examples"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 1: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Find √196 by prime factors."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "196 = 2×2×7×7. Take 2 and 7: √196 = 14."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 2: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Find √900 by prime factors."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "900 = 2²×3²×5². √900 = 2×3×5 = 30."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Independent practice"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Work these out in your notebook before looking at the self-check below."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Find √225 using prime factors."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "A square garden has area 289 m². Find its side."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Self-check"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Compare your method and answer. If you are unsure, revisit the relevant worked example before taking the chapter checkpoint."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "225 = 3²×5²; root = 15."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "17 m."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Source reference"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Grade 8 Mathematics, Part I, Educational Publications Department (2019 print), printed pp. 93–94. Competency level 1.1. Original lesson content."
+          }
+        ]
+      }
+    ]
+  },
+  "details": {},
+  "published": false,
+  "order": 1,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "93–94",
+      "competency_level": "1.1",
+      "term": 1,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required"
+    }
+  }
+}

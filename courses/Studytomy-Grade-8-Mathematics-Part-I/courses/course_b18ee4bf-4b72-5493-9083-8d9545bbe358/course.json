@@ -1,0 +1,36 @@
+{
+  "course_uuid": "course_b18ee4bf-4b72-5493-9083-8d9545bbe358",
+  "name": "Grade 8 Mathematics – Part I (English Medium)",
+  "description": "Master the 14 chapters of Sri Lanka’s Grade 8 Mathematics Part I through illustrated lessons, worked examples, practice, chapter checkpoints and revision. Covers Term 1 and the first four chapters of Term 2.",
+  "about": "English-medium Grade 8 Mathematics, Part I, based on the Educational Publications Department textbook (2019 printing; syllabus introduced in 2017). Develop mathematical reasoning, calculation and application using the textbook chapter sequence. Lessons and assessment items are independently authored; the textbook is a reference, not embedded. Teacher review and confirmation of the applicable cohort syllabus are required before release. Part II topics are outside this course.",
+  "learnings": "[{\"id\": \"learning_cd81350d-4253-50f7-8a30-728847b28211\", \"text\": \"Identify general terms and use them to find terms and positions in number patterns.\", \"emoji\": \"✅\"}, {\"id\": \"learning_0cd59a39-ac66-50cb-985a-9d9b455d2e0e\", \"text\": \"Calculate perimeters of composite rectilinear plane figures and solve contextual problems.\", \"emoji\": \"✅\"}, {\"id\": \"learning_cb959794-0fe3-5bcc-9df6-3ce1a2fb6ba0\", \"text\": \"Recognise complementary, supplementary, adjacent and vertically opposite angles and calculate missing angles.\", \"emoji\": \"✅\"}, {\"id\": \"learning_35e76a4e-1df1-5d39-b760-0e2611e254de\", \"text\": \"Subtract, multiply and divide directed numbers using their signs and magnitudes.\", \"emoji\": \"✅\"}, {\"id\": \"learning_c3853e0e-6587-5833-aab2-dd6debc74876\", \"text\": \"Construct expressions with up to three unknowns, expand, simplify and substitute integer values.\", \"emoji\": \"✅\"}, {\"id\": \"learning_0f70ef03-5d39-55a1-ade7-012967b08422\", \"text\": \"Construct regular octahedron, dodecahedron and icosahedron models; verify Euler’s relationship and classify Platonic solids.\", \"emoji\": \"✅\"}, {\"id\": \"learning_12283901-fa21-546c-919b-ce60d01f1e09\", \"text\": \"Find HCFs of up to three algebraic terms, factorise using the HCF and check by expansion.\", \"emoji\": \"✅\"}, {\"id\": \"learning_fd4b6bf3-ca39-56d1-8179-b2435e8b471e\", \"text\": \"Recognise perfect squares, learn squares 1–20 and determine positive square roots of perfect squares up to 1000.\", \"emoji\": \"✅\"}, {\"id\": \"learning_f849c18a-5b45-5f5a-a341-a21144353668\", \"text\": \"Convert metric tons and kilogrammes and calculate with masses in mixed units.\", \"emoji\": \"✅\"}, {\"id\": \"learning_0f169a21-bc5f-53c5-83c4-f9c532f1adfb\", \"text\": \"Expand powers of products, combine products with a common index and evaluate powers of negative integers.\", \"emoji\": \"✅\"}, {\"id\": \"learning_dd746ed0-2bc0-5e6d-ae70-ada4a0d0e308\", \"text\": \"Identify bilateral and rotational symmetry, centres of rotation and rotational order.\", \"emoji\": \"✅\"}, {\"id\": \"learning_10225764-7655-5034-ae22-716a12e7f02f\", \"text\": \"Establish interior and exterior angle sums of triangles and quadrilaterals and solve related problems.\", \"emoji\": \"✅\"}, {\"id\": \"learning_3f5ebbfe-e7a1-5eb9-94c6-602e7564d27c\", \"text\": \"Multiply fractions by whole numbers, fractions and mixed numbers, including mixed-by-mixed products.\", \"emoji\": \"✅\"}, {\"id\": \"learning_f2fea641-9fb7-53a3-8942-57b57cdbb3e0\", \"text\": \"Find reciprocals and divide fractions, whole numbers and mixed numbers in every combination.\", \"emoji\": \"✅\"}]",
+  "tags": "Mathematics,Grade 8,English Medium,Sri Lanka,National Curriculum,Part I",
+  "thumbnail_type": "image",
+  "thumbnail_image": "a34ac088-c4a4-5a01-9e70-7f8c463d918d.png",
+  "thumbnail_video": "",
+  "public": false,
+  "published": false,
+  "open_to_contributors": false,
+  "seo": null,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "title": "Mathematics, Grade 8, Part I (English medium)",
+      "isbn": "978-955-25-0128-9",
+      "syllabus_start_year": 2017,
+      "printing_year": 2019,
+      "source_sha256": "a976f1d5f8c8fdbb4fb7735da4dbd92ba4e7da54a6d409651827583fa672d7f4",
+      "page_reference_convention": "Printed textbook page numbers; PDF page = printed page + 12 for content pages.",
+      "country": "Sri Lanka",
+      "grade": 8,
+      "subject": "Mathematics",
+      "medium": "English",
+      "part": 1,
+      "term_coverage": "Term 1 and first four chapters of Term 2",
+      "textbook_periods": 75,
+      "repository_commit": "bc3049fbb05826c86a9b4fa321a293ec79525a1c",
+      "review_status": "teacher_review_required",
+      "curriculum_mapping": "Reference metadata only; no curriculum database IDs or approval claims."
+    }
+  }
+}

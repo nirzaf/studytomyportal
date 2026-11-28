@@ -1,0 +1,155 @@
+{
+  "assignment_uuid": "assignment_3fd534e3-c886-514b-a7a6-2b9e18c04a5a",
+  "assignment": {
+    "title": "Chapter 11 checkpoint — Symmetry",
+    "description": "Answer all 4 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 2 — The horizontal and vertical lines through its centre.\n2. Both halves coincide when folded along the proposed axis — Reflection must match the entire figure.\n3. 5 — 360 ÷ 72 = 5.\n4. A general parallelogram that is neither a rectangle nor a rhombus — A half-turn matches it, but no reflection axis exists.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_f8d94bf3-9556-52f3-a1e3-539b30d96838",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "How many axes of symmetry does a non-square rectangle have?",
+        "correct_value": 2,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "The horizontal and vertical lines through its centre."
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_acfd668d-399f-54ee-95dc-39dd1d13c0ab",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which test demonstrates bilateral symmetry?",
+            "questionUUID": "question_acfd668d-399f-54ee-95dc-39dd1d13c0ab",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_84cf707f-8b53-5a9c-9c91-ebc9837c128d",
+                "text": "The two halves have equal area only",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_4ca1b327-72cb-54da-8b9e-8d4d89258cd9",
+                "text": "Both halves coincide when folded along the proposed axis",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_e3f4e747-b182-5ac5-b01f-c1d5dc93e7dc",
+                "text": "The figure turns through 360°",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_2579e156-0985-5e21-b095-edd278f3cf12",
+                "text": "The two halves have equal perimeter only",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_a5073f94-c5b4-54e2-acb2-5e80ad83b6f4",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A figure first matches itself after a rotation of 72°. Find its rotational order.",
+        "correct_value": 5,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "360 ÷ 72 = 5."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_3541ca17-c4e2-536c-a5ed-2bad7b25ce7d",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which figure has rotational order 2 but no reflection axis?",
+            "questionUUID": "question_3541ca17-c4e2-536c-a5ed-2bad7b25ce7d",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_48e312a4-70bf-568d-ae47-292e8304155e",
+                "text": "A non-square rectangle",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_df832411-3664-5cf7-adaa-c05c5ca02289",
+                "text": "A general parallelogram that is neither a rectangle nor a rhombus",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_3cab28c1-c269-5f97-ac97-9a42cbc75704",
+                "text": "A square",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_899eae5a-7c04-56bd-91e9-ff82409cd4d8",
+                "text": "An equilateral triangle",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 3
+    }
+  ]
+}

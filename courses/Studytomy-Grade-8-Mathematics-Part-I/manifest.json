@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "format": "learnhouse-course-export",
+  "created_at": "2026-11-27T07:09:01.005240+00:00",
+  "courses": [
+    {
+      "course_uuid": "course_b18ee4bf-4b72-5493-9083-8d9545bbe358",
+      "name": "Grade 8 Mathematics – Part I (English Medium)",
+      "path": "courses/course_b18ee4bf-4b72-5493-9083-8d9545bbe358"
+    }
+  ]
+}

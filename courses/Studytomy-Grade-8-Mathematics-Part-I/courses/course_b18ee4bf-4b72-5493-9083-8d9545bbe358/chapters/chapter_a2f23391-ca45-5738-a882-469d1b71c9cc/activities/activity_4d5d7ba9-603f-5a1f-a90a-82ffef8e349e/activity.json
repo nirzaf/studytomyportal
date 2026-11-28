@@ -1,0 +1,336 @@
+{
+  "activity_uuid": "activity_4d5d7ba9-603f-5a1f-a90a-82ffef8e349e",
+  "name": "3.4 Vertically opposite angles",
+  "activity_type": "TYPE_DYNAMIC",
+  "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE",
+  "content": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 1
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Vertically opposite angles"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Learning objective: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Identify equal opposite angles and apply straight-line and full-turn rules."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Understand the concept"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Two intersecting straight lines form two pairs of vertically opposite angles. The opposite angles in each pair are equal. Adjacent angles on either straight line add to 180°."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Reason: if a and b are opposite angles and both share a straight-line neighbour c, then a+c=180° and b+c=180°. Subtracting c from both equalities gives a=b."
+          }
+        ]
+      },
+      {
+        "type": "blockImage",
+        "attrs": {
+          "blockObject": {
+            "block_uuid": "block_3f58ec46-09a4-5a85-bdee-3638b9a8a744",
+            "content": {
+              "file_id": "2fe73452-c582-508e-b8b8-0954d136e87f",
+              "file_format": "png",
+              "activity_uuid": "activity_4d5d7ba9-603f-5a1f-a90a-82ffef8e349e"
+            }
+          },
+          "size": {
+            "width": 537
+          },
+          "alignment": "center",
+          "unsplash_url": null,
+          "unsplash_photographer_name": null,
+          "unsplash_photographer_url": null,
+          "unsplash_photo_url": null
+        }
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Blue angles are vertically opposite; orange angles are the other equal pair."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Worked examples"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 1: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Two straight lines cross. One angle is 68°. Find the other three."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Opposite angle = 68°; each neighbour = 180° − 68° = 112°."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 2: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Opposite angles are (3x+10)° and 85°."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "3x + 10 = 85; x = 25."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Independent practice"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Work these out in your notebook before looking at the self-check below."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Find the angle opposite 132°."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "If an angle at an intersection is 47°, find its adjacent angle."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Self-check"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Compare your method and answer. If you are unsure, revisit the relevant worked example before taking the chapter checkpoint."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "132°."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "133°."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Source reference"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Grade 8 Mathematics, Part I, Educational Publications Department (2019 print), printed pp. 34–36. Competency level 21.1. Original lesson content."
+          }
+        ]
+      }
+    ]
+  },
+  "details": {},
+  "published": false,
+  "order": 3,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "34–36",
+      "competency_level": "21.1",
+      "term": 1,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "chapter_uuid": "chapter_447626d0-34a3-5b8e-a81d-424c9ae98247",
+  "name": "08. Square Root",
+  "description": "Recognise perfect squares, learn squares 1–20 and determine positive square roots of perfect squares up to 1000. Textbook pp. 90–99; competency 1.1; Term 1; 5 suggested textbook periods.",
+  "thumbnail_image": "",
+  "order": 7,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "90–99",
+      "competency_level": "1.1",
+      "term": 1,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required",
+      "textbook_periods": 5
+    }
+  }
+}

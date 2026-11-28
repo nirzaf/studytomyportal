@@ -1,0 +1,342 @@
+{
+  "activity_uuid": "activity_3d9a0403-c914-572c-aa88-2816bc93bf4f",
+  "name": "11.2 Rotational symmetry and order",
+  "activity_type": "TYPE_DYNAMIC",
+  "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE",
+  "content": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 1
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Rotational symmetry and order"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Learning objective: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Identify the centre of rotation and calculate the order of rotational symmetry."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Understand the concept"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Rotate a plane figure about a fixed point. If it matches its original shape before completing 360°, it has rotational symmetry. The centre of rotation is the fixed point. The order counts all matching positions during one complete turn, including the final 360° position but not the initial 0° position."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "If the smallest positive matching angle is θ, the order is 360° ÷ θ. For the figures studied that have both reflection and rotational symmetry, the number of reflection axes equals the rotational order. A general parallelogram has order 2 with no reflection axes; a non-equilateral isosceles triangle has one reflection axis but no nontrivial rotational symmetry."
+          }
+        ]
+      },
+      {
+        "type": "blockMathEquation",
+        "attrs": {
+          "math_equation": "\\text{Order}=\\frac{360^\\circ}{\\theta}"
+        }
+      },
+      {
+        "type": "blockImage",
+        "attrs": {
+          "blockObject": {
+            "block_uuid": "block_8dcf6ee9-ab7d-5941-8d71-66bf127bc6a1",
+            "content": {
+              "file_id": "1aac3395-d763-54b0-8939-5c5f286eecfe",
+              "file_format": "png",
+              "activity_uuid": "activity_3d9a0403-c914-572c-aa88-2816bc93bf4f"
+            }
+          },
+          "size": {
+            "width": 900
+          },
+          "alignment": "center",
+          "unsplash_url": null,
+          "unsplash_photographer_name": null,
+          "unsplash_photographer_url": null,
+          "unsplash_photo_url": null
+        }
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "The dashed outline is the initial rectangle. The rotated shape matches at 180° and 360°."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Worked examples"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 1: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Find the rotational order of a regular hexagon."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "It matches every 60°, so order = 360 ÷ 60 = 6."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 2: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "A non-square rectangle matches at 180° and 360°. What is its order?"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Order 2; its centre is the intersection of the diagonals."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Independent practice"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Work these out in your notebook before looking at the self-check below."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Find the rotational order of a square."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Compare a general parallelogram’s reflection and rotational symmetries."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Self-check"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Compare your method and answer. If you are unsure, revisit the relevant worked example before taking the chapter checkpoint."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "4."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "No reflection axes; rotational order 2."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Source reference"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Grade 8 Mathematics, Part I, Educational Publications Department (2019 print), printed pp. 123–127. Competency level 25.1. Original lesson content."
+          }
+        ]
+      }
+    ]
+  },
+  "details": {},
+  "published": false,
+  "order": 1,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "123–127",
+      "competency_level": "25.1",
+      "term": 2,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required"
+    }
+  }
+}

@@ -1,0 +1,366 @@
+{
+  "activity_uuid": "activity_610547d4-0bbe-5b76-a5b7-9d558b73df27",
+  "name": "6.2 Regular dodecahedron and regular icosahedron",
+  "activity_type": "TYPE_DYNAMIC",
+  "activity_sub_type": "SUBTYPE_DYNAMIC_PAGE",
+  "content": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 1
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Regular dodecahedron and regular icosahedron"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Learning objective: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Identify the faces, edges and vertices of the two solids and construct their models."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Understand the concept"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "A regular dodecahedron has 12 congruent regular pentagonal faces, 30 edges and 20 vertices. Three pentagons meet at each vertex. A regular icosahedron has 20 congruent equilateral triangular faces, 30 edges and 12 vertices; five triangles meet at every vertex."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Build each model from a net. Print the original nets supplied in this course, cut around their outlines, fold at the shared edges and use tape to join the free edges. Mark one face or edge at a time to avoid double-counting."
+          }
+        ]
+      },
+      {
+        "type": "blockImage",
+        "attrs": {
+          "blockObject": {
+            "block_uuid": "block_4e82dbb1-9be4-5447-8770-0ed0ad0f5c2e",
+            "content": {
+              "file_id": "0d19efc3-9f90-5b51-8392-53865501f210",
+              "file_format": "png",
+              "activity_uuid": "activity_610547d4-0bbe-5b76-a5b7-9d558b73df27"
+            }
+          },
+          "size": {
+            "width": 900
+          },
+          "alignment": "center",
+          "unsplash_url": null,
+          "unsplash_photographer_name": null,
+          "unsplash_photographer_url": null,
+          "unsplash_photo_url": null
+        }
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Print the regular pentagon net. Fold the dashed edges and tape together matching numbered free edges."
+          }
+        ]
+      },
+      {
+        "type": "blockImage",
+        "attrs": {
+          "blockObject": {
+            "block_uuid": "block_bb3dd699-393a-5363-a208-8d3bda0a70b6",
+            "content": {
+              "file_id": "9b992562-91ae-5be8-af73-5ad6e972b5b2",
+              "file_format": "png",
+              "activity_uuid": "activity_610547d4-0bbe-5b76-a5b7-9d558b73df27"
+            }
+          },
+          "size": {
+            "width": 900
+          },
+          "alignment": "center",
+          "unsplash_url": null,
+          "unsplash_photographer_name": null,
+          "unsplash_photographer_url": null,
+          "unsplash_photo_url": null
+        }
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Print the equilateral triangle net. Fold the dashed edges and tape matching numbered free edges."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Worked examples"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 1: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Calculate the number of edges of a regular dodecahedron."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "12 × 5 ÷ 2 = 30."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Example 2: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Calculate the number of vertices of a regular icosahedron using its triangular faces."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Solution: ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "20 × 3 = 60 face-vertex incidences; five faces meet at each vertex, so 60 ÷ 5 = 12."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Independent practice"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Work these out in your notebook before looking at the self-check below."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Compare the number of edges of both solids."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Construct both paper models and record F, E and V."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 2
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Self-check"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Compare your method and answer. If you are unsure, revisit the relevant worked example before taking the chapter checkpoint."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "1. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "They both have 30 edges."
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "2. ",
+            "marks": [
+              {
+                "type": "bold"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "text": "Dodecahedron: 12, 30, 20. Icosahedron: 20, 30, 12."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "attrs": {
+          "level": 3
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Source reference"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "text": "Grade 8 Mathematics, Part I, Educational Publications Department (2019 print), printed pp. 71–74. Competency level 22.1. Original lesson content."
+          }
+        ]
+      }
+    ]
+  },
+  "details": {},
+  "published": false,
+  "order": 1,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "71–74",
+      "competency_level": "22.1",
+      "term": 1,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required"
+    }
+  }
+}

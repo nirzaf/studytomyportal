@@ -1,0 +1,32 @@
+{
+  "assignment_uuid": "assignment_5288be40-7b08-5491-8653-80b166bacf17",
+  "assignment": {
+    "title": "Practical assignment — Discover polygon angle sums",
+    "description": "Draw two different triangles and two different convex quadrilaterals. Measure each interior angle with a protractor. Record the sums. For one triangle and one quadrilateral extend a side at each vertex consistently to mark exterior angles; measure and record their sums. Explain the relationship between an interior angle and its adjacent exterior angle. Include labelled working or photos.\n\nUpload clear photographs or a PDF of your own work. Your teacher will assess the work.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": false,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": null,
+    "ungraded": false,
+    "solution": "Teacher rubric (100): accurate labelled figures 20; measurements and reasonable protractor accuracy 25; interior sums near 180°/360° with explanation 20; exterior sums near 360° for both shapes 20; explanation that each interior/exterior pair totals 180°, 15. Allow small measurement error; evaluate reasoning.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_2e282346-bfec-5f5b-b2ab-dde63bd6f803",
+      "title": "Submit your work",
+      "description": "Draw two different triangles and two different convex quadrilaterals. Measure each interior angle with a protractor. Record the sums. For one triangle and one quadrilateral extend a side at each vertex consistently to mark exterior angles; measure and record their sums. Explain the relationship between an interior angle and its adjacent exterior angle. Include labelled working or photos.\n\nUpload clear photographs or a PDF of your own work. Your teacher will assess the work.",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "FILE_SUBMISSION",
+      "contents": {},
+      "max_grade_value": 100,
+      "order": 0
+    }
+  ]
+}

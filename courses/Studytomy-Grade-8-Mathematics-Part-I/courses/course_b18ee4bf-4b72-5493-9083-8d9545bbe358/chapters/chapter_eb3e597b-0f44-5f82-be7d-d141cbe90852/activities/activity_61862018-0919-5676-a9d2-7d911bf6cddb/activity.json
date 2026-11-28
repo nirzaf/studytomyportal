@@ -1,0 +1,24 @@
+{
+  "activity_uuid": "activity_61862018-0919-5676-a9d2-7d911bf6cddb",
+  "name": "Practical assignment — Test reflection and rotation",
+  "activity_type": "TYPE_ASSIGNMENT",
+  "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY",
+  "content": {},
+  "details": {},
+  "published": false,
+  "order": 3,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "121–127",
+      "competency_level": "25.1",
+      "term": 2,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required",
+      "assessment_scope": "chapter practical"
+    }
+  }
+}

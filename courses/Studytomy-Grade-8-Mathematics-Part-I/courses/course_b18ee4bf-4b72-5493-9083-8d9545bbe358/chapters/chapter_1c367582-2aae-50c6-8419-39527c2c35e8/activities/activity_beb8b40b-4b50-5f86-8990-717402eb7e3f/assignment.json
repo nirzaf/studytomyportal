@@ -1,0 +1,32 @@
+{
+  "assignment_uuid": "assignment_923181d6-1d4f-5c83-a33e-3e1a6b797e56",
+  "assignment": {
+    "title": "Practical assignment — Build three regular solids",
+    "description": "Print or trace the three original nets in this chapter. Build a regular octahedron, regular dodecahedron and regular icosahedron by folding and taping matching edges. Photograph each finished model and write a table of faces, edges, vertices and V − E + F. Describe the shape of each face and explain why all three are Platonic solids.\n\nUpload clear photographs or a PDF of your own work. Your teacher will assess the work.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": false,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": null,
+    "ungraded": false,
+    "solution": "Teacher rubric (100): correctly assembled models, 15 marks each (45); accurate face/edge/vertex counts, 5 marks each solid (15); Euler checks for three solids, 5 marks each (15); correct regular face descriptions and equal vertex configurations, 15; clear labelled evidence and presentation, 10. Expected F,E,V: octahedron 8,12,6; dodecahedron 12,30,20; icosahedron 20,30,12. V−E+F=2 for each.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_5b1433bb-b11d-5b44-8fa6-1d3eb16b1a5d",
+      "title": "Submit your work",
+      "description": "Print or trace the three original nets in this chapter. Build a regular octahedron, regular dodecahedron and regular icosahedron by folding and taping matching edges. Photograph each finished model and write a table of faces, edges, vertices and V − E + F. Describe the shape of each face and explain why all three are Platonic solids.\n\nUpload clear photographs or a PDF of your own work. Your teacher will assess the work.",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "FILE_SUBMISSION",
+      "contents": {},
+      "max_grade_value": 100,
+      "order": 0
+    }
+  ]
+}

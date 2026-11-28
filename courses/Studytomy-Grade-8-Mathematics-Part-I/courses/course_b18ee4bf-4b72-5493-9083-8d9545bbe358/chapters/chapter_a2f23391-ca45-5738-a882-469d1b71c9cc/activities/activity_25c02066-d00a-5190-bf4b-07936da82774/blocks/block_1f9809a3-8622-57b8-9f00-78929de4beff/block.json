@@ -1,0 +1,12 @@
+{
+  "block_uuid": "block_1f9809a3-8622-57b8-9f00-78929de4beff",
+  "block_type": "BLOCK_IMAGE",
+  "content": {
+    "file_id": "b19f1888-7d95-5b8c-a7e2-147592c6f543",
+    "file_format": "png",
+    "file_name": "point.png",
+    "file_size": 26983,
+    "file_type": "image/png",
+    "activity_uuid": "activity_25c02066-d00a-5190-bf4b-07936da82774"
+  }
+}

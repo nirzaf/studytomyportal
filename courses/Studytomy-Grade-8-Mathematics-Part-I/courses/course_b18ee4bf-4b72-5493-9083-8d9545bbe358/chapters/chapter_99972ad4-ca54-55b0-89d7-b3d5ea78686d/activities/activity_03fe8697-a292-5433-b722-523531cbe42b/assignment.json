@@ -1,0 +1,289 @@
+{
+  "assignment_uuid": "assignment_361c5937-30b8-53ab-a528-1ce85879771f",
+  "assignment": {
+    "title": "Part I mixed review — Chapters 11–14",
+    "description": "Answer all 8 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 3 — One axis through each vertex and opposite midpoint.\n2. 4 — 360 ÷ 90 = 4.\n3. 45 ° — 180 − 37 − 98 = 45.\n4. 70 ° — 360 − 82 − 96 − 112 = 70.\n5. 1/6 — 20/120 = 1/6.\n6. 3 3/5 — 3/2 × 12/5 = 18/5.\n7. 2/11 — 5 1/2 = 11/2.\n8. 3 — 21/4 × 4/7 = 3.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_5da06a6b-b3c1-5c3e-8696-b27032fcc2b7",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "How many axes of symmetry does an equilateral triangle have?",
+        "correct_value": 3,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "One axis through each vertex and opposite midpoint."
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_de025262-e270-5566-b1a9-b7f0687151ba",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A figure first matches its position after 90°. What is its rotational order?",
+        "correct_value": 4,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "360 ÷ 90 = 4."
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_d85ee544-67b8-573e-908d-27cee2a4ee03",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Two angles in a triangle are 37° and 98°. Find the third.",
+        "correct_value": 45,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "180 − 37 − 98 = 45."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_ff1810be-1cbc-5713-94de-9879fee73e3c",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Three exterior angles of a convex quadrilateral are 82°, 96° and 112°. Find the fourth.",
+        "correct_value": 70,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "360 − 82 − 96 − 112 = 70."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_8ced31b6-c084-5ba9-accb-2231d30c1eac",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Simplify 5/8 × 4/15.",
+            "questionUUID": "question_8ced31b6-c084-5ba9-accb-2231d30c1eac",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_fbedbad2-15f8-5bb0-a7ab-7babd1e73151",
+                "text": "1/6",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_496f8c11-6bc5-56cf-9fbb-bf07df43b8c7",
+                "text": "2/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_f4848d82-8351-5fc9-aa44-fd372bc90a1c",
+                "text": "3/23",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_cc790246-a904-5427-a3da-33310ff6fc88",
+                "text": "1/3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_3f1b8eab-bac4-5127-a4e4-0207d2a5c5c7",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 1 1/2 × 2 2/5.",
+            "questionUUID": "question_3f1b8eab-bac4-5127-a4e4-0207d2a5c5c7",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_829c1cf9-d7c3-55ed-839a-566724b2c7dd",
+                "text": "4 1/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_d2ba7de1-e652-5011-9998-418a4394534d",
+                "text": "3 3/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_7cfb2dd8-d7b2-5af5-a0eb-23a3054752c6",
+                "text": "2 1/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_48969387-d020-5603-a954-89ad5d9952e4",
+                "text": "3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 5
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_4615546f-68cd-500a-b461-de0e290657a9",
+      "title": "Question 7",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Find the reciprocal of 5 1/2.",
+            "questionUUID": "question_4615546f-68cd-500a-b461-de0e290657a9",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_08d605d4-e595-570f-be3c-350650fb278b",
+                "text": "1/11",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_d500178b-fc96-5035-a7af-d202daca96a5",
+                "text": "11/2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_5a25ee99-879b-51e2-8e01-7e7a01252426",
+                "text": "1/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_0b75ea13-752c-56fe-99cb-14c05c7dab3c",
+                "text": "2/11",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 6
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_243e71b7-196a-527f-b657-51f6e36bc2d6",
+      "title": "Question 8",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 5 1/4 ÷ 1 3/4.",
+            "questionUUID": "question_243e71b7-196a-527f-b657-51f6e36bc2d6",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_ecfab615-b55e-5110-b674-4c928897fffb",
+                "text": "4",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_6ecbfa4a-fa54-5178-ac89-858f06cefaea",
+                "text": "3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_50499246-429e-5516-bca5-ab949c823c31",
+                "text": "9 3/16",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_2f3e302f-9c0f-5316-bba4-c8cd145b5c6b",
+                "text": "1/3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 7
+    }
+  ]
+}

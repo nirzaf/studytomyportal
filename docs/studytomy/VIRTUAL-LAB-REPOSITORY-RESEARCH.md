@@ -1,12 +1,15 @@
 # Virtual-lab repository research and adoption reference
 
 **Research snapshot:** 27 November 2026<br>
-**Studytomy checkout reviewed:** `main` at `b7e57929eba1230577fe23767aac162fefccf80d`<br>
+**Studytomy checkout stated in the supplied report:** `main` at `b7e57929eba1230577fe23767aac162fefccf80d`<br>
+**Checkout receiving this reference update:** `main` at `bafc499dca5b98a570fbaa49e58bc4c3c6ddd945`<br>
 **Status:** candidate inventory only; no new simulation source is approved or integrated by this document.
 
 This document records the supplied open-source virtual-lab research beside the existing lab implementation notes so future work can evaluate candidates against actual Studytomy requirements. The repository, its code, and its educational content have different rights boundaries. Studytomy's open-source status does not grant rights to third-party code, assets, datasets, videos, exam questions, or scientific content. A repository license must be checked at the exact revision and does not automatically cover material with separate notices.
 
 The linked repositories' default branches can change. The license statements below are the research report's descriptions, not legal clearance. Before copying code or content, record an immutable commit SHA and inspect the root and per-directory license notices, asset provenance, transitive dependencies, and applicable content terms. An absent, ambiguous, noncommercial, or content-only license means **do not copy** until the owner supplies compatible permission.
+
+**Implementation-use rule:** Treat this inventory as a source reference, not an implementation request. Reuse a candidate unchanged only when its verified behavior satisfies the approved Studytomy requirement in full and its exact code, assets, data, and dependencies are cleared for the intended use. If behavior only partly matches, adapt only the necessary parts after the same review. If requirements, scientific validation, security, or rights do not match, defer or reject the candidate. Studytomy being open source does not remove these checks.
 
 ## Candidate inventory
 
@@ -24,6 +27,31 @@ The linked repositories' default branches can change. The license statements bel
 | [BN Lab Simulations](https://github.com/4mser/bn-lab-simulations) | Advanced physics and mathematics simulations | Enrichment candidate. The supplied report describes MIT and numerical validation material. | Verify source, validation procedures, license and assets for each chosen experiment. Do not treat published validation claims as Studytomy verification. |
 
 The supplied report also identified [PhET](https://phet.colorado.edu/), [All Science Sims](https://github.com/listyantidewi1/all-science-sims), [IIT Virtual Labs](https://github.com/virtual-labs), and [NetLogo models](https://github.com/NetLogo/models) as needing special licensing review, including noncommercial or per-project terms. Do not include these materials in Studytomy's commercial or redistributable bundles unless the exact source, asset, and use are covered by an explicit compatible license or separate permission.
+
+## Technical notes from the supplied repository review
+
+The following are specific observations reported by the supplied research. They are useful search leads, not current-source verification: project descriptions, file locations, experiment counts, dependencies, and license coverage can change. Recheck them at the immutable revision chosen for a task before relying on them.
+
+| Candidate | Reported technical detail | Potential Studytomy use | Exclusions and verification leads |
+|---|---|---|---|
+| Agentuto | React, TypeScript, Vite, Three.js, Canvas2D; report describes 18 simulation sandboxes, measurement tools, experiment recording and CSV export, with engines separated from UI. | Continue from the already curated momentum pilot; inspect individual physics engines for a syllabus-mapped experiment. | Do not adopt its optional AI/backend path by default. Recheck each simulation's equations, units, assets, dependencies and license notices. |
+| ScienceLab 3D | Next.js, React Three Fiber; report describes roughly 40 experiments across physics, chemistry, biology and mathematics, including pendulum, projectile, optics, waves, titration, cells and photosynthesis. | Candidate for selected multidisciplinary visual demonstrations. | Treat 3D demonstrations as conceptual until measurement validity is independently established. Audit textures, models, fonts, data and nested licenses. |
+| Valence | React/Vite; report describes 14 chemistry labs and separate engines under `src/engine/` for titration, calorimetry, kinetics, equilibrium and pH. | Inspect a specific chemistry engine against an approved syllabus outcome. | Recheck engine correctness, chemical datasets, safety instructions, assets and exact license coverage. |
+| 3ducation | Report describes about 90 interactive instruments/simulations and names modules such as `microscope.js`, `photosynthesis.js`, `circuit.js`, `pendulum.js`, `genetics.js`, `dialysis.js`, `distillation.js` and `reactionrate.js`. | Candidate for age-appropriate foundational science demonstrations. | The report notes Firebase authentication/synchronization; exclude that integration and any unneeded service code. Review each module and asset separately. |
+| Cambridge Chemistry Lab | Report identifies a reaction engine, chemical rules, equipment definitions and evaluation logic. | The report suggests evaluating engine concepts for original Studytomy practicals. | `src/data/questionPaper.js` was reported to contain Cambridge exam material. Do not reuse its questions, diagrams, mark schemes or paper content without explicit rights, even if software code has a permissive license. |
+| myPhysicsLab | Report describes TypeScript mechanics models, approximately 50 simulations, and mathematical documentation. | Potential source for a specifically required mechanics model that is not covered by the existing pilot. | Verify equations, assumptions, units, numerical behavior, license notices and attribution at the selected revision. |
+| AI Science Simulations | Report describes individual, standalone HTML demos in subject folders, including osmosis, plant cells and micro-ecosystems. | Candidate for a small, isolated demonstration after technical and educational review. | AI-assisted creation does not establish scientific accuracy. Check every file's assets and license; validate model behavior independently. |
+| Concord Consortium Lab / Lab Interactives | Report describes a scientific-modeling framework, molecular dynamics, interactive graphs and JSON-configured activities. | Inspect individual models if a syllabus requirement calls for molecular or thermodynamic modeling. | The report did not verify a root license for the framework. Do not copy until applicable licensing is confirmed; review older runtime and model-specific content. |
+| GeniBlocks / Geniventure | Report describes React genetics components for traits, inheritance and variation. | Candidate for a reviewed genetics activity. | Confirm current root and component licenses, older dependencies, asset rights, and data provenance before any reuse. |
+| BN Lab Simulations | Report describes roughly 40 physics and mathematics experiments and numerical-validation material. | Candidate for advanced physics/mathematics enrichment where a mapped outcome exists. | Verify the claimed validation source and reproduce relevant checks; do not treat project-published results as Studytomy validation. |
+
+### AI-tutor design references
+
+The supplied report also reviewed AI-oriented projects as architectural references: XIVIX Physics Virtual Lab (Gemini), LabAI, STEMulator, and SimStep. They are not approved tutoring backends. The report specifically notes that XIVIX injects a Gemini key into the browser build, LabAI lacks a usable license grant and uses Supabase, and STEMulator's license and architecture need review. Never copy a frontend API key or introduce Supabase. Studytomy should continue using its existing protected FastAPI AI/RAG path, with deterministic simulation calculations and educator-reviewed source content kept separate from generated explanations.
+
+### Suggested evaluation order
+
+Use the official syllabus experiment checklist to select an actual learning outcome first. Then evaluate one narrowly scoped model at a time: Agentuto for physics already adjacent to the momentum pilot; Valence for chemistry; ScienceLab 3D or 3ducation for broader school demonstrations; and myPhysicsLab or BN Lab for additional mechanics or advanced enrichment. This is a research ordering only, not approval to import any candidate or broaden the current laboratory registry.
 
 ## AI-tutoring references
 

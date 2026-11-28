@@ -1,0 +1,24 @@
+{
+  "activity_uuid": "activity_c9111f45-45c3-5e09-a0b8-4aa2ca0a510e",
+  "name": "Chapter 13 checkpoint — Fractions (Part I)",
+  "activity_type": "TYPE_ASSIGNMENT",
+  "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY",
+  "content": {},
+  "details": {},
+  "published": false,
+  "order": 4,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "144–155",
+      "competency_level": "3.1",
+      "term": 2,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required",
+      "assessment_scope": "chapter"
+    }
+  }
+}

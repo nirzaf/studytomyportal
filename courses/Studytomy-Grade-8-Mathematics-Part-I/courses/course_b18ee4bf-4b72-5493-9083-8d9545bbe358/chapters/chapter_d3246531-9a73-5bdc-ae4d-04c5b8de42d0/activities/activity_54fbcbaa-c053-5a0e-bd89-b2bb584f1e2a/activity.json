@@ -1,0 +1,24 @@
+{
+  "activity_uuid": "activity_54fbcbaa-c053-5a0e-bd89-b2bb584f1e2a",
+  "name": "First Term Revision — Chapters 1–10",
+  "activity_type": "TYPE_ASSIGNMENT",
+  "activity_sub_type": "SUBTYPE_ASSIGNMENT_ANY",
+  "content": {},
+  "details": {},
+  "published": false,
+  "order": 3,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "117–120",
+      "competency_level": "2.1, 7.1, 21.1, 1.2, 14.1, 22.1, 15.1, 1.1, 9.1, 6.1, 6.2",
+      "term": 1,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required",
+      "assessment_scope": "chapters 1–10; textbook revision pp. 117–120"
+    }
+  }
+}

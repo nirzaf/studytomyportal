@@ -1,0 +1,526 @@
+{
+  "assignment_uuid": "assignment_843f9bde-1477-531b-ae1c-60ad16d1d986",
+  "assignment": {
+    "title": "First Term Revision — Chapters 1–10",
+    "description": "Answer all 20 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 45 — 2 × 23 − 1 = 45.\n2. 171 — 18 × 19 ÷ 2 = 171.\n3. 70 m — 2(21 + 14) = 70.\n4. 60 cm — 5 × 12 = 60.\n5. 41 ° — 180 − 139 = 41.\n6. 75 ° — 360 − 80 − 110 − 95 = 75.\n7. 9 — −15 + 24 = 9.\n8. -9 — Opposite signs give −9.\n9. 7x − 15 — 6x − 15 + x = 7x − 15.\n10. 3 — −4 − 5 + 12 = 3.\n11. 30 — 12 × 5 ÷ 2 = 30.\n12. 7 — F = 15 + 2 − 10 = 7.\n13. 12x — Coefficient HCF 12; only x is common.\n14. 8a(2a − 3b) — HCF = 8a; divide both terms.\n15. 25 — 25² = 625.\n16. 592 — No perfect square ends in 2.\n17. 18009 kg — 18.009 × 1000 = 18009.\n18. 14550 kg — 4850 × 3 = 14550.\n19. (4mn)³ — 64 = 4³.\n20. -64 — An odd power of a negative base is negative.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_3498f777-ed08-54dc-91ff-d97b8d1618c2",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find the 23rd positive odd number.",
+        "correct_value": 45,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "2 × 23 − 1 = 45."
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_85788559-26d2-5aaf-b6fe-a1b5b8cfc7eb",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find the 18th triangular number.",
+        "correct_value": 171,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "18 × 19 ÷ 2 = 171."
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_c79b55ef-102c-58ab-a26e-d326a48bdf03",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find the perimeter of a 21 m by 14 m rectangle.",
+        "correct_value": 70,
+        "tolerance": 0,
+        "unit": "m",
+        "explanation": "2(21 + 14) = 70."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_f33fc0ea-0c39-5272-88a3-e0ff49cbe720",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A square of side 12 cm shares a full side with an equilateral triangle. Find the composite perimeter.",
+        "correct_value": 60,
+        "tolerance": 0,
+        "unit": "cm",
+        "explanation": "5 × 12 = 60."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_5c0a3f83-2667-52aa-8cbd-23c54ce8dcbb",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find the supplement of 139°.",
+        "correct_value": 41,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "180 − 139 = 41."
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_638010a8-7ef2-5e04-9908-baa23904b8e9",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Angles at a point are 80°, 110°, 95° and x°. Find x.",
+        "correct_value": 75,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "360 − 80 − 110 − 95 = 75."
+      },
+      "max_grade_value": 100,
+      "order": 5
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_b6c40f4d-6bcb-552a-9e5a-24ff26a05721",
+      "title": "Question 7",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Calculate −15 − (−24).",
+        "correct_value": 9,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "−15 + 24 = 9."
+      },
+      "max_grade_value": 100,
+      "order": 6
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_58c2da54-bb04-515b-826e-bb102e87f2f7",
+      "title": "Question 8",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Calculate (−63) ÷ (+7).",
+        "correct_value": -9,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "Opposite signs give −9."
+      },
+      "max_grade_value": 100,
+      "order": 7
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_7f48b22c-e888-5706-b182-56a6ccfbea49",
+      "title": "Question 9",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Expand and simplify 3(2x − 5) + x.",
+            "questionUUID": "question_7f48b22c-e888-5706-b182-56a6ccfbea49",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_f1823a7a-97d2-5ef0-b52c-7e7c9053b05c",
+                "text": "7x − 15",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_24ec477a-c3f6-590a-9247-ad10dd3edd5c",
+                "text": "7x − 5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_7223ebfb-f996-572f-99fe-58048de487de",
+                "text": "5x − 15",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_5842c437-f5ec-525e-9113-c252bcd4771e",
+                "text": "6x − 15",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 8
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_ce3edb3d-3726-5625-b67e-fb7bea4a6228",
+      "title": "Question 10",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Evaluate 2x − y + 3z when x=−2, y=5, z=4.",
+        "correct_value": 3,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "−4 − 5 + 12 = 3."
+      },
+      "max_grade_value": 100,
+      "order": 9
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_4b1b396b-d685-5d98-ba3e-6c40f0d6620e",
+      "title": "Question 11",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "How many edges does a regular dodecahedron have?",
+        "correct_value": 30,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "12 × 5 ÷ 2 = 30."
+      },
+      "max_grade_value": 100,
+      "order": 10
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_389a8013-7d7b-5f35-9fb6-c249a9403bf9",
+      "title": "Question 12",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A convex polyhedron has 10 vertices and 15 edges. Find its faces.",
+        "correct_value": 7,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "F = 15 + 2 − 10 = 7."
+      },
+      "max_grade_value": 100,
+      "order": 11
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_68966c4b-0f47-5d05-a38d-f4a439563630",
+      "title": "Question 13",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Find the HCF of 24xy and 36xz.",
+            "questionUUID": "question_68966c4b-0f47-5d05-a38d-f4a439563630",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_2b9a0da8-0909-5a88-a91b-852ae67d2691",
+                "text": "12x",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_27ce8619-a7cc-5c6f-96dd-210af5cb02da",
+                "text": "24x",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_565800d5-6c9c-50f0-bc91-952f2b1ba0c2",
+                "text": "12xyz",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_23c2f67c-c3b9-58b9-8012-cce4892a1cd6",
+                "text": "6xy",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 12
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_d42b3082-e6ab-556c-9705-eedaf9689c32",
+      "title": "Question 14",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Factorise 16a² − 24ab.",
+            "questionUUID": "question_d42b3082-e6ab-556c-9705-eedaf9689c32",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_6e0d8277-70c0-5965-a773-a776d087511b",
+                "text": "4a(4a − 3b)",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_78da9800-04b6-5c6c-bb84-7f04ad1f1020",
+                "text": "8a(2a + 3b)",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_159aab08-99fb-5518-a98a-7ee8f14925f9",
+                "text": "8(2a − 3b)",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_fffca357-b36e-5de9-aae0-33b3c581cf8b",
+                "text": "8a(2a − 3b)",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 13
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_5df6c7c3-91dc-5399-a931-1c953da36550",
+      "title": "Question 15",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find √625.",
+        "correct_value": 25,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "25² = 625."
+      },
+      "max_grade_value": 100,
+      "order": 14
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_6c3121a5-9b8e-53a9-8e94-4573c95056bc",
+      "title": "Question 16",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which number cannot be a perfect square because of its final digit?",
+            "questionUUID": "question_6c3121a5-9b8e-53a9-8e94-4573c95056bc",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_271ce46a-b30f-5b45-abdd-05f9085d525f",
+                "text": "576",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_11e8add8-b862-5bf1-8d2f-79ad0a262723",
+                "text": "592",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_944b51d5-35b2-5076-b7f8-bde689e8a7c2",
+                "text": "625",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_8aacd777-ea3a-57fd-a53c-4cabd03989c2",
+                "text": "529",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 15
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_1e759714-0b37-5606-ba68-4ea1df25d583",
+      "title": "Question 17",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Convert 18.009 t into kg.",
+        "correct_value": 18009,
+        "tolerance": 0,
+        "unit": "kg",
+        "explanation": "18.009 × 1000 = 18009."
+      },
+      "max_grade_value": 100,
+      "order": 16
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_bc943473-888e-5b14-babf-55b787972b9e",
+      "title": "Question 18",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Three beams each weigh 4 t 850 kg. Find their combined mass in kg.",
+        "correct_value": 14550,
+        "tolerance": 0,
+        "unit": "kg",
+        "explanation": "4850 × 3 = 14550."
+      },
+      "max_grade_value": 100,
+      "order": 17
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_a1ceea28-8888-5216-9688-caeb52c3cc8f",
+      "title": "Question 19",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Express 64m³n³ as a single power.",
+            "questionUUID": "question_a1ceea28-8888-5216-9688-caeb52c3cc8f",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_d852837a-c80d-5402-a154-0234a99a9331",
+                "text": "(4mn)³",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_5be9ff8b-0d77-5226-b68d-1e0d03a4ff8b",
+                "text": "(64mn)³",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_1f8b11de-1ab9-5b5e-b3f1-d3209946fb41",
+                "text": "(4mn)²",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_f35385c8-e62e-5e19-83da-6dfd5014e387",
+                "text": "(8mn)³",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 18
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_e5b1623d-933f-510f-85dc-77c089bf57a9",
+      "title": "Question 20",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Evaluate (−4)³.",
+        "correct_value": -64,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "An odd power of a negative base is negative."
+      },
+      "max_grade_value": 100,
+      "order": 19
+    }
+  ]
+}

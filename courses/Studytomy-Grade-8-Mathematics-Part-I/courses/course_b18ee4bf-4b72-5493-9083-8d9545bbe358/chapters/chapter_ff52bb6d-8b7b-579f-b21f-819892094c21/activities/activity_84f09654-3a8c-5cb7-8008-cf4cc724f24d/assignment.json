@@ -1,0 +1,123 @@
+{
+  "assignment_uuid": "assignment_e688f95c-ed81-5de1-8bc8-6da31a486626",
+  "assignment": {
+    "title": "Chapter 9 checkpoint — Mass",
+    "description": "Answer all 6 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 6045 kg — 6.045 × 1000 = 6045.\n2. 8.25 t — 8250 ÷ 1000 = 8.25.\n3. 9150 kg — 3680 + 5470 = 9150.\n4. 6650 kg — 11300 − 4650 = 6650.\n5. 12250 kg — 2450 × 5 = 12250.\n6. 2250 kg — 15750 ÷ 7 = 2250.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_e91315a8-36bf-5893-aac3-eaf1dc63320f",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Convert 6.045 t to kilogrammes.",
+        "correct_value": 6045,
+        "tolerance": 0,
+        "unit": "kg",
+        "explanation": "6.045 × 1000 = 6045."
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_9b666513-9403-5777-8dc9-fe9a74980564",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Convert 8250 kg to metric tons.",
+        "correct_value": 8.25,
+        "tolerance": 0,
+        "unit": "t",
+        "explanation": "8250 ÷ 1000 = 8.25."
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_a9b7fc58-24e4-5a34-9337-29827fde1ebf",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Add 3 t 680 kg and 5 t 470 kg. Enter the total in kg.",
+        "correct_value": 9150,
+        "tolerance": 0,
+        "unit": "kg",
+        "explanation": "3680 + 5470 = 9150."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_b447a67d-5ef1-595b-899f-0c5f84d0610e",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A loaded vehicle has mass 11 t 300 kg and empty mass 4 t 650 kg. Find the load in kg.",
+        "correct_value": 6650,
+        "tolerance": 0,
+        "unit": "kg",
+        "explanation": "11300 − 4650 = 6650."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_78e486bf-cd8c-5e4a-b1c2-430e5c535312",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Five containers each have mass 2 t 450 kg. Find their total mass in kg.",
+        "correct_value": 12250,
+        "tolerance": 0,
+        "unit": "kg",
+        "explanation": "2450 × 5 = 12250."
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_f8624f4f-08c9-55ef-91b2-379510a068a4",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Divide 15 t 750 kg into 7 equal loads. Enter one load in kg.",
+        "correct_value": 2250,
+        "tolerance": 0,
+        "unit": "kg",
+        "explanation": "15750 ÷ 7 = 2250."
+      },
+      "max_grade_value": 100,
+      "order": 5
+    }
+  ]
+}

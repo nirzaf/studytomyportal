@@ -1,0 +1,156 @@
+{
+  "assignment_uuid": "assignment_299c0ce1-66ed-5f0e-adf9-1cacca89cfa1",
+  "assignment": {
+    "title": "Chapter 6 checkpoint — Solids",
+    "description": "Answer all 6 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 12 — 8 × 3 ÷ 2 = 12.\n2. 4 — It has four corners.\n3. 12 — Its 12 faces are regular pentagons.\n4. 12 — 60 face-vertex incidences ÷ 5 = 12.\n5. 8 — F = 18 + 2 − 12 = 8.\n6. Regular dodecahedron — All twelve faces are congruent regular pentagons and the vertex arrangements match.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_59f24dff-fce8-51ba-afee-c9dc75ac7384",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "How many edges does a regular octahedron have?",
+        "correct_value": 12,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "8 × 3 ÷ 2 = 12."
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_75784926-6974-5d97-9bcd-1af03ff9df27",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "How many vertices does a regular tetrahedron have?",
+        "correct_value": 4,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "It has four corners."
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_92579f68-1cf1-5cbe-b363-fbe2f1311c2a",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "How many faces does a regular dodecahedron have?",
+        "correct_value": 12,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "Its 12 faces are regular pentagons."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_c2f03bed-7119-5f84-a459-fbd708bab6ed",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "How many vertices does a regular icosahedron have?",
+        "correct_value": 12,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "60 face-vertex incidences ÷ 5 = 12."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_9af1d7e2-8799-5092-a824-fe4f15e4c90e",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A convex polyhedron has 12 vertices and 18 edges. How many faces does it have?",
+        "correct_value": 8,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "F = 18 + 2 − 12 = 8."
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_0a6d7f58-3c3b-5d47-aa4f-df1dfbe510d7",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which solid is a Platonic solid?",
+            "questionUUID": "question_0a6d7f58-3c3b-5d47-aa4f-df1dfbe510d7",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_d496afa7-ec41-5039-981f-aba0495a381f",
+                "text": "Square pyramid",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_c85beb0e-eeac-5291-99d6-6e5f1e3e97f9",
+                "text": "Non-square rectangular cuboid",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_675a91ef-0bb3-5faa-beb5-b3773995250f",
+                "text": "Triangular prism",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_da681b7c-1c3c-5d37-84d7-3865831bb30a",
+                "text": "Regular dodecahedron",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 5
+    }
+  ]
+}

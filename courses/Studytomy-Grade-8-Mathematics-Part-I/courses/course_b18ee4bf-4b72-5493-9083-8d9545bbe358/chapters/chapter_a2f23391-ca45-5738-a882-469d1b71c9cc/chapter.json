@@ -1,0 +1,21 @@
+{
+  "chapter_uuid": "chapter_a2f23391-ca45-5738-a882-469d1b71c9cc",
+  "name": "03. Angles",
+  "description": "Recognise complementary, supplementary, adjacent and vertically opposite angles and calculate missing angles. Textbook pp. 22–36; competency 21.1; Term 1; 5 suggested textbook periods.",
+  "thumbnail_image": "",
+  "order": 2,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "22–36",
+      "competency_level": "21.1",
+      "term": 1,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required",
+      "textbook_periods": 5
+    }
+  }
+}

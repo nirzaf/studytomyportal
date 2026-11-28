@@ -1,0 +1,189 @@
+{
+  "assignment_uuid": "assignment_0297bf56-6e28-5ada-8e21-1dd67a3db710",
+  "assignment": {
+    "title": "Chapter 8 checkpoint — Square Root",
+    "description": "Answer all 6 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 324 — 18 × 18 = 324.\n2. 437 — No perfect square ends in 7.\n3. 28 — 784 = 2⁴ × 7²; √784 = 4 × 7 = 28.\n4. 21 cm — 21 × 21 = 441.\n5. 31 — Root is between 30 and 32; 31² = 961.\n6. 676 — 26² = 676; a permitted final digit alone is insufficient.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_0ee4ad93-6ed0-5603-9fd2-2ce374a0c04a",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find 18².",
+        "correct_value": 324,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "18 × 18 = 324."
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_d809b7fb-8199-557f-8f2c-b1c2c9733e82",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which number cannot be a perfect square based on its units digit alone?",
+            "questionUUID": "question_d809b7fb-8199-557f-8f2c-b1c2c9733e82",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_cd5d909f-44c1-59b9-87ed-d7255edee103",
+                "text": "196",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_da0abd13-218c-5bbf-9f86-a328e6ea0cec",
+                "text": "437",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_3d696349-c583-5b94-a9e7-4e78882042c9",
+                "text": "625",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_5ef73f87-a049-571c-bf18-b55dbe665804",
+                "text": "441",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_cf67f0f3-2813-5c0e-b37e-8a05e2c9671b",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find √784.",
+        "correct_value": 28,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "784 = 2⁴ × 7²; √784 = 4 × 7 = 28."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_6b9aa35e-8e44-5fef-89bb-734d92292d62",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A square has area 441 cm². What is its side length?",
+        "correct_value": 21,
+        "tolerance": 0,
+        "unit": "cm",
+        "explanation": "21 × 21 = 441."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_a5c8a9bc-68e3-5fcb-b0b5-eb42b002033d",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find √961 by observation.",
+        "correct_value": 31,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "Root is between 30 and 32; 31² = 961."
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_4f8f7e01-8947-57b4-9464-c7f7b6cbcea9",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which is a perfect square?",
+            "questionUUID": "question_4f8f7e01-8947-57b4-9464-c7f7b6cbcea9",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_7a97dcba-2e63-5dd1-ac4a-96ac5e60c3cc",
+                "text": "686",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_f0cfa32f-8ff9-5943-ab96-7cd3640a45e6",
+                "text": "676",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_b9f4447a-8e82-509c-be3c-886dfaf11065",
+                "text": "696",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_40fdd4d1-9d0f-5395-8542-49859e708186",
+                "text": "656",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 5
+    }
+  ]
+}

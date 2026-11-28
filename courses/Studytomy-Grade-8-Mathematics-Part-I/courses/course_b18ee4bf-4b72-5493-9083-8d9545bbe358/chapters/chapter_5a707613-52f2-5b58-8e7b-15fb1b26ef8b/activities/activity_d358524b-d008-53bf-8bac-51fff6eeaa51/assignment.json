@@ -1,0 +1,139 @@
+{
+  "assignment_uuid": "assignment_05035383-ad03-5593-8134-d34e0e4752c7",
+  "assignment": {
+    "title": "Chapter 2 checkpoint — Perimeter",
+    "description": "Answer all 5 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 52 cm — 2(17 + 9) = 52.\n2. 27 cm — 81 ÷ 3 = 27.\n3. 28 cm — 22 + 22 − 16 = 28.\n4. 9 cm — Five exposed equal sides; 45 ÷ 5 = 9.\n5. Only the exposed boundary segments — The shared interior edges are not on the boundary.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_f9f3f715-a9a0-5013-a2d7-efe4f2d140e4",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find the perimeter of a rectangle 17 cm long and 9 cm wide.",
+        "correct_value": 52,
+        "tolerance": 0,
+        "unit": "cm",
+        "explanation": "2(17 + 9) = 52."
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_1caa4ce2-aac8-580e-b773-124a6f28f916",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "An equilateral triangle has perimeter 81 cm. Find its side length.",
+        "correct_value": 27,
+        "tolerance": 0,
+        "unit": "cm",
+        "explanation": "81 ÷ 3 = 27."
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_e21ddb6d-e00e-5867-a82e-5386a729add0",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Two 8 cm by 3 cm rectangles share their full 8 cm side. What is the combined perimeter?",
+        "correct_value": 28,
+        "tolerance": 0,
+        "unit": "cm",
+        "explanation": "22 + 22 − 16 = 28."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_bc7854f7-2661-58a4-88bd-81bba76fecf6",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A square and an equilateral triangle share a full side. The outside perimeter is 45 cm. Find the side length.",
+        "correct_value": 9,
+        "tolerance": 0,
+        "unit": "cm",
+        "explanation": "Five exposed equal sides; 45 ÷ 5 = 9."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_9c5dc2a2-1c04-5a98-97da-72d391c995f7",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which sides must be counted when finding a composite perimeter?",
+            "questionUUID": "question_9c5dc2a2-1c04-5a98-97da-72d391c995f7",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_c2571506-6c3a-532a-905d-9b508f049d79",
+                "text": "Only the exposed boundary segments",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_bfd8734d-6c9f-584c-bfe5-e98e231bdf8d",
+                "text": "Every side of each component, including internal joins",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_e8bcebfe-49a9-5b59-8cc9-2b3fd8c536ba",
+                "text": "Only horizontal segments",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_32b0b07f-09b9-53db-a366-99b08d1cd569",
+                "text": "Only the longest sides",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 4
+    }
+  ]
+}

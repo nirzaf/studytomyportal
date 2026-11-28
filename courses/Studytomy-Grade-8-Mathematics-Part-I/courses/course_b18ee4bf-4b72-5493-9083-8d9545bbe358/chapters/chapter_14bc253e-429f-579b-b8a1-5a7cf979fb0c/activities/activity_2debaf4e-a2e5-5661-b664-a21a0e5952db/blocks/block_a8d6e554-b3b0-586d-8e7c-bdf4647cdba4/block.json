@@ -1,0 +1,12 @@
+{
+  "block_uuid": "block_a8d6e554-b3b0-586d-8e7c-bdf4647cdba4",
+  "block_type": "BLOCK_IMAGE",
+  "content": {
+    "file_id": "e0bd89ea-1f78-53b7-94f3-961f3b7861aa",
+    "file_format": "png",
+    "file_name": "triangle.png",
+    "file_size": 17764,
+    "file_type": "image/png",
+    "activity_uuid": "activity_2debaf4e-a2e5-5661-b664-a21a0e5952db"
+  }
+}

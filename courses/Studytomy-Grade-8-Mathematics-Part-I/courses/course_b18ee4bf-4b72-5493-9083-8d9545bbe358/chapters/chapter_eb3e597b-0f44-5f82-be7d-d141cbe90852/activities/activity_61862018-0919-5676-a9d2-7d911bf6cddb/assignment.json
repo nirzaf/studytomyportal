@@ -1,0 +1,32 @@
+{
+  "assignment_uuid": "assignment_10b8a400-59bf-542a-ac3e-d5a013529a43",
+  "assignment": {
+    "title": "Practical assignment — Test reflection and rotation",
+    "description": "Draw a non-square rectangle, square, equilateral triangle and general parallelogram. Trace each onto transparent paper, fold or reflect to test each symmetry axis, and rotate the tracing about its centre to find its rotational order. Record the axes and matching angles in a table and include your labelled diagrams.\n\nUpload clear photographs or a PDF of your own work. Your teacher will assess the work.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": false,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": null,
+    "ungraded": false,
+    "solution": "Teacher rubric (100): correct labelled drawings 20; reflection axes 25; centres and rotation tests 25; orders and matching angles 20; explanation of a non-reflection-symmetric parallelogram 10. Expected axes/orders: rectangle 2/2; square 4/4; equilateral triangle 3/3; general parallelogram 0/2.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_c9a3f674-3bb4-5ded-9684-7bcabc7d17ce",
+      "title": "Submit your work",
+      "description": "Draw a non-square rectangle, square, equilateral triangle and general parallelogram. Trace each onto transparent paper, fold or reflect to test each symmetry axis, and rotate the tracing about its centre to find its rotational order. Record the axes and matching angles in a table and include your labelled diagrams.\n\nUpload clear photographs or a PDF of your own work. Your teacher will assess the work.",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "FILE_SUBMISSION",
+      "contents": {},
+      "max_grade_value": 100,
+      "order": 0
+    }
+  ]
+}

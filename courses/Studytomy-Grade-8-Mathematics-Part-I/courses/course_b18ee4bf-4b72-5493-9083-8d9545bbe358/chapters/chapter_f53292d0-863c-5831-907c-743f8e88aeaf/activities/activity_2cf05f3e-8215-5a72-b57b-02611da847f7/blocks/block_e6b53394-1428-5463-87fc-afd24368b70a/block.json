@@ -1,0 +1,12 @@
+{
+  "block_uuid": "block_e6b53394-1428-5463-87fc-afd24368b70a",
+  "block_type": "BLOCK_IMAGE",
+  "content": {
+    "file_id": "4c52e7bf-0767-56ad-bc45-e043b3fcc4d8",
+    "file_format": "png",
+    "file_name": "patterns.png",
+    "file_size": 22342,
+    "file_type": "image/png",
+    "activity_uuid": "activity_2cf05f3e-8215-5a72-b57b-02611da847f7"
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "assignment_uuid": "assignment_9e2490fd-cc3a-532d-aa77-57c934377512",
+  "assignment": {
+    "title": "Chapter 10 checkpoint — Indices",
+    "description": "Answer all 4 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 8a³b³ — Every factor, including 2, is cubed.\n2. (7pq)² — 49 = 7², and both variables have index 2.\n3. 81 — Four negative factors yield a positive result: 81.\n4. -125 — An odd power of a negative base is negative.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_65db80ba-4a1d-50bb-938c-1c0c1d0ad5b7",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Expand (2ab)³.",
+            "questionUUID": "question_65db80ba-4a1d-50bb-938c-1c0c1d0ad5b7",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_3d70e1a5-ed81-5041-b02b-fa3fa4cc5303",
+                "text": "8ab³",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_877247c6-fd9f-5cad-8380-225561456772",
+                "text": "8a³b³",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_1333276c-422b-5c7a-8ed6-5c5078bf26f9",
+                "text": "2a³b³",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_39902e30-ed75-546a-a271-6f4743dfbe46",
+                "text": "6a³b³",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_bcd5e924-c585-529d-b207-6c00d32dfe52",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Express 49p²q² as one power.",
+            "questionUUID": "question_bcd5e924-c585-529d-b207-6c00d32dfe52",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_f0fdf1a6-1ff2-5ae2-85e3-2d271dede61b",
+                "text": "(7pq)²",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_873bc37d-c387-5cd8-8187-0fda6b24d29d",
+                "text": "(49pq)²",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_bc441544-dbdc-54c7-8b69-feda84bb2d9b",
+                "text": "(7p+q)²",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_ee1f7321-8415-5422-9484-16e4866a2972",
+                "text": "(7p²q)²",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_4565d1a2-0403-5cea-82b4-b7ee9085b965",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Evaluate (−3)⁴.",
+        "correct_value": 81,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "Four negative factors yield a positive result: 81."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_1be34a2d-ac99-5061-8f51-dd399c3aa8bd",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Evaluate (−5)³.",
+        "correct_value": -125,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "An odd power of a negative base is negative."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    }
+  ]
+}

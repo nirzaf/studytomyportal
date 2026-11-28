@@ -1,0 +1,157 @@
+{
+  "assignment_uuid": "assignment_27613cef-522b-5eb7-a95f-6b9b6701eff3",
+  "assignment": {
+    "title": "Chapter 12 checkpoint — Triangles and Quadrilaterals",
+    "description": "Answer all 8 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 52 ° — 180 − 52 − 76 = 52.\n2. 20 — 9x = 180; x = 20.\n3. 95 ° — 360 − 102 − 88 − 75 = 95.\n4. 36 — 10x = 360, so x = 36.\n5. 100 ° — 360 − 112 − 148 = 100.\n6. 43 ° — 180 − 137 = 43.\n7. 100 ° — 360 − 65 − 85 − 110 = 100.\n8. 62 ° — 180 − 118 = 62.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_7c4e0a82-7895-5e59-a963-37eec9a8496d",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A triangle has two interior angles 52° and 76°. Find the third.",
+        "correct_value": 52,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "180 − 52 − 76 = 52."
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_943e7cf3-0279-59b8-870d-3769d807db2b",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A triangle has angles 2x°, 3x° and 4x°. Find x.",
+        "correct_value": 20,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "9x = 180; x = 20."
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_047add6e-09a8-529b-9714-8b7880da4891",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A quadrilateral has angles 102°, 88°, 75° and x°. Find x.",
+        "correct_value": 95,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "360 − 102 − 88 − 75 = 95."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_10605443-5ec9-5d19-a905-c8833af1c5ed",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Angles in a quadrilateral are x°, 2x°, 3x° and 4x°. Find x.",
+        "correct_value": 36,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "10x = 360, so x = 36."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_f40ac552-9f81-5fb5-8edc-357897b8d806",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A triangle has exterior angles 112°, 148° and x°. Find x.",
+        "correct_value": 100,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "360 − 112 − 148 = 100."
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_97ef1286-b38c-5f45-be02-af03c0390f3d",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "An exterior angle is 137°. Find the adjacent interior angle.",
+        "correct_value": 43,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "180 − 137 = 43."
+      },
+      "max_grade_value": 100,
+      "order": 5
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_b3860bbe-52c1-5df2-8e3b-4a2eb53bc0d4",
+      "title": "Question 7",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "A convex quadrilateral has exterior angles 65°, 85°, 110° and y°. Find y.",
+        "correct_value": 100,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "360 − 65 − 85 − 110 = 100."
+      },
+      "max_grade_value": 100,
+      "order": 6
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_3d19c8c8-36ad-5ec3-bb2d-91a68a7a9103",
+      "title": "Question 8",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "An interior angle of a convex quadrilateral is 118°. Find its adjacent exterior angle.",
+        "correct_value": 62,
+        "tolerance": 0,
+        "unit": "°",
+        "explanation": "180 − 118 = 62."
+      },
+      "max_grade_value": 100,
+      "order": 7
+    }
+  ]
+}

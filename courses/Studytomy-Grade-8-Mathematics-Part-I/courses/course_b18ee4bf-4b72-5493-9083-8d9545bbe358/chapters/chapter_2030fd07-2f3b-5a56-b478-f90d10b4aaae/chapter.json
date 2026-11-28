@@ -1,0 +1,21 @@
+{
+  "chapter_uuid": "chapter_2030fd07-2f3b-5a56-b478-f90d10b4aaae",
+  "name": "07. Factors",
+  "description": "Find HCFs of up to three algebraic terms, factorise using the HCF and check by expansion. Textbook pp. 80–89; competency 15.1; Term 1; 6 suggested textbook periods.",
+  "thumbnail_image": "",
+  "order": 6,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "80–89",
+      "competency_level": "15.1",
+      "term": 1,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required",
+      "textbook_periods": 6
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "chapter_uuid": "chapter_5a707613-52f2-5b58-8e7b-15fb1b26ef8b",
+  "name": "02. Perimeter",
+  "description": "Calculate perimeters of composite rectilinear plane figures and solve contextual problems. Textbook pp. 14–21; competency 7.1; Term 1; 5 suggested textbook periods.",
+  "thumbnail_image": "",
+  "order": 1,
+  "extra_metadata": {
+    "studytomy_course_source": {
+      "source": "Mathematics, Grade 8, Part I (English medium)",
+      "publisher": "Educational Publications Department, Sri Lanka",
+      "isbn": "978-955-25-0128-9",
+      "printing_year": 2019,
+      "printed_pages": "14–21",
+      "competency_level": "7.1",
+      "term": 1,
+      "content_origin": "Original teaching content and original questions; textbook-aligned, not reproduced source pages.",
+      "review_status": "teacher_review_required",
+      "textbook_periods": 5
+    }
+  }
+}

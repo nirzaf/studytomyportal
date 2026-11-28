@@ -1,0 +1,12 @@
+{
+  "block_uuid": "block_a6086ab1-df24-5b47-a70f-82e53181aee2",
+  "block_type": "BLOCK_IMAGE",
+  "content": {
+    "file_id": "2bb36529-0f84-5b26-bcf9-5d872a37eb5a",
+    "file_format": "png",
+    "file_name": "platonic.png",
+    "file_size": 88881,
+    "file_type": "image/png",
+    "activity_uuid": "activity_60fe1594-e627-5680-a2c4-8d2880b32e0e"
+  }
+}

@@ -1,0 +1,422 @@
+{
+  "assignment_uuid": "assignment_db557101-2bbf-56d5-845f-dc41bca5d7db",
+  "assignment": {
+    "title": "Chapter 5 checkpoint — Algebraic Expressions",
+    "description": "Answer all 10 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 4x + 6y + 2z — Multiply each quantity by its unit price, then add.\n2. -8 — The signed multiplier of p is −8.\n3. −12x + 8 — Multiply both 3x and −2 by −4.\n4. 6a + 12b − 18 — Distribute 6 to all three terms.\n5. −12a²b — Multiply coefficients and both factors of a.\n6. 6y² − 8xy — Multiply 2y by each term.\n7. 2x + 4y — 6x + 3y − 4x + y = 2x + 4y.\n8. 5ab and −2ba — ab and ba represent the same variable product.\n9. 7 — −6 + 8 + 5 = 7.\n10. 13 — 2(8) − 3 = 13.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_5f6f2c09-d086-5fe2-8ddb-f087599cec50",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which expression gives the cost of 4 items at Rs. x, 6 at Rs. y and 2 at Rs. z?",
+            "questionUUID": "question_5f6f2c09-d086-5fe2-8ddb-f087599cec50",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_7d0a4ce7-a007-5abb-ac3f-3229e1e1f0b4",
+                "text": "4xy + 6z",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_ebb3e63e-9d0b-5ffc-8ff9-40fce39cf27a",
+                "text": "4x + 6y + 2z",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_2c91649b-f3d8-5fe3-908f-1b13a70ee8d3",
+                "text": "4 + 6 + 2 + x + y + z",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_3918d0de-1a47-51e3-834b-c9c86f899d52",
+                "text": "12xyz",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_e30738b8-a843-5d83-a8d2-e9114c17c706",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "What is the coefficient of p in −8p + 3q − 2?",
+        "correct_value": -8,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "The signed multiplier of p is −8."
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_8b9fd539-2ce5-5b06-96df-d2eb4b3c88c0",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Expand −4(3x − 2).",
+            "questionUUID": "question_8b9fd539-2ce5-5b06-96df-d2eb4b3c88c0",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_eb619d30-8dc0-51f0-9f89-471eaae0d6d3",
+                "text": "−12x + 8",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_a52d0b29-7db9-59cf-9880-1127fa590eaf",
+                "text": "−12x − 2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_607e1611-4c4e-563b-bf27-0bc289649a3d",
+                "text": "−12x − 8",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_08ac795c-443a-5325-9b2c-e2181933801f",
+                "text": "12x − 8",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_09da9ddc-660a-5d97-af49-4379b3eb0525",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Expand 6(a + 2b − 3).",
+            "questionUUID": "question_09da9ddc-660a-5d97-af49-4379b3eb0525",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_aad809d0-4359-5e16-bead-0b386e9f3d35",
+                "text": "6a + 8b − 18",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_1f786d32-d78d-593d-b84a-9e4a5922b570",
+                "text": "6a + 2b − 3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_11404c8d-915f-5831-aaf7-1e6ed22b7d37",
+                "text": "6a + 12b − 18",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_631476f2-8740-56b5-8a3a-9d40afbc2ccd",
+                "text": "6a + 12b + 18",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_b4d8325c-a72d-5997-882a-1b51501663c5",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Simplify 4a × (−3ab).",
+            "questionUUID": "question_b4d8325c-a72d-5997-882a-1b51501663c5",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_0ade209e-206f-5d8a-a0c2-3f02774a7771",
+                "text": "12a²b",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_d4d48c25-e48f-5e1c-9f0d-ce2c5c8f88e8",
+                "text": "−7a²b",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_797726b3-088c-56d0-a76d-7bb667949bfa",
+                "text": "−12a²b",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_c19b4273-46b3-5e0c-bd43-30e83c81b565",
+                "text": "−12ab",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_db8b4c34-5f44-525d-a649-4a1b8db498fe",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Expand 2y(3y − 4x).",
+            "questionUUID": "question_db8b4c34-5f44-525d-a649-4a1b8db498fe",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_a5558d55-feb6-52eb-944e-e4b2160cbe25",
+                "text": "6y² − 4x",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_f72dec9a-4269-5993-a26b-8430de46b707",
+                "text": "6y² + 8xy",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_7b3d56ae-1260-5fac-b4cd-8a505fbf7666",
+                "text": "6y − 8xy",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_451612b8-99ad-5d7c-a517-4d02a48dc73e",
+                "text": "6y² − 8xy",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 5
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_903fd16c-b0f9-5995-a7a3-569c97c9fa8a",
+      "title": "Question 7",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Simplify 3(2x + y) − (4x − y).",
+            "questionUUID": "question_903fd16c-b0f9-5995-a7a3-569c97c9fa8a",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_8d6b603e-8a4e-5253-94b2-6a9c3c461117",
+                "text": "2x + 4y",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_d52a98f8-6d14-5754-911a-cea64223ecfb",
+                "text": "10x + 2y",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_bccc46a9-60b7-5681-b4d2-2d8a3e87067b",
+                "text": "2x + 2y",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_522eea71-ce80-511f-8d70-69cca0304c78",
+                "text": "2x − 4y",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 6
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_e7aa21d6-d300-5035-b19a-583a8627a9d9",
+      "title": "Question 8",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which pair consists of like terms?",
+            "questionUUID": "question_e7aa21d6-d300-5035-b19a-583a8627a9d9",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_5abf077b-d4ca-5d9f-a14b-42c2d6246708",
+                "text": "2x² and 2x",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_a56f84a5-3df7-5e23-88f0-ab884284655e",
+                "text": "5ab and −2ba",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_a351a2f8-0930-5a24-b581-d03e0cea6443",
+                "text": "3x and 3y",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_4afb754c-0359-5812-8d49-a9e66300812b",
+                "text": "4ab and 4a²b",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 7
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_98d6f1c0-fbf3-5e2c-b145-50610db054ec",
+      "title": "Question 9",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Evaluate 3x − 2y + z for x=−2, y=−4, z=5.",
+        "correct_value": 7,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "−6 + 8 + 5 = 7."
+      },
+      "max_grade_value": 100,
+      "order": 8
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_00dcf12a-da32-5ce4-868b-10074c258512",
+      "title": "Question 10",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Evaluate 2(a − b) + c for a=7, b=−1, c=−3.",
+        "correct_value": 13,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "2(8) − 3 = 13."
+      },
+      "max_grade_value": 100,
+      "order": 9
+    }
+  ]
+}

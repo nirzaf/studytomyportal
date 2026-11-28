@@ -1,0 +1,438 @@
+{
+  "assignment_uuid": "assignment_73a82b96-e27c-5032-893f-f588424d654b",
+  "assignment": {
+    "title": "Chapter 14 checkpoint — Fractions (Part II)",
+    "description": "Answer all 9 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 4/13 — 3 1/4 = 13/4, then interchange numerator and denominator.\n2. 0 — 0 multiplied by any number is 0.\n3. 5/18 — Multiply by the reciprocal 1/3.\n4. 20 — 8 ÷ 2/5 = 8 × 5/2 = 20.\n5. 5/8 — 7/12 × 15/14 = 5/8.\n6. 2/3 — 3/5 × 10/9 = 2/3.\n7. 2 1/2 — 7/2 × 5/7 = 5/2.\n8. 6 — 9/4 × 8/3 = 6.\n9. 1/2 — 4/5 × 5/8 = 1/2.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_1c14db8c-b8a5-5c9a-b29d-33b2de8884ed",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "What is the reciprocal of 3 1/4?",
+            "questionUUID": "question_1c14db8c-b8a5-5c9a-b29d-33b2de8884ed",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_29150f69-3fd6-5447-b58c-1d6408387b6f",
+                "text": "1/4",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_b63096e4-db5b-56bc-8295-c910e54f5107",
+                "text": "13/4",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_608975ca-125a-568b-ad8c-7a0960b0e4e4",
+                "text": "4/13",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_c07f3271-4a00-5858-8ff5-2c718c84a18c",
+                "text": "4/3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_407916c4-1574-5352-8d83-5af3bb9720ed",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which number has no reciprocal?",
+            "questionUUID": "question_407916c4-1574-5352-8d83-5af3bb9720ed",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_6b897952-a387-5039-9920-0718d71316cd",
+                "text": "0",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_42b37118-c57f-54f4-a7d0-9db2b1d25d01",
+                "text": "1/2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_dfe4402f-34fa-5133-9e03-b1d7d0fa0f5a",
+                "text": "1",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_b635c857-c4da-5f83-b3fc-bee2f8c32487",
+                "text": "2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_a82a5def-ab37-5421-b7c4-40aedd0ffaf7",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 5/6 ÷ 3.",
+            "questionUUID": "question_a82a5def-ab37-5421-b7c4-40aedd0ffaf7",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_f334a99e-4b3d-5393-a996-1c1eb5457655",
+                "text": "5/2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_e40499c6-8c2e-573f-bfc4-d82ec424f86c",
+                "text": "18/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_ae57856d-809a-515c-97e7-84d39e74f281",
+                "text": "15/6",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_2fb18ae8-e8a0-585b-8768-f4849626bdaf",
+                "text": "5/18",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_8732624a-2499-53d7-b30e-bf627a97dd0d",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "How many 2/5-litre portions can be filled from 8 litres?",
+        "correct_value": 20,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "8 ÷ 2/5 = 8 × 5/2 = 20."
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_8ab69718-6047-546b-a919-9d7f72889e16",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 7/12 ÷ 14/15.",
+            "questionUUID": "question_8ab69718-6047-546b-a919-9d7f72889e16",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_de409fab-d975-56b8-b233-ea1c17ac8771",
+                "text": "7/8",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_2aaa70d6-8009-5147-9c90-1bd98863c881",
+                "text": "5/8",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_f7da6de0-7125-5149-bae8-b2b5fdc08f62",
+                "text": "49/90",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_19e51374-8895-5c92-b56c-9636881fd4bd",
+                "text": "8/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_1527d17c-316b-5235-9ae1-c584d7d93e64",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 3/5 ÷ 9/10.",
+            "questionUUID": "question_1527d17c-316b-5235-9ae1-c584d7d93e64",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_9f200123-c954-5dd4-bb04-949dd922fbd3",
+                "text": "2/3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_dfae4139-b2d0-5fa9-8d58-230059b4634b",
+                "text": "27/50",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_17f83111-11f8-5be6-814c-1fd7d2d2dbbb",
+                "text": "1/6",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_f9089263-1eb6-52d9-ae6a-bef6fc2add04",
+                "text": "3/2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 5
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_14d9f7fc-64a7-59ce-b180-3782b14b2aa5",
+      "title": "Question 7",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 3 1/2 ÷ 1 2/5.",
+            "questionUUID": "question_14d9f7fc-64a7-59ce-b180-3782b14b2aa5",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_d5195d86-5d25-5987-8f0d-7f6b57045a5a",
+                "text": "2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_e922f282-f4d4-563f-a2b6-2c0d2be264c0",
+                "text": "4 9/10",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_11e3a8b6-7911-53ac-b3f6-d783161c4205",
+                "text": "1 2/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_14954e2b-5b03-5820-ba69-5cc1470d2f8c",
+                "text": "2 1/2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 6
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_9db153a2-e29c-5b23-96d2-fa46ff1569ae",
+      "title": "Question 8",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 2 1/4 ÷ 3/8.",
+            "questionUUID": "question_9db153a2-e29c-5b23-96d2-fa46ff1569ae",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_55d19587-408f-509c-8f01-cc9eae730acd",
+                "text": "3/8",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_a356d405-1cef-5548-a9bc-c13b411f6c6e",
+                "text": "27/32",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_5f1711f7-2550-5d98-9116-a3aeb8395e54",
+                "text": "8/27",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_73362962-6b22-5968-a8a9-74a48b40ae91",
+                "text": "6",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 7
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_b9e37b58-c808-5976-8425-5fbeb0a7a438",
+      "title": "Question 9",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 4/5 ÷ 1 3/5.",
+            "questionUUID": "question_b9e37b58-c808-5976-8425-5fbeb0a7a438",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_933200ae-a82d-5f71-ac2d-c2d2300ebec5",
+                "text": "1/2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_3467e30d-af60-553b-a59c-1832e9cb29de",
+                "text": "2",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_25fb76a4-cf2e-55a8-a998-83e1ab31237f",
+                "text": "4/15",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_0baf6b93-19ef-5e13-8199-9db4692f3c68",
+                "text": "32/25",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 8
+    }
+  ]
+}

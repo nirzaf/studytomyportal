@@ -1,0 +1,12 @@
+{
+  "block_uuid": "block_a54648e7-ad11-5580-8182-23e576dc0194",
+  "block_type": "BLOCK_IMAGE",
+  "content": {
+    "file_id": "2b298294-ff88-5ddc-b865-cc9414ebed54",
+    "file_format": "png",
+    "file_name": "fraction.png",
+    "file_size": 11852,
+    "file_type": "image/png",
+    "activity_uuid": "activity_4c973d5d-abb8-52c4-a038-0d14678c0d40"
+  }
+}

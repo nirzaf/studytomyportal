@@ -1,0 +1,388 @@
+{
+  "assignment_uuid": "assignment_e3b74a59-e165-5d0e-bd67-3964a84679b4",
+  "assignment": {
+    "title": "Chapter 13 checkpoint — Fractions (Part I)",
+    "description": "Answer all 8 questions independently. Enter numerical answers without a unit when the unit is shown separately. Each question has equal weight. Submit when finished; use the reviewed feedback to improve.",
+    "due_date": null,
+    "published": false,
+    "grading_type": "PERCENTAGE",
+    "auto_grading": true,
+    "anti_copy_paste": false,
+    "show_correct_answers": false,
+    "allow_retries": false,
+    "max_retries": 0,
+    "pass_threshold_percentage": 70,
+    "ungraded": false,
+    "solution": "1. 3/4 — Divide numerator and denominator by 5.\n2. 38/9 — 4 × 9 + 2 = 38.\n3. 40 — 48 ÷ 6 × 5 = 40.\n4. 1 5/9 — 7 × 2/9 = 14/9 = 1 5/9.\n5. 2/9 — 5×8/(12×15)=40/180=2/9.\n6. 0 — Every number multiplied by zero is zero.\n7. 5/6 — 4/9 × 15/8 = 5/6.\n8. 3 — 9/4 × 4/3 = 3.",
+    "solution_reveal": "NEVER"
+  },
+  "tasks": [
+    {
+      "assignment_task_uuid": "assignmenttask_ac440edb-aef8-5671-929e-6f1aba3a68dc",
+      "title": "Question 1",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Which fraction is equivalent to 15/20?",
+            "questionUUID": "question_ac440edb-aef8-5671-929e-6f1aba3a68dc",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_78f1f962-e387-52a7-b7f2-6c9e5f384280",
+                "text": "3/4",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_6368e2d5-3c4a-5308-a814-51a40831e29c",
+                "text": "4/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_b4f822ec-e567-5e7b-9278-664bd397f54f",
+                "text": "2/3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_187e6d3b-dbb9-5c9d-9518-167dfc4df65c",
+                "text": "3/5",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 0
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_8ff006b9-05e5-512e-9bf1-95a9dc860b7a",
+      "title": "Question 2",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Convert 4 2/9 to an improper fraction.",
+            "questionUUID": "question_8ff006b9-05e5-512e-9bf1-95a9dc860b7a",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_2650540d-9231-5ad4-b260-f1400e8383d6",
+                "text": "40/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_b7ac7ff8-a8b8-5b05-b381-11de3f0afa36",
+                "text": "36/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_f2c2a1f2-492a-5b83-9ba3-f5e043ef6eb4",
+                "text": "38/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_61131c39-87e8-5492-b8f4-d0d777d43998",
+                "text": "6/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 1
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_e23e7251-0410-5239-ae39-220602f5a695",
+      "title": "Question 3",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "NUMBER_ANSWER",
+      "contents": {
+        "prompt": "Find 5/6 of 48.",
+        "correct_value": 40,
+        "tolerance": 0,
+        "unit": "",
+        "explanation": "48 ÷ 6 × 5 = 40."
+      },
+      "max_grade_value": 100,
+      "order": 2
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_2c8f182e-f33f-515b-b608-c7a83e83671f",
+      "title": "Question 4",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 7 × 2/9 in simplest mixed form.",
+            "questionUUID": "question_2c8f182e-f33f-515b-b608-c7a83e83671f",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_b6dc6a9a-d192-5e31-8c3a-9fa7a802cabc",
+                "text": "2 5/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_5d9474ec-5b33-58eb-a7f9-f43ad03c2f28",
+                "text": "1 2/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_5d1a61ec-ff46-53e8-870e-63cce201d2b0",
+                "text": "1 5/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_47212c08-5b60-51b8-8321-709083a6c3dc",
+                "text": "14/63",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 3
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_d1b6b9a1-ce3d-5eff-b79d-8bd07dfe6b05",
+      "title": "Question 5",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Simplify 5/12 × 8/15.",
+            "questionUUID": "question_d1b6b9a1-ce3d-5eff-b79d-8bd07dfe6b05",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_ee4db0dd-7c9c-5732-aef7-5f4f2f3369a7",
+                "text": "40/27",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_f6f600a7-e0ac-5570-a13d-fee0190d7ef0",
+                "text": "2/3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_82b2c31d-aab0-5475-8668-22300c395164",
+                "text": "2/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_ad5b320f-f911-50f3-921d-b2656b4642cc",
+                "text": "13/27",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 4
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_a8b6c977-99a3-5522-9c62-8bd119d29a3f",
+      "title": "Question 6",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "What is 3/7 × 0?",
+            "questionUUID": "question_a8b6c977-99a3-5522-9c62-8bd119d29a3f",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_f7620799-e9a3-587c-a3e7-f9ef093fa450",
+                "text": "1",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_2f407c60-7468-58e4-801f-5c775cf377a1",
+                "text": "0",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_60464817-4983-5db7-84a1-cd000c5b1f0c",
+                "text": "3/7",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_33786690-3a2e-5413-9cae-d9b2a3001e60",
+                "text": "Undefined",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 5
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_2a025de8-4fad-58be-85a4-f79f00f6bfdb",
+      "title": "Question 7",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 4/9 × 1 7/8.",
+            "questionUUID": "question_2a025de8-4fad-58be-85a4-f79f00f6bfdb",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_bd0068bf-447b-52ec-a93a-c399209589ae",
+                "text": "5/6",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              },
+              {
+                "optionUUID": "option_0fac5f04-b4e4-5aff-853c-d12bee20621c",
+                "text": "2 1/6",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_6bd8933c-d602-5a5a-83f2-7bc2538c2af5",
+                "text": "5/9",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_63292feb-dc98-5f12-bae1-677d9ecf1580",
+                "text": "7/18",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 6
+    },
+    {
+      "assignment_task_uuid": "assignmenttask_51413323-bd1f-587f-ba81-a3e280c6d677",
+      "title": "Question 8",
+      "description": "",
+      "hint": "",
+      "reference_file": null,
+      "assignment_type": "QUIZ",
+      "contents": {
+        "questions": [
+          {
+            "questionText": "Calculate 2 1/4 × 1 1/3.",
+            "questionUUID": "question_51413323-bd1f-587f-ba81-a3e280c6d677",
+            "response_type": "single",
+            "options": [
+              {
+                "optionUUID": "option_f973ead6-9fe0-5fdb-8f61-cfe60afbab96",
+                "text": "2 3/4",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_87dc493a-2fb2-5ee0-b93f-e28307a0fec4",
+                "text": "3 1/4",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_5252303a-cd71-5ad7-99dc-a24c0f51ad3e",
+                "text": "2 1/12",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": false
+              },
+              {
+                "optionUUID": "option_ddba6f8e-7eb6-5d55-8df6-1911aa273478",
+                "text": "3",
+                "fileID": "",
+                "type": "text",
+                "assigned_right_answer": true
+              }
+            ]
+          }
+        ],
+        "grading_mode": "all_or_nothing"
+      },
+      "max_grade_value": 100,
+      "order": 7
+    }
+  ]
+}
